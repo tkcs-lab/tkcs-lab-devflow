@@ -1,6 +1,6 @@
 {
   "name": "stack-ipados",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "iPadOS stack skill for devflow, on top of stack-swift: project layout, iPad-specific UI, tests on an iPad simulator",
   "author": { "name": "andras-tkcs" },
   "license": "Apache-2.0",

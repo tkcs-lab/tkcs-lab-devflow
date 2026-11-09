@@ -1,9 +1,9 @@
 {
   "name": "claude-toolkit",
   "owner": { "name": "andras-tkcs" },
-  "metadata": { "description": "Plan → implement toolkit for Claude Code on the web: /review, /make-plan, /implement, /dod" },
+  "metadata": { "description": "Plan → implement toolkit for Claude Code on the web: /review, /make-plan, /implement, /dod, /board, /deps, /upstream, /land" },
   "plugins": [
-    { "name": "devflow", "source": "./plugins/devflow", "description": "/review, /make-plan, /implement and /dod driven by a per-project profile (.claude/toolkit.yaml)" },
+    { "name": "devflow", "source": "./plugins/devflow", "description": "/review, /make-plan, /implement, /dod, /board, /deps, /upstream and /land driven by a per-project profile (.claude/toolkit.yaml)" },
     { "name": "stack-python", "source": "./plugins/stack-python", "description": "Python stack skill for devflow" },
     { "name": "stack-swift", "source": "./plugins/stack-swift", "description": "Swift stack skill for devflow (SwiftPM here, Apple builds on a macOS runner)" },
     { "name": "stack-ipados", "source": "./plugins/stack-ipados", "description": "iPadOS app stack skill for devflow, on top of stack-swift" },

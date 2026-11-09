@@ -90,4 +90,4 @@ def test_no_plan_name_in_fixtures_or_schema():
     paths = [SCHEMA, *RECORDS.glob("*.json")]
     assert len(paths) > 2
     for path in paths:
-        assert "devflow-v2" not in path.read_text(), path.relative_to(ROOT)
+        assert "devflow-" "v2" not in path.read_text(), path.relative_to(ROOT)
