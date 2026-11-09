@@ -215,3 +215,26 @@ def test_bot_login_without_codeowners_warns(vp):
 def test_empty_codeowners_and_empty_bot_login_are_rejected(vp):
     assert errs(vp, _git(codeowners=[], bot_login="agent"))
     assert errs(vp, _git(bot_login=""))
+
+
+def _maintenance():
+    return yaml.safe_load((FIXTURES / "maintenance-toolkit.yaml").read_text())
+
+
+def test_maintenance_fixture_is_valid(vp):
+    assert errs(vp, _maintenance()) == []
+
+
+@pytest.mark.parametrize("mutate,message", [
+    (lambda p: p["deps"].pop("cooldown_days"), "missing required key 'deps.cooldown_days'"),
+    (lambda p: p["deps"].update(cooldown_days=31), "'deps.cooldown_days': must be at most 30"),
+    (lambda p: p["upstream"].update(repo="nonsense"), "'upstream.repo': does not match"),
+    (lambda p: p["upstream"].update(tag_pattern="(["), "'upstream.tag_pattern': not a valid regular expression"),
+    (lambda p: p["land"].update(max_prs=0), "'land.max_prs': must be at least 1"),
+    (lambda p: p["deps"].update(bogus=1), "unknown key 'deps.bogus'"),
+    (lambda p: p["deps"]["audit"][0].pop("run"), "missing required key 'deps.audit[0].run'"),
+])
+def test_maintenance_keys_are_checked(vp, mutate, message):
+    profile = copy.deepcopy(_maintenance())
+    mutate(profile)
+    assert any(message in e for e in errs(vp, profile))

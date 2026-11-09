@@ -132,6 +132,60 @@
       "additionalProperties": false,
       "properties": {"board_url": {"type": "string", "minLength": 1, "description": "URL of the published status board page; when unset, the environment variable DEVFLOW_BOARD_URL is used."}}
     },
+    "deps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cooldown_days", "time_budget_minutes"],
+      "properties": {
+        "cooldown_days": {"type": "integer", "minimum": 0, "maximum": 30, "description": "Dependabot cooldown (days) the project's .github/dependabot.yml must set."},
+        "time_budget_minutes": {"type": "integer", "minimum": 10, "maximum": 480, "description": "/deps starts no new update group after 80% of this."},
+        "audit": {
+          "type": "array",
+          "description": "Commands that list vulnerable packages: exit 0 = nothing found, non-zero = findings in the output.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ecosystem", "run"],
+            "properties": {
+              "ecosystem": {"type": "string", "minLength": 1},
+              "run": {"type": "string", "minLength": 1},
+              "cwd": {"type": "string", "minLength": 1, "description": "Directory, relative to the repo root."}
+            }
+          }
+        },
+        "lock_freshness": {
+          "type": "array",
+          "description": "Run after a manifest change so lockfiles stay consistent.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["when", "run", "lockfiles"],
+            "properties": {
+              "when": {"$ref": "#/$defs/stringList", "description": "Globs matched against changed files."},
+              "run": {"type": "string", "minLength": 1},
+              "lockfiles": {"$ref": "#/$defs/stringList", "description": "The only files the command may change besides the matched ones."}
+            }
+          }
+        }
+      }
+    },
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "tag_pattern", "version_file"],
+      "properties": {
+        "repo": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "description": "The upstream repository, owner/name."},
+        "tag_pattern": {"type": "string", "minLength": 1, "description": "Regular expression a release tag must match."},
+        "version_file": {"type": "string", "minLength": 1, "description": "File in the fork that records the synced tag."}
+      }
+    },
+    "land": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_prs": {"type": "integer", "minimum": 1, "maximum": 50, "description": "Most pull requests one /land run orders."}
+      }
+    },
     "project_steward": {"type": "string", "minLength": 1, "description": "Path to a project skill with policy that fits no other key."}
   }
 }

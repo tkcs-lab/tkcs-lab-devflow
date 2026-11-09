@@ -43,6 +43,14 @@ Rules:
 | `stacks` | **yes** (may be `[]`) | Stack skills to load: `python` loads `stack-python`, `go` loads `stack-go`, `swift` loads `stack-swift`, `ipados` loads `stack-ipados` (list it with `swift`) |
 | `models.planner`, `models.orchestrator`, `models.worker`, `models.reviewer` | no | `opus` or `sonnet`. `worker` and `reviewer` pick the model of child sessions; planner and orchestrator document intent (the command front matter sets them) |
 | `status.board_url` | no | URL of the published status board; `/implement` writes its status record there. When unset the environment variable `DEVFLOW_BOARD_URL` is used; with neither, no board is written |
+| `deps.cooldown_days` | **yes** (in `deps`) | Integer 0..30: the Dependabot cooldown (days) the project's `.github/dependabot.yml` must set. `/deps` needs the `deps` section and stops with a missing-key message when it is absent |
+| `deps.time_budget_minutes` | **yes** (in `deps`) | Integer 10..480: `/deps` starts no new update group after 80% of this |
+| `deps.audit` | no | List of `{ecosystem, run, cwd?}`: commands that list vulnerable packages (sessions cannot read Dependabot alerts). Exit 0 = nothing found; non-zero = findings in the output. `cwd` is relative to the repo root |
+| `deps.lock_freshness` | no | List of `{when, run, lockfiles}`, run after a manifest change so lockfiles stay consistent (see below) |
+| `upstream.repo` | **yes** (in `upstream`) | The upstream repository as `owner/name`. `/upstream` needs the `upstream` section |
+| `upstream.tag_pattern` | **yes** (in `upstream`) | Regular expression a release tag must match; must compile |
+| `upstream.version_file` | **yes** (in `upstream`) | File in the fork that records the synced tag |
+| `land.max_prs` | no | Integer 1..50: most pull requests one `/land` run orders. `/land` works without the `land` section |
 | `project_steward` | no | Path to a project skill or doc with policy that fits no other key; read after `pr-steward` and wins where more specific |
 
 ### Command entries
@@ -99,6 +107,18 @@ ci:
 The planner treats anything one of these covers as a phase task, never a manual step; `pr-steward`
 dispatches it instead of skipping the row; a swift or ipados project with an empty list gets a warning.
 The workflow file must be on the default branch to be dispatchable (see `pr-steward`).
+
+### `deps.lock_freshness`
+
+```yaml
+deps:
+  lock_freshness:
+    - when: ["pyproject.toml"]   # globs matched against changed files
+      run: "uv lock"             # one command, run from the repo root
+      lockfiles: ["uv.lock"]     # the only files it may change besides the matched ones
+```
+
+All three keys are required; `when`, `run` and `lockfiles` entries are non-empty strings.
 
 ### `verify.dod_conditional`
 
