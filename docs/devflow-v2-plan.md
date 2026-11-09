@@ -14,8 +14,10 @@ its section 10) and three maintenance commands, in one plan:
 2. **Plugin-only delivery** (p0): the SessionStart-hook route and the `toolkit.ref` pin are removed;
    the plugins in the Claude Project are the only way the toolkit reaches a session.
 3. **`/board prune`** and a record `kind` (`run` or `maintenance`).
-4. **A verified spike** (p7, human-gated) that settles six open questions about Dependabot, CI
-   triggers, approval behaviour, unattended scheduled tasks and anonymous tag fetching.
+4. **A verified spike**, run before this plan from its own prompt (not a phase), that settles six open
+   questions about Dependabot, CI triggers, approval behaviour, unattended scheduled tasks and anonymous
+   tag fetching. Its result file `docs/design/maintenance-spike.md` is committed to this branch; the plan
+   is revised with it before `/implement` runs.
 5. **Three commands**: `/deps` (weekly, unattended dependency triage and updates), `/upstream`
    (weekly, unattended sync of a patch-carrying fork to the newest upstream release tag) and `/land`
    (orders open pull requests, resolves conflicts before review, runs CI once on a combined branch and
@@ -289,9 +291,12 @@ Follow brief section 8. Decisions the brief leaves open:
   PRs as git.bot_login and the code owner's review is the gate`, done_when `get_me in a new session prints
   <bot_login> and the main branch requires a Code Owner review`.
 
-### D8. The spike (p7)
+### D8. The spike (run separately, not a phase)
 
-One worker session, one file: `docs/design/maintenance-spike.md`. It must not link to the brief or this
+The spike is not in the manifest. The owner runs it from the single-session prompt that accompanied this
+plan, in its own session, and the session commits `docs/design/maintenance-spike.md` to this branch; the
+plan is then revised with its findings. This section is the specification of that file and of the
+conclusion lines the phases read. One session, one file: `docs/design/maintenance-spike.md`. It must not link to the brief or this
 plan (both are deleted later). Side effects outside the repository are allowed and listed in its last
 section: the scratch repository `andras-tkcs/devflow-scratch` (attach it with `add_repo`, access `push`),
 one throwaway artifact and one one-shot scheduled task (delete the task afterwards with `delete_trigger`).
@@ -356,11 +361,12 @@ What each item does:
   anonymously; record how many tags came back and the highest tag matching `^v?[0-9]+\.[0-9]+\.[0-9]+$`.
   `no-upstream` when the fork has no parent.
 
-The phase's `PHASE-REPORT` contains the conclusion lines and the questions for the owner, because the
-human gate shows them to the owner. The owner's questions are: whether the unattended push notification
-reached the phone and at what time, and whether any conclusion looks wrong.
+The spike session's final reply contains the conclusion lines and the questions for the owner. The
+owner's questions are: whether the unattended push notification reached the phone and at what time, and
+whether any conclusion looks wrong. The owner brings the findings back to `/make-plan`, which revises this
+plan on `plan/devflow-v2` before `/implement` runs.
 
-**How the later phases use it.** Each of p8, p9, p10, p11a and p11b starts by reading the spike file and
+**How the later phases use it.** The file must exist in the checkout (mb2-spike-done). Each of p8, p9, p10, p11a and p11b starts by reading the spike file and
 checking its own *Assumes* line (in its brief). A needed CONCLUSION line that is missing, marked `[A]`
 (except where the brief says `[A]` is fine), or different from the value the brief assumes means: stop
 with `status=blocked`, quote the line and say which assumption failed. Do not improvise around it.
@@ -538,8 +544,8 @@ Update `docs/design.md` (layout, command list, the decisions on delivery), `READ
 for `/board`, `/deps`, `/upstream`, `/land`; the "What is here" table), add `docs/maintenance.md` (how to
 run and schedule the three commands, the profile sections, the board variable, what the spike found, with
 a link to `docs/design/maintenance-spike.md`, which stays as a record), set all five `plugin.json` to
-`0.4.0`, delete `docs/design/devflow-v2.md`, `docs/devflow-v2-plan.md` and
-`docs/devflow-v2-plan-manual-steps.html`. There is no changelog or ADR directory in this repository, so
+`0.4.0`, delete `docs/design/devflow-v2.md`, `docs/devflow-v2-plan.md`,
+`docs/devflow-v2-plan-manual-steps.html` and `docs/devflow-v2-spike-manual-steps.html`. There is no changelog or ADR directory in this repository, so
 neither is written.
 
 ### D16. The tracking issue (p5a), not in the brief
@@ -590,28 +596,26 @@ Summary; the step-by-step page is [the artifact](https://claude.ai/artifact/D38t
 (source `docs/devflow-v2-plan-manual-steps.html`).
 
 - Before: `mb1-identity-done` (one confirm question: second GitHub user, ruleset, CODEOWNERS and the
-  throwaway PR are done), `mb2-scratch-repo` (private scratch repository with the same ruleset and the
-  agent user invited with Write, seeded for the spike), `mb3-approved-pr` (one approved, out-of-date pull
-  request for spike item d).
+  throwaway PR are done), `mb2-spike-done` (the spike result file is on this branch and has been read).
+  The spike's own setup (private scratch repository with the same ruleset and the agent invited with
+  Write; one approved, out-of-date pull request) is on a separate page,
+  [Spike Setup Steps](https://claude.ai/artifact/LefiPDFNQU7BoQ2fnXkpKr) (source
+  `docs/devflow-v2-spike-manual-steps.html`), and belongs to the spike prompt, not to this plan.
 - After: `ma1-board-live` (publish the board, set `DEVFLOW_BOARD_URL`, check the phone and the push),
   `ma2-throwaway-pr` (review gate), `ma3-scheduled-tasks` (weekly `/deps` and `/upstream` tasks),
   `ma4-land-repos` (auto-merge setting and agent token secret for repositories using `/land`).
 
-The spike phase needs the owner's mid-run review (a human gate); it is the only one, and the reason is in
-the next section.
+There is no human gate and nothing manual in the middle.
 
 ## 5. Risks and open questions
 
-- **The human gate stops all scheduling.** `/implement` stops scheduling after merging a `human_gate`
-  phase, not only its dependants. p7 runs beside p0 in the first wave; if p7 finishes first, p0 still
-  completes, and nothing new starts until the owner approves the spike. This is intended: p8 to p11
-  depend on the spike's conclusions, and the owner should see them before they are built on.
 - **A spike conclusion can contradict a later phase.** Each of p8 to p11b lists the conclusions it
   assumes. If one differs (for example `d: approval-dismissed`, which makes the `/land` design unsound),
   the phase stops with `status=blocked` and the orchestrator asks the owner. Expected cost: a redesign of
   that phase, not of the others.
-- **The scratch-repository work is outside the repository.** The p7 worker acts on `devflow-scratch`
-  with the agent account. A failure to attach it (`add_repo` denied) stops the phase blocked.
+- **The plan cannot run until the spike file exists.** `mb2-spike-done` is a `manual_before` item whose
+  `done_when` the orchestrator can check (the file and its 12 conclusion lines). Phases p0 to p5a do not
+  read the file; p8 to p11b do.
 - **`update_pull_request` may not offer `reviewers`** (p5, D7). The brief step then stops blocked; the
   alternative is a manual reviewer request, which the owner decides.
 - **The board page's database API is documented only in the `artifact-capabilities` skill.** If a worker
@@ -640,14 +644,10 @@ manual_before:
     title: "Confirm the second GitHub user, ruleset, CODEOWNERS and throwaway PR are in place"
     why: "p5 and every later review gate assume the agent acts as a second GitHub user and the code owner's review is enforced"
     done_when: "The claude.ai GitHub connection shows the agent login, main requires Code Owner review, and a throwaway PR from a session showed the agent as author with Review required"
-  - id: mb2-scratch-repo
-    title: "Create the private scratch repository andras-tkcs/devflow-scratch with the ruleset and the agent invited with Write"
-    why: "p7-spike tests Dependabot access, CI triggers and approval behaviour there; without it p7 stops blocked and p8 to p11b cannot start"
-    done_when: "The repository shows a Dependabot alert for PyYAML and an open dependabot/pip pull request, the agent user has Write, and a session can attach it with add_repo"
-  - id: mb3-approved-pr
-    title: "Prepare one approved pull request \"spike d: approval test\" that is behind main"
-    why: "p7-spike item d needs an approved, out-of-date pull request to see whether an update-branch by the agent removes the approval"
-    done_when: "The pull request is open, shows Changes approved and says the branch is out of date with main"
+  - id: mb2-spike-done
+    title: "Run the maintenance spike from its own prompt and commit docs/design/maintenance-spike.md to this branch"
+    why: "p8 to p11b read the spike's conclusion lines and stop blocked without them; the plan is revised with the findings before /implement runs"
+    done_when: "On plan/devflow-v2, docs/design/maintenance-spike.md exists, grep -cE '^CONCLUSION ' on it prints 12 and grep -cE '^ROUTE ' prints 2"
 manual_after:
   - id: ma1-board-live
     title: "Publish the board with /board, set DEVFLOW_BOARD_URL, open it on the phone, check the push, try /board prune"
@@ -665,7 +665,7 @@ verify_after_merge:
   - .venv/bin/python plugins/devflow/scripts/validate_profile.py .claude/toolkit.yaml
   - .venv/bin/python plugins/devflow/scripts/validate_profile.py templates/toolkit.yaml --no-file-checks
 final_checks:
-  - docs/devflow-v2-plan.md, docs/devflow-v2-plan-manual-steps.html and docs/design/devflow-v2.md are deleted and nothing links to them
+  - docs/devflow-v2-plan.md, docs/devflow-v2-plan-manual-steps.html, docs/devflow-v2-spike-manual-steps.html and docs/design/devflow-v2.md are deleted and nothing links to them
   - git grep -nE "toolkit\.ref|session-start|SessionStart" -- plugins templates README.md docs/delivery.md docs/profile-reference.md prints nothing
   - docs/design/maintenance-spike.md exists and grep -cE '^CONCLUSION ' on it prints 12
   - The pull request body starts with a line that closes the plan's tracking issue when the manifest has one
@@ -720,28 +720,6 @@ phases:
       - "grep -n 'plugins/synced' plugins/devflow/skills/project-profile/SKILL.md matches"
       - ".venv/bin/python -m pytest tests/test_validate_profile.py::test_toolkit_section_is_rejected_with_a_migration_message -q passes"
       - ".venv/bin/python plugins/devflow/scripts/validate_profile.py .claude/toolkit.yaml prints toolkit.yaml: OK"
-  - id: p7-spike
-    title: "Spike - verify Dependabot, CI trigger, approval, unattended-run and anonymous-tag questions"
-    depends_on: []
-    complexity: M
-    human_gate: true
-    touches:
-      - docs/design/maintenance-spike.md
-    brief: |
-      Implement design section D8 of docs/devflow-v2-plan.md. You write exactly one repository file, `docs/design/maintenance-spike.md`; everything else you do is an experiment whose evidence goes into that file. Do not link to docs/design/devflow-v2.md or to the plan. Never write a token or secret into the file.
-      1. Attach the scratch repository: `add_repo` owner `andras-tkcs`, repo `devflow-scratch`, access `push`; clone it into a separate empty directory outside this checkout. If this fails, stop with status=blocked and quote the error (the owner's manual_before item mb2-scratch-repo is not done).
-      2. Run items (a) to (f) exactly as D8 describes them. Take the forks `PrivacyFence/peek` and `PrivacyFence/grist-core`. Use the pull request titled "spike d: approval test" for (d); if it does not exist or is not approved and behind main, stop with status=blocked and say which of those is missing (item mb3-approved-pr).
-      3. Record each item in the file as: `### (x) <title>`, then `**Method**`, `**Evidence**`, `**Result**` with a [V], [D] or [A] marker. Never mark [V] without evidence in the file. An experiment that fails or cannot be run is a result ("denied", "tool missing"), not a reason to stop; mark what you could not test as [A] and say why.
-      4. Write `## Conclusions` with exactly the 12 CONCLUSION lines and the 2 ROUTE lines of D8 (one value and one marker per CONCLUSION line; `c.default-token` is always `documented-no-trigger [D]`). Then `## Questions for the owner at the gate` (the two questions of D8) and `## Cleanup left behind` (the scratch pull requests and branches, the throwaway artifact URL, and the scheduled task id you deleted).
-      5. Delete the one-shot scheduled task with `delete_trigger` after reading its result.
-      6. Your PHASE-REPORT body must contain the 12 CONCLUSION lines, the 2 ROUTE lines and the owner questions verbatim, because the human gate shows them to the owner.
-      Stop conditions: no repository change other than the one file (check `git status`); if you were about to push to any branch other than your phase branch, stop.
-    acceptance:
-      - "git diff --name-only origin/feature/devflow-v2...HEAD prints only docs/design/maintenance-spike.md"
-      - "grep -cE '^CONCLUSION (a|b\\.push|b\\.rebase|c\\.session|c\\.default-token|d|e\\.unattended|e\\.board-write|e\\.push|e\\.env|f\\.peek|f\\.grist-core): [a-z-]+ \\[(V|D|A)\\]$' docs/design/maintenance-spike.md prints 12"
-      - "grep -cE '^ROUTE (a|f): ' docs/design/maintenance-spike.md prints 2"
-      - "grep -cE '^### \\((a|b|c|d|e|f)\\)' docs/design/maintenance-spike.md prints 6"
-      - "grep -c 'devflow-v2' docs/design/maintenance-spike.md prints 0"
   - id: p1-wake
     title: "Child tells its parent when done; size-based fallback timers"
     depends_on: [p0-plugin-only]
@@ -898,7 +876,7 @@ phases:
       - ".venv/bin/python -m pytest tests -q passes"
   - id: p8-profile-keys
     title: "All new profile keys for the maintenance commands, added at once"
-    depends_on: [p5-identity, p7-spike]
+    depends_on: [p5-identity]
     complexity: S
     touches:
       - plugins/devflow/schema/profile.schema.json
@@ -909,7 +887,7 @@ phases:
       - tests/fixtures/maintenance-toolkit.yaml
     brief: |
       Implement design section D9 of docs/devflow-v2-plan.md.
-      0. Read docs/design/maintenance-spike.md. Assumes: `CONCLUSION a: alerts-readable` and both `CONCLUSION f.peek: anonymous-ok` and `CONCLUSION f.grist-core: anonymous-ok`, each marked [V] or [D]. If any is missing, marked [A] or different, stop with status=blocked and quote the line (the keys of D9 assume no token is needed for alerts or tags).
+      0. Read docs/design/maintenance-spike.md; if the file does not exist in your checkout, stop with status=blocked (mb2-spike-done is not done). Assumes: `CONCLUSION a: alerts-readable` and both `CONCLUSION f.peek: anonymous-ok` and `CONCLUSION f.grist-core: anonymous-ok`, each marked [V] or [D]. If any is missing, marked [A] or different, stop with status=blocked and quote the line (the keys of D9 assume no token is needed for alerts or tags).
       1. `plugins/devflow/scripts/validate_profile.py`, function `check`: add `minimum` and `maximum` for integers and `pattern` for strings (re.search; the error is `'<path>': does not match <pattern>`; `'<path>': must be at least <n>` / `at most <n>`).
       2. Schema: add the `deps`, `upstream` and `land` objects of D9 with the stated required keys, `additionalProperties: false`, and `minimum`/`maximum`/`pattern` as listed (`deps.cooldown_days` 0..30, `deps.time_budget_minutes` 10..480, `land.max_prs` 1..50, `upstream.repo` pattern).
       3. `semantic_checks`: `upstream.tag_pattern` must compile with `re.compile` (message of D9).
@@ -1021,18 +999,19 @@ phases:
       - docs/design/devflow-v2.md
       - docs/devflow-v2-plan.md
       - docs/devflow-v2-plan-manual-steps.html
+      - docs/devflow-v2-spike-manual-steps.html
     brief: |
       Implement design section D15 of docs/devflow-v2-plan.md. Work in this order.
       1. Set `"version": "0.4.0"` in the five `plugin.json` files; update the `metadata.description` and the devflow plugin description in `.claude-plugin/marketplace.json` to mention `/board`, `/deps`, `/upstream` and `/land`.
       2. Create `docs/maintenance.md`: what each of `/deps`, `/upstream`, `/land` does (three short subsections taken from D11, D12, D14), the profile sections `deps`, `upstream`, `land` with one example each, how to schedule `/deps` and `/upstream` weekly (a scheduled task per repository, permission mode auto, an environment that has `DEVFLOW_BOARD_URL`), the board and `/board prune`, the secret `DEVFLOW_AGENT_TOKEN` and the setting Allow auto-merge for `/land`, and a link to `design/maintenance-spike.md`. Do not link to any file this phase deletes.
       3. `README.md`: bullets for `/board`, `/deps`, `/upstream`, `/land` under the existing command bullets, and one sentence in the `/make-plan` and `/implement` bullets about the tracking issue (D16); in "What is here" mention the new skill `status-board`, the new scripts and `plugins/devflow/board`, `plugins/devflow/templates`, and `docs/maintenance.md`.
       4. `docs/design.md`: update the layout block (new commands, `skills/status-board`, `scripts/`, `schema/status-record.schema.json`, `board/`, `templates/`), the §5 list of commands (one line each for the four new ones), and add a short §10 "devflow v2 and the maintenance commands" that says what was added and points to docs/maintenance.md and docs/design/maintenance-spike.md.
-      5. `git rm docs/design/devflow-v2.md docs/devflow-v2-plan.md docs/devflow-v2-plan-manual-steps.html`. Then `git grep -n 'devflow-v2'` must print nothing except possibly a branch or slug mention inside docs/maintenance.md that is not a link; remove any link to a deleted file.
+      5. `git rm docs/design/devflow-v2.md docs/devflow-v2-plan.md docs/devflow-v2-plan-manual-steps.html docs/devflow-v2-spike-manual-steps.html`. Then `git grep -n 'devflow-v2'` must print nothing except possibly a branch or slug mention inside docs/maintenance.md that is not a link; remove any link to a deleted file.
       6. Run `/dod`.
       Stop condition: a test that still references a deleted file or the old version `0.3.0` means stop with status=blocked and quote it.
     acceptance:
       - ".venv/bin/python -m pytest tests -q passes"
-      - "test ! -e docs/design/devflow-v2.md && test ! -e docs/devflow-v2-plan.md && test ! -e docs/devflow-v2-plan-manual-steps.html"
+      - "test ! -e docs/design/devflow-v2.md && test ! -e docs/devflow-v2-plan.md && test ! -e docs/devflow-v2-plan-manual-steps.html && test ! -e docs/devflow-v2-spike-manual-steps.html"
       - "grep -h '\"version\"' plugins/*/.claude-plugin/plugin.json prints five identical lines with 0.4.0"
       - "git grep -n 'devflow-v2' -- . ':!docs/maintenance.md' prints nothing"
       - "grep -c 'CONCLUSION ' docs/design/maintenance-spike.md prints 12"

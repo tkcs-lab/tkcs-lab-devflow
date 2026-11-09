@@ -63,7 +63,7 @@
 <main>
   <div>
     <h1>devflow v2 Setup Steps</h1>
-    <p class="lede">Everything only you can do for the devflow-v2 plan. Do Part 1 before you run <code>/implement</code>; do Part 2 after the last phase has merged and before you merge the pull request. Ticks are remembered in this browser only.</p>
+    <p class="lede">Everything only you can do for the devflow-v2 plan. Do Part 1 before you run <code>/implement</code> (the spike setup is on its own page); do Part 2 after the last phase has merged and before you merge the pull request. Ticks are remembered in this browser only.</p>
   </div>
   <div class="bar" role="status"><progress id="prog" max="1" value="0"></progress><span id="count">0 of 0 steps</span></div>
 
@@ -81,61 +81,22 @@
     <p class="done-when"><strong>Done when</strong> all three are true. If any is not, stop and tell me; the plan does not redo them.</p>
   </section>
 
-  <section class="item" id="mb2-scratch-repo">
-    <header><h3>2. Create the private scratch repository</h3><span class="time">about 20 min</span></header>
-    <span class="id">mb2-scratch-repo</span>
-    <p class="what">The spike phase (p7) tests Dependabot access, CI triggers and approval behaviour here, so nothing touches a real project. Use exactly this name: <code>andras-tkcs/devflow-scratch</code>. The order matters: seed the files first, add the ruleset last.</p>
-    <ol>
-      <li><input type="checkbox" data-id="mb2-1" id="mb2-1" aria-labelledby="l-mb2-1"><div><p id="l-mb2-1">Create the repository at <a href="https://github.com/new">github.com/new</a> as <strong>andras-tkcs / devflow-scratch</strong>, <strong>Private</strong>, with a README so the main branch exists.</p></div></li>
-      <li><input type="checkbox" data-id="mb2-2" id="mb2-2" aria-labelledby="l-mb2-2"><div><p id="l-mb2-2">Add these four files to <code>main</code> with GitHub's "Add file → Create new file" (commit straight to main; the ruleset does not exist yet).</p>
-        <div class="file"><div class="name"><span>requirements.txt</span><button type="button" data-copy="f1">Copy</button></div><pre id="f1">PyYAML==5.3
-</pre></div>
-        <div class="file"><div class="name"><span>.github/dependabot.yml</span><button type="button" data-copy="f2">Copy</button></div><pre id="f2">version: 2
-updates:
-  - package-ecosystem: pip
-    directory: "/"
-    schedule:
-      interval: daily
-</pre></div>
-        <div class="file"><div class="name"><span>.github/workflows/ci.yml</span><button type="button" data-copy="f3">Copy</button></div><pre id="f3">name: ci
-on:
-  push:
-    branches: [main]
-  pull_request:
-jobs:
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo ok
-</pre></div>
-        <div class="file"><div class="name"><span>.github/CODEOWNERS</span><button type="button" data-copy="f4">Copy</button></div><pre id="f4">* @andras-tkcs
-</pre></div>
-        <p class="what">The old PyYAML pin is on purpose: it raises a Dependabot alert and a Dependabot pull request.</p></div></li>
-      <li><input type="checkbox" data-id="mb2-3" id="mb2-3" aria-labelledby="l-mb2-3"><div><p id="l-mb2-3">Turn on Dependabot alerts, Dependabot security updates and Dependabot version updates at <a href="https://github.com/andras-tkcs/devflow-scratch/settings/security_analysis">Settings → Advanced Security</a>.</p></div></li>
-      <li><input type="checkbox" data-id="mb2-4" id="mb2-4" aria-labelledby="l-mb2-4"><div><p id="l-mb2-4">Invite the agent user with <strong>Write</strong> (not Admin, not Maintain) at <a href="https://github.com/andras-tkcs/devflow-scratch/settings/access">Settings → Collaborators</a>, and accept the invitation while signed in as the agent user.</p></div></li>
-      <li><input type="checkbox" data-id="mb2-5" id="mb2-5" aria-labelledby="l-mb2-5"><div><p id="l-mb2-5">Make sure the Claude GitHub App covers this repository: <a href="https://github.com/apps/claude/installations/select_target">github.com/apps/claude/installations/select_target</a>, then add <code>devflow-scratch</code> to the repositories it can see.</p></div></li>
-      <li><input type="checkbox" data-id="mb2-6" id="mb2-6" aria-labelledby="l-mb2-6"><div><p id="l-mb2-6">Add the same ruleset you use on your real repositories to <code>main</code> at <a href="https://github.com/andras-tkcs/devflow-scratch/settings/rules/new?target=branch">Settings → Rules → New branch ruleset</a>: require a pull request; require review from Code Owners; 1 approval; dismiss stale approvals on new commits; require approval of the most recent reviewable push; require status check <code>ci</code>; require branches to be up to date; block force pushes and deletions. No bypass list entries for the agent user.</p></div></li>
-    </ol>
-    <p class="done-when"><strong>Done when</strong> the repository's Security tab lists at least one Dependabot alert for PyYAML, a Dependabot pull request (branch <code>dependabot/pip/…</code>) is open (it can take a few minutes), and a session can open the repository (<code>list_repos</code> shows it).</p>
-  </section>
 
-  <section class="item" id="mb3-approved-pr">
-    <header><h3>3. Prepare one approved pull request that is behind main</h3><span class="time">about 15 min</span></header>
-    <span class="id">mb3-approved-pr</span>
-    <p class="what">Spike item (d) asks whether an update-branch by the agent removes your approval. It needs a pull request that you approved and that is out of date. You need both accounts: use a private browser window for the agent user.</p>
+  <section class="item" id="mb2-spike-done">
+    <header><h3>2. Check that the spike result is on the plan branch</h3><span class="time">about 1 min</span></header>
+    <span class="id">mb2-spike-done</span>
+    <p class="what">The spike runs from its own prompt, in its own session, before this plan. Its result is a file the later phases read.</p>
     <ol>
-      <li><input type="checkbox" data-id="mb3-1" id="mb3-1" aria-labelledby="l-mb3-1"><div><p id="l-mb3-1">As the <strong>agent user</strong>, on the scratch repository, use the web editor to create a new file <code>spike-d-a.txt</code> (content <code>a</code>) on a new branch <code>spike/d-a</code> and open a pull request titled <strong>spike d: approval test</strong>.</p></div></li>
-      <li><input type="checkbox" data-id="mb3-2" id="mb3-2" aria-labelledby="l-mb3-2"><div><p id="l-mb3-2">As <strong>you</strong>, open that pull request and approve it (Review changes → Approve). Do not merge it.</p></div></li>
-      <li><input type="checkbox" data-id="mb3-3" id="mb3-3" aria-labelledby="l-mb3-3"><div><p id="l-mb3-3">As the <strong>agent user</strong>, create <code>spike-d-move.txt</code> on a new branch <code>spike/d-move</code> and open a second pull request. As <strong>you</strong>, approve it and merge it once the <code>ci</code> check is green. This moves <code>main</code> ahead.</p></div></li>
+      <li><input type="checkbox" data-id="mb2-1" id="mb2-1" aria-labelledby="l-mb2-1"><div><p id="l-mb2-1">On the <code>plan/devflow-v2</code> branch, the file <code>docs/design/maintenance-spike.md</code> exists and has 12 lines that start with <code>CONCLUSION</code> and 2 that start with <code>ROUTE</code>.</p></div></li>
+      <li><input type="checkbox" data-id="mb2-2" id="mb2-2" aria-labelledby="l-mb2-2"><div><p id="l-mb2-2">You have read its conclusions and the plan was updated for anything that surprised you.</p></div></li>
     </ol>
-    <p class="done-when"><strong>Done when</strong> the first pull request ("spike d: approval test") is open, shows "Changes approved" and says the branch is out of date with main.</p>
-    <p class="note">Leave both Dependabot and the first pull request alone. Do not click "Update branch" yourself.</p>
+    <p class="done-when"><strong>Done when</strong> both are true.</p>
   </section>
 
   <h2 class="after">Part 2 · After implementation</h2>
 
   <section class="item" id="ma1-board-live">
-    <header><h3>4. Publish the board and point sessions at it</h3><span class="time">about 5 min</span></header>
+    <header><h3>3. Publish the board and point sessions at it</h3><span class="time">about 5 min</span></header>
     <span class="id">ma1-board-live</span>
     <p class="what">Verifies what no test can: the board on your phone and the push notification.</p>
     <ol>
@@ -148,7 +109,7 @@ jobs:
   </section>
 
   <section class="item" id="ma2-throwaway-pr">
-    <header><h3>5. Confirm the review gate once more</h3><span class="time">about 5 min</span></header>
+    <header><h3>4. Confirm the review gate once more</h3><span class="time">about 5 min</span></header>
     <span class="id">ma2-throwaway-pr</span>
     <ol>
       <li><input type="checkbox" data-id="ma2-1" id="ma2-1" aria-labelledby="l-ma2-1"><div><p id="l-ma2-1">Start a session on a repository that uses devflow v2. Check that its first reply says the account matches <code>git.bot_login</code> (the <code>get_me</code> check).</p></div></li>
@@ -158,7 +119,7 @@ jobs:
   </section>
 
   <section class="item" id="ma3-scheduled-tasks">
-    <header><h3>6. Create the weekly scheduled tasks</h3><span class="time">about 10 min</span></header>
+    <header><h3>5. Create the weekly scheduled tasks</h3><span class="time">about 10 min</span></header>
     <span class="id">ma3-scheduled-tasks</span>
     <p class="what">Each repository needs a profile section first: <code>deps:</code> for <code>/deps</code>, <code>upstream:</code> for <code>/upstream</code> (see docs/profile-reference.md after the merge). Today the two forks are <code>PrivacyFence/peek</code> and <code>PrivacyFence/grist-core</code>; a future fork gets its own profile and its own task the same way.</p>
     <ol>
@@ -171,7 +132,7 @@ jobs:
   </section>
 
   <section class="item" id="ma4-land-repos">
-    <header><h3>7. Set up repositories that use /land</h3><span class="time">about 15 min per repository</span></header>
+    <header><h3>6. Set up repositories that use /land</h3><span class="time">about 15 min per repository</span></header>
     <span class="id">ma4-land-repos</span>
     <p class="what">/land installs a workflow that updates the next auto-merge pull request after each merge. The workflow needs the agent's token as a secret, and the repository must allow auto-merge. Do this for each repository that will use <code>/land</code>.</p>
     <ol>
