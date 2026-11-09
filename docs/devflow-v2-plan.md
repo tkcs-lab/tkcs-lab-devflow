@@ -300,12 +300,14 @@ conclusion lines the phases read. One session, one file: `docs/design/maintenanc
 plan (both are deleted later). Side effects outside the repository are allowed and listed in its last
 section: the scratch repository `andras-tkcs/devflow-scratch` (attach it with `add_repo`, access `push`),
 one throwaway artifact and one one-shot scheduled task (delete the task afterwards with `delete_trigger`).
-The forks under test are `PrivacyFence/peek` and `PrivacyFence/grist-core`; their upstreams are whatever
-the forks' `parent` (or `source`) field says on `https://api.github.com/repos/<fork>`, read anonymously.
+The forks under test are `PrivacyFence/peek` and `PrivacyFence/grist-core`; their upstreams are named by
+the owner when the spike starts, or else read from the fork's `parent` (or `source`) field. The sandbox's
+proxy can refuse anonymous API reads of repositories that are not attached to the session; that is a
+session restriction and is recorded as such, and `f.*` is based on `git ls-remote --tags` of the upstream.
 
 File layout, in order: a header with the date and the two forks; `### (a)` to `### (f)` sections, each
 with *Method* (the exact commands or tool calls), *Evidence* (short excerpts, never a token or a secret),
-*Result* with a marker; `## Conclusions` (the lines below); `## Questions for the owner at the gate`;
+*Result* with a marker; `## Conclusions` (the lines below); `## Questions for the owner`;
 `## Cleanup left behind`. Markers: **[V]** verified here, **[D]** stated by documentation only, **[A]**
 assumed. The conclusions block is exact, one line each, nothing else starts with these words:
 
@@ -322,11 +324,11 @@ CONCLUSION e.push: ok|failed [V|D|A]
 CONCLUSION e.env: set|unset [V|D|A]
 CONCLUSION f.peek: anonymous-ok|anonymous-denied|no-upstream [V|D|A]
 CONCLUSION f.grist-core: anonymous-ok|anonymous-denied|no-upstream [V|D|A]
-ROUTE a: <the exact command or tool call that lists open Dependabot alerts, or none>
-ROUTE f: <the exact command that lists an upstream's tags anonymously, or none>
+ROUTE a: <one command in plain text, no backticks, <owner>/<repo> instead of real names; or none>
+ROUTE f: <one command in plain text, no backticks, <owner>/<repo> instead of real names; or none>
 ```
 
-(Each CONCLUSION line shows one value and one marker, for example `CONCLUSION d: approval-kept [V]`.
+(Each CONCLUSION line shows one value and one marker, for example `CONCLUSION d: approval-kept [V]`. The word CONCLUSION appears nowhere else in the file. A ROUTE line is a single command, for example `ROUTE f: git ls-remote --tags https://github.com/<owner>/<repo>.git`, so that p9 and p10 can copy it into a command that must contain no project name. `b.rebase` is `n/a` when the push was denied; `d` is `approval-dismissed` also when the review stays APPROVED but the review decision falls to review-required; an item that could not be tested takes its negative value with `[A]`.
 There are 12 CONCLUSION lines and 2 ROUTE lines.)
 
 What each item does:
@@ -348,8 +350,8 @@ What each item does:
   review state again and whether the approval is dismissed. State in the result that a PAT-based
   workflow doing the same API call is assumed equivalent **[A]**.
 - **(e)** Publish a throwaway artifact with `capabilities: {db: {}}`. Create a one-shot scheduled task
-  (`create_trigger`, `create_new_session_on_fire: true`, `run_once_at` 8 minutes ahead, permission mode
-  `auto`) whose prompt: writes the document `spike-e` (fields `at`, `by` = its session id) to that
+  (`create_trigger`, `create_new_session_on_fire: true`, `run_once_at` 8 minutes ahead; the tool has no
+  permission-mode parameter, which is recorded) whose prompt: writes the document `spike-e` (fields `at`, `by` = its session id) to that
   artifact's database with `ArtifactData`; checks whether `DEVFLOW_BOARD_URL` is set and records only
   `set` or `unset`, never the value; calls `PushNotification` with `spike e unattended`; ends. Wait 12
   minutes with `send_later`, read the document back, find the fired session with `list_sessions` and read
