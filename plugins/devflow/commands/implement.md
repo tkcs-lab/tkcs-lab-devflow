@@ -273,3 +273,20 @@ the PR body.
 Never: push to `<main>`; merge the PR yourself; rebase or force-push the feature branch; run a phase's
 work in your own session to "save time"; skip a phase whose dependency failed; do a `manual_*` step
 on the user's behalf.
+
+## Status board
+
+Follow the `status-board` skill (whichever form the skill list shows) for where and how to write; a
+board error never stops the run. `/implement` writes a record as follows.
+
+- The first record (status `starting`) is written before any child session starts. After that, write at
+  every ledger change and at every check-in.
+- Fields: `kind` is `"run"` and `command` is `null`; `plan_slug`, `plan_url`, `feature_branch` come from
+  the plan and `orchestrator_session` is this session; `phases` mirrors the ledger, with the states
+  `pending`, `running`, `merged`, `failed` and `gate`.
+- `status` follows the field rules of brief section 4 (`starting`, `running`, `waiting_user`,
+  `reviewing`, `pr_open`, `done`, `failed`); `needs_you` is true exactly when you have asked the owner
+  something or stopped on a failure, with a one-line reason.
+- `pr` is filled when the pull request is opened and kept current afterwards.
+- `next_check_at` equals the time of the timer you have armed, or `null` when none is armed.
+- `updated_at` is set on every write.
