@@ -41,6 +41,7 @@ security:
   automated_security_fixes: true
   secret_scanning: true
   secret_push_protection: true
+  private_vulnerability_reporting: true
 
 actions:
   default_workflow_permissions: read
@@ -90,7 +91,13 @@ branches:                          # branches already merged into the default br
 
 config_dirs:
   forbid: []                       # paths removed through a pull request, e.g. [".archon"]
+  require: []                      # files every repository needs, e.g. [SECURITY.md, .github/CODEOWNERS, LICENSE]
   # known: [.cursor]               # more top-level dot directories to expect (.github, .claude and a few more are built in); any other is reported
+
+workflow_lint:                     # read only: what to fix by hand in the workflow files
+  pin_actions: third_party         # third_party | all: actions not pinned to a commit SHA
+  require_permissions: true
+  forbid_pull_request_target: true
 
 workflows:                         # installed or updated through a pull request; the script never merges it
   - template: release              # cut a release: annotated tag plus GitHub release (run by hand; starts as a dry run)

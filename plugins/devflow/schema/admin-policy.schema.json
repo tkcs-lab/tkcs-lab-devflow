@@ -107,7 +107,8 @@
         "vulnerability_alerts": { "$ref": "#/$defs/yesno" },
         "automated_security_fixes": { "$ref": "#/$defs/yesno" },
         "secret_scanning": { "$ref": "#/$defs/yesno" },
-        "secret_push_protection": { "$ref": "#/$defs/yesno" }
+        "secret_push_protection": { "$ref": "#/$defs/yesno" },
+        "private_vulnerability_reporting": { "$ref": "#/$defs/yesno" }
       }
     },
     "actions": {
@@ -214,8 +215,19 @@
       "additionalProperties": false,
       "description": "Files and directories committed to the repositories.",
       "properties": {
-        "forbid": { "$ref": "#/$defs/names", "description": "Paths or globs (root-relative) that must not exist, for example .archon. Removed through a pull request." },
+        "forbid": { "$ref": "#/$defs/names", "description": "Paths or globs (root-relative) that must not exist, for example .archon. * matches within one path segment. Removed through a pull request." },
+        "require": { "$ref": "#/$defs/names", "description": "Files every repository must have, as root-relative paths (for example SECURITY.md, .github/CODEOWNERS, LICENSE). A missing one is reported." },
         "known": { "$ref": "#/$defs/names", "description": "Top-level dot directories that are expected, in addition to the built-in list (.github .claude .devcontainer .vscode .husky .config .changeset .githooks). Any other is reported." }
+      }
+    },
+    "workflow_lint": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Read-only hygiene checks on the workflow files of the default branch. Nothing is changed: a finding says what to fix by hand.",
+      "properties": {
+        "pin_actions": { "enum": ["third_party", "all"], "description": "Report actions not pinned to a full commit SHA: third_party leaves actions/* and github/* alone, all reports every one." },
+        "require_permissions": { "type": "boolean", "description": "Report a workflow without a top-level permissions block." },
+        "forbid_pull_request_target": { "type": "boolean", "description": "Report a workflow that runs on pull_request_target." }
       }
     },
     "workflows": {
@@ -226,7 +238,7 @@
         "additionalProperties": false,
         "properties": {
           "template": { "enum": ["release", "land"], "description": "A template shipped with devflow." },
-          "path": { "type": "string", "minLength": 1, "description": "A template file of your own, relative to the policy file." },
+          "path": { "type": "string", "minLength": 1, "description": "A template file of your own, below the directory of the policy file (no absolute path, no ..)." },
           "dest": { "type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9._-]+\\.ya?ml$", "description": "Where it goes. Default: .github/workflows/ plus the template's file name." },
           "params": { "type": "object", "description": "Values for the template's __UPPER_CASE__ placeholders, as strings of letters, digits and . _ / -. main_branch defaults to the repository's default branch." },
           "repos": { "$ref": "#/$defs/names", "description": "Repository name globs this entry applies to. Default: all selected." },

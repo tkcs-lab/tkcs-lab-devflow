@@ -52,12 +52,13 @@ Run unattended (no user to ask), do only the audit and stop with the report; nev
 - **Can:** organisation settings, repository settings, security features, Actions permissions, a first branch
   protection, labels (create, update, rename, delete), unused secrets and variables, webhooks, deploy keys,
   merged branches, fine-grained tokens, forbidden paths (for example `.archon`), workflow files.
+- **Reports only (`lint`, required files):** actions not pinned to a commit, workflows without `permissions`, `pull_request_target`, missing `SECURITY.md`/`CODEOWNERS`/`LICENSE`.
 - **Cannot, and says so as `warn` or `info`:** uninstall a GitHub App (the report links the settings page; GitHub has
   no "last used" for apps, so an app is judged against `apps.allow`), list OAuth authorisations or classic
-  personal access tokens, read environment or Codespaces secrets, replace an existing branch protection, add or remove people.
+  personal access tokens, read environment or Codespaces secrets, read rulesets, replace an existing branch protection, add or remove people.
 - **Heuristic:** a secret or variable is "unused" when no workflow of the repository (any repository, for an
   organisation-level one) names it. The script says nothing is unused when a workflow hides names
-  (`secrets: inherit`, a computed name). Anything used from elsewhere belongs in `keep`.
+  (`secrets: inherit`, a computed name). Only the default branch is read, and an organisation-level name is judged only when the token sees every repository of the organisation. Anything used from elsewhere belongs in `keep`.
 
 ## Releases
 
@@ -66,7 +67,7 @@ A release is the maintainer's decision, so this skill installs the workflow and 
 `.github/workflows/devflow-release.yml`. To cut a release the user opens Actions, `devflow-release`, Run workflow
 on the main branch. The default is a dry run that shows the tag and the notes; unticking `dry_run` makes the tag
 (`<tag_prefix><version>`, an annotated tag on the head of the main branch) and the GitHub release. Never dispatch it
-from a session and never push a tag (see `pr-steward`).
+from a session and never push a tag (see `pr-steward`). The workflow's branch check is not a control; tell the user that a tag ruleset is what restricts who can release.
 
 ## Never
 

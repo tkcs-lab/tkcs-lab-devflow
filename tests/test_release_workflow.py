@@ -103,12 +103,12 @@ def test_renders_to_valid_yaml(ra, prefix):
     assert rendered["jobs"]["release"]["steps"][0]["env"]["PREFIX"] == prefix
 
 
-def stub_env(tmp_path, refs=(), checks=None, status="success", **extra):
+def stub_env(tmp_path, refs=(), checks=None, status="success", statuses=1, **extra):
     d = tmp_path / "stub"
     d.mkdir(exist_ok=True)
     (d / "refs.json").write_text(json.dumps([{"ref": r} for r in refs]))
     (d / "checks.json").write_text(json.dumps({"check_runs": checks or []}))
-    (d / "status.json").write_text(json.dumps({"state": status}))
+    (d / "status.json").write_text(json.dumps({"state": status, "total_count": statuses}))
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
     gh = bindir / "gh"
@@ -182,8 +182,8 @@ def test_existing_tag_stops(doc, tmp_path):
     assert p.returncode == 1 and "tag v1.0.1 already exists" in p.stdout and out == ""
 
 
-def run_check(doc, tmp_path, checks, status="success"):
-    env, *_ = stub_env(tmp_path, checks=checks, status=status, SHA="abc", SELF="release")
+def run_check(doc, tmp_path, checks, status="success", statuses=1):
+    env, *_ = stub_env(tmp_path, checks=checks, status=status, statuses=statuses, SHA="abc", SELF="devflow-release")
     return run_step(doc, "Check that the commit is green", env, tmp_path)
 
 
@@ -193,7 +193,7 @@ def run_(name, status="completed", conclusion="success"):
 
 @needs_jq
 def test_green_commit_passes_and_ignores_its_own_run(doc, tmp_path):
-    p = run_check(doc, tmp_path, [run_("test"), run_("lint", conclusion="skipped"), run_("release", "in_progress", None)])
+    p = run_check(doc, tmp_path, [run_("test"), run_("lint", conclusion="skipped"), run_("devflow-release", "in_progress", None)])
     assert p.returncode == 0, p.stdout + p.stderr
 
 
@@ -206,9 +206,10 @@ def test_red_or_running_check_blocks(doc, tmp_path, bad):
 
 
 @needs_jq
-@pytest.mark.parametrize("state,code", [("failure", 1), ("error", 1), ("success", 0), ("pending", 0)])
-def test_commit_status(doc, tmp_path, state, code):
-    assert run_check(doc, tmp_path, [run_("test")], status=state).returncode == code
+@pytest.mark.parametrize("state,statuses,code", [("failure", 1, 1), ("error", 1, 1), ("success", 1, 0), ("pending", 1, 1),
+                                                  ("pending", 0, 0)])  # "pending" with no status at all is just "none yet"
+def test_commit_status(doc, tmp_path, state, statuses, code):
+    assert run_check(doc, tmp_path, [run_("test")], status=state, statuses=statuses).returncode == code
 
 
 def publish(doc, tmp_path, prerelease="false", fail=False):

@@ -106,13 +106,26 @@ def find_token() -> str | None:
     return None
 
 
+class _SameHostRedirects(urllib.request.HTTPRedirectHandler):
+    """urllib copies every request header to the redirect target. The token must not leave the host it was meant for."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and urllib.parse.urlsplit(newurl).netloc != urllib.parse.urlsplit(req.full_url).netloc:
+            new.remove_header("Authorization")
+        return new
+
+
+_OPENER = urllib.request.build_opener(_SameHostRedirects)
+
+
 class Client:
     """The few GitHub REST calls the checks need. Tests replace the whole object."""
 
     def __init__(self, token: str | None = None, base: str = API, urlopen=None, sleep=time.sleep):
         self.token = token
         self.base = base.rstrip("/")
-        self._urlopen = urlopen or urllib.request.urlopen
+        self._urlopen = urlopen or _OPENER.open
         self._sleep = sleep
 
     def _wait(self, status: int, headers) -> float | None:
@@ -268,9 +281,10 @@ def validate_policy(policy, base_dir: Path | None = None) -> list[str]:
     for pattern in forbid:
         bare = pattern.strip("/")
         if (not bare or bare.startswith("..") or "/../" in f"/{bare}/" or pattern.startswith("/")
-                or bare in ("*", "**", ".*", ".", ".git") or bare.startswith(".git/")):
-            errors.append(f"'config_dirs.forbid': refusing '{pattern}' (use a path or glob below the repository root, "
-                          "not the root, '.git' or a bare wildcard)")
+                or bare in ("*", "**", ".*", ".", ".git") or bare.startswith(".git/")
+                or len(re.sub(r"[*?\[\]]", "", bare)) < 2):
+            errors.append(f"'config_dirs.forbid': refusing '{pattern}' (use a path or glob below the repository root with at "
+                          "least two literal characters, not the root, '.git' or a bare wildcard; * matches within one path segment)")
     labels = policy.get("labels", {}).get("sync", [])
     seen: dict[str, str] = {}
     for label in labels:
@@ -283,8 +297,18 @@ def validate_policy(policy, base_dir: Path | None = None) -> list[str]:
         if ("template" in wf) == ("path" in wf):
             errors.append(f"'{where}': give exactly one of 'template' and 'path'")
             continue
-        if "path" in wf and base_dir is not None and not (base_dir / wf["path"]).is_file():
-            errors.append(f"'{where}.path': file not found: '{wf['path']}' (relative to the policy file)")
+        if "path" in wf:
+            rel = Path(wf["path"])
+            if rel.is_absolute() or ".." in rel.parts:
+                errors.append(f"'{where}.path': must be a path below the policy file's directory (no absolute path, no '..')")
+                continue
+            if base_dir is not None:
+                target = (base_dir / rel).resolve()
+                if not target.is_relative_to(base_dir.resolve()):
+                    errors.append(f"'{where}.path': '{wf['path']}' leaves the policy file's directory (a symbolic link?)")
+                    continue
+                if not target.is_file():
+                    errors.append(f"'{where}.path': file not found: '{wf['path']}' (relative to the policy file)")
         for key, value in wf.get("params", {}).items():
             if not isinstance(value, str) or not SAFE_PARAM.match(value):
                 errors.append(f"'{where}.params.{key}': must be a string of letters, digits and . _ / - only")
@@ -358,6 +382,21 @@ class Ctx:
         return self.memo("repos", lambda: self.c.paginate(f"/orgs/{self.org}/repos", {"type": "all"}))
 
     @property
+    def org_complete(self) -> bool:
+        """True when the repository list holds every repository the organisation has. A token that cannot see
+        some repositories under-counts where a secret is used, so nothing of the organisation may be deleted as unused."""
+
+        def build() -> bool:
+            try:
+                org = self.c.get(f"/orgs/{self.org}")
+            except ApiError:
+                return False
+            counts = [org.get("public_repos"), org.get("total_private_repos")]
+            return all(isinstance(n, int) for n in counts) and len(self.all_repos) >= sum(counts)
+
+        return self.memo("complete", build)
+
+    @property
     def scan_repos(self) -> list[dict]:
         """Every live repository: where a secret or variable of the organisation might be used."""
         return [r for r in self.all_repos if not r.get("archived")]
@@ -399,26 +438,38 @@ class Ctx:
 
         return self.memo(("snap", repo["full_name"]), build)
 
-    def usage(self, repo: dict) -> tuple[set, set, bool]:
-        """(secret names, variable names, opaque) that a repository's workflows and dependabot.yml
-        refer to. opaque is true when the text hides some (secrets: inherit, a computed name, or a
-        file that could not be read), so nothing may be called unused."""
+    def automation_files(self, repo: dict) -> tuple[list[tuple[str, str]], bool]:
+        """([(path, text)] of the workflow files and dependabot.yml on the default branch, unreadable). unreadable is
+        true when a file could not be read or the tree was too large to list."""
 
         def build():
             snap = self.snapshot(repo)
-            secrets, variables, opaque = set(), set(), snap.truncated
+            files, unreadable = [], snap.truncated
             for e in snap.entries:
                 if e.get("type") != "blob" or not re.match(r"^\.github/(workflows/[^/]+|dependabot)\.ya?ml$", e["path"]):
                     continue
                 try:
-                    text = self.c.get_text(f"/repos/{repo['full_name']}/contents/{urllib.parse.quote(e['path'], safe='/')}",
-                                           {"ref": snap.commit})
+                    files.append((e["path"], self.c.get_text(
+                        f"/repos/{repo['full_name']}/contents/{urllib.parse.quote(e['path'], safe='/')}", {"ref": snap.commit})))
                 except ApiError:
-                    opaque = True
-                    continue
+                    unreadable = True
+            return files, unreadable
+
+        return self.memo(("files", repo["full_name"]), build)
+
+    def usage(self, repo: dict) -> tuple[set, set, bool]:
+        """(secret names, variable names, opaque) that a repository's workflows and dependabot.yml
+        refer to. opaque is true when the text hides some (secrets: inherit, a computed name, the whole
+        context as in toJSON(secrets), or a file that could not be read), so nothing may be called unused.
+        Only the default branch is read."""
+
+        def build():
+            files, opaque = self.automation_files(repo)
+            secrets, variables = set(), set()
+            for _, text in files:
                 for kind, dotted, quoted in REFERENCE.findall(text):
                     (secrets if kind == "secrets" else variables).add((dotted or quoted).upper())
-                if INHERIT.search(text) or COMPUTED.search(text):
+                if INHERIT.search(text) or COMPUTED.search(text) or WHOLE_CONTEXT.search(text):
                     opaque = True
             return secrets, variables, opaque
 
@@ -428,6 +479,7 @@ class Ctx:
 REFERENCE = re.compile(r"\b(secrets|vars)\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|\[\s*['\"]([^'\"]+)['\"]\s*\])")
 INHERIT = re.compile(r"^\s*secrets:\s*inherit\b", re.M)
 COMPUTED = re.compile(r"\b(?:secrets|vars)\s*\[\s*(?!['\"])")
+WHOLE_CONTEXT = re.compile(r"\$\{\{(?:(?!\}\}).)*?\b(?:secrets|vars)\b(?!\s*[.\[])", re.S)  # toJSON(secrets), format('{0}', vars)
 
 
 def per_repo(ctx: Ctx, check: str, fn) -> list[Finding]:
@@ -576,6 +628,10 @@ def check_security(ctx: Ctx) -> list[Finding]:
                     raise
                 have = False
             diff("automated_security_fixes", have, want["automated_security_fixes"], api("PUT", path), api("DELETE", path))
+        if "private_vulnerability_reporting" in want:
+            path = f"/repos/{fn}/private-vulnerability-reporting"
+            diff("private_vulnerability_reporting", bool((ctx.c.get(path) or {}).get("enabled")),
+                 want["private_vulnerability_reporting"], api("PUT", path), api("DELETE", path))
         sa = ctx.repo(repo).get("security_and_analysis")
         for key, api_key in SCANNING.items():
             if key not in want:
@@ -642,6 +698,13 @@ def check_protection(ctx: Ctx) -> list[Finding]:
             return []
         branch = snap.branch if cfg.get("branch", "default") == "default" else cfg["branch"]
         quoted = urllib.parse.quote(branch, safe="/")
+        if branch != snap.branch:
+            try:
+                ctx.c.get(f"/repos/{fn}/branches/{quoted}")
+            except ApiError as exc:
+                if exc.status != 404:
+                    raise
+                return [Finding("protection", fn, branch, f"branch '{branch}' does not exist", "info")]
         try:
             have = ctx.c.get(f"/repos/{fn}/branches/{quoted}/protection")
         except ApiError as exc:
@@ -738,16 +801,18 @@ def _named(ctx: Ctx, check: str, cfg: dict, noun: str, repo_lists, avail_lists, 
             return out + [failure(check, repo["full_name"], exc)]
     blocked = sorted(r for r, u in usages.items() if u[2])
     used_anywhere = set().union(*(u[used_index] for u in usages.values())) if usages else set()
+    complete = ctx.org_complete
     for label, list_path, key, del_path in org_lists:
         for item in ctx.c.paginate(list_path.format(o=ctx.org), key=key):
             name = item["name"]
             if name.upper() in keep or name.upper() in used_anywhere:
                 continue
-            if blocked:
+            if blocked or not complete:
                 more = " and more" if len(blocked) > 5 else ""
-                out.append(Finding(check, ctx.org, f"{label}:{name}", f"cannot tell whether {label} {name} is used: "
-                                   f"{', '.join(blocked[:5])}{more} hide names (secrets: inherit, a computed name or an "
-                                   "unreadable file)", "info"))
+                why = (f"{', '.join(blocked[:5])}{more} hide names (secrets: inherit, a computed name, the whole context or an "
+                       "unreadable file)") if blocked else ("the token does not see every repository of the organisation "
+                                                           "(it must belong to an owner to be sure)")
+                out.append(Finding(check, ctx.org, f"{label}:{name}", f"cannot tell whether {label} {name} is used: {why}", "info"))
                 continue
             out.append(_unused_finding(check, ctx.org, label, name, del_path.format(o=ctx.org, n=_q(name)), flag,
                                        "not referred to by any workflow of any repository in the organisation"))
@@ -863,6 +928,15 @@ def hook_state(hook: dict) -> str:
     return "ok"
 
 
+def _recent_success(ctx: Ctx, list_path: str, hook_id) -> bool | None:
+    """Did any of the hook's latest deliveries succeed? None when the deliveries cannot be read."""
+    try:
+        deliveries = ctx.c.get(f"{list_path}/{hook_id}/deliveries", {"per_page": 30}) or []
+    except ApiError:
+        return None
+    return any(200 <= (d.get("status_code") or 0) < 300 for d in deliveries)
+
+
 def _hooks(ctx: Ctx, scope: str, list_path: str, cfg: dict) -> list[Finding]:
     out = []
     for hook in ctx.c.paginate(list_path):
@@ -872,8 +946,15 @@ def _hooks(ctx: Ctx, scope: str, list_path: str, cfg: dict) -> list[Finding]:
         state = hook_state(hook)
         if state == "ok":
             continue
+        deletable = True
+        if state == "failing":
+            # One bad delivery is not a dead hook: it is deleted only when none of the latest deliveries succeeded.
+            recent = _recent_success(ctx, list_path, hook["id"])
+            deletable = recent is False
+            if recent:
+                state = "flaky (the last delivery failed, an earlier one succeeded)"
         msg = f"webhook {hook['id']} ({redact_url(url)}) is {state}"
-        if state in cfg.get("delete", []):
+        if deletable and state in cfg.get("delete", []):
             out.append(Finding("webhooks", scope, str(hook["id"]), msg, "fix", api("DELETE", f"{list_path}/{hook['id']}", destructive=True)))
         else:
             out.append(Finding("webhooks", scope, str(hook["id"]), msg, "info" if state == "never delivered" else "warn",
@@ -905,8 +986,11 @@ def check_keys(ctx: Ctx) -> list[Finding]:
                 continue
             days = (ctx.now - ref).days
             msg = f"deploy key '{key.get('title', '?')}' (id {key['id']}, {'read-only' if key.get('read_only') else 'read-write'}): " \
-                  f"{'not used for' if key.get('last_used') else 'never used, created'} {days} days"
-            if cfg.get("delete_unused"):
+                  f"{'not used for' if key.get('last_used') else 'no recorded use, created'} {days} days"
+            if not key.get("last_used"):
+                # GitHub does not record a last use for every key: unknown is not unused, so a person decides.
+                out.append(Finding("keys", fn, str(key["id"]), msg, "warn", manual="check whether it is still needed, then delete it by hand"))
+            elif cfg.get("delete_unused"):
                 out.append(Finding("keys", fn, str(key["id"]), msg, "fix", api("DELETE", f"/repos/{fn}/keys/{key['id']}", destructive=True)))
             else:
                 out.append(Finding("keys", fn, str(key["id"]), msg, "warn", manual="delete it (deploy_keys.delete_unused: true lets apply do it)"))
@@ -920,10 +1004,19 @@ def check_keys(ctx: Ctx) -> list[Finding]:
 MAX_BRANCH_COMPARES = 500
 
 
+def last_touched(ctx: Ctx, fn: str, branch: str) -> dt.datetime | None:
+    """When the branch last changed (created or pushed to), from the repository activity API; None when unknown.
+    The date of the commit it points at says nothing: a branch cut today from an old commit would look old."""
+    try:
+        acts = ctx.c.get(f"/repos/{fn}/activity", {"ref": f"refs/heads/{branch}", "per_page": 1})
+    except ApiError:
+        return None
+    return _when((acts[0] if acts else {}).get("timestamp"))
+
+
 def check_branches(ctx: Ctx) -> list[Finding]:
-    """Branches whose every commit is already in the default branch. A branch that has no commit of its
-    own and was cut yesterday looks the same, so only branches whose head commit is older than
-    branches.min_age_days count."""
+    """Branches whose every commit is already in the default branch, that no open pull request uses as head or
+    base and that were last touched more than branches.min_age_days ago (unknown: left alone)."""
     cfg = ctx.p.get("branches")
     if cfg is None:
         return []
@@ -931,20 +1024,21 @@ def check_branches(ctx: Ctx) -> list[Finding]:
 
     def one(repo):
         fn, default, out = repo["full_name"], ctx.repo(repo)["default_branch"], []
-        open_heads = {p["head"]["ref"] for p in ctx.c.paginate(f"/repos/{fn}/pulls", {"state": "open"})
-                      if ((p["head"].get("repo") or {}).get("full_name") == fn)}
+        pulls = ctx.c.paginate(f"/repos/{fn}/pulls", {"state": "open"})
+        open_heads = {p["head"]["ref"] for p in pulls if ((p["head"].get("repo") or {}).get("full_name") == fn)}
+        open_bases = {(p.get("base") or {}).get("ref") for p in pulls}  # closing a stacked pull request's base closes it
         candidates = [b for b in ctx.c.paginate(f"/repos/{fn}/branches")
-                      if b["name"] != default and not b.get("protected") and b["name"] not in open_heads
+                      if b["name"] != default and not b.get("protected") and b["name"] not in open_heads | open_bases
                       and not any(fnmatch.fnmatchcase(b["name"], g) for g in cfg.get("keep", []))]
         for b in candidates[:MAX_BRANCH_COMPARES]:
             name = b["name"]
             cmp = ctx.c.get(f"/repos/{fn}/compare/{urllib.parse.quote(default, safe='/')}...{urllib.parse.quote(name, safe='/')}")
             if cmp.get("ahead_by") != 0 or cmp.get("status") not in ("behind", "identical"):
                 continue
-            head = _when((((cmp.get("merge_base_commit") or {}).get("commit") or {}).get("committer") or {}).get("date"))
+            head = last_touched(ctx, fn, name)
             if head is None or (ctx.now - head).days < min_age:
                 continue
-            msg = f"branch '{name}' is fully merged into {default} (last commit {(ctx.now - head).days} days ago) and has no open pull request"
+            msg = f"branch '{name}' is fully merged into {default} (last activity {(ctx.now - head).days} days ago) and has no open pull request"
             if cfg.get("delete_merged"):
                 out.append(Finding("branches", fn, name, msg, "fix",
                                    api("DELETE", f"/repos/{fn}/git/refs/heads/{urllib.parse.quote(name, safe='/')}", destructive=True)))
@@ -962,10 +1056,10 @@ def check_branches(ctx: Ctx) -> list[Finding]:
 
 
 def matches(path: str, pattern: str) -> bool:
-    """True when path is the pattern or lies below it; the pattern may be a glob."""
-    pattern = pattern.strip("/")
-    parts = path.split("/")
-    return any(fnmatch.fnmatchcase("/".join(parts[:i]), pattern) for i in range(1, len(parts) + 1))
+    """True when path is the pattern or lies below it. The pattern is matched segment by segment from the
+    repository root, so * never crosses a '/'."""
+    want, parts = pattern.strip("/").split("/"), path.split("/")
+    return len(parts) >= len(want) and all(fnmatch.fnmatchcase(p, g) for p, g in zip(parts, want))
 
 
 def render_template(text: str, params: dict[str, str]) -> str:
@@ -1004,6 +1098,11 @@ def check_files(ctx: Ctx) -> list[Finding]:
             out.append(Finding("files", fn, "truncated", "the file tree is too large for the API to list in full; file checks "
                                "may miss files", "info"))
         blobs = [e for e in snap.entries if e.get("type") == "blob"]
+        present = {e["path"] for e in blobs}
+        for needed in (cfg or {}).get("require", []):
+            if needed not in present:
+                out.append(Finding("files", fn, f"require:{needed}", f"required file {needed} is missing", "warn",
+                                   manual=f"add {needed} to the repository (the script cannot know what it should say)"))
         for pattern in forbid:
             hit = sorted(e["path"] for e in blobs if matches(e["path"], pattern))
             if hit:
@@ -1029,6 +1128,12 @@ def check_files(ctx: Ctx) -> list[Finding]:
                                        Action("files", repo=fn, changes=[{"op": "delete", "path": dest}])))
                 continue
             params = {"main_branch": snap.branch, **defaults, **{k.lower(): v for k, v in wf.get("params", {}).items()}}
+            # The default branch name comes from the repository, not from the policy: it is put into YAML and shell too.
+            bad = [k for k, v in params.items() if not SAFE_PARAM.match(v) or ".." in v or (k == "main_branch" and not v)]
+            if bad:
+                out.append(Finding("files", fn, f"workflow:{dest}", f"workflows[{i}]: not rendered, {', '.join(sorted(bad))} "
+                                   "has characters other than letters, digits and . _ / -", "error"))
+                continue
             try:
                 want = _norm(render_template(text, params))
             except ValueError as exc:
@@ -1049,11 +1154,69 @@ def check_files(ctx: Ctx) -> list[Finding]:
     return per_repo(ctx, "files", one)
 
 
+SHA = re.compile(r"^[0-9a-f]{40}$")
+FIRST_PARTY = ("actions", "github")
+
+
+def _uses(doc: dict) -> list[str]:
+    found = []
+    for job in (doc.get("jobs") or {}).values():
+        if not isinstance(job, dict):
+            continue
+        found.append(job.get("uses"))
+        found += [s.get("uses") for s in job.get("steps") or [] if isinstance(s, dict)]
+    return [u for u in found if isinstance(u, str)]
+
+
+def check_lint(ctx: Ctx) -> list[Finding]:
+    """Workflow hygiene, read only: actions not pinned to a commit, no top-level permissions, pull_request_target."""
+    cfg = ctx.p.get("workflow_lint")
+    if not cfg:
+        return []
+
+    def one(repo):
+        fn, out = repo["full_name"], []
+        files, unreadable = ctx.automation_files(repo)
+        if unreadable:
+            out.append(Finding("lint", fn, "unreadable", "some workflow files could not be read; the lint may be incomplete", "info"))
+        for path, text in files:
+            if "/workflows/" not in path:
+                continue
+            try:
+                doc = yaml.safe_load(text)
+            except yaml.YAMLError:
+                out.append(Finding("lint", fn, f"{path}:yaml", f"{path} is not valid YAML", "warn"))
+                continue
+            if not isinstance(doc, dict):
+                continue
+            if cfg.get("require_permissions") and "permissions" not in doc:
+                out.append(Finding("lint", fn, f"{path}:permissions", f"{path} has no top-level permissions block (the token gets the "
+                                   "repository default)", "warn", manual="add `permissions: contents: read` and widen per job"))
+            on = doc.get("on", doc.get(True))  # YAML 1.1 reads the key `on` as true
+            events = set(on) if isinstance(on, (list, dict)) else {on}
+            if cfg.get("forbid_pull_request_target") and "pull_request_target" in events:
+                out.append(Finding("lint", fn, f"{path}:pull_request_target", f"{path} runs on pull_request_target (it has secrets "
+                                   "and a write token while it may build code from a fork)", "warn", manual="review it by hand"))
+            mode = cfg.get("pin_actions")
+            if mode:
+                loose = sorted({u for u in _uses(doc) if not u.startswith(("./", "docker://"))
+                                and not SHA.match(u.rpartition("@")[2] if "@" in u else "")
+                                and not (mode == "third_party" and u.split("/")[0] in FIRST_PARTY)})
+                if loose:
+                    shown = ", ".join(loose[:5]) + (" and more" if len(loose) > 5 else "")
+                    out.append(Finding("lint", fn, f"{path}:pin", f"{path} uses actions that are not pinned to a commit: {shown}", "warn",
+                                       manual="replace the tag by the full commit SHA (a tag can be moved)"))
+        return out
+
+    return per_repo(ctx, "lint", one)
+
+
 CHECKS = {
     "org": check_org, "members": check_members, "apps": check_apps, "tokens": check_tokens,
     "repo": check_repo, "security": check_security, "actions": check_actions, "protection": check_protection,
     "secrets": check_secrets, "variables": check_variables, "labels": check_labels,
     "webhooks": check_webhooks, "keys": check_keys, "branches": check_branches, "files": check_files,
+    "lint": check_lint,
 }
 
 
@@ -1071,7 +1234,9 @@ def run_checks(ctx: Ctx, names=None) -> list[Finding]:
 
 
 def _cell(text: str, limit: int = 220) -> str:
-    text = " ".join(str(text).split()).replace("|", "\\|")
+    """One table cell. Names come from the repositories, so markdown, HTML and @mentions are defused."""
+    text = " ".join(str(text).split())
+    text = re.sub(r"([\\|`\[\]<>])", r"\\\1", text).replace("@", "@​")
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
@@ -1096,6 +1261,11 @@ def render_markdown(org: str, findings: list[Finding], repo_count: int, now: dt.
 
 def apply_files(client, repo: str, changes: list[dict], default_branch: str, commit: str, tree: str, today: dt.date) -> str:
     """One commit on a new branch from the default branch's head, and one pull request. Returns the PR URL."""
+    merged: dict[str, dict] = {}
+    for c in changes:  # one entry per path: the tree API refuses duplicates; an install wins over a removal
+        if c["path"] not in merged or c["op"] == "put":
+            merged[c["path"]] = c
+    changes = sorted(merged.values(), key=lambda c: c["path"])
     entries = []
     for c in changes:
         if c["op"] == "delete":
@@ -1103,7 +1273,8 @@ def apply_files(client, repo: str, changes: list[dict], default_branch: str, com
         else:
             entries.append({"path": c["path"], "mode": c.get("mode", "100644"), "type": "blob", "content": c["content"]})
     new_tree = client.send("POST", f"/repos/{repo}/git/trees", {"base_tree": tree, "tree": entries})
-    summary = "\n".join(f"- {'remove' if c['op'] == 'delete' else 'add or update'} `{c['path']}`" for c in changes)
+    summary = "\n".join(f"- {'remove' if c['op'] == 'delete' else 'add or update'} `{c['path'].replace(chr(96), chr(39))}`"
+                        for c in changes)
     new_commit = client.send("POST", f"/repos/{repo}/git/commits", {
         "message": "chore: apply repository policy\n\n" + summary.replace("`", ""), "tree": new_tree["sha"], "parents": [commit]})
     base = f"chore/repo-admin-{today:%Y%m%d}"
@@ -1211,6 +1382,10 @@ def cmd_whoami(args) -> int:
 
 def _run(args) -> tuple[Ctx, list[Finding]]:
     policy = load_policy(args.policy)
+    for name in args.repo:
+        owner, _, short = name.rpartition("/")
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", short) or (owner and owner.lower() != policy["org"].lower()):
+            raise SystemExit(f"repo_admin: --repo '{name}': give a repository name or {policy['org']}/name")
     ctx = Ctx(_client(), policy, args.repo)
     return ctx, run_checks(ctx, args.check or None)
 

@@ -44,6 +44,7 @@ permissions:
 
 jobs:
   release:
+    name: devflow-release
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/__MAIN_BRANCH__'
     steps:
@@ -97,7 +98,7 @@ jobs:
           GH_TOKEN: ${{ secrets.DEVFLOW_RELEASE_TOKEN || github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
-          SELF: release
+          SELF: devflow-release
         run: |
           set -euo pipefail
           bad=$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[]
@@ -109,8 +110,9 @@ jobs:
             echo "$bad"
             exit 1
           fi
-          state=$(gh api "repos/$REPO/commits/$SHA/status" --jq .state)
-          if [ "$state" = "failure" ] || [ "$state" = "error" ]; then
+          read -r state total < <(gh api "repos/$REPO/commits/$SHA/status" --jq '[.state, .total_count] | @tsv')
+          # "pending" with no status at all is what a commit without legacy statuses reports: only a real pending one blocks
+          if [ "$state" = "failure" ] || [ "$state" = "error" ] || { [ "$state" = "pending" ] && [ "$total" != "0" ]; }; then
             echo "::error::commit status of $SHA is $state"
             exit 1
           fi

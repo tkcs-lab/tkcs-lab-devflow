@@ -100,6 +100,7 @@ def world(ra, policy, names=("app",), routes=None, only=(), files=None, now=NOW,
     """A Ctx over a fake organisation 'acme' whose repositories are `names`."""
     r = dict(routes or {})
     r[("GET", "/orgs/acme/repos")] = [repo(n) for n in names]
+    r.setdefault(("GET", "/orgs/acme"), {"public_repos": len(names), "total_private_repos": 0})
     for n in names:
         if ("GET", f"/repos/acme/{n}") not in r:
             add_repo(r, n, (files or {}).get(n, {}), **full)
@@ -711,7 +712,14 @@ def test_webhooks(ra):
     assert fix.action.destructive and fix.action.describe() == "DELETE /repos/acme/app/hooks/2"
     assert all("SECRET" not in f.message and "abc" not in f.message for f in found)
     ctx, _ = world(ra, {"webhooks": {"delete": ["failing", "inactive"]}}, routes=routes)
+    assert next(f for f in ra.check_webhooks(ctx) if f.scope == "acme").action is None, "deliveries unreadable: not deleted"
+    routes[("GET", "/orgs/acme/hooks/1/deliveries")] = [{"status_code": 500}, {"status_code": 502}]
+    ctx, _ = world(ra, {"webhooks": {"delete": ["failing", "inactive"]}}, routes=routes)
     assert next(f for f in ra.check_webhooks(ctx) if f.scope == "acme").action.describe() == "DELETE /orgs/acme/hooks/1"
+    routes[("GET", "/orgs/acme/hooks/1/deliveries")] = [{"status_code": 500}, {"status_code": 200}]
+    ctx, _ = world(ra, {"webhooks": {"delete": ["failing", "inactive"]}}, routes=routes)
+    (flaky,) = [f for f in ra.check_webhooks(ctx) if f.scope == "acme"]
+    assert flaky.action is None and "flaky" in flaky.message
 
 
 def test_webhook_org_failure_does_not_hide_repository_hooks(ra):
@@ -728,9 +736,11 @@ def test_deploy_keys(ra):
     found = ra.check_keys(ctx)
     assert sev(found) == [("2", "warn"), ("3", "warn")] and all(f.action is None for f in found)
     assert all("AAAA" not in f.message for f in found)
-    assert "read-write" in found[0].message and "never used, created" in found[1].message
+    assert "read-write" in found[0].message and "no recorded use, created" in found[1].message
     ctx, _ = world(ra, {"deploy_keys": {"max_unused_days": 180, "delete_unused": True}}, routes={("GET", "/repos/acme/app/keys"): keys})
-    assert all(f.action.destructive for f in ra.check_keys(ctx))
+    found = {f.subject: f for f in ra.check_keys(ctx)}
+    assert found["2"].action.destructive, "a key with a recorded old use may be deleted"
+    assert found["3"].action is None, "a key GitHub has no last use for is only ever reported"
     ctx, _ = world(ra, {"deploy_keys": {}}, routes={("GET", "/repos/acme/app/keys"): keys})
     assert ra.check_keys(ctx) == []
 
@@ -738,23 +748,32 @@ def test_deploy_keys(ra):
 # --------------------------------------------------------------------------- branches
 
 
-def cmp_merged(date, status="behind"):
-    return {"ahead_by": 0, "status": status, "merge_base_commit": {"commit": {"committer": {"date": date}}}}
+def cmp_merged(status="behind"):
+    return {"ahead_by": 0, "status": status}
+
+
+# when each branch was last touched (the repository activity API); "no-date" has no answer, the old merge base is a trap
+ACTIVITY = {"merged-old": "2026-09-01T00:00:00Z", "merged-new": "2026-11-05T00:00:00Z", "release/1.0": "2026-01-01T00:00:00Z",
+            "chore/old-slash": "2026-01-01T00:00:00Z", "forked": "2026-01-01T00:00:00Z", "identical-old": "2026-01-01T00:00:00Z",
+            "stacked-base": "2026-01-01T00:00:00Z"}
 
 
 def branch_routes(extra=None):
-    names = ["main", "merged-old", "merged-new", "wip", "unmerged", "release/1.0", "chore/old-slash", "prot", "forked", "identical-old", "no-date"]
+    names = ["main", "merged-old", "merged-new", "wip", "unmerged", "release/1.0", "chore/old-slash", "prot", "forked", "identical-old",
+             "no-date", "stacked-base"]
+
+    def activity(params):
+        when = ACTIVITY.get(params["ref"].removeprefix("refs/heads/"))
+        return [{"timestamp": when}] if when else ApiErr(404, "no activity", "GET", "x")
+
     r = {("GET", "/repos/acme/app/branches"): [{"name": n, "protected": n == "prot"} for n in names],
-         ("GET", "/repos/acme/app/pulls"): [{"head": {"ref": "wip", "repo": {"full_name": "acme/app"}}},
-                                           {"head": {"ref": "forked", "repo": {"full_name": "someone/app"}}}],
-         ("GET", "/repos/acme/app/compare/main...merged-old"): cmp_merged("2026-09-01T00:00:00Z"),
-         ("GET", "/repos/acme/app/compare/main...merged-new"): cmp_merged("2026-11-05T00:00:00Z"),
+         ("GET", "/repos/acme/app/pulls"): [{"head": {"ref": "wip", "repo": {"full_name": "acme/app"}}, "base": {"ref": "stacked-base"}},
+                                           {"head": {"ref": "forked", "repo": {"full_name": "someone/app"}}, "base": {"ref": "main"}}],
+         ("GET", "/repos/acme/app/activity"): activity,
          ("GET", "/repos/acme/app/compare/main...unmerged"): {"ahead_by": 3, "status": "ahead"},
-         ("GET", "/repos/acme/app/compare/main...release/1.0"): cmp_merged("2026-01-01T00:00:00Z"),
-         ("GET", "/repos/acme/app/compare/main...chore/old-slash"): cmp_merged("2026-01-01T00:00:00Z"),
-         ("GET", "/repos/acme/app/compare/main...forked"): cmp_merged("2026-01-01T00:00:00Z"),
-         ("GET", "/repos/acme/app/compare/main...identical-old"): cmp_merged("2026-01-01T00:00:00Z", "identical"),
-         ("GET", "/repos/acme/app/compare/main...no-date"): {"ahead_by": 0, "status": "behind"}}
+         ("GET", "/repos/acme/app/compare/main...identical-old"): cmp_merged("identical")}
+    for n in names:
+        r.setdefault(("GET", f"/repos/acme/app/compare/main...{n}"), cmp_merged())
     return {**r, **(extra or {})}
 
 
@@ -763,16 +782,16 @@ def test_merged_branches_are_reported_by_default(ra):
     found = ra.check_branches(ctx)
     assert sev(found) == [("chore/old-slash", "warn"), ("forked", "warn"), ("identical-old", "warn"), ("merged-old", "warn")]
     assert all(f.action is None for f in found)
-    assert "fully merged into main (last commit 69 days ago)" in next(f for f in found if f.subject == "merged-old").message
+    assert "fully merged into main (last activity 69 days ago)" in next(f for f in found if f.subject == "merged-old").message
 
 
 def test_what_is_never_called_merged(ra):
     ctx, fake = world(ra, {"branches": {}}, routes=branch_routes())
     subjects = {f.subject for f in ra.check_branches(ctx)}
-    assert not subjects & {"main", "wip", "prot", "unmerged", "merged-new", "no-date"}, subjects
+    assert not subjects & {"main", "wip", "prot", "unmerged", "merged-new", "no-date", "stacked-base"}, subjects
     compared = {p.rsplit("...", 1)[1] for p in fake.reads if "/compare/" in p}
     assert compared == {"merged-old", "merged-new", "unmerged", "release/1.0", "chore/old-slash", "forked", "identical-old", "no-date"}
-    assert not compared & {"main", "wip", "prot"}, "the default, an open-PR and a protected branch are never even compared"
+    assert not compared & {"main", "wip", "prot"}, "the default, an open-PR head or base and a protected branch are never even compared"
 
 
 def test_a_fork_pull_request_does_not_protect_a_branch_of_the_same_name(ra):
@@ -808,7 +827,7 @@ def test_branch_check_is_capped(ra, monkeypatch):
 @pytest.mark.parametrize("path,pattern,expected", [
     (".archon/a/b.yml", ".archon", True), (".archon", ".archon/", True), (".archonx/a", ".archon", False),
     ("src/.archon/a", ".archon", False), ("docs/old/a.md", "docs/old", True), ("a.bak", "*.bak", True),
-    ("x/a.bak", "*.bak", True), (".cursor/rules/a", ".cursor/**", True), ("README.md", ".archon", False)])
+    ("x/a.bak", "*.bak", False), ("docs/x/y.md", "docs/*.md", False), ("docs/y.md", "docs/*.md", True), (".cursor/rules/a", ".cursor/**", True), ("README.md", ".archon", False)])
 def test_path_matching(ra, path, pattern, expected):
     assert ra.matches(path, pattern) is expected
 
@@ -1155,7 +1174,7 @@ def test_whoami(ra, monkeypatch, capsys):
 def test_the_token_is_never_printed_by_any_command(ra, monkeypatch, capsys, tmp_path):
     monkeypatch.setenv("GH_TOKEN", "ghp_SUPERSECRET")
     seen = []
-    monkeypatch.setattr(ra.urllib.request, "urlopen", lambda req, timeout=None: seen.append(req) or (_ for _ in ()).throw(http_error(401, "Bad credentials")))
+    monkeypatch.setattr(ra._OPENER, "open", lambda req, timeout=None: seen.append(req) or (_ for _ in ()).throw(http_error(401, "Bad credentials")))
     pol = tmp_path / "p.yaml"
     pol.write_text("org: acme\nrepo_settings: {has_wiki: false}\n")
     for argv in (["whoami", "--org", "acme"], ["audit", "--policy", str(pol)], ["apply", "--policy", str(pol), "--yes"]):
@@ -1163,3 +1182,157 @@ def test_the_token_is_never_printed_by_any_command(ra, monkeypatch, capsys, tmp_
     captured = capsys.readouterr()
     assert "ghp_SUPERSECRET" not in captured.out + captured.err
     assert seen and all(r.get_header("Authorization") == "Bearer ghp_SUPERSECRET" for r in seen)
+
+
+# --------------------------------------------------------------------------- review fixes and the later additions
+
+
+def test_token_is_not_sent_to_another_host_on_redirect(ra):
+    import urllib.request
+    handler = ra._SameHostRedirects()
+    req = urllib.request.Request("https://api.github.com/x", headers={"Authorization": "Bearer t"})
+    same = handler.redirect_request(req, None, 302, "Found", {}, "https://api.github.com/y")
+    other = handler.redirect_request(req, None, 302, "Found", {}, "https://evil.example.com/y")
+    assert same.get_header("Authorization") == "Bearer t" and other.get_header("Authorization") is None
+
+
+@pytest.mark.parametrize("path", ["/etc/passwd", "../x.yml", "sub/../../x.yml"])
+def test_workflow_path_must_stay_below_the_policy_directory(ra, tmp_path, path):
+    errors = ra.validate_policy({"org": "a", "workflows": [{"path": path, "dest": ".github/workflows/x.yml"}]}, tmp_path)
+    assert any("below the policy file's directory" in e for e in errors), errors
+
+
+def test_workflow_path_symlink_out_of_the_directory_is_refused(ra, tmp_path):
+    outside = tmp_path / "outside.yml"
+    outside.write_text("name: x\n")
+    inside = tmp_path / "pol"
+    inside.mkdir()
+    (inside / "w.yml").symlink_to(outside)
+    assert any("leaves the policy file's directory" in e for e in ra.validate_policy({"org": "a", "workflows": [{"path": "w.yml"}]}, inside))
+
+
+@pytest.mark.parametrize("pattern", ["**/*", "*/*", "*.*", "?*", "*e*", "a"])
+def test_forbid_patterns_need_literal_characters(ra, pattern):
+    assert any("refusing" in e for e in ra.validate_policy({"org": "a", "config_dirs": {"forbid": [pattern]}}))
+
+
+def test_default_branch_name_cannot_break_out_of_the_template(ra):
+    ctx, _ = world(ra, {"workflows": [{"template": "release"}]}, files={"app": {}}, branch="a~b")
+    (f,) = ra.check_files(ctx)
+    assert f.severity == "error" and f.action is None and "main_branch" in f.message
+
+
+def test_overlapping_changes_make_one_tree_entry_per_path(ra):
+    sent = []
+
+    class C:
+        def send(self, method, path, body=None):
+            sent.append((path, body))
+            return {"sha": "s", "html_url": "u", "number": 1}
+
+    ra.apply_files(C(), "acme/app", [{"op": "delete", "path": "a/b"}, {"op": "delete", "path": "a/b"},
+                                     {"op": "delete", "path": "w.yml"}, {"op": "put", "path": "w.yml", "content": "x"}],
+                   "main", "c", "t", NOW.date())
+    tree = next(b for p, b in sent if p.endswith("/git/trees"))["tree"]
+    assert [(e["path"], e.get("sha", "x")) for e in tree] == [("a/b", None), ("w.yml", "x")]
+
+
+def test_names_are_defused_in_the_markdown_report(ra):
+    f = ra.Finding("labels", "acme/app", "x", "label '@team <img src=x> [a](b) `c`' is unused", "warn")
+    text = ra.render_markdown("acme", [f], 1, NOW)
+    import re
+    cell = text.split("label '", 1)[1].split("' is unused", 1)[0]
+    assert "@team" not in cell and "@\u200bteam" in cell
+    assert not re.search(r"(?<!\\)[<>\[\]`]", cell), cell
+
+
+@pytest.mark.parametrize("repo_arg", ["other/app", "app/../x", "a b", "acme/x/y"])
+def test_repo_argument_must_name_a_repository_of_the_organisation(ra, tmp_path, repo_arg):
+    pol = tmp_path / "p.yaml"
+    pol.write_text("org: acme\nrepo_settings: {has_wiki: false}\n")
+    with pytest.raises(SystemExit, match="--repo"):
+        ra.main(["audit", "--policy", str(pol), "--repo", repo_arg])
+
+
+def test_org_secret_is_not_deleted_when_the_token_does_not_see_every_repository(ra):
+    routes = secret_routes(repo_secrets=(), org_secrets=("ORPHAN",))
+    routes[("GET", "/orgs/acme")] = {"public_repos": 3, "total_private_repos": 2}  # the list below holds one
+    ctx, _ = world(ra, {"secrets": {"kinds": ["actions"], "delete_unused": True}}, routes=routes)
+    (f,) = ra.check_secrets(ctx)
+    assert f.severity == "info" and f.action is None and "every repository" in f.message
+    routes[("GET", "/orgs/acme")] = {"public_repos": 1}  # a non-owner does not get the private count
+    ctx, _ = world(ra, {"secrets": {"kinds": ["actions"], "delete_unused": True}}, routes=routes)
+    assert ra.check_secrets(ctx)[0].action is None
+
+
+@pytest.mark.parametrize("expr", ["${{ toJSON(secrets) }}", "${{ format('{0}', vars) }}"])
+def test_the_whole_context_hides_names(ra, expr):
+    files = {"app": {".github/workflows/x.yml": f'env:\n  A: "{expr}"\n'}}
+    ctx, _ = world(ra, {"secrets": {"kinds": ["actions"]}}, files=files, routes=secret_routes(repo_secrets=("ANY",)))
+    assert ra.check_secrets(ctx) == []
+
+
+def test_branch_age_is_the_last_activity_not_the_age_of_the_commit(ra):
+    routes = branch_routes({("GET", "/repos/acme/app/activity"): lambda p: [{"timestamp": "2026-11-08T00:00:00Z"}]})
+    ctx, _ = world(ra, {"branches": {}}, routes=routes)
+    assert ra.check_branches(ctx) == [], "every branch was touched yesterday"
+
+
+def test_the_base_of_an_open_pull_request_is_never_a_candidate(ra):
+    ctx, fake = world(ra, {"branches": {}}, routes=branch_routes())
+    assert "stacked-base" not in {f.subject for f in ra.check_branches(ctx)}
+    assert not any(p.endswith("...stacked-base") for p in fake.reads)
+
+
+def test_protection_of_a_branch_that_does_not_exist_is_info_not_a_failed_put(ra):
+    ctx, fake = world(ra, {"branch_protection": {"branch": "release"}})
+    (f,) = ra.check_protection(ctx)
+    assert f.severity == "info" and f.action is None and not fake.writes
+
+
+def test_private_vulnerability_reporting(ra):
+    routes = {("GET", "/repos/acme/app/private-vulnerability-reporting"): {"enabled": False}}
+    ctx, _ = world(ra, {"security": {"private_vulnerability_reporting": True}}, routes=routes)
+    (f,) = ra.check_security(ctx)
+    assert f.action.describe() == "PUT /repos/acme/app/private-vulnerability-reporting"
+    routes[("GET", "/repos/acme/app/private-vulnerability-reporting")] = {"enabled": True}
+    ctx, _ = world(ra, {"security": {"private_vulnerability_reporting": True}}, routes=routes)
+    assert ra.check_security(ctx) == []
+
+
+def test_required_files_are_reported_not_created(ra):
+    ctx, _ = world(ra, {"config_dirs": {"require": ["SECURITY.md", "LICENSE"]}}, files={"app": {"LICENSE": "MIT"}})
+    (f,) = ra.check_files(ctx)
+    assert (f.subject, f.severity, f.action) == ("require:SECURITY.md", "warn", None)
+
+
+UNPINNED = """name: ci
+on: {pull_request_target: {}}
+jobs:
+  a:
+    uses: org/repo/.github/workflows/w.yml@v1
+  b:
+    steps:
+      - uses: actions/checkout@v4
+      - uses: third/party@v1
+      - uses: pinned/x@0123456789abcdef0123456789abcdef01234567
+      - uses: ./local
+      - uses: docker://alpine:3
+"""
+
+
+def test_workflow_lint(ra):
+    files = {"app": {".github/workflows/ci.yml": UNPINNED, ".github/workflows/ok.yml":
+                     "on: push\npermissions: {contents: read}\njobs: {a: {steps: [{uses: 'actions/checkout@0123456789abcdef0123456789abcdef01234567'}]}}\n"}}
+    policy = {"workflow_lint": {"pin_actions": "third_party", "require_permissions": True, "forbid_pull_request_target": True}}
+    ctx, _ = world(ra, policy, files=files)
+    found = ra.check_lint(ctx)
+    assert sev(found) == [(".github/workflows/ci.yml:permissions", "warn"), (".github/workflows/ci.yml:pin", "warn"),
+                          (".github/workflows/ci.yml:pull_request_target", "warn")]
+    pin = next(f for f in found if f.subject.endswith(":pin")).message
+    assert "third/party@v1" in pin and "org/repo" in pin and "actions/checkout" not in pin and "local" not in pin and "alpine" not in pin
+    assert all(f.action is None for f in found), "the lint never changes anything"
+    ctx, _ = world(ra, {"workflow_lint": {"pin_actions": "all"}}, files=files)
+    assert "actions/checkout@v4" in next(f for f in ra.check_lint(ctx)).message
+    ctx, _ = world(ra, {"workflow_lint": {}}, files=files)
+    assert ra.check_lint(ctx) == []

@@ -24,7 +24,8 @@ python3 plugins/devflow/scripts/repo_admin.py audit --policy .claude/admin-polic
 
 The token comes from `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token`, in that order. It is sent only to
 the GitHub API (`GITHUB_API_URL` selects a GitHub Enterprise Server) and never printed. A classic token
-with `repo`, `workflow`, `admin:org` and `admin:org_hook` can run every check. A fine-grained token
+with `repo`, `workflow`, `admin:org` and `admin:org_hook` can run most checks; the fine-grained token check (`tokens`) may need a
+GitHub App token with the organisation permission "Personal access tokens" (read and write), and answers `unavailable` otherwise. A fine-grained token
 runs the checks its permissions allow; for each other check the report says `unavailable` and names the
 endpoint that answered 401, 403 or 404, so you know which permission to grant.
 
@@ -64,6 +65,7 @@ must see every repository.
   several). Writing workflow files needs the token's `workflow` permission.
 - **An existing branch protection is never replaced.** The script adds one where there is neither a rule nor a
   ruleset, and reports a difference otherwise.
+- **`--repo` names a repository of the policy's organisation**, nothing else.
 - **Nothing secret is read or printed.** The API never returns secret values. Webhook URLs are shown as scheme and
   host only (the path is often the secret), and deploy keys by title.
 - **Text from the repositories is untrusted.** Label names, file names and hook hosts appear in the report; the skill
@@ -80,27 +82,29 @@ must see every repository.
 | `apps` | Installed GitHub Apps against `apps.allow`; suspended installations | nothing: GitHub has no endpoint to uninstall as a user, so the report links the page |
 | `tokens` | Fine-grained tokens with access to the organisation: expired, or unused longer than `tokens.fine_grained.max_unused_days` (a never-used token counts from the day access was granted) | revokes (irreversible) |
 | `repo` | The keys of `repo_settings` against each repository | yes |
-| `security` | `security.vulnerability_alerts`, `security.automated_security_fixes`, `security.secret_scanning`, `security.secret_push_protection` | yes (secret scanning needs a plan that offers it) |
+| `security` | `security.vulnerability_alerts`, `security.automated_security_fixes`, `security.secret_scanning`, `security.secret_push_protection`, `security.private_vulnerability_reporting` | yes (secret scanning needs a plan that offers it) |
 | `actions` | `actions.enabled`, `actions.default_workflow_permissions`, `actions.can_approve_pull_request_reviews` | yes (an organisation setting that overrides a repository one answers 409) |
 | `protection` | The branch of `branch_protection` has a rule or ruleset | adds a missing one; reports a weaker existing one |
 | `secrets` | Actions and Dependabot secrets that no workflow names; `secrets.required` names a repository lacks | deletes unused ones when `secrets.delete_unused` (irreversible); a missing one is reported with the `gh secret set` command |
 | `variables` | The same for Actions variables | deletes when `variables.delete_unused` |
 | `labels` | `labels.sync` against each repository: create, update colour or description, rename an alias; labels outside it | create and update yes; delete when `labels.delete_unused` (only labels on no issue or pull request) or `labels.delete_unlisted` (irreversible) |
-| `webhooks` | Hooks of the organisation and repositories that are inactive, failing or never delivered | deletes the kinds listed in `webhooks.delete` (irreversible) |
-| `keys` | Deploy keys not used for `deploy_keys.max_unused_days` | deletes when `deploy_keys.delete_unused` (irreversible) |
-| `branches` | Branches whose every commit is already in the default branch, with no open pull request, not protected, last commit older than `branches.min_age_days` | deletes when `branches.delete_merged` (irreversible, though the commits stay in the default branch) |
-| `files` | `config_dirs.forbid` paths that exist; top-level dot directories outside `config_dirs.known`; `workflows` missing or different from their template | pull requests |
+| `webhooks` | Hooks of the organisation and repositories that are inactive, failing or never delivered. Failing means the last delivery failed *and* none of the latest 30 succeeded; otherwise it is reported as flaky | deletes the kinds listed in `webhooks.delete` (irreversible); never a flaky one or one whose deliveries cannot be read |
+| `keys` | Deploy keys not used for `deploy_keys.max_unused_days`. A key GitHub has no last use for is only reported | deletes a key with a recorded old use when `deploy_keys.delete_unused` (irreversible) |
+| `branches` | Branches whose every commit is already in the default branch, not protected, not the head or base of an open pull request, last activity older than `branches.min_age_days` | deletes when `branches.delete_merged` (irreversible, though the commits stay in the default branch) |
+| `files` | `config_dirs.forbid` paths that exist; `config_dirs.require` files that are missing; top-level dot directories outside `config_dirs.known`; `workflows` missing or different from their template | pull requests (a missing required file is only reported) |
+| `lint` | `workflow_lint`: actions not pinned to a commit SHA, workflows without top-level `permissions`, `pull_request_target` | nothing: read only |
 
 How "unused" is decided, and where it can be wrong:
 
 - **Secrets and variables.** A name is unused when no workflow (`.github/workflows/*`) or `dependabot.yml` of
   the repository refers to it as `secrets.NAME`, `vars.NAME` or `secrets['NAME']`. For an organisation-level one,
-  no live repository of the organisation may refer to it. If any workflow uses `secrets: inherit` or a computed
-  name, the script cannot tell and says so instead of reporting. A name used by something other than a workflow
+  no live repository of the organisation may refer to it, and the token must see every repository (the count of `GET /orgs/{org}` is compared; a non-owner
+  token never passes), otherwise nothing is deleted. Only the default branch is read: a name used by a workflow that exists only on another branch is reported as unused. If any workflow uses `secrets: inherit`, a computed
+  name or the whole context (`toJSON(secrets)`), the script cannot tell and says so instead of reporting. A name used by something other than a workflow
   (a deploy script on a server, an environment secret) belongs in `secrets.keep`. Environment secrets and Codespaces secrets are not looked at.
 - **Branches.** Merged means GitHub's compare of the default branch with the branch shows no commit of its own. A branch merged
   with a squash or rebase has such commits and is not detected. A branch cut yesterday with no commit of its own looks merged too, which
-  is why only branches whose last commit is older than `branches.min_age_days` count; the commits of a deleted merged branch stay in the default branch.
+  is why only branches whose last activity (creation or push, from the repository activity API) is older than `branches.min_age_days` count; a branch with no readable activity is left alone, and so is one that an open pull request uses as its head or base; the commits of a deleted merged branch stay in the default branch.
 - **Labels.** In use means at least one issue or pull request, open or closed, carries it.
 - **Apps.** GitHub shows no "last used" time for an app. The only reliable test is your allow list.
 - **Tokens.** Only fine-grained tokens granted access to the organisation can be listed, and they carry a last-used time.
@@ -126,7 +130,7 @@ Every key is optional except `org`. The schema is the exact source of truth.
 | `repo_settings.allow_squash_merge`, `repo_settings.allow_merge_commit`, `repo_settings.allow_rebase_merge`, `repo_settings.allow_auto_merge`, `repo_settings.allow_update_branch`, `repo_settings.delete_branch_on_merge`, `repo_settings.allow_forking` | Merge and branch behaviour. `allow_auto_merge` is what `/land` needs |
 | `repo_settings.has_issues`, `repo_settings.has_wiki`, `repo_settings.has_projects`, `repo_settings.has_discussions`, `repo_settings.web_commit_signoff_required` | Features |
 | `repo_settings.squash_merge_commit_title`, `repo_settings.squash_merge_commit_message`, `repo_settings.merge_commit_title`, `repo_settings.merge_commit_message` | Commit message defaults (GitHub's enum values) |
-| `security.vulnerability_alerts`, `security.automated_security_fixes`, `security.secret_scanning`, `security.secret_push_protection` | true or false |
+| `security.vulnerability_alerts`, `security.automated_security_fixes`, `security.secret_scanning`, `security.secret_push_protection`, `security.private_vulnerability_reporting` | true or false |
 | `actions.enabled`, `actions.default_workflow_permissions`, `actions.can_approve_pull_request_reviews` | `default_workflow_permissions` is `read` or `write` |
 | `branch_protection.branch` | A name, or `default` (the default) |
 | `branch_protection.require_pull_request`, `branch_protection.approvals`, `branch_protection.require_status_checks`, `branch_protection.strict` | Defaults true, 1, none, false |
@@ -138,24 +142,25 @@ Every key is optional except `org`. The schema is the exact source of truth.
 | `branches.delete_merged`, `branches.min_age_days`, `branches.keep` | `min_age_days` defaults to 14; `keep` is branch name globs |
 | `webhooks.delete`, `webhooks.keep_urls` | `delete`: `inactive`, `failing`. `keep_urls`: URL prefixes never reported |
 | `deploy_keys.max_unused_days`, `deploy_keys.delete_unused` | |
-| `config_dirs.forbid`, `config_dirs.known` | `forbid`: root-relative paths or globs (not the root, `.git` or a bare wildcard). `known`: more top-level dot directories to expect, added to the built-in `.github .claude .devcontainer .vscode .husky .config .changeset .githooks`; any other is reported |
+| `config_dirs.forbid`, `config_dirs.require`, `config_dirs.known` | `forbid`: root-relative paths or globs with at least two literal characters (not the root, `.git` or a bare wildcard); `*` matches within one path segment, so `*.bak` is a top-level file only. `require`: root-relative files that must exist (for example `SECURITY.md`, `.github/CODEOWNERS`, `LICENSE`). `known`: more top-level dot directories to expect, added to the built-in `.github .claude .devcontainer .vscode .husky .config .changeset .githooks`; any other is reported |
+| `workflow_lint.pin_actions`, `workflow_lint.require_permissions`, `workflow_lint.forbid_pull_request_target` | `pin_actions`: `third_party` (leaves `actions/*` and `github/*`) or `all` |
 | `workflows` | List of workflow entries, below |
 
-A `workflows` entry has exactly one of `template` (`release` or `land`) or `path` (your own template, relative to
-the policy file), and optionally `dest` (inside `.github/workflows/`), `params`, `repos` (name globs) and `remove: true`
+A `workflows` entry has exactly one of `template` (`release` or `land`) or `path` (your own template, below the directory of
+the policy file: no absolute path, no `..`, no symbolic link out of it), and optionally `dest` (inside `.github/workflows/`), `params`, `repos` (name globs) and `remove: true`
 (delete the file instead). In a template, `__UPPER_CASE__` words are placeholders, filled from `params` (lower
-case keys). `main_branch` is the repository's default branch unless `params` sets it. Values may contain only
-letters, digits and `. _ / -`, so they cannot break out of the YAML or the shell. A file that already matches its
+case keys). `main_branch` is the repository's default branch unless `params` sets it. Values, including the default branch name read from the repository, may contain only
+letters, digits and `. _ / -`, so they cannot break out of the YAML or the shell; a repository whose default branch has other characters gets an `error` finding and no file. A file that already matches its
 rendered template is left alone; one that differs is updated, so editing the template and running `apply` rolls the change out.
 
 ## The release workflow
 
 `template: release` installs `.github/workflows/devflow-release.yml`. Parameter: `tag_prefix` (default `v`).
 
-- Run it by hand: Actions, `devflow-release`, Run workflow, on the main branch (it refuses any other).
+- Run it by hand: Actions, `devflow-release`, Run workflow, on the main branch. The branch check is a convenience, not a control: anyone who can push a branch can run an edited copy of the workflow. What stops a release is a tag ruleset (or branch protection) that only your release roles may bypass.
 - Inputs: `version` (for example `1.4.0`; empty bumps the newest `<tag_prefix>x.y.z` tag by `bump`: `patch`, `minor`, `major`),
   `prerelease`, `skip_checks`, and `dry_run`, which is ticked by default. A dry run shows the tag and the generated notes in the run summary.
-- Unticked, it checks that every check run on the head commit succeeded (and the commit status is not failing), creates an
+- Unticked, it checks that every check run on the head commit succeeded (and the commit status is neither failing nor pending), creates an
   annotated tag on that commit and a GitHub release with generated notes. It stops if the tag exists.
 - Tags and releases made with the default workflow token do not start other workflows. If one must run on the tag
   (a build, a publish), add the secret `DEVFLOW_RELEASE_TOKEN`, a token that may write contents; the workflow uses it
@@ -164,6 +169,7 @@ rendered template is left alone; one that differs is updated, so editing the tem
 
 ## Not covered
 
-Rulesets, environment secrets, Codespaces secrets, OAuth
-authorisations, classic personal access tokens, and people (adding or removing members). The report says so where it
+Rulesets (the audit sees them only as "this branch is protected") and tag protection, the organisation's Actions allow list, environments and their
+secrets, Codespaces secrets, OAuth
+authorisations, classic personal access tokens (in a SAML organisation `GET /orgs/{org}/credential-authorizations` lists them), and people (adding or removing members). The report says so where it
 matters (`info`). Scheduling an audit (a weekly workflow that opens an issue) is left to you.
