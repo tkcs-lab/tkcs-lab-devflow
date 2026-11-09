@@ -26,13 +26,6 @@
     "stringList": {"type": "array", "items": {"type": "string", "minLength": 1}}
   },
   "properties": {
-    "toolkit": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "ref": {"type": "string", "minLength": 1, "description": "Tag of the toolkit repo that install/session-start.sh installs. Required only when the SessionStart hook route is used."}
-      }
-    },
     "project": {
       "type": "object",
       "additionalProperties": false,

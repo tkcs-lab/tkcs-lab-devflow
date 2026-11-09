@@ -21,15 +21,16 @@ rules follow from that:
 1. **Find the toolkit scripts.** Run this once and keep the result as `<devflow root>`:
 
    ```bash
-   for d in "${CLAUDE_PLUGIN_ROOT:-}" "$HOME/.claude/devflow" "$PWD/.claude/devflow" \
-            $(ls -d "$HOME"/.claude/plugins/cache/*/devflow/*/ 2>/dev/null); do
+   for d in "${CLAUDE_PLUGIN_ROOT:-}" \
+            $(ls -d "$HOME"/.claude/plugins/cache/*/devflow/*/ 2>/dev/null) \
+            $(ls -d "$HOME"/.claude/plugins/synced/*/devflow/ 2>/dev/null); do
      [ -n "$d" ] && [ -f "$d/scripts/validate_profile.py" ] && { echo "$d"; break; }
    done
    ```
 
    No output means the toolkit is not installed in this session. Stop and tell the user: the
-   project needs the devflow plugin in its Claude Project, or the SessionStart hook from
-   `install/session-start.sh` (see `docs/delivery.md` in the claude-toolkit repo).
+   project needs the devflow plugin in its Claude Project (see `docs/delivery.md` in the
+   claude-toolkit repo).
 
 2. **Validate and resolve it**, from the repo root:
 
