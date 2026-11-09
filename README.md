@@ -27,10 +27,8 @@ project facts and stop with a message naming the missing key.
 
 1. Copy [`templates/toolkit.yaml`](templates/toolkit.yaml) to `.claude/toolkit.yaml` and fill it in.
    Reference: [docs/profile-reference.md](docs/profile-reference.md).
-2. Get the toolkit into your cloud sessions, either way ([docs/delivery.md](docs/delivery.md)):
-   - add the plugins in your Claude Project's settings (marketplace `andras-tkcs/claude-toolkit`), or
-   - call [`install/session-start.sh`](install/session-start.sh) from the project's SessionStart hook,
-     pinned by `toolkit.ref`.
+2. Add the plugins in your Claude Project's settings (marketplace `andras-tkcs/claude-toolkit`), see
+   [docs/delivery.md](docs/delivery.md).
 3. Start a session and run `/make-plan <what you want>`.
 
 ## What is here
@@ -39,7 +37,6 @@ project facts and stop with a message naming the missing key.
 |---|---|
 | `plugins/devflow` | the four commands, the `project-profile`, `pr-steward`, `review-checklist`, `secure-code-review`, `test-review` and `docs-review` skills, `scripts/validate_manifest.py`, `scripts/validate_profile.py`, `scripts/review_decisions.py` (with its page template), `schema/profile.schema.json` |
 | `plugins/stack-python`, `plugins/stack-go`, `plugins/stack-swift`, `plugins/stack-ipados` | stack skills the profile selects (`ipados` goes with `swift`) |
-| `install/session-start.sh` | delivery for cloud sessions |
 | `templates/toolkit.yaml` | starter profile |
 | `docs/` | profile reference, delivery, design, [the review flow](docs/review.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |
 | `tests/` | `python -m pytest tests -q` (Python 3.11+, PyYAML) |
