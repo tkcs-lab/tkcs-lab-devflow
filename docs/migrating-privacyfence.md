@@ -50,7 +50,7 @@ This also checks that every file the profile lists exists.
 
 - The wording is generic where the originals named PrivacyFence things, for example "live
   external-service credentials" instead of "live connector credentials". The rules are the same.
-- Under route 1 the commands are namespaced plugin commands, such as `devflow:dod`.
+- Under the plugin route the commands are namespaced plugin commands, such as `devflow:dod`.
 - `/implement` treats a `verify_after_merge` entry written as `dispatch <workflow>` as a CI dispatch
   against the feature branch. This is new and used by the Swift stack. PrivacyFence manifests have no
   such entries.
