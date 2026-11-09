@@ -92,7 +92,7 @@ The scratch repository was attached with `add_repo` (access `push`) before route
 - Step 3 tool result: `Database set committed: "spike"/"spike-e" ... The document is now at version 1.`
 - Step 4 (`PushNotification`, message `spike e unattended`, sent as `<routine_summary>spike e unattended</routine_summary>`): `Mobile push requested.` (`pushSent: true`, `sentAt` 2026-11-09T07:38:43.866Z).
 
-**Result** The task ran unattended to its end with no pending permission request; the push was requested; the board write succeeded but `by` is not the fired session id (the fired session cannot call `get_session` without connectors), so by the rule of this spike the board write counts as failed; the variable was unset. **[V]** for all four.
+**Result** The task ran unattended to its end with no pending permission request; the push was requested; the board write succeeded but `by` is not the fired session id (the fired session cannot call `get_session` without connectors); the variable was unset. By the rule of this spike that would count as a failed board write; the owner corrected it to ok (see Owner review), because the write itself committed with no approval. **[V]** for all four.
 
 ### (f) Can a session fetch release tags of the fork upstreams anonymously?
 
@@ -117,13 +117,20 @@ CONCLUSION c.session: ci-triggered [V]
 CONCLUSION c.default-token: documented-no-trigger [D]
 CONCLUSION d: approval-kept [V]
 CONCLUSION e.unattended: ok [V]
-CONCLUSION e.board-write: failed [V]
+CONCLUSION e.board-write: ok [V]
 CONCLUSION e.push: ok [V]
 CONCLUSION e.env: unset [V]
 CONCLUSION f.peek: anonymous-ok [V]
 CONCLUSION f.grist-core: anonymous-ok [V]
 ROUTE a: none
 ROUTE f: git ls-remote --tags https://github.com/<owner>/<repo>.git
+
+## Owner review (2026-11-09)
+
+- Board write: the owner decided that an unattended board write counts as ok. The write committed (version 1) with no approval prompt; the earlier value came only from the fired session lacking `get_session`.
+- Alerts: because sessions cannot read Dependabot alerts, `/deps` will take security findings from a per-project audit command (`deps.audit`) and will not read alerts.
+- Forks: `PrivacyFence/peek` and `PrivacyFence/grist-core` are the owner's forks, not the upstreams. Item (f) therefore shows that `git ls-remote --tags` of a public repository works without credentials; the real upstreams are set per fork in the profile and were not tested.
+- Ruleset: the ruleset of the scratch repository had `dismiss_stale_reviews_on_push`, `require_last_push_approval` and `require_code_owner_review` set to false when item (d) ran, so item (d) says nothing about the stricter ruleset the plan assumes. Round 2 repeats item (d) with those flags on, records them in a `RULESET d` line, and adds item (g).
 
 ## Questions for the owner
 

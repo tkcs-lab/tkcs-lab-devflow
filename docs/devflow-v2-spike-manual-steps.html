@@ -120,6 +120,33 @@ jobs:
     <p class="note">Leave both Dependabot and the first pull request alone. Do not click "Update branch" yourself.</p>
   </section>
 
+
+  <h2 class="before">Round 2 · before the second spike prompt</h2>
+
+  <section class="item" id="mb4-ruleset-flags">
+    <header><h3>3. Switch the stricter ruleset settings on</h3><span class="time">about 3 min</span></header>
+    <span class="id">mb4-ruleset-flags</span>
+    <p class="what">Round 1 found these settings off in the scratch repository, so its approval test did not use the ruleset the plan assumes. Turn them on and save.</p>
+    <ol>
+      <li><input type="checkbox" data-id="mb4-1" id="mb4-1" aria-labelledby="l-mb4-1"><div><p id="l-mb4-1">Open the ruleset for <code>main</code> at <a href="https://github.com/tkcs-lab/devflow-scratch/settings/rules">Settings → Rules</a>.</p></div></li>
+      <li><input type="checkbox" data-id="mb4-2" id="mb4-2" aria-labelledby="l-mb4-2"><div><p id="l-mb4-2">Under "Require a pull request before merging", tick <strong>Require review from Code Owners</strong>, <strong>Dismiss stale pull request approvals when new commits are pushed</strong> and <strong>Require approval of the most recent reviewable push</strong>. Keep 1 required approval.</p></div></li>
+      <li><input type="checkbox" data-id="mb4-3" id="mb4-3" aria-labelledby="l-mb4-3"><div><p id="l-mb4-3">Under "Require status checks to pass", keep <code>ci</code> and tick <strong>Require branches to be up to date before merging</strong>. Save the ruleset.</p></div></li>
+    </ol>
+    <p class="done-when"><strong>Done when</strong> the ruleset page shows all four settings on.</p>
+  </section>
+
+  <section class="item" id="mb5-approved-pr-2">
+    <header><h3>4. Prepare a new approved pull request that is behind main</h3><span class="time">about 15 min</span></header>
+    <span class="id">mb5-approved-pr-2</span>
+    <p class="what">The first approval test pull request (#3) was already updated in round 1, so it cannot be reused. Use both accounts again; use a private browser window for the agent user. The ruleset from step 3 must be saved first.</p>
+    <ol>
+      <li><input type="checkbox" data-id="mb5-1" id="mb5-1" aria-labelledby="l-mb5-1"><div><p id="l-mb5-1">As the <strong>agent user</strong>, create <code>spike-d-a2.txt</code> (content <code>a2</code>) on a new branch <code>spike/d-a2</code> and open a pull request titled <strong>spike d2: approval test</strong>.</p></div></li>
+      <li><input type="checkbox" data-id="mb5-2" id="mb5-2" aria-labelledby="l-mb5-2"><div><p id="l-mb5-2">As <strong>you</strong>, approve it. Do not merge it.</p></div></li>
+      <li><input type="checkbox" data-id="mb5-3" id="mb5-3" aria-labelledby="l-mb5-3"><div><p id="l-mb5-3">As the <strong>agent user</strong>, create <code>spike-d-move2.txt</code> on a new branch <code>spike/d-move2</code> and open a pull request. As <strong>you</strong>, approve it and merge it once <code>ci</code> is green. This moves <code>main</code> ahead.</p></div></li>
+    </ol>
+    <p class="done-when"><strong>Done when</strong> "spike d2: approval test" is open, shows "Changes approved" and says the branch is out of date with main.</p>
+    <p class="note">Do not click "Update branch" yourself and do not push to that branch.</p>
+  </section>
 </main>
 
 <script>
