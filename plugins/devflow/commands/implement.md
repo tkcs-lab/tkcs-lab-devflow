@@ -23,15 +23,18 @@ This command is project-independent; everything specific to the repository comes
 profile, `.claude/toolkit.yaml`. Before anything else, load the `project-profile` skill and follow
 its "Loading the profile" section. If it reports an error, show the message verbatim and stop; never
 substitute a value of your own for a missing key.
-Skill names: under the plugin route the toolkit's skills carry a prefix (`devflow:project-profile`,
-`devflow:pr-steward`, `stack-python:stack-python`); under the SessionStart-hook route they do not.
-Use whichever form the skill list shows. In this file:
+Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profile`,
+`devflow:pr-steward`, `stack-python:stack-python`). Use whichever form the skill list shows. In this file:
 
 - `<main>` is `git.main_branch`; `<branch pattern>` is `git.branch_pattern`.
 - "the must-read docs" are the files in `docs.must_read`.
 - "the fast checks" are the commands in `verify.fast`.
 - "the project's steward file" is `project_steward`, when the profile has one.
 - "the stack skills" are the `stack-<name>` skills for each name in `stacks`; load them now.
+
+**Identity.** When the profile has `git.bot_login`, call `get_me` now. If its login differs, stop
+with exactly `get_me returned <login> but git.bot_login is <bot_login>: connect the second GitHub
+account at claude.ai/connect-github and start a new session.`
 
 **Models.** This command runs on Sonnet (the `model:` line above). That covers the turn the user
 starts it in; later turns (check-ins, wakes) run on the session's own model, so for a Sonnet
@@ -93,6 +96,20 @@ Keep an orchestration ledger as a comment on a GitHub issue if the manifest name
 Otherwise keep it in your own replies: for each phase record its state (`pending` / `running` /
 `merged` / `failed`), its session id, and its branch. Update the ledger on every state change.
 
+If the manifest names `tracking_issue`, also post these event comments on that issue, one comment
+each, short and with exactly these texts (a failed comment is noted once and the run continues):
+
+- `Implementation started on <feature_branch>.` after the `manual_before` confirmation and the
+  branch push.
+- `Phase <phase id> merged.` after each Merge (section 4, step 5).
+- `Waiting for you: <needs_you_reason>.` each time `needs_you` goes from false to true.
+- `Phase <phase id> failed after retry: <short cause>.` when a phase fails after its retry.
+- `Final review: approve.` or `Final review: changes (<n> blocking).` when a final review ends.
+- `PR opened: <url>.` after the pull request is opened.
+
+Every post ends with the attribution footer the session rules require; the exact text comes before
+it. Without `tracking_issue` none of this happens: no event comments and no `Closes` lines.
+
 A phase is **ready** when every phase in its `depends_on` is `merged`, and, if any of those
 phases is marked `human_gate: true`, the user has approved it (see "Merge" step 6 below). Start every ready phase at
 once, up to `max_parallel` (manifest, default 2). Phases in the same wave touch different files by
@@ -142,12 +159,24 @@ Call `create_session` with:
 > 5. End your last turn with a report in exactly this shape, which the orchestrator reads:
 >    `PHASE-REPORT <phase id> status=<done|blocked> head=<sha>` on its own line, then the `/dod`
 >    table, the acceptance checklist, and any out-of-scope findings.
+> 6. After the final `PHASE-REPORT` line, call `send_message` with `session_id: "@parent"` and
+>    exactly the text `PHASE-REPORT <phase id> status=<done|blocked> head=<sha>` (the same first
+>    line). It only tells the orchestrator to look; the report stays the authority.
 
 ## 4. Waiting, collecting and merging
 
-Child sessions do not report back when they finish cleanly. Between checks, end your turn after
-arming a check-in with `send_later` (about 20 minutes; 45 when only long phases are running). Never
-poll with `sleep`. A `<child-session-event>` wake (a failed turn or a restarted worker) is handled
+The orchestrator is woken by a child's doorbell message (rule 6 of the brief, sent to `@parent`), by a
+`<child-session-event>`, or by a safety-net timer. On a doorbell it ignores a message whose sender
+is not one of its recorded child sessions; otherwise it reads that child with `get_session` and
+continues exactly as for a check-in. Never poll with `sleep`; between wakes, end your turn.
+Safety-net timers: while any child, fix, conflict or review session is running, arm one
+`send_later`, **15 minutes** from now when a running phase has complexity `S`, otherwise
+**30 minutes** (a running `M` phase, a phase without `complexity`, a final-review, fix or conflict
+session); with several running, the shortest applies. After every wake cancel the armed timer
+(`delete_trigger` with the id `send_later` returned) and re-arm the same way for what is still
+running. When a timer wake finds a finished phase whose doorbell never arrived, the ledger line
+says `no doorbell` and the orchestrator uses **5 minutes** for the rest of the run (the doorbell is
+not reaching it). A `<child-session-event>` wake (a failed turn or a restarted worker) is handled
 immediately.
 
 On each check-in, for each `running` phase, call `get_session`:
@@ -158,10 +187,13 @@ On each check-in, for each `running` phase, call `get_session`:
   - `status=blocked`, or no report: read why. If the fix is small and clearly inside the phase,
     send the child a steering message (`send_message`, if you have it) or start a follow-up
     session on the same phase branch with the specific instruction. Otherwise mark the phase
-    `failed` and **ask the user**, quoting the child's reason. Do not start dependent phases.
+    `failed` and **ask the user**, quoting the child's reason, and post `Phase <phase id> failed
+    after retry: <short cause>.` and `Waiting for you: <needs_you_reason>.` on the tracking issue
+    (if any). Do not start dependent phases.
 - `failed`: start one retry session on the same phase branch, with a brief that says what the
   first attempt got to (read the branch). If a second session also fails, mark the phase `failed`
-  and ask the user.
+  and ask the user, and post `Phase <phase id> failed after retry: <short cause>.` on the
+  tracking issue (if any), followed by `Waiting for you: <needs_you_reason>.`
 
 **Merge** (one phase at a time, even when several finish together):
 
@@ -187,10 +219,12 @@ On each check-in, for each `running` phase, call `get_session`:
    wait for the run, and treat a red run like any other failed check. If anything is red, `git merge --abort` is no longer possible, so revert the merge commit
    (`git revert -m 1`), push, send the failure back to the phase, and mark the phase `running`
    again.
-5. Push the feature branch. Mark the phase `merged`, delete the phase branch on origin, and
+5. Push the feature branch. Mark the phase `merged`, post the comment `Phase <phase id> merged.`
+   on the tracking issue (if any), and
    `archive_session` the child. If the manifest has `screenshots_after_merge`, run it and send the
    user the images (`SendUserFile`) with a one-line caption naming the phase, so they can watch
    the result take shape and object early.
+   Append the phase branch to the ledger list `Branches left on origin`.
 6. **Human gate.** If the phase is marked `human_gate: true`, stop scheduling. Send the user the
    phase's review material (its screenshots and its `PHASE-REPORT`), and ask one question:
    approve, or change what. Do not arm a check-in while you wait for their answer; the reply
@@ -226,14 +260,15 @@ start one review session with `create_session`: `source_revision` the feature br
 
 Wait for it with check-ins as in section 4. Then:
 
-- `approve`: go to Finishing.
-- `changes`: group the blocking findings by phase and start one Sonnet fix session per group on a
+- `approve`: post `Final review: approve.` on the tracking issue (if any) and go to Finishing.
+- `changes`: post `Final review: changes (<n> blocking).` on the tracking issue (if any), then group the blocking findings by phase and start one Sonnet fix session per group on a
   `<feature_branch>--fix-<n>` branch, whose brief is the findings verbatim plus the phase's
   original entry. Merge each exactly as a phase (section 4's **Merge**, trailer
   `Plan-Phase: <plan slug>/fix-<n>`). Then start one more review session with the same prompt plus
   "Earlier review findings: <list>; confirm each is fixed and review only the diff since
-  `<sha>`". If that second review still says `changes`, stop and ask the user, quoting the
-  findings.
+  `<sha>`". If that second review still says `changes`, post `Final review: changes (<n> blocking).`
+  and `Waiting for you: <needs_you_reason>.` on the tracking issue (if any), stop and ask the user,
+  quoting the findings.
 
 `archive_session` each review session once you have read its report. Non-blocking findings go into
 the PR body.
@@ -245,10 +280,19 @@ the PR body.
    added, and the plan document is deleted, with its decisions extracted into ADRs when the
    profile has `docs.adr_dir`).
 3. Open **one** pull request from the feature branch to `<main>`, following the PR template if the
-   repo has one. The body lists each phase with its merge commit, the combined acceptance
+   repo has one. The body begins with one line `Closes #<tracking_issue>` and one more `Closes #<n>` line for each entry
+   of the manifest's `closes`, before the phase list (no such lines without `tracking_issue`). It lists each phase with its merge commit, the combined acceptance
    checklist, the final review's verdict and its non-blocking findings, every out-of-scope
    finding the children reported, and a **Manual verification** section: each `manual_after`
    item as an unchecked box, with the `manual_steps_artifact` link.
+   After opening it, post `PR opened: <url>.` on the tracking issue (if any).
+   The body also has a section `## Branches left on origin` listing that ledger list, and the
+   sentence "The owner deletes them in the GitHub UI."
+   When the profile has `git.codeowners`, request a review from every login in it (GitHub MCP
+   `update_pull_request` with `reviewers`) and set `needs_you` true with the reason `Review PR #<n>`.
+   Never re-request for the same pushed head, and never approve, merge or enable auto-merge. If the
+   tool cannot request a reviewer, still set `needs_you` (`Review PR #<n>`) and ask the user to
+   request the review.
 4. Subscribe to the PR and drive it to green as the `pr-steward` skill says (and the project's
    steward file, if any). You own this PR. A failure goes to a new phase-style session on a `<feature_branch>--fix-<n>` branch,
    merged the same way, or you fix it yourself when it is small.
@@ -256,6 +300,33 @@ the PR body.
    and anything a child or the reviewer flagged. The plan branch (`plan/<slug>`) can be deleted
    once the PR merges.
 
-Never: push to `<main>`; merge the PR yourself; rebase or force-push the feature branch; run a phase's
+Never: push to `<main>`; approve or merge the PR yourself, or enable auto-merge on it; rebase or force-push the feature branch; run a phase's
 work in your own session to "save time"; skip a phase whose dependency failed; do a `manual_*` step
 on the user's behalf.
+
+## Status board
+
+Follow the `status-board` skill (whichever form the skill list shows) for where and how to write; a
+board error never stops the run. `/implement` writes a record as follows.
+
+- The first record (status `starting`) is written before any child session starts. After that, write at
+  every ledger change and at every check-in.
+- Fields: `kind` is `"run"` and `command` is `null`; `plan_slug`, `plan_url`, `feature_branch` come from
+  the plan and `orchestrator_session` is this session; `phases` mirrors the ledger, with the states
+  `pending`, `running`, `merged`, `failed` and `gate`.
+- `status` follows the field rules of brief section 4 (`starting`, `running`, `waiting_user`,
+  `reviewing`, `pr_open`, `done`, `failed`); `needs_you` is true exactly when you have asked the owner
+  something or stopped on a failure, with a one-line reason.
+- `pr` is filled when the pull request is opened and kept current afterwards.
+- `next_check_at` equals the time of the timer you have armed, or `null` when none is armed.
+- `updated_at` is set on every write.
+
+When `needs_you` changes, follow the `## Alerts` section of the `status-board` skill (rename the session, push once, rename back).
+
+`/implement` sets `needs_you` true at these moments, with these reasons:
+
+- the `manual_before` question: `Confirm manual steps`
+- a `human_gate`: `Approve <phase id>`
+- a phase failed after its retry: `Fix <phase id>`
+- a second `changes` review: `Resolve review findings`
+- a PR waiting for the code owner: `Review PR #<n>`

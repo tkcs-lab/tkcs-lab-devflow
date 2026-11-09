@@ -2,6 +2,8 @@
 
 Status: review 1 answered; this is the design as built. The three decisions in §8 are resolved.
 
+Since devflow 0.4 the SessionStart-hook route and `toolkit.ref` no longer exist; plugins in the Claude Project are the only delivery route (see delivery.md). Section 3 is kept as the record of the probe that led to the first design.
+
 ## 1. What this is
 
 PrivacyFence's `/make-plan`, `/implement` and `/dod` (plus the generic half of its `steward` skill)
@@ -22,22 +24,28 @@ Nightshift's runtime is not used. From it I take: the marketplace shape, the `re
 plugins/devflow/
   .claude-plugin/plugin.json
   commands/{make-plan,implement,dod,review}.md   # review: see docs/review.md
+  commands/{board,deps,upstream,land}.md         # maintenance commands: see docs/maintenance.md
   skills/project-profile/SKILL.md       # how every command reads, validates and quotes the profile
   skills/pr-steward/SKILL.md            # generic steward policy; table comes from ci.dispatchable
   skills/review-checklist/SKILL.md      # Nightshift, adapted (no run-ledger / R-AG rules)
   skills/secure-code-review/SKILL.md    # Nightshift, adapted; whole-repository section for /review
   skills/{test-review,docs-review}/SKILL.md   # checklists for /review's test and documentation dimensions
+  skills/status-board/SKILL.md          # how a session writes its status record to the board
   scripts/validate_manifest.py          # CLI: validate_manifest.py <plan.md|manifest.yaml> [--profile P]
   scripts/validate_profile.py           # CLI: validate_profile.py [.claude/toolkit.yaml]
   scripts/review_decisions.{py,html}    # CLI: review_decisions.py <items.json> <out.html>, /review's decisions page
+  scripts/{validate_status_record,build_board,board_stale,pick_release,upstream_sync,land_order}.py
   schema/profile.schema.json
+  schema/status-record.schema.json
+  board/                                # the status board page (board.html, rules.js)
+  templates/devflow-land.yml            # the workflow /land installs
 plugins/stack-python/skills/stack-python/SKILL.md
 plugins/stack-swift/skills/stack-swift/SKILL.md
 plugins/stack-ipados/skills/stack-ipados/SKILL.md
 plugins/stack-go/skills/stack-go/SKILL.md
-install/session-start.sh
 templates/toolkit.yaml                  # commented starter profile
-docs/{README.md,profile-reference.md,delivery.md,design.md,migrating-privacyfence.md}
+docs/{README.md,profile-reference.md,delivery.md,design.md,maintenance.md,migrating-privacyfence.md}
+docs/design/maintenance-spike.md        # record of the spike behind the maintenance commands
 tests/                                  # pytest; fixtures from real PrivacyFence plans
 .github/workflows/test.yml
 ```
@@ -207,6 +215,10 @@ manifests on `plan/atlassian-user-names` (7 phases) and `plan/plugin-framework`.
 * **dod**: runs `verify.dod` (honouring `narrow`/`skip_when_narrowed`), then reads `verify.dod_doc`
   and walks its rows against `git diff --stat origin/<main>...HEAD`, then the manual items; if
   `dod_doc` is absent it says so and runs only the gate.
+* **board**: publishes the status board page once; `/board prune` deletes stale records after one confirmation.
+* **deps**: weekly unattended dependency triage; fixes red Dependabot and audit groups, opens pull requests, never merges.
+* **upstream**: weekly unattended sync of a patch-carrying fork to the newest upstream release tag, one commit, one pull request.
+* **land**: orders the bot's open pull requests, resolves conflicts before review, runs CI once, installs the land workflow.
 * Every command starts with the same two lines: load `project-profile`, run `validate_profile.py`;
   a failure message is shown verbatim and the command stops.
 * Finding the scripts: `project-profile` documents one resolution order (plugin root → `~/.claude/devflow`)
@@ -243,12 +255,9 @@ conventions, table-driven tests with `httptest`, acceptance as `go test <pkg> -r
 pytest, stdlib + PyYAML: manifest (good; missing field; unknown `depends_on`; cycle; overlapping
 `touches` in a wave; `worker_model: opus` without reason; real PrivacyFence manifests from git history
 stored under `tests/fixtures/`), profile (good; each missing required key named; unknown key; bad
-types; PrivacyFence profile), a **no-project-words test** that greps `plugins/devflow`, `install/`,
+types; PrivacyFence profile), a **no-project-words test** that greps `plugins/devflow`,
 `plugins/stack-swift`, `plugins/stack-ipados`, `plugins/stack-go` and `templates/` for `privacyfence|ruff|pytest|src/privacyfence|connector`
-(case-insensitive; `stack-python` and `docs/` exempt), plus marketplace/plugin JSON structure and a
-`bash -n` / `shellcheck`-if-present check on the hook. Plus a hook test that runs `session-start.sh` against a
-local bare repo as the "toolkit remote": idempotent, no-op without `CLAUDE_CODE_REMOTE`, exclude
-written in project scope. Workflow `.github/workflows/test.yml` runs it all on Python 3.11 and 3.13.
+(case-insensitive; `stack-python` and `docs/` exempt), plus marketplace/plugin JSON structure. Workflow `.github/workflows/test.yml` runs it all on Python 3.11 and 3.13.
 
 Note the string check also catches the word `connector` in the generic text: I will phrase
 "live connector credentials" as "live external-service credentials".
@@ -267,3 +276,15 @@ Note the string check also catches the word `connector` in the generic text: I w
 
 The probe commit (`WIP delivery probe`) is in this branch's history and removed again in the next
 commit, so the final PR diff does not contain it.
+
+## 10. devflow v2 and the maintenance commands
+
+Version 0.4 added four commands and what they share. `/board` publishes a status board, one private
+page that reads the status records every session writes through the `status-board` skill (format:
+`schema/status-record.schema.json`). `/deps`, `/upstream` and `/land` are the maintenance commands:
+the first two run unattended from a scheduled task, `/land` is run by the owner, and none of them
+merges. `/make-plan` and `/implement` now keep a tracking issue for every plan. Profile sections
+`deps`, `upstream`, `land` and the key `git.bot_login` configure the new commands. Delivery is by plugins
+only. How to run and schedule the commands, the profile sections, the board and the secret and setting
+`/land` needs are in [maintenance.md](maintenance.md); what a cloud session can and cannot do, which
+shaped the design, is recorded in [design/maintenance-spike.md](design/maintenance-spike.md).

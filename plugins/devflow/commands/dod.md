@@ -12,9 +12,8 @@ $ARGUMENTS
 
 Load the `project-profile` skill and follow its "Loading the profile" section. If it reports an
 error, show the message verbatim and stop; never substitute a command of your own.
-Skill names: under the plugin route the toolkit's skills carry a prefix (`devflow:project-profile`,
-`devflow:pr-steward`, `stack-python:stack-python`); under the SessionStart-hook route they do not.
-Use whichever form the skill list shows. The definition
+Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profile`,
+`devflow:pr-steward`, `stack-python:stack-python`). Use whichever form the skill list shows. The definition
 of done is the profile's `verify` section:
 
 - `verify.dod`: the blocking gate, in order.

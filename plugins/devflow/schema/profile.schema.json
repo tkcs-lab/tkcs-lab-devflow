@@ -26,13 +26,6 @@
     "stringList": {"type": "array", "items": {"type": "string", "minLength": 1}}
   },
   "properties": {
-    "toolkit": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "ref": {"type": "string", "minLength": 1, "description": "Tag of the toolkit repo that install/session-start.sh installs. Required only when the SessionStart hook route is used."}
-      }
-    },
     "project": {
       "type": "object",
       "additionalProperties": false,
@@ -67,7 +60,18 @@
         "main_branch": {"type": "string", "minLength": 1},
         "branch_pattern": {"type": "string", "minLength": 1},
         "branch_types": {"$ref": "#/$defs/stringList"},
-        "merge_style": {"enum": ["merge-commit", "squash"]}
+        "merge_style": {"enum": ["merge-commit", "squash"]},
+        "codeowners": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "description": "GitHub logins of the code owners; /implement requests their review on the pull request it opens."
+        },
+        "bot_login": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Login of the second GitHub user the agent acts as; /implement stops when get_me returns another login."
+        }
       }
     },
     "verify": {
@@ -121,6 +125,65 @@
         "orchestrator": {"enum": ["opus", "sonnet"], "default": "sonnet"},
         "worker": {"enum": ["opus", "sonnet"], "default": "sonnet"},
         "reviewer": {"enum": ["opus", "sonnet"], "default": "opus"}
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"board_url": {"type": "string", "minLength": 1, "description": "URL of the published status board page; when unset, the environment variable DEVFLOW_BOARD_URL is used."}}
+    },
+    "deps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cooldown_days", "time_budget_minutes"],
+      "properties": {
+        "cooldown_days": {"type": "integer", "minimum": 0, "maximum": 30, "description": "Dependabot cooldown (days) the project's .github/dependabot.yml must set."},
+        "time_budget_minutes": {"type": "integer", "minimum": 10, "maximum": 480, "description": "/deps starts no new update group after 80% of this."},
+        "audit": {
+          "type": "array",
+          "description": "Commands that list vulnerable packages: exit 0 = nothing found, non-zero = findings in the output.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ecosystem", "run"],
+            "properties": {
+              "ecosystem": {"type": "string", "minLength": 1},
+              "run": {"type": "string", "minLength": 1},
+              "cwd": {"type": "string", "minLength": 1, "description": "Directory, relative to the repo root."}
+            }
+          }
+        },
+        "lock_freshness": {
+          "type": "array",
+          "description": "Run after a manifest change so lockfiles stay consistent.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["when", "run", "lockfiles"],
+            "properties": {
+              "when": {"$ref": "#/$defs/stringList", "description": "Globs matched against changed files."},
+              "run": {"type": "string", "minLength": 1},
+              "lockfiles": {"$ref": "#/$defs/stringList", "description": "The only files the command may change besides the matched ones."}
+            }
+          }
+        }
+      }
+    },
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "tag_pattern", "version_file"],
+      "properties": {
+        "repo": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "description": "The upstream repository, owner/name."},
+        "tag_pattern": {"type": "string", "minLength": 1, "description": "Regular expression a release tag must match."},
+        "version_file": {"type": "string", "minLength": 1, "description": "File in the fork that records the synced tag."}
+      }
+    },
+    "land": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_prs": {"type": "integer", "minimum": 1, "maximum": 50, "description": "Most pull requests one /land run orders."}
       }
     },
     "project_steward": {"type": "string", "minLength": 1, "description": "Path to a project skill with policy that fits no other key."}

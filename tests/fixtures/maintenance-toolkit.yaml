@@ -1,0 +1,28 @@
+docs:
+  must_read: []
+git:
+  main_branch: main
+  branch_pattern: "<type>/<kebab-case>"
+verify:
+  fast:
+    - make lint
+  dod:
+    - make test
+stacks: []
+deps:
+  cooldown_days: 3
+  time_budget_minutes: 90
+  audit:
+    - ecosystem: "pip"
+      run: "pip-audit -r requirements.txt"
+      cwd: "."
+  lock_freshness:
+    - when: ["pyproject.toml"]
+      run: "uv lock"
+      lockfiles: ["uv.lock"]
+upstream:
+  repo: "owner/name"
+  tag_pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+  version_file: "UPSTREAM_VERSION"
+land:
+  max_prs: 10

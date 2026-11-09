@@ -121,6 +121,18 @@ def validate(manifest, profile: dict | None = None) -> tuple[list[str], list[str
     mp = manifest.get("max_parallel")
     if mp is not None and (not isinstance(mp, int) or isinstance(mp, bool) or mp < 1):
         errors.append("max_parallel must be a positive integer")
+    def _pos_int(v):
+        return isinstance(v, int) and not isinstance(v, bool) and v >= 1
+
+    ti = manifest.get("tracking_issue")
+    if "tracking_issue" in manifest and not _pos_int(ti):
+        errors.append("tracking_issue must be a positive integer")
+    if "closes" in manifest:
+        cl = manifest["closes"]
+        if not (isinstance(cl, list) and all(_pos_int(x) for x in cl)):
+            errors.append("closes must be a list of positive integers")
+        elif _pos_int(ti) and ti in cl:
+            warnings.append("closes contains tracking_issue")
     for key in ("verify_after_merge", "final_checks"):
         if key in manifest and not (isinstance(manifest[key], list) and all(isinstance(x, str) for x in manifest[key])):
             errors.append(f"'{key}' must be a list of strings")

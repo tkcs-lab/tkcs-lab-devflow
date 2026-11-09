@@ -21,15 +21,16 @@ rules follow from that:
 1. **Find the toolkit scripts.** Run this once and keep the result as `<devflow root>`:
 
    ```bash
-   for d in "${CLAUDE_PLUGIN_ROOT:-}" "$HOME/.claude/devflow" "$PWD/.claude/devflow" \
-            $(ls -d "$HOME"/.claude/plugins/cache/*/devflow/*/ 2>/dev/null); do
+   for d in "${CLAUDE_PLUGIN_ROOT:-}" \
+            $(ls -d "$HOME"/.claude/plugins/cache/*/devflow/*/ 2>/dev/null) \
+            $(ls -d "$HOME"/.claude/plugins/synced/*/devflow/ 2>/dev/null); do
      [ -n "$d" ] && [ -f "$d/scripts/validate_profile.py" ] && { echo "$d"; break; }
    done
    ```
 
    No output means the toolkit is not installed in this session. Stop and tell the user: the
-   project needs the devflow plugin in its Claude Project, or the SessionStart hook from
-   `install/session-start.sh` (see `docs/delivery.md` in the claude-toolkit repo).
+   project needs the devflow plugin in its Claude Project (see `docs/delivery.md` in the
+   claude-toolkit repo).
 
 2. **Validate and resolve it**, from the repo root:
 
@@ -59,11 +60,14 @@ rules follow from that:
 | `git.main_branch` | Base for plan branches, merges and the PR |
 | `git.branch_pattern`, `branch_types` | Names of feature branches; checked by `validate_manifest.py` |
 | `git.merge_style` | Quoted to workers and to `pr-steward` |
+| `git.bot_login` | `/implement` checks at the start that `get_me` returns this login |
+| `git.codeowners` | Logins `/implement` requests a review from on the pull request it opens |
 | `verify.fast` | Run after every merge in `/implement` and by the final reviewer |
 | `verify.dod`, `dod_conditional`, `dod_manual`, `dod_doc` | `/dod` |
 | `ci.dispatchable` | The dispatch table in `pr-steward`; what is not "manual" in a plan |
 | `stacks` | Which `stack-*` skills to load |
 | `models` | `planner`, `orchestrator` (documentation of intent; the command front matter fixes them), `worker`, `reviewer` (used in `create_session`) |
+| `status.board_url` | Where the `status-board` skill writes status records; unset falls back to `DEVFLOW_BOARD_URL` |
 | `project_steward` | A project skill or doc with policy that fits none of the keys |
 
 A command entry in `verify.*` is a string or `{run, cwd?, narrow?, skip_when_narrowed?}`; a string

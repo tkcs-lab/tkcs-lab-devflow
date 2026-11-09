@@ -5,7 +5,7 @@ from conftest import ROOT
 
 FORBIDDEN = re.compile(r"privacyfence|ruff|pytest|src/privacyfence|connector", re.I)
 # stack-python names its tools on purpose; docs/ and tests/ use PrivacyFence as the worked example.
-CHECKED = ["plugins/devflow", "plugins/stack-swift", "plugins/stack-ipados", "plugins/stack-go", "install", "templates", ".claude-plugin"]
+CHECKED = ["plugins/devflow", "plugins/stack-swift", "plugins/stack-ipados", "plugins/stack-go", "templates", ".claude-plugin"]
 SUFFIXES = {".md", ".py", ".sh", ".json", ".yaml", ".yml", ".txt"}
 
 
@@ -24,3 +24,7 @@ def test_no_project_specific_strings():
 def test_checked_paths_exist():
     for rel in CHECKED:
         assert (ROOT / rel).is_dir(), rel
+
+
+def test_install_directory_is_gone():
+    assert not (ROOT / "install").exists()

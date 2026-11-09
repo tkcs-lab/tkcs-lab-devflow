@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -65,6 +66,13 @@ def check(value, schema: dict, root: dict, path: str, errors: list[str]) -> None
         return
     if t == "string" and len(value) < schema.get("minLength", 0):
         errors.append(f"'{path}': must not be empty")
+    if t == "string" and "pattern" in schema and not re.search(schema["pattern"], value):
+        errors.append(f"'{path}': does not match {schema['pattern']}")
+    if t == "integer":
+        if "minimum" in schema and value < schema["minimum"]:
+            errors.append(f"'{path}': must be at least {schema['minimum']}")
+        if "maximum" in schema and value > schema["maximum"]:
+            errors.append(f"'{path}': must be at most {schema['maximum']}")
     if t == "array":
         if len(value) < schema.get("minItems", 0):
             errors.append(f"'{path}': needs at least {schema['minItems']} item(s)")
@@ -120,6 +128,20 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
     docs = profile.get("docs", {})
     if ("adr_index" in docs or "adr_bar" in docs) and "adr_dir" not in docs:
         errors.append("'docs.adr_index' / 'docs.adr_bar' need 'docs.adr_dir' (ADRs are used iff adr_dir is set)")
+    git = profile.get("git", {})
+    owners, bot = git.get("codeowners"), git.get("bot_login")
+    if owners is not None and bot is not None and bot in owners:
+        errors.append("'git.codeowners' must not contain 'git.bot_login': the agent cannot be its own code owner")
+    if owners is not None and bot is None:
+        errors.append("'git.codeowners' needs 'git.bot_login'")
+    if bot is not None and owners is None:
+        warnings.append("'git.bot_login' is set without 'git.codeowners': nobody is asked to review")
+    tag_pattern = profile.get("upstream", {}).get("tag_pattern")
+    if tag_pattern is not None:
+        try:
+            re.compile(tag_pattern)
+        except re.error as exc:
+            errors.append(f"'upstream.tag_pattern': not a valid regular expression ({exc})")
     stacks = profile.get("stacks", [])
     apple = [s for s in ("swift", "ipados") if s in stacks]
     if apple and not profile.get("ci", {}).get("dispatchable"):
@@ -144,6 +166,9 @@ def validate(profile, root_dir: Path | None = None) -> tuple[list[str], list[str
     errors: list[str] = []
     if not isinstance(profile, dict):
         return ["the profile must be a YAML mapping"], [], {}
+    if "toolkit" in profile:
+        return (["'toolkit' was removed: the toolkit is delivered only as plugins (docs/delivery.md); "
+                 "delete the 'toolkit' section"], [], {})
     check(profile, schema, schema, "", errors)
     if errors:
         return errors, [], {}

@@ -30,11 +30,23 @@ def test_plugin_versions_agree():
     assert len(versions) == 1
 
 
-COMMANDS = ("make-plan", "implement", "dod", "review")
+CORE_COMMANDS = ("make-plan", "implement", "dod", "review")
+COMMANDS = tuple(sorted(p.stem for p in (DEVFLOW / "commands").glob("*.md")))
 
 
-def test_command_files_are_exactly_these():
-    assert {p.stem for p in (DEVFLOW / "commands").glob("*.md")} == set(COMMANDS)
+def test_core_commands_exist():
+    assert set(CORE_COMMANDS) <= set(COMMANDS)
+
+
+def test_no_session_start_wording_in_the_plugins():
+    for path in (DEVFLOW.parent).rglob("*"):
+        if path.is_file() and "__pycache__" not in path.parts:
+            assert "SessionStart" not in path.read_text(errors="ignore"), path
+
+
+def test_project_profile_finds_synced_plugins():
+    text = (DEVFLOW / "skills" / "project-profile" / "SKILL.md").read_text()
+    assert "plugins/synced" in text
 
 
 def test_commands_have_front_matter():
@@ -50,7 +62,7 @@ def test_skills_have_matching_names():
     skills = list(ROOT.glob("plugins/*/skills/*/SKILL.md"))
     assert {p.parent.name for p in skills} == {
         "project-profile", "pr-steward", "review-checklist", "secure-code-review", "test-review", "docs-review",
-        "stack-python", "stack-swift", "stack-ipados", "stack-go"}
+        "status-board", "stack-python", "stack-swift", "stack-ipados", "stack-go"}
     for path in skills:
         fm = frontmatter(path)
         assert fm["name"] == path.parent.name
