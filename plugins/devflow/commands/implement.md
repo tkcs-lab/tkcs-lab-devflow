@@ -32,6 +32,10 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
 - "the project's steward file" is `project_steward`, when the profile has one.
 - "the stack skills" are the `stack-<name>` skills for each name in `stacks`; load them now.
 
+**Identity.** When the profile has `git.bot_login`, call `get_me` now. If its login differs, stop
+with exactly `get_me returned <login> but git.bot_login is <bot_login>: connect the second GitHub
+account at claude.ai/connect-github and start a new session.`
+
 **Models.** This command runs on Sonnet (the `model:` line above). That covers the turn the user
 starts it in; later turns (check-ins, wakes) run on the session's own model, so for a Sonnet
 orchestrator throughout, start the session on Sonnet. The plan was sized for Sonnet workers by an
@@ -263,6 +267,11 @@ the PR body.
    item as an unchecked box, with the `manual_steps_artifact` link.
    The body also has a section `## Branches left on origin` listing that ledger list, and the
    sentence "The owner deletes them in the GitHub UI."
+   When the profile has `git.codeowners`, request a review from every login in it (GitHub MCP
+   `update_pull_request` with `reviewers`) and set `needs_you` true with the reason `Review PR #<n>`.
+   Never re-request for the same pushed head, and never approve, merge or enable auto-merge. If the
+   tool cannot request a reviewer, still set `needs_you` (`Review PR #<n>`) and ask the user to
+   request the review.
 4. Subscribe to the PR and drive it to green as the `pr-steward` skill says (and the project's
    steward file, if any). You own this PR. A failure goes to a new phase-style session on a `<feature_branch>--fix-<n>` branch,
    merged the same way, or you fix it yourself when it is small.
@@ -270,7 +279,7 @@ the PR body.
    and anything a child or the reviewer flagged. The plan branch (`plan/<slug>`) can be deleted
    once the PR merges.
 
-Never: push to `<main>`; merge the PR yourself; rebase or force-push the feature branch; run a phase's
+Never: push to `<main>`; approve or merge the PR yourself, or enable auto-merge on it; rebase or force-push the feature branch; run a phase's
 work in your own session to "save time"; skip a phase whose dependency failed; do a `manual_*` step
 on the user's behalf.
 

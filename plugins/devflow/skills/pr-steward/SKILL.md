@@ -48,6 +48,9 @@ Things about dispatching that are true everywhere:
 - **A PR this session opened is this session's to drive to green.** Subscribe to it
   (`subscribe_pr_activity`), and keep working it until CI passes and it is mergeable. That is the
   default and this file does not soften it.
+- **A review requested from a code owner is waiting on a person.** Set `needs_you` with the reason
+  `Review PR #<n>`. Request the review once per pushed head. Never approve, merge or enable
+  auto-merge on a PR you opened.
 - **Do not follow dependency-bot PRs** unless the maintainer asks: a version bump is a supply-chain
   decision for a person. The project's steward file may name other PRs to leave alone.
 - **Stop at merge or close.** Nothing further is owed.

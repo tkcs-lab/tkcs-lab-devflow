@@ -60,6 +60,8 @@ rules follow from that:
 | `git.main_branch` | Base for plan branches, merges and the PR |
 | `git.branch_pattern`, `branch_types` | Names of feature branches; checked by `validate_manifest.py` |
 | `git.merge_style` | Quoted to workers and to `pr-steward` |
+| `git.bot_login` | `/implement` checks at the start that `get_me` returns this login |
+| `git.codeowners` | Logins `/implement` requests a review from on the pull request it opens |
 | `verify.fast` | Run after every merge in `/implement` and by the final reviewer |
 | `verify.dod`, `dod_conditional`, `dod_manual`, `dod_doc` | `/dod` |
 | `ci.dispatchable` | The dispatch table in `pr-steward`; what is not "manual" in a plan |

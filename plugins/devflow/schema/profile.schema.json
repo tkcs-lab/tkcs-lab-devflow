@@ -60,7 +60,18 @@
         "main_branch": {"type": "string", "minLength": 1},
         "branch_pattern": {"type": "string", "minLength": 1},
         "branch_types": {"$ref": "#/$defs/stringList"},
-        "merge_style": {"enum": ["merge-commit", "squash"]}
+        "merge_style": {"enum": ["merge-commit", "squash"]},
+        "codeowners": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "description": "GitHub logins of the code owners; /implement requests their review on the pull request it opens."
+        },
+        "bot_login": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Login of the second GitHub user the agent acts as; /implement stops when get_me returns another login."
+        }
       }
     },
     "verify": {

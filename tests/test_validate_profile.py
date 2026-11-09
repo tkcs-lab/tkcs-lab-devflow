@@ -185,3 +185,33 @@ def test_toolkit_section_is_rejected_with_a_migration_message(vp):
         "'toolkit' was removed: the toolkit is delivered only as plugins (docs/delivery.md); "
         "delete the 'toolkit' section"
     ]
+
+
+def _git(**kw):
+    p = copy.deepcopy(MINIMAL)
+    p["git"].update(kw)
+    return p
+
+
+def test_identity_keys_in_a_valid_profile(vp):
+    e, w, _ = vp.validate(_git(codeowners=["owner"], bot_login="agent"))
+    assert e == [] and w == []
+
+
+def test_bot_in_codeowners_is_an_error(vp):
+    assert errs(vp, _git(codeowners=["owner", "agent"], bot_login="agent")) == [
+        "'git.codeowners' must not contain 'git.bot_login': the agent cannot be its own code owner"]
+
+
+def test_codeowners_without_bot_login_is_an_error(vp):
+    assert errs(vp, _git(codeowners=["owner"])) == ["'git.codeowners' needs 'git.bot_login'"]
+
+
+def test_bot_login_without_codeowners_warns(vp):
+    e, w, _ = vp.validate(_git(bot_login="agent"))
+    assert e == [] and w == ["'git.bot_login' is set without 'git.codeowners': nobody is asked to review"]
+
+
+def test_empty_codeowners_and_empty_bot_login_are_rejected(vp):
+    assert errs(vp, _git(codeowners=[], bot_login="agent"))
+    assert errs(vp, _git(bot_login=""))

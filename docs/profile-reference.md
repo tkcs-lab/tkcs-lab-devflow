@@ -32,6 +32,8 @@ Rules:
 | `git.branch_pattern` | **yes** | Human-readable branch rule, quoted into prompts, for example `<type>/<kebab-case>` |
 | `git.branch_types` | no | Allowed `<type>` values; `/implement` rejects a manifest whose `feature_branch` uses another |
 | `git.merge_style` | no | `merge-commit` or `squash`; only quoted to workers and the steward |
+| `git.codeowners` | no (needs `git.bot_login`) | GitHub logins of the code owners (at least one). `/implement` requests their review on the pull request it opens and sets `needs_you` (`Review PR #<n>`); it never approves or merges |
+| `git.bot_login` | no | Login of the second GitHub user the agent acts as. `/implement` calls `get_me` at the start and stops when the login differs. Must not be listed in `git.codeowners` |
 | `verify.fast` | **yes** | Commands run after every merge by `/implement` and by the final reviewer. Seconds to a minute |
 | `verify.dod` | **yes** | The blocking definition-of-done gate `/dod` runs, in order |
 | `verify.dod_conditional` | no | `{when: [globs], do: text}`: checked against the diff by `/dod` |
@@ -53,6 +55,36 @@ Every entry of `verify.fast` and `verify.dod` is a string, or a mapping:
   narrow: "npm test -- {args}"   # /dod <args>: run this instead of `run`, with {args} replaced
   skip_when_narrowed: true # /dod <args>: report n/a (partial run) instead of running
 ```
+
+### Second GitHub user
+
+Set `git.bot_login` and `git.codeowners` when the agent should open pull requests as its own GitHub
+account and the owner's review is the gate. Sessions keep running in the owner's claude.ai seat;
+only the GitHub account connected to it changes, so the owner's own GitHub access from that seat
+goes away until the connection is swapped back. The owner does these steps once (`/make-plan` adds
+them to `manual_before` as `mb0-second-user`):
+
+GitHub:
+
+1. Create the second GitHub user (its own email address, 2FA on). Put it on the team plan seat.
+2. Invite it to each repository with **Write** (not Admin, not Maintain). It must not be in any
+   branch-protection bypass list.
+3. On each repository, protect `main` (a ruleset): require a pull request, require review from Code
+   Owners, at least 1 approval, dismiss stale approvals on new commits, require approval of the most
+   recent push, block force pushes and deletions.
+4. Add `.github/CODEOWNERS` containing `* @<owner-login>`. The second user is not listed.
+5. Confirm the Claude GitHub App is installed for the repository and, if the second user is the one
+   connecting, that it is installed for that account's access
+   (`https://github.com/apps/claude/installations/select_target`).
+
+claude.ai (the owner's own seat):
+
+6. On `https://claude.ai/connect-github`, replace the connected GitHub account with the second login.
+7. In that account's environment settings, check that the repositories are enabled.
+8. Open a session and ask it to call `get_me`; it must print the second login, not the owner's.
+
+Then open one throwaway pull request from a session and check that its author is the second login
+and that GitHub shows "Review required".
 
 ### `ci.dispatchable`
 
