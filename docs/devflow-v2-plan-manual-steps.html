@@ -72,22 +72,23 @@
   <section class="item" id="ma1-board-live">
     <header><h3>1. Publish the board and point sessions at it</h3><span class="time">about 5 min</span></header>
     <span class="id">ma1-board-live</span>
-    <p class="what">Verifies what no test can: the board on your phone and the push notification.</p>
+    <p class="what">Verifies what no test can: the board page on your phone.</p>
     <ol>
       <li><input type="checkbox" data-id="ma1-1" id="ma1-1" aria-labelledby="l-ma1-1"><div><p id="l-ma1-1">In a new session on any repository that has the devflow plugin, run <code>/board</code>. It prints the board's address.</p></div></li>
       <li><input type="checkbox" data-id="ma1-2" id="ma1-2" aria-labelledby="l-ma1-2"><div><p id="l-ma1-2">In the claude.ai environment that your sessions and scheduled tasks use (the cloud environment menu in the session's title bar, then Edit), add the environment variable <code>DEVFLOW_BOARD_URL</code> with that address. It is not a secret. Only sessions started afterwards see it.</p></div></li>
       <li><input type="checkbox" data-id="ma1-3" id="ma1-3" aria-labelledby="l-ma1-3"><div><p id="l-ma1-3">Open the address on your phone. It should say "Nothing needs you" or list your running projects, in light and dark mode, with no sideways scrolling.</p></div></li>
       <li><input type="checkbox" data-id="ma1-4" id="ma1-4" aria-labelledby="l-ma1-4"><div><p id="l-ma1-4">Run <code>/board prune</code>. It lists records older than 7 days and asks before deleting any.</p></div></li>
     </ol>
-    <p class="report"><strong>Report back:</strong> "Board opens on the phone: pass/fail. Push notification arrived: pass/fail."</p>
+    <p class="report"><strong>Report back:</strong> "Board opens on the phone: pass/fail."</p>
   </section>
 
   <section class="item" id="ma2-throwaway-pr">
-    <header><h3>2. Confirm the review gate once more</h3><span class="time">about 5 min</span></header>
+    <header><h3>2. Confirm the review gate on the plan's pull request</h3><span class="time">about 2 min</span></header>
     <span class="id">ma2-throwaway-pr</span>
+    <p class="what">The reviewer request and the account check in the new commands only take effect from the next <code>/implement</code> run with the new version. This run still uses the installed one, so what you can check now is the author and the code owner gate.</p>
     <ol>
-      <li><input type="checkbox" data-id="ma2-1" id="ma2-1" aria-labelledby="l-ma2-1"><div><p id="l-ma2-1">Start a session on a repository that uses devflow v2. Check that its first reply says the account matches <code>git.bot_login</code> (the <code>get_me</code> check).</p></div></li>
-      <li><input type="checkbox" data-id="ma2-2" id="ma2-2" aria-labelledby="l-ma2-2"><div><p id="l-ma2-2">Open the pull request that <code>/implement</code> created for this plan. It must be authored by the agent user, ask you for review, and show "Review required".</p></div></li>
+      <li><input type="checkbox" data-id="ma2-1" id="ma2-1" aria-labelledby="l-ma2-1"><div><p id="l-ma2-1">Open the pull request that <code>/implement</code> created for this plan. It is authored by the agent user.</p></div></li>
+      <li><input type="checkbox" data-id="ma2-2" id="ma2-2" aria-labelledby="l-ma2-2"><div><p id="l-ma2-2">It shows "Review required" (the <code>CODEOWNERS</code> file asks for your review) and cannot be merged without it.</p></div></li>
     </ol>
     <p class="report"><strong>Report back:</strong> "PR author is the agent: pass/fail. Review required shown: pass/fail."</p>
   </section>
