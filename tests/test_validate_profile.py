@@ -174,5 +174,14 @@ def test_schema_file_matches_the_validator(vp):
     schema = json.loads(vp.SCHEMA.read_text())
     assert set(schema["required"]) == {"docs", "git", "verify", "stacks"}
     assert schema["additionalProperties"] is False
-    for key in ("toolkit", "project", "docs", "git", "verify", "ci", "stacks", "models", "project_steward"):
+    for key in ("project", "docs", "git", "verify", "ci", "stacks", "models", "project_steward"):
         assert key in schema["properties"]
+
+
+def test_toolkit_section_is_rejected_with_a_migration_message(vp):
+    p = copy.deepcopy(MINIMAL)
+    p["toolkit"] = {"ref": "v1"}
+    assert errs(vp, p) == [
+        "'toolkit' was removed: the toolkit is delivered only as plugins (docs/delivery.md); "
+        "delete the 'toolkit' section"
+    ]

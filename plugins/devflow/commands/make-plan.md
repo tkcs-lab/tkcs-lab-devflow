@@ -32,9 +32,8 @@ This command is project-independent; everything specific to the repository comes
 profile, `.claude/toolkit.yaml`. Before anything else, load the `project-profile` skill and follow
 its "Loading the profile" section. If it reports an error, show the message verbatim and stop; never
 substitute a value of your own for a missing key.
-Skill names: under the plugin route the toolkit's skills carry a prefix (`devflow:project-profile`,
-`devflow:pr-steward`, `stack-python:stack-python`); under the SessionStart-hook route they do not.
-Use whichever form the skill list shows. In this file:
+Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profile`,
+`devflow:pr-steward`, `stack-python:stack-python`). Use whichever form the skill list shows. In this file:
 
 - `<main>` is `git.main_branch`, `<plan_dir>` is `docs.plan_dir`, `<branch pattern>` is
   `git.branch_pattern`.

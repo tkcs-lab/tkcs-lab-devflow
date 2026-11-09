@@ -21,7 +21,6 @@ Rules:
 
 | Key | Required | Meaning |
 |---|---|---|
-| `toolkit.ref` | only for the SessionStart-hook route | Tag of this repository that `install/session-start.sh` installs, for example `v0.3.0` |
 | `project.name` | no | Name used in prose; default is the repository name |
 | `docs.must_read` | **yes** (may be `[]`) | Files the planner reads first, every worker brief names, and the final reviewer reads |
 | `docs.plan_dir` | no (default `docs`) | Plan documents are `<plan_dir>/<slug>-plan.md`, with `<slug>-plan-manual-steps.html` beside it |

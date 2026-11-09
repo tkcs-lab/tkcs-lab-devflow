@@ -144,6 +144,9 @@ def validate(profile, root_dir: Path | None = None) -> tuple[list[str], list[str
     errors: list[str] = []
     if not isinstance(profile, dict):
         return ["the profile must be a YAML mapping"], [], {}
+    if "toolkit" in profile:
+        return (["'toolkit' was removed: the toolkit is delivered only as plugins (docs/delivery.md); "
+                 "delete the 'toolkit' section"], [], {})
     check(profile, schema, schema, "", errors)
     if errors:
         return errors, [], {}

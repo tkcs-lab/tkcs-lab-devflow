@@ -3,9 +3,6 @@
 # An optional key you leave out means "this project does not use that".
 # Reference: docs/profile-reference.md in https://github.com/andras-tkcs/claude-toolkit
 
-toolkit:
-  ref: v0.3.0            # needed only for the SessionStart-hook delivery route: the toolkit tag to install
-
 project:
   name: My Project       # optional; used in prose. Default: the repository name
 
