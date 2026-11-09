@@ -47,11 +47,25 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
 
 ## 0. Understand the ask
 
-1. If `$ARGUMENTS` names an issue (`#<n>` or a URL), read it and its comments with the GitHub MCP
-   tools. If `$ARGUMENTS` is empty, stop and ask what to plan.
-   If it is the URL of a review document written by `/review` (a file on a `review/` branch, with a
+1. If `$ARGUMENTS` is empty, stop and ask what to plan. **Which issue** is the tracking issue:
+   - If the ask names exactly one issue of this repository (`#<n>` or its URL), that is the tracking
+     issue: use it, and read it and its comments with the GitHub MCP tools.
+   - If it names none (free text, or the URL of a `/review` document) or more than one, create a new
+     issue at once with `issue_write`, method `create`. Title: one line that sums up the ask, at most
+     80 characters. Body: the ask verbatim under `## Request`, plus, for several issues, the line
+     `Covers: #<a>, #<b>`. The new issue is the tracking issue; the issues the ask named are listed in
+     the manifest as `closes` (and read, with their comments).
+   - If `issue_write` is refused, continue without a tracking issue, skip every issue step below, and
+     say so in your final reply.
+
+   Right after the issue is known, post the comment `Planning started.` on it (`add_issue_comment`).
+   Every post on GitHub ends with the attribution footer the session rules require; the exact text
+   above comes before it.
+
+   If the ask is the URL of a review document written by `/review` (a file on a `review/` branch, with a
    `review_slug` header), read it from its branch with `git fetch origin <ref>` and
-   `git show FETCH_HEAD:<path>`. Its header's `status` must be `ready-for-plan`; if it is
+   `git show FETCH_HEAD:<path>`. The review document is the ask, and a new issue is created for it as
+   above. Its header's `status` must be `ready-for-plan`; if it is
    `decisions-pending`, stop and tell the user to finish the decisions with
    `/review apply <that URL>` first. Then the ask is exactly its "Findings to fix" section:
    - Plan every finding there and nothing else. "Not doing" and "Issues created" are out of scope;
@@ -78,7 +92,12 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
 
 ## Small scope: a single-session prompt
 
-Skip sections 1, 2, 4 and 5. Section 3 still applies: manual steps go only at the very beginning
+Skip sections 1, 2, 4 and 5. The tracking issue (section 0 step 1) is created or read and gets
+`Planning started.` as for a large plan. Once the prompt is written, rewrite the issue body (keeping
+the original `## Request` first) with the headings `## Request`, `## Goal`, `## What changes` (one
+bullet per step), `## Before you start`, `## After the last merge`, `## Risks`, in plain words with
+no YAML. Name the issue in the final reply.
+Section 3 still applies: manual steps go only at the very beginning
 and the very end of the prompt, and get the HTML artifact if there are any (publish it, but do not
 commit it; there is no branch).
 
@@ -98,9 +117,11 @@ the PR in one go. It holds, in this order:
 6. **Acceptance**: each item a named test, a grep or a command.
 7. **Stop conditions**: what the session should see if this prompt is wrong, and that it should
    then stop and ask instead of improvising.
-8. **Finish**: branch name (`<branch pattern>`), run `/dod`, open one PR following the repo
-   template, and drive it to green per the `pr-steward` skill (and the project's steward file, if
-   the profile names one).
+8. **Finish**: branch name (`<branch pattern>`), post the comment `Implementation started.` on the
+   tracking issue before the first change, run `/dod`, open one PR following the repo
+   template, with the body starting with `Closes #<n>` (the tracking issue; one more `Closes #<n>`
+   line per issue named in the ask), post the comment `PR opened: <url>.` on the issue, and drive the PR to green per
+   the `pr-steward` skill (and the project's steward file, if the profile names one).
 9. **After merge-ready**: the `manual_after` steps, if any, as unchecked items in the PR's body
    with the artifact link, and a note to the user in the final reply.
 
@@ -153,7 +174,8 @@ code block, ready to paste.
 ```yaml
 plan_slug: <slug>
 feature_branch: <type>/<slug>          # <branch pattern>; with git.branch_types, the type is one of them
-tracking_issue: <n>                     # optional; the orchestrator's ledger goes there
+tracking_issue: <n>                     # always set; the issue created or named in the ask
+closes: [<n>]                           # optional; other issues named in the ask
 max_parallel: 2                         # phases in one wave must have disjoint `touches`
 manual_steps_artifact: <claude.ai artifact URL, or omit if there are no manual steps>
 manual_steps_source: <plan_dir>/<slug>-plan-manual-steps.html   # omit if no manual steps
@@ -302,7 +324,24 @@ rejects.
 
 1. Commit the plan and the HTML file (if any) to `plan/<slug>` with a message saying what the plan
    is for, and push.
-2. Final reply, short:
+2. **The issue.** Rewrite the tracking issue body (`issue_write`, method `update`), keeping the
+   original ask, with the plan in plain, human-readable words and **no YAML**, under exactly these
+   headings in this order:
+   - `## Request` (the original ask, first)
+   - `## Goal`
+   - `## What changes` (one bullet per phase: `<phase id> - <title> (<S|M>): <one plain sentence>`)
+   - `## Order` (one sentence per wave: what runs together and what waits)
+   - `## Before you start` (one bullet per `manual_before`: title and why)
+   - `## After the last merge` (one bullet per `manual_after`)
+   - `## Risks`
+   - `## Machine-readable plan` (the plan file URL and the line `Run: /implement <plan URL>`)
+
+   The plan file with the manifest stays the source `/implement` runs; the issue is its readable
+   view. A revision of the plan updates the issue body the same way. Then post the comment
+   `Plan ready: <plan URL>. Next: /implement <plan URL>.` on the issue. This is the last step before
+   the final reply.
+3. Final reply, short:
+   - The tracking issue link.
    - The plan URL in the exact form `/implement` takes:
      `https://github.com/<owner>/<repo>/blob/plan/<slug>/<plan_dir>/<slug>-plan.md`, and the line to
      run: `/implement <that URL>`.
