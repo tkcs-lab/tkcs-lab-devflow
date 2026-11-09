@@ -359,8 +359,11 @@ What each item does:
   minutes with `send_later`, read the document back, find the fired session with `list_sessions` and read
   its events. `e.push` is `ok` when the tool returned "Mobile push requested" in the unattended session;
   whether the phone buzzed is asked at the gate.
-- **(g)** (added in round 2) A scheduled, fired session can do the core work of `/deps` and `/upstream`:
-  create a one-shot task whose prompt lists the open pull requests of the scratch repository (REST via
+- **(g)** (added in round 2, redone in round 3) A scheduled session can do the core work of `/deps` and
+  `/upstream`. Round 2 created a one-shot task from a session with `create_trigger`: the fired session had no
+  repository, no `add_repo` and no GitHub tools, so `g.pr` was `failed`. The real tasks are created by the
+  owner in the claude.ai UI with the repository attached, so round 3 repeats the item with such a task
+  (below) and re-measures `e.*` for that path. Round 2 form: create a one-shot task whose prompt lists the open pull requests of the scratch repository (REST via
   `gh api`, or a GitHub MCP tool; GraphQL is not available), pushes a branch `spike/g-<yyyymmdd>` with one
   file and opens a pull request titled `spike g: unattended pr`, and ends by saying which tools it used.
   `g.pr` is `ok` when that pull request exists afterwards, authored by the agent.
@@ -400,8 +403,14 @@ plan on `plan/devflow-v2` before `/implement` runs.
   refused by the sandbox proxy, so only `git ls-remote` is used.
 - GraphQL is blocked in sessions: no `gh pr view --json`, no `gh api graphql`; commands use REST
   (`gh api repos/...`) or the GitHub MCP tools, and `reviewDecision` is not available.
-- Round 2 (item g and the re-test of d) is run from a short second prompt; its result is merged into the
-  same file.
+- Round 2 (item d re-test): under the strict ruleset (`RULESET d: dismiss_stale=true last_push_approval=true
+  code_owner=true strict=true`) the agent's update-branch left the code owner's approval in place and the pull
+  request `clean`, with `ci` re-run: `d: approval-kept [V]`. The `/land` design holds.
+- Round 2 (item g): a task created from a session cannot open a pull request (see (g)). A task the owner
+  creates in the claude.ai UI with the repository attached was not tested, so round 3 tests exactly that: the
+  owner creates a task "spike g3" on the scratch repository with a given prompt and runs it once, and a
+  short prompt reads the result and replaces the `g.pr` and `e.*` lines with the values for that path.
+  Phases p9 and p10 stay blocked on `g.pr: ok`.
 
 **How the later phases use it.** The file must exist in the checkout (mb2-spike-done), including the `RULESET d` line and `CONCLUSION g.pr`. Each of p8, p9, p10, p11a and p11b starts by reading the spike file and
 checking its own *Assumes* line (in its brief). A needed CONCLUSION line that is missing, marked `[A]`
@@ -651,7 +660,7 @@ Summary; the step-by-step page is [the artifact](https://claude.ai/artifact/D38t
   [Spike Setup Steps](https://claude.ai/artifact/LefiPDFNQU7BoQ2fnXkpKr) (source
   `docs/devflow-v2-spike-manual-steps.html`), and belongs to the spike prompt, not to this plan.
 - After: `ma1-board-live` (publish the board, set `DEVFLOW_BOARD_URL`, check the phone and the push),
-  `ma2-throwaway-pr` (review gate), `ma3-scheduled-tasks` (weekly `/deps` and `/upstream` tasks),
+  `ma2-throwaway-pr` (review gate), `ma3-scheduled-tasks` (weekly `/deps` and `/upstream` tasks, created in the claude.ai UI with the repository attached),
   `ma4-land-repos` (auto-merge setting and agent token secret for repositories using `/land`).
 
 There is no human gate and nothing manual in the middle.
@@ -696,7 +705,7 @@ manual_before:
   - id: mb2-spike-done
     title: "Run the maintenance spike from its own prompt and commit docs/design/maintenance-spike.md to this branch"
     why: "p8 to p11b read the spike's conclusion lines and stop blocked without them; the plan is revised with the findings before /implement runs"
-    done_when: "On plan/devflow-v2, docs/design/maintenance-spike.md exists, grep -cE '^CONCLUSION ' on it prints 13, grep -cE '^ROUTE ' prints 2, and the line starting RULESET d: says dismiss_stale=true and last_push_approval=true"
+    done_when: "On plan/devflow-v2, docs/design/maintenance-spike.md exists, grep -cE '^CONCLUSION ' on it prints 13, grep -cE '^ROUTE ' prints 2, the line starting RULESET d: says dismiss_stale=true and last_push_approval=true, and the line CONCLUSION g.pr: says ok"
 manual_after:
   - id: ma1-board-live
     title: "Publish the board with /board, set DEVFLOW_BOARD_URL, open it on the phone, check the push, try /board prune"

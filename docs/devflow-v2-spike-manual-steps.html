@@ -147,6 +147,27 @@ jobs:
     <p class="done-when"><strong>Done when</strong> "spike d2: approval test" is open, shows "Changes approved" and says the branch is out of date with main.</p>
     <p class="note">Do not click "Update branch" yourself and do not push to that branch.</p>
   </section>
+
+  <h2 class="before">Round 3 · before the third spike prompt</h2>
+
+  <section class="item" id="mb6-ui-task">
+    <header><h3>5. Create one scheduled task in the claude.ai UI and run it once</h3><span class="time">about 10 min</span></header>
+    <span class="id">mb6-ui-task</span>
+    <p class="what">A task created from a session fired a bare session with no repository and no GitHub tools, so it could not open a pull request. Your real weekly tasks will be created in the UI with the repository attached. This step tests that path once. The screen names may differ slightly from these words.</p>
+    <ol>
+      <li><input type="checkbox" data-id="mb6-1" id="mb6-1" aria-labelledby="l-mb6-1"><div><p id="l-mb6-1">In claude.ai/code, open the scheduled tasks screen and create a new task named <strong>spike g3</strong>. Choose the repository <code>tkcs-lab/devflow-scratch</code> and the environment you will use for <code>/deps</code> later. If it asks for a permission mode, choose auto. Set it to run once, a few minutes from now (or run it by hand if the screen offers that), and disable it afterwards.</p></div></li>
+      <li><input type="checkbox" data-id="mb6-2" id="mb6-2" aria-labelledby="l-mb6-2"><div><p id="l-mb6-2">Use exactly this prompt:</p>
+        <div class="file"><div class="name"><span>prompt of the task</span><button type="button" data-copy="f9">Copy</button></div><pre id="f9" style="white-space:pre-wrap">Spike g3, unattended check. Do these steps and do not ask me anything; if a step fails, say so and continue with the next.
+1. List the open pull requests of tkcs-lab/devflow-scratch, with gh api repos/tkcs-lab/devflow-scratch/pulls?state=open or a GitHub tool; note which worked.
+2. Create the branch spike/g3-YYYYMMDD (today's UTC date) with a file spike-g3.txt containing g3, push it, and open a pull request titled "spike g3: unattended pr" against main. End the pull request body with a blank line, ---, and the attribution line your instructions require.
+3. Check which of these tools you have: get_session, list_sessions, ArtifactData, PushNotification, add_repo. Run: if [ -n "${DEVFLOW_BOARD_URL:-}" ]; then echo set; else echo unset; fi
+4. If you have ArtifactData, write the document spike-g3 with the fields at (UTC time), env (set or unset) and tools (the names from step 3 that you have) into the database of the artifact https://claude.ai/artifact/XyVXjNQGfdfsQbjWJEJ3Hx.
+5. If you have PushNotification, send it with the text: spike g3 unattended
+6. End with one line naming every tool you used and every step that failed.</pre></div></div></li>
+      <li><input type="checkbox" data-id="mb6-3" id="mb6-3" aria-labelledby="l-mb6-3"><div><p id="l-mb6-3">Wait until the run has finished and note the time. Did your phone buzz for "spike g3 unattended"? You will be asked.</p></div></li>
+    </ol>
+    <p class="done-when"><strong>Done when</strong> the task has run once. Whether it opened a pull request does not matter; the next prompt reads the result either way.</p>
+  </section>
 </main>
 
 <script>
