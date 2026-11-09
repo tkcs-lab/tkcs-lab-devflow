@@ -141,12 +141,24 @@ Call `create_session` with:
 > 5. End your last turn with a report in exactly this shape, which the orchestrator reads:
 >    `PHASE-REPORT <phase id> status=<done|blocked> head=<sha>` on its own line, then the `/dod`
 >    table, the acceptance checklist, and any out-of-scope findings.
+> 6. After the final `PHASE-REPORT` line, call `send_message` with `session_id: "@parent"` and
+>    exactly the text `PHASE-REPORT <phase id> status=<done|blocked> head=<sha>` (the same first
+>    line). It only tells the orchestrator to look; the report stays the authority.
 
 ## 4. Waiting, collecting and merging
 
-Child sessions do not report back when they finish cleanly. Between checks, end your turn after
-arming a check-in with `send_later` (about 20 minutes; 45 when only long phases are running). Never
-poll with `sleep`. A `<child-session-event>` wake (a failed turn or a restarted worker) is handled
+The orchestrator is woken by a child's doorbell message (rule 6 of the brief, sent to `@parent`), by a
+`<child-session-event>`, or by a safety-net timer. On a doorbell it ignores a message whose sender
+is not one of its recorded child sessions; otherwise it reads that child with `get_session` and
+continues exactly as for a check-in. Never poll with `sleep`; between wakes, end your turn.
+Safety-net timers: while any child, fix, conflict or review session is running, arm one
+`send_later`, **15 minutes** from now when a running phase has complexity `S`, otherwise
+**30 minutes** (a running `M` phase, a phase without `complexity`, a final-review, fix or conflict
+session); with several running, the shortest applies. After every wake cancel the armed timer
+(`delete_trigger` with the id `send_later` returned) and re-arm the same way for what is still
+running. When a timer wake finds a finished phase whose doorbell never arrived, the ledger line
+says `no doorbell` and the orchestrator uses **5 minutes** for the rest of the run (the doorbell is
+not reaching it). A `<child-session-event>` wake (a failed turn or a restarted worker) is handled
 immediately.
 
 On each check-in, for each `running` phase, call `get_session`:
@@ -186,10 +198,11 @@ On each check-in, for each `running` phase, call `get_session`:
    wait for the run, and treat a red run like any other failed check. If anything is red, `git merge --abort` is no longer possible, so revert the merge commit
    (`git revert -m 1`), push, send the failure back to the phase, and mark the phase `running`
    again.
-5. Push the feature branch. Mark the phase `merged`, delete the phase branch on origin, and
+5. Push the feature branch. Mark the phase `merged`, and
    `archive_session` the child. If the manifest has `screenshots_after_merge`, run it and send the
    user the images (`SendUserFile`) with a one-line caption naming the phase, so they can watch
    the result take shape and object early.
+   Append the phase branch to the ledger list `Branches left on origin`.
 6. **Human gate.** If the phase is marked `human_gate: true`, stop scheduling. Send the user the
    phase's review material (its screenshots and its `PHASE-REPORT`), and ask one question:
    approve, or change what. Do not arm a check-in while you wait for their answer; the reply
@@ -248,6 +261,8 @@ the PR body.
    checklist, the final review's verdict and its non-blocking findings, every out-of-scope
    finding the children reported, and a **Manual verification** section: each `manual_after`
    item as an unchecked box, with the `manual_steps_artifact` link.
+   The body also has a section `## Branches left on origin` listing that ledger list, and the
+   sentence "The owner deletes them in the GitHub UI."
 4. Subscribe to the PR and drive it to green as the `pr-steward` skill says (and the project's
    steward file, if any). You own this PR. A failure goes to a new phase-style session on a `<feature_branch>--fix-<n>` branch,
    merged the same way, or you fix it yourself when it is small.
