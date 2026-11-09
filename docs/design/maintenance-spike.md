@@ -108,6 +108,39 @@ For each upstream, with no credentials:
 
 **Result** Tags of both upstreams can be listed with `git ls-remote` without credentials; the GitHub API route is closed by the session. For `grist-core` the stable-tag pattern needs to accept the `-pf.N` suffix to find a release. **[V]**
 
+### (d2) Round 2: does a bot update-branch dismiss an approval under the stricter ruleset?
+
+Round 1 (item (d)) ran with `dismiss_stale_reviews_on_push`, `require_last_push_approval` and `require_code_owner_review` all false and kept the approval; it said nothing about the stricter ruleset, so this round repeats it with those flags on.
+
+**Method**
+1. Setup check (07:58 UTC): `gh api repos/tkcs-lab/devflow-scratch/rules/branches/main`; open pull requests from `gh api "repos/tkcs-lab/devflow-scratch/pulls?state=open"`; on pull request #5 "spike d2: approval test": `GET /pulls/5`, `GET /pulls/5/reviews`, `GET /compare/main...<head>`, `GET /actions/runs`.
+2. GitHub MCP tool `update_pull_request_branch` as the agent, owner `tkcs-lab`, repo `devflow-scratch`, pullNumber 5, expectedHeadSha `ef77a59c7e8fd874908c1d8c86b348d6ddcce365`, at about 07:59 UTC.
+3. About 6 minutes later (08:04:57 UTC; the 3 minute wait was exceeded because the reminder fired after 5 minutes): the same REST reads of the pull request, its reviews, the rules and the workflow runs.
+
+**Evidence**
+- Rules before the update (the `pull_request` rule): `dismiss_stale_reviews_on_push: true`, `require_code_owner_review: true`, `require_last_push_approval: true`, `required_approving_review_count: 1`; `required_status_checks` with `ci` and `strict_required_status_checks_policy: true`; also `required_linear_history`, `non_fast_forward`, `deletion`. The same flags were read again after the update.
+- Before: pull request #5 authored by `andras-tkcs-agent`, head `ef77a59c7e8fd874908c1d8c86b348d6ddcce365`, `mergeable_state: behind` (an earlier read at 07:58:40 returned `unknown`; `compare`: diverged, ahead 1, behind 1). One review: `APPROVED` by `andras-tkcs`, `commit_id` `ef77a59c...` (the head).
+- Tool result: "Pull request branch update is in progress".
+- After (08:04:57): head `2d8c139200efa509b5b0f5c96842742161b84ca4`, `state: open`, `mergeable_state: clean`. Reviews: still one, `APPROVED` by `andras-tkcs`, `commit_id` `2d8c139...` (now the new head; no `DISMISSED` review appeared). A new `ci` run, id 42582736766, event `pull_request`, head `2d8c139...`, created 07:59:02, ended `success`.
+- A workflow using a personal access token for the same API call is assumed to behave the same. **[A]**
+
+**Result** `approval-kept`: with dismissal of stale approvals, approval of the most recent push, code owner review and up-to-date branches all required, the update-branch by the agent left the code owner's review `APPROVED` (its `commit_id` moved to the new head) and the pull request `clean`, with `ci` re-run. The reads do not show how GitHub treated the review internally, only the resulting state. **[V]** (the personal access token case is **[A]**)
+
+### (g) Can a scheduled session open a pull request?
+
+**Method**
+1. `create_trigger` (task `trig_01VQJ1YwJNrvMEpRSGFhyyKm`), `create_new_session_on_fire: true`, `run_once_at` 2026-11-09T08:08:00Z, `initiation: human_request`. The prompt told the fired session to list the open pull requests of `tkcs-lab/devflow-scratch` (REST or a GitHub MCP tool), attach the repository with `add_repo` if needed, push the branch `spike/g-20261109` with `spike-g.txt` and open a pull request titled `spike g: unattended pr`, and end with a line naming the tools used and failed steps. The result warned that the task stores no connectors.
+2. After it fired: `get_trigger` (`last_run.session_id`), `list_events` of the fired session, and REST reads of the pull requests and branches of the scratch repository (08:21 UTC).
+
+**Evidence**
+- Fired at 08:13:35 (scheduled 08:08:00), run status `ROUTINE_RUN_STATUS_SUCCEEDED`, finished 08:14:02; fired session `cse_013HAf784sFGLfmedXRPvRrb`, `stop_reason: end_turn`, `permission_denials: []`.
+- Step 1 (`gh api repos/tkcs-lab/devflow-scratch/pulls?state=open`): `GitHub access to this repository is not enabled for this session. Use add_repo to request access. ... (HTTP 403)`; exit 1. REST failed; no GitHub MCP tool was available.
+- `ToolSearch` for `add_repo` and for `select:add_repo,mcp__github__add_repo`: `No matching deferred tools found`; a third query (`github repo attach access`) listed only unrelated tools. The fired session therefore could not attach the repository.
+- The fired session stopped there, sent a `PushNotification` reporting the failure, and its last line read: "Tools used: Bash (`gh api` REST, failed with 403), ToolSearch (no `add_repo` or GitHub MCP tool found), PushNotification. Steps 1–4 failed or were not run because the repo isn't attached and `add_repo` isn't available."
+- Afterwards the scratch repository has no pull request titled `spike g: unattended pr` and no branch `spike/g-20261109` (branches: `dependabot/pip/pyyaml-6.0.3`, `main`, `spike/d-a`, `spike/d-a2`, `spike/d-move`, `spike/d-move2`). I did not wait the extra 10 minutes because the fired session had already ended and said why nothing was created.
+
+**Result** A scheduled session created with `create_trigger` from this session cannot open a pull request: it has no `add_repo` and no GitHub tools, so its `gh` calls get 403 and nothing is created. Whether a task created from the claude.ai routines UI with the repository attached would work was not tested. **[V]**
+
 ## Conclusions
 
 CONCLUSION a: alerts-unreadable [V]
@@ -122,6 +155,8 @@ CONCLUSION e.push: ok [V]
 CONCLUSION e.env: unset [V]
 CONCLUSION f.peek: anonymous-ok [V]
 CONCLUSION f.grist-core: anonymous-ok [V]
+CONCLUSION g.pr: failed [V]
+RULESET d: dismiss_stale=true last_push_approval=true code_owner=true strict=true
 ROUTE a: none
 ROUTE f: git ls-remote --tags https://github.com/<owner>/<repo>.git
 
@@ -144,3 +179,4 @@ ROUTE f: git ls-remote --tags https://github.com/<owner>/<repo>.git
 - Throwaway artifact: https://claude.ai/artifact/XyVXjNQGfdfsQbjWJEJ3Hx (private, holds document `spike/spike-e`).
 - Deleted task: `trig_01CHu7PrqHwVb4LUQtrNAcXx` (its fired session `session_013HAf78Ed7obfQiQCoAL454` went with it).
 - Reminders to this session created with `send_later`: `trig_01CZnKicHFf48Sew1MyPdA15` and `trig_019k54xigZgUHeihkvffCVfB` (one-shot, self-disabling).
+- Round 2: pull requests created by me: none; branches created in the scratch repository: none (pull request #5 and its branch `spike/d-a2` were set up beforehand). Change to a scratch object: the branch update of pull request #5 (head `ef77a59` to `2d8c139`). Deleted task: `trig_01VQJ1YwJNrvMEpRSGFhyyKm` (item (g); its fired session `cse_013HAf784sFGLfmedXRPvRrb`). Reminders to this session created with `send_later`: `trig_01AZ4Kp75KBCvwVNvkYCtn96` and `trig_01AqxpX6EZYyR5MM47UUvtYE` (one-shot, self-disabling).
