@@ -116,6 +116,11 @@
         "reviewer": {"enum": ["opus", "sonnet"], "default": "opus"}
       }
     },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"board_url": {"type": "string", "minLength": 1, "description": "URL of the published status board page; when unset, the environment variable DEVFLOW_BOARD_URL is used."}}
+    },
     "project_steward": {"type": "string", "minLength": 1, "description": "Path to a project skill with policy that fits no other key."}
   }
 }

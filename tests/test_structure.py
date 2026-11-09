@@ -62,7 +62,7 @@ def test_skills_have_matching_names():
     skills = list(ROOT.glob("plugins/*/skills/*/SKILL.md"))
     assert {p.parent.name for p in skills} == {
         "project-profile", "pr-steward", "review-checklist", "secure-code-review", "test-review", "docs-review",
-        "stack-python", "stack-swift", "stack-ipados", "stack-go"}
+        "status-board", "stack-python", "stack-swift", "stack-ipados", "stack-go"}
     for path in skills:
         fm = frontmatter(path)
         assert fm["name"] == path.parent.name

@@ -40,6 +40,7 @@ Rules:
 | `ci.dispatchable` | no | `{workflow, use_when, notes?}`: workflows a session may dispatch against its own branch for work the container cannot do |
 | `stacks` | **yes** (may be `[]`) | Stack skills to load: `python` loads `stack-python`, `go` loads `stack-go`, `swift` loads `stack-swift`, `ipados` loads `stack-ipados` (list it with `swift`) |
 | `models.planner`, `models.orchestrator`, `models.worker`, `models.reviewer` | no | `opus` or `sonnet`. `worker` and `reviewer` pick the model of child sessions; planner and orchestrator document intent (the command front matter sets them) |
+| `status.board_url` | no | URL of the published status board; `/implement` writes its status record there. When unset the environment variable `DEVFLOW_BOARD_URL` is used; with neither, no board is written |
 | `project_steward` | no | Path to a project skill or doc with policy that fits no other key; read after `pr-steward` and wins where more specific |
 
 ### Command entries

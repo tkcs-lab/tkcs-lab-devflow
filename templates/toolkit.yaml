@@ -56,4 +56,7 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 #   worker: sonnet
 #   reviewer: opus
 
+# status:               # optional. Where /implement writes its status record (the board URL printed by /board)
+#   board_url: https://claude.ai/artifact/...
+
 # project_steward: .claude/skills/steward/SKILL.md   # optional: project skill with policy that fits no key above
