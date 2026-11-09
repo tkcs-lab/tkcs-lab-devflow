@@ -62,3 +62,23 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 #   board_url: https://claude.ai/artifact/...
 
 # project_steward: .claude/skills/steward/SKILL.md   # optional: project skill with policy that fits no key above
+
+# deps:                  # optional: /deps stops with a missing-key message when absent
+#   cooldown_days: 3         # 0..30: Dependabot cooldown your .github/dependabot.yml must set
+#   time_budget_minutes: 90  # 10..480: no new update group after 80% of this
+#   audit:                   # optional: commands that list vulnerable packages (exit 0 = none found)
+#     - ecosystem: "<ecosystem>"
+#       run: "<audit command>"
+#       cwd: "."             # optional, relative to the repo root
+#   lock_freshness:          # optional: run after a manifest change
+#     - when: ["<manifest glob>"]
+#       run: "<lock command>"
+#       lockfiles: ["<lockfile>"]
+
+# upstream:              # optional: /upstream stops with a missing-key message when absent
+#   repo: "owner/name"
+#   tag_pattern: "<release tag regex>"
+#   version_file: "<file recording the synced tag>"
+
+# land:                  # optional: /land works without it
+#   max_prs: 10            # 1..50
