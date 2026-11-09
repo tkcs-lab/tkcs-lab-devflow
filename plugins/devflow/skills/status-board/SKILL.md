@@ -6,7 +6,7 @@ user-invocable: false
 
 # Writing to the status board
 
-The record format and its rules are in `docs/design/devflow-v2.md` section 4 and
+The record format and its rules are in
 `plugins/devflow/schema/status-record.schema.json`. This skill says where and how to write one.
 
 ## Where the board is
