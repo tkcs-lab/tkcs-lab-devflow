@@ -141,6 +141,25 @@ Round 1 (item (d)) ran with `dismiss_stale_reviews_on_push`, `require_last_push_
 
 **Result** A scheduled session created with `create_trigger` from this session cannot open a pull request: it has no `add_repo` and no GitHub tools, so its `gh` calls get 403 and nothing is created. Whether a task created from the claude.ai routines UI with the repository attached would work was not tested. **[V]**
 
+### (g3) Round 3: a scheduled task created in the UI with the repository attached
+
+**Method**
+1. The owner created a scheduled task in the claude.ai UI on `tkcs-lab/devflow-scratch` and ran it once. In `list_triggers` it shows as `trig_011nS5b8tRDzjdSSiDWSogLP`, created via `http_api` at 08:31:26 UTC, weekly schedule (Sundays 09:00 Europe/Budapest), push notifications on, connectors Claude-Docs, PF-TKCS and visualize. Its name there is `deps test`, not `spike g3`, but its stored prompt begins "Spike g3, unattended check" and is the g3 prompt (list open pull requests; push `spike/g3-<yyyymmdd>` with `spike-g3.txt` and open `spike g3: unattended pr`; check the five tools and `DEVFLOW_BOARD_URL`; write the document `spike-g3`; send `PushNotification`; end with one line of tools and failed steps).
+2. Read-only afterwards: `get`/`list_triggers` (`last_run`), `list_events` of the fired session `cse_013HAf7AKkVzSdjq6qSvmiFF`, `gh api repos/tkcs-lab/devflow-scratch/pulls?state=all` and `.../branches`, and `ArtifactData` `get` of the document. I changed nothing in the scratch repository.
+
+**Evidence**
+- Run: `client_platform: force_run_trigger`, fired 08:33:10, finished 08:33:39 UTC, status `ROUTINE_RUN_STATUS_SUCCEEDED`. The run ended with a final summary line, asked no question, and its first event is the task prompt.
+- Step 1: the GitHub MCP tool `list_pull_requests` worked (the run did not try `gh api`). The run had a clone of the repository (`/home/user/devflow-scratch`), and so GitHub tools, which the round 2 task did not.
+- Step 2: pull request #7 "spike g3: unattended pr", author `andras-tkcs-agent`, created 2026-11-09T08:33:33Z (inside the run window), state open, head `spike/g3-20261109`; that branch is in the branch list. The run pushed with `git` and opened the pull request with `create_pull_request`.
+- Step 3: `DEVFLOW_BOARD_URL` was unset (`unset` in the run's Bash output). Tools the run had: ArtifactData, PushNotification, add_repo. Tools it lacked: get_session, list_sessions.
+- Step 4: document `spike-g3` in collection `spike-g3` of the throwaway artifact: `at` 2026-11-09T08:33:21Z, `env` unset, `tools` ["ArtifactData","PushNotification","add_repo"], version 1 (the run's write committed at 08:33:35 without an approval prompt). `at` is inside the run window. The run wrote it into a collection named `spike-g3`, not `spike` where `spike-e` is.
+- Step 5: the `PushNotification` result in the run's events was `Mobile push requested.` The owner answered that the phone buzzed for "spike g3 unattended" ("yes and yes"); the owner gave no time, and the run's call was at 08:33:33-08:33:35 UTC.
+- Final line of the run: "All six steps ran and none failed." followed by the per-step list above.
+- Owner's answers (quoted): "yes and yes" to "created the task and ran it once" and to "did your phone buzz".
+- Round 1 and round 2 values for comparison: round 1 (`create_trigger` task) had `e.board-write` failed by the missing `get_session` and later counted ok by the owner; round 2 (`create_trigger` task, item (g)) gave `g.pr` failed because the fired session had no repository, no `add_repo` and no GitHub tools.
+
+**Result** A task created by the owner in the UI with the repository attached runs unattended to its end, opens a pull request as `andras-tkcs-agent`, writes the board and sends a phone push; `DEVFLOW_BOARD_URL` is unset there. Scheduled commands may rely on ArtifactData, PushNotification, add_repo and the repository clone; they must not rely on get_session or list_sessions. Only tasks created in the UI with the repository attached have these; a task made with `create_trigger` from a session does not (round 2). **[V]** (that the push reached the phone is the owner's report; the time was not given)
+
 ## Conclusions
 
 CONCLUSION a: alerts-unreadable [V]
@@ -155,7 +174,7 @@ CONCLUSION e.push: ok [V]
 CONCLUSION e.env: unset [V]
 CONCLUSION f.peek: anonymous-ok [V]
 CONCLUSION f.grist-core: anonymous-ok [V]
-CONCLUSION g.pr: failed [V]
+CONCLUSION g.pr: ok [V]
 RULESET d: dismiss_stale=true last_push_approval=true code_owner=true strict=true
 ROUTE a: none
 ROUTE f: git ls-remote --tags https://github.com/<owner>/<repo>.git
@@ -180,3 +199,4 @@ ROUTE f: git ls-remote --tags https://github.com/<owner>/<repo>.git
 - Deleted task: `trig_01CHu7PrqHwVb4LUQtrNAcXx` (its fired session `session_013HAf78Ed7obfQiQCoAL454` went with it).
 - Reminders to this session created with `send_later`: `trig_01CZnKicHFf48Sew1MyPdA15` and `trig_019k54xigZgUHeihkvffCVfB` (one-shot, self-disabling).
 - Round 2: pull requests created by me: none; branches created in the scratch repository: none (pull request #5 and its branch `spike/d-a2` were set up beforehand). Change to a scratch object: the branch update of pull request #5 (head `ef77a59` to `2d8c139`). Deleted task: `trig_01VQJ1YwJNrvMEpRSGFhyyKm` (item (g); its fired session `cse_013HAf784sFGLfmedXRPvRrb`). Reminders to this session created with `send_later`: `trig_01AZ4Kp75KBCvwVNvkYCtn96` and `trig_01AqxpX6EZYyR5MM47UUvtYE` (one-shot, self-disabling).
+- Round 3: nothing was created by this round. Seen: the UI-created task `trig_011nS5b8tRDzjdSSiDWSogLP` (listed as `deps test`, enabled, weekly, next run 2026-11-15; I did not change it, so it will fire again unless the owner disables or deletes it). Created by its run in the scratch repository: pull request #7 `spike g3: unattended pr` (open, author `andras-tkcs-agent`), branch `spike/g3-20261109`, and the document `spike-g3` in collection `spike-g3` of the throwaway artifact. I deleted nothing.
