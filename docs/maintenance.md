@@ -78,11 +78,16 @@ land:
 
 ## Scheduling `/deps` and `/upstream` weekly
 
-Create one scheduled task per repository (in the Claude app, or with the scheduled-task tools of a
-session), weekly, with the prompt `/deps` or `/upstream`, permission mode **auto**, and an environment
+Create one scheduled task per repository **in the claude.ai UI, with the repository attached to the
+task**, weekly, with the prompt `/deps` or `/upstream`, permission mode **auto**, and an environment
 that has the variable `DEVFLOW_BOARD_URL` (see the next section). Both commands ask nothing and stop
 cleanly with `needs_you` on the status record when they are unsure. Pick a time outside the hours when
 you work in the repository.
+
+Do not create these tasks from a session with `create_trigger` (or any other scheduled-task tool of a
+session). Such a task has no repository, no `add_repo` and no GitHub tools, so it cannot open a pull
+request and does nothing useful; only a task created in the UI with the repository attached can do the
+work.
 
 ## The board
 
