@@ -298,7 +298,7 @@ plan, in its own session, and the session commits `docs/design/maintenance-spike
 plan is then revised with its findings. This section is the specification of that file and of the
 conclusion lines the phases read. One session, one file: `docs/design/maintenance-spike.md`. It must not link to the brief or this
 plan (both are deleted later). Side effects outside the repository are allowed and listed in its last
-section: the scratch repository `andras-tkcs/devflow-scratch` (attach it with `add_repo`, access `push`),
+section: the scratch repository `tkcs-lab/devflow-scratch` (attach it with `add_repo`, access `push`; code owner `andras-tkcs`, agent account `andras-tkcs-agent`; the approval pull request is #3 "spike d: approval test", the merged pull request #4 only moved `main` ahead),
 one throwaway artifact and one one-shot scheduled task (delete the task afterwards with `delete_trigger`).
 The forks under test are `PrivacyFence/peek` and `PrivacyFence/grist-core`; their upstreams are named by
 the owner when the spike starts, or else read from the fork's `parent` (or `source`) field. The sandbox's
@@ -334,7 +334,7 @@ There are 12 CONCLUSION lines and 2 ROUTE lines.)
 What each item does:
 
 - **(a)** In the scratch repository, find every route a session has to the open Dependabot alerts:
-  GitHub MCP tools (search the tool list for `dependabot`), `gh api repos/andras-tkcs/devflow-scratch/dependabot/alerts?state=open`,
+  GitHub MCP tools (search the tool list for `dependabot`), `gh api repos/tkcs-lab/devflow-scratch/dependabot/alerts?state=open`,
   `curl` with the session's proxy. Success is a list that contains the seeded PyYAML alert.
 - **(b)** Find the open `dependabot/pip/...` pull request. Fetch its branch, add one commit that creates
   `spike-b.txt`, and `git push origin HEAD:<that branch>`; record the result. Comment `@dependabot
