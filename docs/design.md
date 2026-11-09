@@ -31,14 +31,18 @@ plugins/devflow/
   skills/secure-code-review/SKILL.md    # Nightshift, adapted; whole-repository section for /review
   skills/{test-review,docs-review}/SKILL.md   # checklists for /review's test and documentation dimensions
   skills/status-board/SKILL.md          # how a session writes its status record to the board
+  skills/repo-admin/SKILL.md            # audit and update organisation and repository settings: see docs/admin.md
   scripts/validate_manifest.py          # CLI: validate_manifest.py <plan.md|manifest.yaml> [--profile P]
   scripts/validate_profile.py           # CLI: validate_profile.py [.claude/toolkit.yaml]
   scripts/review_decisions.{py,html}    # CLI: review_decisions.py <items.json> <out.html>, /review's decisions page
-  scripts/{validate_status_record,build_board,board_stale,pick_release,upstream_sync,land_order}.py
+  scripts/{validate_status_record,build_board,board_stale,pick_release,upstream_sync,land_order,repo_admin}.py
   schema/profile.schema.json
   schema/status-record.schema.json
+  schema/admin-policy.schema.json       # the policy repo_admin.py reads; its own file, referenced by the profile key admin.policy
   board/                                # the status board page (board.html, rules.js)
   templates/devflow-land.yml            # the workflow /land installs
+  templates/devflow-release.yml         # the release (tag) workflow repo-admin installs
+  templates/admin-policy.yaml           # starter policy
 plugins/stack-python/skills/stack-python/SKILL.md
 plugins/stack-swift/skills/stack-swift/SKILL.md
 plugins/stack-ipados/skills/stack-ipados/SKILL.md

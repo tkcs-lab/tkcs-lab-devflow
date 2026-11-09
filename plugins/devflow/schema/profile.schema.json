@@ -186,6 +186,13 @@
         "max_prs": {"type": "integer", "minimum": 1, "maximum": 50, "description": "Most pull requests one /land run orders."}
       }
     },
+    "admin": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policy": {"type": "string", "minLength": 1, "description": "Path of the repo-admin policy file (schema/admin-policy.schema.json), relative to the repo root."}
+      }
+    },
     "project_steward": {"type": "string", "minLength": 1, "description": "Path to a project skill with policy that fits no other key."}
   }
 }

@@ -80,5 +80,8 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 #   tag_pattern: "<release tag regex>"
 #   version_file: "<file recording the synced tag>"
 
+# admin:                 # optional: the repo-admin skill stops with a missing-key message when absent
+#   policy: .claude/admin-policy.yaml   # starter: plugins/devflow/templates/admin-policy.yaml
+
 # land:                  # optional: /land works without it
 #   max_prs: 10            # 1..50

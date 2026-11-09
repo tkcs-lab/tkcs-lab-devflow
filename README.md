@@ -28,8 +28,14 @@ language.
 - **`/land`** orders the bot's open pull requests, resolves conflicts before review, runs CI once on
   the combined set and installs the workflow that updates the next pull request after each merge.
 
-See [docs/review.md](docs/review.md) for the review flow and [docs/maintenance.md](docs/maintenance.md)
-for the maintenance commands and the board.
+- **`repo-admin`** (a skill, run it with an organisation owner's token) audits a GitHub organisation and
+  its repositories against a policy file and updates what differs: settings, apps, tokens, secrets,
+  variables, labels, webhooks, deploy keys, unused config directories such as `.archon`, and the
+  workflows (for example the release workflow that cuts a tag). Dry run by default; irreversible changes
+  need `--allow-delete`; file changes go into a pull request it never merges.
+
+See [docs/review.md](docs/review.md) for the review flow, [docs/maintenance.md](docs/maintenance.md)
+for the maintenance commands and the board, and [docs/admin.md](docs/admin.md) for `repo-admin`.
 
 Everything specific to your project lives in one file, `.claude/toolkit.yaml` (docs to read, branch
 rules, verify commands, CI workflows a session may dispatch, stacks, models). The commands contain no
@@ -47,10 +53,10 @@ project facts and stop with a message naming the missing key.
 
 | Path | |
 |---|---|
-| `plugins/devflow` | the eight commands, the `project-profile`, `pr-steward`, `status-board`, `review-checklist`, `secure-code-review`, `test-review` and `docs-review` skills, the scripts in `scripts/` (manifest, profile and status-record validators, `review_decisions.py` with its page template, `build_board.py`, `board_stale.py`, `pick_release.py`, `upstream_sync.py`, `land_order.py`), `schema/profile.schema.json`, `schema/status-record.schema.json`, `board/` (the status board page) and `templates/` (the `/land` workflow) |
+| `plugins/devflow` | the eight commands, the `project-profile`, `pr-steward`, `status-board`, `repo-admin`, `review-checklist`, `secure-code-review`, `test-review` and `docs-review` skills, the scripts in `scripts/` (manifest, profile and status-record validators, `review_decisions.py` with its page template, `build_board.py`, `board_stale.py`, `pick_release.py`, `upstream_sync.py`, `land_order.py`, `repo_admin.py`), `schema/profile.schema.json`, `schema/status-record.schema.json`, `schema/admin-policy.schema.json`, `board/` (the status board page) and `templates/` (the `/land` and release workflows, the starter admin policy) |
 | `plugins/stack-python`, `plugins/stack-go`, `plugins/stack-swift`, `plugins/stack-ipados` | stack skills the profile selects (`ipados` goes with `swift`) |
 | `templates/toolkit.yaml` | starter profile |
-| `docs/` | profile reference, delivery, design, [the review flow](docs/review.md), [the maintenance commands and the board](docs/maintenance.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |
+| `docs/` | profile reference, delivery, design, [the review flow](docs/review.md), [the maintenance commands and the board](docs/maintenance.md), [auditing and updating organisation and repository settings](docs/admin.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |
 | `tests/` | `python -m pytest tests -q` (Python 3.11+, PyYAML) |
 
 There is no server and nothing long-running: everything runs inside Claude Code sessions.
