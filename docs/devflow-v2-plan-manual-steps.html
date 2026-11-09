@@ -63,14 +63,24 @@
 <main>
   <div>
     <h1>devflow v2 Setup Steps</h1>
-    <p class="lede">Nothing is needed before you run <code>/implement</code>: the second GitHub user, the ruleset and the spike experiments all ran as the agent user and are proven. These steps are for after the last phase has merged and before you merge the pull request. Ticks are remembered in this browser only.</p>
+    <p class="lede">Nothing is needed before you run <code>/implement</code>: the second GitHub user, the ruleset and the spike experiments all ran as the agent user and are proven. Do step 1 before you merge the pull request. Then merge, update the devflow plugin in your Claude Project to 0.4.0, and do steps 2 to 5: the new commands do not exist in a session before that. Ticks are remembered in this browser only.</p>
   </div>
   <div class="bar" role="status"><progress id="prog" max="1" value="0"></progress><span id="count">0 of 0 steps</span></div>
 
   <h2 class="after">After implementation</h2>
 
+  <section class="item" id="ma2-throwaway-pr">
+    <header><h3>1. Before merging: check the plan's pull request</h3><span class="time">about 2 min</span></header>
+    <span class="id">ma2-throwaway-pr</span>
+    <p class="what">The reviewer request and the account check in the new commands only take effect from the next <code>/implement</code> run with the new version. This run still uses the installed one, so what you can check now is the author and the code owner gate.</p>
+    <ol>
+      <li><input type="checkbox" data-id="ma2-1" id="ma2-1" aria-labelledby="l-ma2-1"><div><p id="l-ma2-1">Open the pull request that <code>/implement</code> created for this plan. It is authored by the agent user.</p></div></li>
+      <li><input type="checkbox" data-id="ma2-2" id="ma2-2" aria-labelledby="l-ma2-2"><div><p id="l-ma2-2">If your ruleset asks for your review it shows "Review required" and cannot be merged without it.</p></div></li>
+    </ol>
+    <p class="report"><strong>Report back:</strong> "PR author is the agent: pass/fail. Review required shown: pass/fail."</p>
+  </section>
   <section class="item" id="ma1-board-live">
-    <header><h3>1. Publish the board and point sessions at it</h3><span class="time">about 5 min</span></header>
+    <header><h3>2. Publish the board and point sessions at it</h3><span class="time">about 5 min</span></header>
     <span class="id">ma1-board-live</span>
     <p class="what">Verifies what no test can: the board page on your phone.</p>
     <ol>
@@ -81,18 +91,6 @@
     </ol>
     <p class="report"><strong>Report back:</strong> "Board opens on the phone: pass/fail."</p>
   </section>
-
-  <section class="item" id="ma2-throwaway-pr">
-    <header><h3>2. Confirm the review gate on the plan's pull request</h3><span class="time">about 2 min</span></header>
-    <span class="id">ma2-throwaway-pr</span>
-    <p class="what">The reviewer request and the account check in the new commands only take effect from the next <code>/implement</code> run with the new version. This run still uses the installed one, so what you can check now is the author and the code owner gate.</p>
-    <ol>
-      <li><input type="checkbox" data-id="ma2-1" id="ma2-1" aria-labelledby="l-ma2-1"><div><p id="l-ma2-1">Open the pull request that <code>/implement</code> created for this plan. It is authored by the agent user.</p></div></li>
-      <li><input type="checkbox" data-id="ma2-2" id="ma2-2" aria-labelledby="l-ma2-2"><div><p id="l-ma2-2">It shows "Review required" (the <code>CODEOWNERS</code> file asks for your review) and cannot be merged without it.</p></div></li>
-    </ol>
-    <p class="report"><strong>Report back:</strong> "PR author is the agent: pass/fail. Review required shown: pass/fail."</p>
-  </section>
-
   <section class="item" id="ma3-scheduled-tasks">
     <header><h3>3. Create the weekly scheduled tasks</h3><span class="time">about 10 min</span></header>
     <span class="id">ma3-scheduled-tasks</span>
@@ -105,7 +103,6 @@
     </ol>
     <p class="report"><strong>Report back:</strong> "deps task fired and wrote a board record: pass/fail. upstream task fired and wrote a board record: pass/fail."</p>
   </section>
-
   <section class="item" id="ma4-land-repos">
     <header><h3>4. Set up repositories that use /land</h3><span class="time">about 15 min per repository</span></header>
     <span class="id">ma4-land-repos</span>
@@ -118,6 +115,16 @@
       <li><input type="checkbox" data-id="ma4-5" id="ma4-5" aria-labelledby="l-ma4-5"><div><p id="l-ma4-5">With two agent pull requests open, run <code>/land</code> again, approve both, and press "Enable auto-merge" on each. After the first merges, the second should be updated by the workflow, run CI again and merge without you touching it.</p></div></li>
     </ol>
     <p class="report"><strong>Report back:</strong> "Second PR updated automatically after the first merged: pass/fail. Your approval stayed on it: pass/fail."</p>
+  </section>
+
+  <section class="item" id="ma5-remove-symlink">
+    <header><h3>5. Delete the .claude/devflow symlink</h3><span class="time">about 2 min</span></header>
+    <span class="id">ma5-remove-symlink</span>
+    <p class="what">The link <code>.claude/devflow</code> only exists so the installed 0.3.0 plugin could find its scripts during this run. Version 0.4.0 finds them itself.</p>
+    <ol>
+      <li><input type="checkbox" data-id="ma5-1" id="ma5-1" aria-labelledby="l-ma5-1"><div><p id="l-ma5-1">Once the Project's devflow plugin is at 0.4.0 and a new session runs <code>/dod</code> successfully, delete <code>.claude/devflow</code> in a small change (<code>git rm .claude/devflow</code>) and merge it.</p></div></li>
+    </ol>
+    <p class="report"><strong>Report back:</strong> "/dod works without the symlink: pass/fail."</p>
   </section>
 </main>
 

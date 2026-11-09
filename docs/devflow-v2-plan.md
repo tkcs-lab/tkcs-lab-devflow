@@ -47,7 +47,7 @@ Measured on `origin/main` (`f0c7629`) on 2026-11-09.
   `plugins/devflow/commands/{implement.md:26-27, make-plan.md:35-36, review.md:33-34, dod.md:15-16}`
   and `plugins/devflow/skills/project-profile/SKILL.md:29-32`. The installed v0.3.0 plugin cannot find its own
   scripts in a cloud session that gets plugins from the Claude Project (D1), so this branch carries the symlink
-  `.claude/devflow -> ../plugins/devflow` until the last phase removes it. `tests/test_install_hook.py` (143 lines)
+  `.claude/devflow -> ../plugins/devflow`; the owner removes it after the 0.4.0 plugin is installed (ma5). `tests/test_install_hook.py` (143 lines)
   tests only the installer. `.github/workflows/test.yml:26-29` runs `bash -n` and `shellcheck` on it.
 - `project-profile/SKILL.md:21-32` looks for the toolkit scripts in `$CLAUDE_PLUGIN_ROOT`,
   `~/.claude/devflow`, `./.claude/devflow` and `~/.claude/plugins/cache/*/devflow/*/`. In a cloud
@@ -68,7 +68,7 @@ Measured on `origin/main` (`f0c7629`) on 2026-11-09.
   them equal.
 - `tests/test_structure.py:33-37` fixes the command set to four names and `:49-53` fixes the skill set
   to ten names; every new command or skill would edit those lines, so phases that add them would
-  collide. Phase p0b makes the command set derived from the directory, and p2 adds the one new skill.
+  collide. Phase p0b makes the command set derived from the directory, and p2b adds the one new skill.
 - `tests/test_no_project_words.py:6-8` forbids `privacyfence|ruff|pytest|src/privacyfence|connector`
   (case-insensitive) in `plugins/devflow`, `plugins/stack-swift`, `plugins/stack-ipados`,
   `plugins/stack-go`, `install`, `templates`, `.claude-plugin`. New text in those places must avoid
@@ -82,7 +82,9 @@ Measured on `origin/main` (`f0c7629`) on 2026-11-09.
 The brief is part of this design. Where this section says "brief section N", a worker reads that
 section of `docs/design/devflow-v2.md` (it is in the checkout) and follows it exactly, except where this
 section amends it. Amendments to the brief: D3 (`kind`), D4 (a `status-board` skill), D2 (the
-"Branches left on origin" clause is assigned to p1), D7 (exact strings the brief leaves open).
+"Branches left on origin" clause is assigned to p1), D7 (exact strings the brief leaves open), D2 (timers run "from now", the brief says "from the child's start"), D5 (13
+fixture records and a Playwright check instead of 8 records and the artifact emulator; "Hidden: 2"), D6 (a
+`kind: maintenance` row). D16 is new and not in the brief.
 
 ### D1. Plugin-only delivery (p0a, p0b)
 
@@ -106,7 +108,8 @@ section amends it. Amendments to the brief: D3 (`kind`), D4 (a `status-board` sk
   form the skill list shows." No file under `plugins/` contains the text `SessionStart`.
 - `project-profile/SKILL.md` "Find the toolkit scripts" (the installed v0.3.0 loop misses the place where a
 Claude Project's plugins live in a cloud session, so until 0.4.0 is installed this branch carries the symlink
-`.claude/devflow -> ../plugins/devflow`, which the old loop finds through `$PWD/.claude/devflow`; p6 removes it): the loop checks, in order,
+`.claude/devflow -> ../plugins/devflow`, which the old loop finds through `$PWD/.claude/devflow`; it stays through the whole run, because `/dod` and the PR
+follow-up still run with the old plugin, and the owner deletes it after the upgrade, manual step ma5): the loop checks, in order,
   `${CLAUDE_PLUGIN_ROOT:-}`, `$HOME/.claude/plugins/cache/*/devflow/*/` and
   `$HOME/.claude/plugins/synced/*/devflow/`; the failure text becomes: "No output means the toolkit is
   not installed in this session. Stop and tell the user: the project needs the devflow plugin in its
@@ -146,7 +149,7 @@ Follow brief section 5 and section 9 row 1. Exact texts to write into `implement
   worker cannot make a child fail) and the profile validator's warning about non-auto permission modes
   (brief section 7; a profile cannot know the permission mode).
 
-### D3. Status record (p2), brief section 4 plus `kind`
+### D3. Status record (p2a), brief section 4 plus `kind`
 
 Follow brief section 4 and its field rules. Amendments:
 
@@ -166,6 +169,9 @@ Follow brief section 4 and its field rules. Amendments:
   (string or `null`), `branch` (string or `null`), `started_at` and `finished_at` (timestamp or `null`);
   optional `pr` (positive integer or `null`). Maintenance items use `depends_on: []`, `complexity: null`,
   `session: null`.
+- A maintenance item that opened a PR is `running` with `pr: <n>` until CI is green, then `done`; when the
+  command ends with CI still pending the item stays `running`. The record `status` is `pr_open` while any PR
+  awaits the owner.
 - Maintenance `status` values in use: `starting`, `running`, `pr_open` (at least one PR awaits the
   owner), `done`, `failed`. `needs_you` is true when the command could not reach green or a person
   must act, with the reason in the form of brief section 4 ("Review deps PR #12 (CI red)").
@@ -182,7 +188,8 @@ Follow brief section 4 and its field rules. Amendments:
   1. All top-level fields are present and no other field exists; `schema` is `1`.
   2. `kind` and `command` agree as above; `project` and `repo` formats; `--doc-id`, when given, equals
      the project slug (run) or `<project>--<command>` (maintenance); for `maintenance` also `plan_slug`,
-     `plan_url`, `feature_branch` and `next_check_at` are `null` and `orchestrator_session` is `"scheduled"`.
+     `plan_url`, `feature_branch` and `next_check_at` are `null`, `orchestrator_session` is `"scheduled"` and
+     the top-level `pr` object has all five fields `null` (maintenance PRs are carried by the items).
   3. `status` is in `starting, running, waiting_user, reviewing, pr_open, done, failed`; `phases[].state`
      per kind as above; `pr.*` enums as above; `complexity` is `S`, `M` or `null`.
   4. `needs_you` true requires a non-empty `needs_you_reason` of at most 140 characters and a non-null
@@ -190,12 +197,12 @@ Follow brief section 4 and its field rules. Amendments:
   5. `updated_at` is required and a valid timestamp; `finished_at` is non-null exactly when `status` is
      `done` or `failed`.
   6. `next_check_at` is null when `status` is `waiting_user`, `pr_open`, `done` or `failed`.
-- Test fixtures live in `tests/fixtures/status-records/`: `good-run.json` (the brief's example plus `"kind": "run"` and `"command": null`),
+- Test fixtures live in `tests/fixtures/status-records/`: `good-run.json` (the brief's example plus `"kind": "run"` and `"command": null`, with the plan slug changed to `example-plan` everywhere it occurs: `plan_slug`, `plan_url`, `feature_branch`, phase branches),
   `good-maintenance.json`, and one `bad-<rule>.json` per rejected case in the brief's p2 acceptance
   (`bad-needs-you-no-reason`, `bad-unknown-status`, `bad-missing-updated-at`, `bad-done-no-finished`,
   `bad-running-with-finished`) plus `bad-maintenance-with-timer` (status `running`, a non-null `next_check_at`) and `bad-kind-command-mismatch`.
 
-### D4. The `status-board` skill (p2, extended in p4)
+### D4. The `status-board` skill (p2b, extended in p4)
 
 Amendment to the brief: the rules for writing a record are shared by `/implement` and the three
 maintenance commands, so they live in one skill, `plugins/devflow/skills/status-board/SKILL.md`
@@ -256,7 +263,7 @@ Follow brief section 6 and the p3 note of section 10 (p3a and p3b), with these e
   | `f-running-nocheck` | `running`, updated 3 h ago, `next_check_at` null | running | no |
   | `f-waiting` | `waiting_user`, `needs_you` true, updated 3 h ago | needs_you | no |
   | `f-reviewing` | `reviewing`, updated 1 min ago, `next_check_at` +30 min | running | no |
-  | `f-pr-open` | `pr_open`, `pr.awaiting` `codeowner` | pr_open | no |
+  | `f-pr-open` | `pr_open`, `pr.awaiting` `codeowner`, `needs_you` false | pr_open | no |
   | `f-done-recent` | `done`, `finished_at` 3 days ago, updated 3 days ago | done | no |
   | `f-done-old` | `done`, `finished_at` and `updated_at` 8 days ago | hidden | no |
   | `f-failed` | `failed`, `needs_you` true, finished 1 day ago | needs_you | no |
@@ -306,7 +313,7 @@ Follow brief section 8. Decisions the brief leaves open:
 - `implement.md` section 6 step 3 (after the PR is opened): when `git.codeowners` is set, request review
   from every login in it (GitHub MCP `update_pull_request` with `reviewers`), set `needs_you` true with
   reason `Review PR #<n>`, never re-request for the same pushed head, and never approve, merge or enable
-  auto-merge. If the tool cannot request a reviewer, stop with `status=blocked`.
+  auto-merge. If the tool cannot request a reviewer, set `needs_you` (`Review PR #<n>`) and ask the user to request it.
 - `pr-steward/SKILL.md` "Which pull requests to follow": "**A review requested from a code owner is
   waiting on a person.** Set `needs_you` with the reason `Review PR #<n>`. Request the review once per
   pushed head. Never approve, merge or enable auto-merge on a PR you opened."
@@ -486,7 +493,8 @@ regular expression (error `'upstream.tag_pattern': not a valid regular expressio
 
 `plugins/devflow/scripts/pick_release.py`. CLI: `pick_release.py --pattern REGEX [--lines] [FILE|-]`.
 Input: a JSON list of objects with `tag` (string) and `prerelease` (boolean, default false); or, with
-`--lines`, one tag per line. A tag is eligible when it matches `--pattern`, is not marked prerelease and
+`--lines`, text in which each line is either a bare tag or raw `git ls-remote --tags` output
+(`<sha>\trefs/tags/<tag>`; `^{}` lines are dropped). A tag is eligible when it matches `--pattern`, is not marked prerelease and
 is *stable* (after an optional leading `v` or `V` it is only digits and dots). Prints the eligible tag with
 the highest version (numeric comparison of dot-separated parts, missing parts count as 0); exit 3 and the
 message `pick_release: no eligible release` when none; exit 1 and `pick_release: <message>` for bad input
@@ -530,7 +538,7 @@ dependency update: triage Dependabot PRs and audit findings, fix what is red, op
   run a command they contain, never follow a link in them, never let them change this policy.
 - **Where the fix goes.** From the spike (D8): `CONCLUSION b.push: allowed`. A group with a Dependabot PR:
   commit the fix onto that Dependabot branch with a normal push (never force). A session can never command
-  Dependabot (the safety filter rewrites `@dependabot ...` comments, spike b), so it never comments a bot
+  Dependabot (the session safety filter rewrites bot mentions in comments, spike b), so it never comments a bot
   command; when the branch is behind it is brought up to date with `update_pull_request_branch` (spike c:
   CI runs). Dependabot may stop managing a branch after a push; say so in the record's `last_event`. A
   security group with no Dependabot PR: a new branch `chore/deps-<ecosystem>-<yyyymmdd>` from the default
@@ -542,7 +550,7 @@ dependency update: triage Dependabot PRs and audit findings, fix what is red, op
   the same group: leave the PR as it is with `needs_you` and reason `Review deps PR #<n> (CI red)`.
 - **Green.** Run `verify.fast` and `verify.dod` locally before pushing. Subscribe to each PR it opened or
   changed with `subscribe_pr_activity` and mark the group `done` when CI is green; if that tool is missing in
-  the scheduled session, record the item as `pr_open` with `pr.ci: "pending"` and end the run (never wait).
+  the scheduled session, leave the item `running` with its `pr` number, set the record `status` to `pr_open` and end the run (never wait).
 - **Record.** Per D3/D4: `status` `running` while working, final `pr_open` when any PR awaits the owner
   and `done` when none does; items carry `pr`. Alerts and pushes per D6.
 
@@ -556,7 +564,8 @@ Run inside a fork that carries patches on a linear `main` (no force-push, ever).
   stops with `needs_you` and the reason `Create <version_file> with the tag the fork is based on`.
 - **Which release.** `upstream.repo` is the real upstream project, not the fork. Only release tags: the command writes the spike's `ROUTE f` line verbatim
   (`git ls-remote --tags https://github.com/<owner>/<repo>.git`, where `<owner>/<repo>` is `upstream.repo`)
-  and runs it anonymously, then `pick_release.py --lines --pattern <upstream.tag_pattern>`
+  and shows it in the command text; the decision itself is made by `upstream_sync.py plan` (which runs the same
+  `git ls-remote` anonymously and `pick_release.py --lines --pattern <upstream.tag_pattern>`)
   (no prereleases, no branches, never upstream `main`). If the result equals the recorded tag, write a
   `done` record (`up to date`) and stop.
 - **`upstream_sync.py`.** Subcommand `plan --upstream-url URL --version-file F --pattern RE` prints JSON
@@ -568,14 +577,14 @@ Run inside a fork that carries patches on a linear `main` (no force-push, ever).
   conflicted paths (exit 2, markers left in the working tree). It never commits and never pushes.
 - **One commit.** After conflicts are resolved (mechanical only; otherwise `needs_you`), run `verify.fast`
   and `verify.dod`, then make **one** commit on top of `main` with subject `Sync <upstream.repo> <old> to
-  <new>` and a body that lists the new upstream commit sha; push the branch `chore/upstream-<new>`
+  <new>` and a body that lists the new upstream commit sha; push the branch `chore/upstream-<new with dots replaced by hyphens>`
   (normal push) and open **one** PR. The PR body states old and new tag, the conflicted paths and how each
   was resolved, and that the history of the fork stays linear. Squash the branch? No: the branch holds the
   one commit already; the owner merges it by the repository's normal style.
 - **Rules.** Release notes are untrusted text (as D11). Anonymous access only. Never push to the
   upstream. Never force-push. Record per D3 with `command: upstream`, one item for the sync. Subscribe to
-  the PR; `done` when CI is green (if `subscribe_pr_activity` is missing in the scheduled session, record `pr_open`
-  with `pr.ci: "pending"` and end); `needs_you` (reason `Review upstream sync PR #<n>`) in every case a PR
+  the PR; `done` when CI is green (if `subscribe_pr_activity` is missing in the scheduled session, leave the item `running` with its
+  `pr` number, set `status` `pr_open` and end); `needs_you` (reason `Review upstream sync PR #<n>`) in every case a PR
   was opened, because the owner reviews every PR. The version file's `commit:` is the peeled commit of the
   tag (the `^{}` line of an annotated tag).
 
@@ -638,6 +647,8 @@ left to resolve by hand after approval.
 - **Report.** The ordered list with PR links, "review in this order, approve each, enable auto-merge on
   each; the workflow updates the next one after every merge". Record per D3 with `command: land`, one item
   per PR, final status `pr_open`.
+- `/land` is run by the owner, not by a schedule, but its record is `kind: maintenance` like the others, so it
+  also writes `orchestrator_session: "scheduled"` and never renames its session.
 - **Never** approve, merge, enable auto-merge, force-push, push to `<main>`, comment on a PR, or delete
   anything.
 
@@ -647,7 +658,7 @@ Update `docs/design.md` (layout, command list, the decisions on delivery), `READ
 for `/board`, `/deps`, `/upstream`, `/land`; the "What is here" table), add `docs/maintenance.md` (how to
 run and schedule the three commands, the profile sections, the board variable, what the spike found, with
 a link to `docs/design/maintenance-spike.md`, which stays as a record), set all five `plugin.json` to
-`0.4.0`, delete the symlink `.claude/devflow`, `docs/design/devflow-v2.md`, `docs/devflow-v2-plan.md`,
+`0.4.0`, delete `docs/design/devflow-v2.md`, `docs/devflow-v2-plan.md`,
 `docs/devflow-v2-plan-manual-steps.html` and `docs/devflow-v2-spike-manual-steps.html`. There is no changelog or ADR directory in this repository, so
 neither is written.
 
@@ -700,12 +711,15 @@ Summary; the step-by-step page is [the artifact](https://claude.ai/artifact/D38t
 (source `docs/devflow-v2-plan-manual-steps.html`).
 
 - Before: nothing. The second GitHub user, the ruleset with Code Owner review and the scratch-repository
-  experiments all ran as the agent user during the spike, so they are proven. The spike's own setup page
+  experiments all ran as the agent user during the spike on `tkcs-lab/devflow-scratch`, so they are proven
+  there; this repository itself has no CODEOWNERS file, which is the owner's setup outside this plan. The spike's own setup page
   ([Spike Setup Steps](https://claude.ai/artifact/LefiPDFNQU7BoQ2fnXkpKr), source
   `docs/devflow-v2-spike-manual-steps.html`) is finished and is deleted by the last phase.
 - After: `ma1-board-live` (publish the board, set `DEVFLOW_BOARD_URL`, check the phone),
   `ma2-throwaway-pr` (review gate), `ma3-scheduled-tasks` (weekly `/deps` and `/upstream` tasks, created in the claude.ai UI with the repository attached),
-  `ma4-land-repos` (auto-merge setting and agent token secret for repositories using `/land`).
+  `ma4-land-repos` (auto-merge setting and agent token secret for repositories using `/land`), `ma5-remove-symlink`.
+  Order: `ma2` before the merge; then merge, update the devflow plugin in the Claude Project to 0.4.0, and do
+  `ma1`, `ma3`, `ma4` and `ma5` (the new commands do not exist in a session before that).
 
 There is no human gate and nothing manual in the middle.
 
@@ -730,8 +744,10 @@ There is no human gate and nothing manual in the middle.
   `/make-plan` falls back to no tracking issue and says so in its final reply; it does not stop.
 - **/implement runs with the installed v0.3.0 plugin**, whose script lookup misses `~/.claude/plugins/synced/*/devflow/`.
   The symlink `.claude/devflow -> ../plugins/devflow` on this branch makes the orchestrator's `validate_manifest.py`
-  and every child's `/dod` find the scripts (they resolve it through `$PWD/.claude/devflow`). p6 deletes it, and
-  from 0.4.0 on the lookup finds the synced path itself.
+  and every child's `/dod` find the scripts (they resolve it through `$PWD/.claude/devflow`). It must stay until
+  the PR is merged and the Claude Project's plugin is updated to 0.4.0, whose lookup finds the synced path
+  itself; the owner deletes it then (ma5). The old orchestrator's merge step also tries to delete phase
+  branches and gets 403 (brief F16); that is expected and the run goes on.
 - **Pushes that touch `.github/workflows/` may be refused** to a session whose token lacks the workflows
   permission (p0a edits `test.yml`; `/land` adds a workflow). Each stops blocked or sets `needs_you` with a clear
   reason instead of improvising.
@@ -749,17 +765,20 @@ manual_steps_source: docs/devflow-v2-plan-manual-steps.html
 manual_before: []
 manual_after:
   - id: ma1-board-live
-    title: "Publish the board with /board, set DEVFLOW_BOARD_URL, open it on the phone, try /board prune"
+    title: "After the merge and the plugin update: publish the board with /board, set DEVFLOW_BOARD_URL, open it on the phone, try /board prune"
     why: "The page on a real phone and a real push notification cannot be checked by CI"
   - id: ma2-throwaway-pr
-    title: "Confirm the plan's PR is authored by the agent user and shows Review required"
+    title: "Before merging: confirm the plan's PR is authored by the agent user"
     why: "Proves the identity swap and the review gate on a real pull request"
   - id: ma3-scheduled-tasks
-    title: "Add the deps and upstream profile sections and create the weekly scheduled tasks for /deps and /upstream"
+    title: "After the merge and the plugin update: add the deps and upstream profile sections (and the Dependabot cooldown), create the weekly scheduled tasks for /deps and /upstream"
     why: "The scheduled tasks and the profiles of the real repositories are owner configuration; the first firing shows a board record"
   - id: ma4-land-repos
-    title: "Enable auto-merge, store the DEVFLOW_AGENT_TOKEN secret and run /land in each repository that uses it"
+    title: "After the merge and the plugin update: enable auto-merge, store the DEVFLOW_AGENT_TOKEN secret and run /land in each repository that uses it"
     why: "The workflow's Actions half (agent token, update-branch, CI on the updated branch) can only be seen in a real repository"
+  - id: ma5-remove-symlink
+    title: "After the merge and the plugin update: delete the .claude/devflow symlink"
+    why: "The symlink only exists so that the installed 0.3.0 plugin can find its scripts during this run; 0.4.0 finds them itself"
 verify_after_merge:
   - .venv/bin/python plugins/devflow/scripts/validate_profile.py .claude/toolkit.yaml
   - .venv/bin/python plugins/devflow/scripts/validate_profile.py templates/toolkit.yaml --no-file-checks
@@ -767,14 +786,13 @@ final_checks:
   - docs/devflow-v2-plan.md, docs/devflow-v2-plan-manual-steps.html, docs/devflow-v2-spike-manual-steps.html and docs/design/devflow-v2.md are deleted and nothing links to them
   - git grep -nE "toolkit\.ref|session-start|SessionStart" -- plugins templates README.md docs/delivery.md docs/profile-reference.md prints nothing
   - docs/design/maintenance-spike.md exists and grep -cE '^CONCLUSION ' on it prints 13 and its RULESET d line has dismiss_stale=true and last_push_approval=true
-  - .claude/devflow (the symlink to plugins/devflow) is deleted
   - All five plugins/*/.claude-plugin/plugin.json have version 0.4.0
   - .claude/toolkit.yaml still validates with plugins/devflow/scripts/validate_profile.py
 phases:
   - id: p0a-remove-installer
     title: "Plugin-only delivery - remove the SessionStart hook route, its installer and their documentation"
     depends_on: []
-    complexity: S
+    complexity: M
     touches:
       - install/
       - tests/test_install_hook.py
@@ -789,10 +807,10 @@ phases:
       1. `git rm -r install tests/test_install_hook.py`.
       2. `.github/workflows/test.yml`: delete the step named "Shell syntax and shellcheck" (the four lines that run bash -n and shellcheck on install/session-start.sh). If pushing this change is refused because the session may not change workflow files, stop with status=blocked and say so.
       3. `tests/test_no_project_words.py`: remove "install" from the CHECKED list and add `test_install_directory_is_gone` asserting `not (ROOT / "install").exists()`.
-      4. `docs/delivery.md`: apply the edits listed under D1 (new intro, heading `## Claude Project plugins`, delete from `## Route 2: SessionStart hook` through the end of `### Checking it yourself`, new `## Uninstall` text). In step 5 of the plugin section replace the sentence "Under this route Claude Code namespaces plugin skills (`devflow:project-profile`); the commands handle both forms." with "Claude Code namespaces plugin skills (`devflow:project-profile`); the commands use whichever form the skill list shows." Keep the "Upgrade by updating the plugin" paragraph and the "Status: not tested end to end" paragraph.
+      4. `docs/delivery.md`: apply the edits listed under D1 (new intro, heading `## Claude Project plugins`, delete from `## Route 2: SessionStart hook` through the end of `### Checking it yourself`, new `## Uninstall` text). In step 5 of the plugin section replace the sentence "Under this route Claude Code namespaces plugin skills (`devflow:project-profile`); the commands handle both forms." with "Claude Code namespaces plugin skills (`devflow:project-profile`); the commands use whichever form the skill list shows." Keep the "Upgrade by updating the plugin" paragraph and the "Status: not tested end to end" paragraph, adding to the latter the sentence "In a cloud session whose plugins come from the Claude Project the scripts are under `~/.claude/plugins/synced/<id>/devflow/`."
       5. `README.md`: apply the D1 edits (step 2 of "Use it in a project" and the table row). Nothing else in README.md changes in this phase.
-      6. `docs/migrating-privacyfence.md`: change the link `delivery.md#route-1-claude-project-plugins` to `delivery.md#claude-project-plugins` and the words "route 1" in that sentence to "the plugin route"; delete the last paragraph of "Delivery: Claude Project plugins" (the one that starts "A project that wants a pinned version takes route 2 instead"); change the sentence "There is no SessionStart hook for the toolkit, and the profile has no `toolkit.ref`." to "The toolkit has no hook and no version pin."; keep the rest as history.
-      7. `docs/design.md`: delete the `install/session-start.sh` line of the layout block; in section 7 delete the sentences about a `bash -n` / shellcheck check of the hook and about the hook test that runs `session-start.sh` against a local bare repo; add under the "Status:" line the paragraph "Since devflow 0.4 the SessionStart-hook route and `toolkit.ref` no longer exist; plugins in the Claude Project are the only delivery route (see delivery.md). Section 3 is kept as the record of the probe that led to the first design."
+      6. `docs/migrating-privacyfence.md`: change the link `delivery.md#route-1-claude-project-plugins` to `delivery.md#claude-project-plugins` and the words "route 1" in that sentence to "the plugin route"; delete the last paragraph of "Delivery: Claude Project plugins" (the one that starts "A project that wants a pinned version takes route 2 instead"); change the sentence "There is no SessionStart hook for the toolkit, and the profile has no `toolkit.ref`." to "The toolkit has no hook and no version pin."; keep the rest as history; in the table row for `.claude/settings.json` change "Unchanged, because route 1 needs no hook." to "Unchanged, because the plugin route needs no hook."
+      7. `docs/design.md`: delete the `install/session-start.sh` line of the layout block; in section 7 delete the sentences about a `bash -n` / shellcheck check of the hook and about the hook test that runs `session-start.sh` against a local bare repo; in section 7 also remove `install` from the list of directories the no-project-words test checks; add under the "Status:" line the paragraph "Since devflow 0.4 the SessionStart-hook route and `toolkit.ref` no longer exist; plugins in the Claude Project are the only delivery route (see delivery.md). Section 3 is kept as the record of the probe that led to the first design."
       Stop condition: if the sections named above do not look as described, stop with status=blocked and quote what you found. Do not touch any other file.
     acceptance:
       - ".venv/bin/python -m pytest tests -q passes"
@@ -831,7 +849,6 @@ phases:
       - "grep -rn 'SessionStart' plugins prints nothing"
       - "grep -n 'plugins/synced' plugins/devflow/skills/project-profile/SKILL.md matches"
       - ".venv/bin/python -m pytest tests/test_validate_profile.py::test_toolkit_section_is_rejected_with_a_migration_message -q passes"
-      - ".venv/bin/python plugins/devflow/scripts/validate_profile.py .claude/toolkit.yaml prints a line starting toolkit.yaml: OK"
   - id: p1-wake
     title: "Child tells its parent when done; size-based fallback timers"
     depends_on: [p0a-remove-installer, p0b-remove-toolkit-ref]
@@ -853,41 +870,55 @@ phases:
       - "grep -c '@parent' plugins/devflow/commands/implement.md prints at least 1"
       - "grep -n 'delete the phase branch on origin' plugins/devflow/commands/implement.md prints nothing"
       - ".venv/bin/python -m pytest tests -q passes"
-  - id: p2-record
-    title: "Status record schema, validator, status-board skill, orchestrator writes the record"
+  - id: p2a-status-record
+    title: "Status record schema, validator and fixtures"
     depends_on: [p1-wake]
     complexity: M
     touches:
       - plugins/devflow/schema/status-record.schema.json
       - plugins/devflow/scripts/validate_status_record.py
+      - tests/test_status_record.py
+      - tests/fixtures/status-records/
+    brief: |
+      Implement design section D3 of docs/devflow-v2-plan.md (and brief section 4). Work in this order.
+      1. Create `plugins/devflow/schema/status-record.schema.json` (JSON Schema 2020-12, `additionalProperties: false`, every field of D3 with `type`/`enum`, `examples` holding the brief's example record plus `kind` "run" and `command` null, with the plan slug changed to `example-plan` everywhere it occurs).
+      2. Create `plugins/devflow/scripts/validate_status_record.py` (stdlib only, Python 3.11) with the CLI, the `FIELDS` constant and the six rule groups of D3 (including the maintenance rules of rule 2 and the item shape). Error lines are `status-record: <message>` and the message contains the field name in single quotes. Pattern for timestamps `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$` (also check the date is real with datetime).
+      3. Create the fixtures listed in D3 under `tests/fixtures/status-records/`.
+      4. Create `tests/test_status_record.py`: good fixtures pass (exit 0, `status-record: OK`); each bad fixture exits 1 with the substring named after its case (`'needs_you_reason'`, `'status'`, `'updated_at'`, `'finished_at'` twice, `'next_check_at'`, `'command'`); `--doc-id claude-toolkit--deps` passes for the maintenance fixture and fails for `claude-toolkit`; `set(FIELDS)` equals the schema's `properties` keys; the schema's example validates; no fixture or schema file contains the text `devflow-v2`.
+      Stop condition: if the brief's example record in section 4 of docs/design/devflow-v2.md cannot be parsed as JSON, stop with status=blocked.
+    acceptance:
+      - ".venv/bin/python -m pytest tests/test_status_record.py -q passes"
+      - ".venv/bin/python plugins/devflow/scripts/validate_status_record.py tests/fixtures/status-records/good-run.json prints status-record: OK"
+      - ".venv/bin/python plugins/devflow/scripts/validate_status_record.py tests/fixtures/status-records/bad-needs-you-no-reason.json exits 1 and prints a line containing 'needs_you_reason'"
+      - "grep -rn 'devflow-v2' plugins/devflow/schema tests/fixtures/status-records prints nothing"
+      - ".venv/bin/python -m pytest tests -q passes"
+  - id: p2b-status-board
+    title: "The status-board skill, the orchestrator's Status board section and the status.board_url key"
+    depends_on: [p2a-status-record]
+    complexity: M
+    touches:
       - plugins/devflow/skills/status-board/SKILL.md
       - plugins/devflow/commands/implement.md
       - plugins/devflow/skills/project-profile/SKILL.md
       - plugins/devflow/schema/profile.schema.json
       - docs/profile-reference.md
       - templates/toolkit.yaml
-      - tests/test_status_record.py
-      - tests/fixtures/status-records/
+      - tests/test_status_board.py
       - tests/test_structure.py
     brief: |
-      Implement design sections D3 and D4 of docs/devflow-v2-plan.md (and brief section 4). Work in this order.
-      1. Create `plugins/devflow/schema/status-record.schema.json` (JSON Schema 2020-12, `additionalProperties: false`, every field of D3 with `type`/`enum`, `examples` holding the brief's example record plus `kind` "run" and `command` null).
-      2. Create `plugins/devflow/scripts/validate_status_record.py` (stdlib only, Python 3.11) with the CLI, the `FIELDS` constant and the six rule groups of D3. Error lines are `status-record: <message>` and the message contains the field name in single quotes. Pattern for timestamps `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$` (also check the date is real with datetime).
-      3. Create the fixtures listed in D3 under `tests/fixtures/status-records/`.
-      4. Create `tests/test_status_record.py`: good fixtures pass (exit 0, `status-record: OK`); each bad fixture exits 1 with the substring named after its case (`'needs_you_reason'`, `'status'`, `'updated_at'`, `'finished_at'` twice, `'next_check_at'`, `'command'`); `--doc-id claude-toolkit--deps` passes for the maintenance fixture and fails for `claude-toolkit`; `set(FIELDS)` equals the schema's `properties` keys; the schema's example validates.
-      5. Create `plugins/devflow/skills/status-board/SKILL.md` with front matter `name: status-board`, a `description` of at least 40 characters, `user-invocable: false`, and the sections of D4 in that order (no `## Alerts` yet). In `tests/test_structure.py` add "status-board" to the expected skill-name set in `test_skills_have_matching_names`.
-      6. `plugins/devflow/commands/implement.md`: add a section `## Status board` (after section 6, before the final "Never:" paragraph) that says: the first record (status `starting`) is written before any child session starts; then at every ledger change and every check-in; field values: `kind` "run", `command` null, `plan_slug`/`plan_url`/`feature_branch`/`orchestrator_session` from the plan and this session, `phases` mirrors the ledger (states `pending`, `running`, `merged`, `failed`, `gate`), `status` per brief section 4, `pr` filled when the PR is opened, `next_check_at` equals the armed timer or null, `updated_at` on every write; and "follow the `status-board` skill for where and how to write; a board error never stops the run". Name the skill with the plugin-prefix hint used elsewhere in the file ("whichever form the skill list shows").
-      7. Profile key `status.board_url` (optional string, non-empty): add to `plugins/devflow/schema/profile.schema.json` as an object `status` with that property; document it in `docs/profile-reference.md` (a Keys row `status.board_url`) and as a commented example in `templates/toolkit.yaml`; add one row in the "Keys" table of `plugins/devflow/skills/project-profile/SKILL.md`. In `tests/test_validate_profile.py` nothing changes (another phase owns it); instead add the assertion that the schema has `status` to `tests/test_status_record.py`.
+      Implement design section D4 of docs/devflow-v2-plan.md (and brief section 4). Work in this order.
+      1. Create `plugins/devflow/skills/status-board/SKILL.md` with front matter `name: status-board`, a `description` of at least 40 characters, `user-invocable: false`, and the sections of D4 in that order (no `## Alerts` yet). In `tests/test_structure.py` add "status-board" to the expected skill-name set in `test_skills_have_matching_names`.
+      2. `plugins/devflow/commands/implement.md`: add a section `## Status board` at the very end of the file, after the final "Never:" paragraph, that says: the first record (status `starting`) is written before any child session starts; then at every ledger change and every check-in; field values: `kind` "run", `command` null, `plan_slug`/`plan_url`/`feature_branch`/`orchestrator_session` from the plan and this session, `phases` mirrors the ledger (states `pending`, `running`, `merged`, `failed`, `gate`), `status` per brief section 4, `pr` filled when the PR is opened, `next_check_at` equals the armed timer or null, `updated_at` on every write; and "follow the `status-board` skill for where and how to write; a board error never stops the run". Name the skill with the plugin-prefix hint used elsewhere in the file ("whichever form the skill list shows").
+      3. Profile key `status.board_url` (optional string, non-empty): add to `plugins/devflow/schema/profile.schema.json` as an object `status` with that property; document it in `docs/profile-reference.md` (a Keys row `status.board_url`) and as a commented example in `templates/toolkit.yaml`; add one row in the "Keys" table of `plugins/devflow/skills/project-profile/SKILL.md`.
+      4. Create `tests/test_status_board.py`: the skill file has the five section headings of D4 in order and `name: status-board`; implement.md has `## Status board` after the "Never:" paragraph and mentions `status-board`; the profile schema has `status` with `board_url`.
       Stop condition: `tests/test_structure.py::test_every_profile_key_in_the_schema_is_documented` must still pass; if it fails because of how keys are written in profile-reference.md, stop with status=blocked and quote the failure.
     acceptance:
-      - ".venv/bin/python -m pytest tests/test_status_record.py tests/test_structure.py tests/test_validate_profile.py -q passes"
-      - ".venv/bin/python plugins/devflow/scripts/validate_status_record.py tests/fixtures/status-records/good-run.json prints status-record: OK"
-      - ".venv/bin/python plugins/devflow/scripts/validate_status_record.py tests/fixtures/status-records/bad-needs-you-no-reason.json exits 1 and prints a line containing 'needs_you_reason'"
+      - ".venv/bin/python -m pytest tests/test_status_board.py tests/test_structure.py tests/test_validate_profile.py -q passes"
       - "grep -n '^## Status board' plugins/devflow/commands/implement.md matches"
       - ".venv/bin/python -m pytest tests -q passes"
   - id: p3a-board-rules
     title: "Board rules - rules.js, board_stale.py and the 13-record fixture"
-    depends_on: [p2-record]
+    depends_on: [p2a-status-record]
     complexity: S
     touches:
       - plugins/devflow/board/rules.js
@@ -897,7 +928,7 @@ phases:
       - tests/test_board_rules.py
     brief: |
       Implement the rules, the stale script and the fixture of design section D5 of docs/devflow-v2-plan.md (and brief section 4 field rules). Work in this order.
-      1. Create `tests/fixtures/board-records.json`: a JSON list of 13 `{"id": <project slug>, "data": <record>}` entries built from the D5 table (the `id` and the record's `project` are the first column of the table; every `data` is a complete record valid for `plugins/devflow/scripts/validate_status_record.py`; `kind` run for all except `f-maint-deps`; `next_check_at` as D5 says). `--now` for every test is 2026-11-09T12:00:00Z.
+      1. Create `tests/fixtures/board-records.json`: a JSON list of 13 `{"id": <project slug>, "data": <record>}` entries built from the D5 table (the record's `project` is the first column of the table and the `id` equals it, except `f-maint-deps` whose `id` is `f-maint-deps--deps`; every `data` is a complete record valid for `plugins/devflow/scripts/validate_status_record.py`; `kind` run for all except `f-maint-deps`; `next_check_at` as D5 says). `--now` for every test is 2026-11-09T12:00:00Z.
       2. Create `plugins/devflow/board/rules.js` with `isHidden`, `isSilent`, `section` exactly as D5 specifies, plus a helper `elapsed(fromIso, nowMs)` returning whole minutes; export with `module.exports` when `module` exists.
       3. Create `plugins/devflow/scripts/board_stale.py` with the CLI and rule of D5 (stdlib, Python 3.11).
       4. Create `tests/board_rules_check.js` (reads the fixture, requires rules.js, asserts for each of the 13 projects `section()` and `isSilent()` as the D5 table says, prints `OK`) and `tests/test_board_rules.py`: runs the Node check (skipped if `node` is missing); validates every `data` of the fixture with `validate_status_record.py -`; asserts `board_stale.py` prints exactly `f-done-old` and `f-stale-quiet` for `--now 2026-11-09T12:00:00Z` and never a record with `needs_you: true`.
@@ -933,7 +964,7 @@ phases:
       - ".venv/bin/python -m pytest tests -q passes"
   - id: p4-alerts
     title: "needs_you - session rename and push notification"
-    depends_on: [p2-record]
+    depends_on: [p2b-status-board]
     complexity: S
     touches:
       - plugins/devflow/commands/implement.md
@@ -944,7 +975,7 @@ phases:
       1. Append to `plugins/devflow/skills/status-board/SKILL.md` a section `## Alerts` containing the table of D6 verbatim (the three rows, the unchanged-row and the `kind: maintenance` row), the sentence "All of it is best effort.", and the instruction to read the session's current title with `get_session` and keep it in memory before the first rename.
       2. In the `## Status board` section of `plugins/devflow/commands/implement.md` add one paragraph: "When `needs_you` changes, follow the `## Alerts` section of the `status-board` skill (rename the session, push once, rename back)." and list the `/implement` moments that set `needs_you` true: the `manual_before` question, a `human_gate`, a phase failed after its retry, a second `changes` review, and a PR waiting for the code owner (reason forms: `Confirm manual steps`, `Approve <phase id>`, `Fix <phase id>`, `Resolve review findings`, `Review PR #<n>`).
       3. Create `tests/test_alerts.py` asserting, in the status-board SKILL.md, the exact strings `[NEEDS YOU] <project> · <reason>`, `<project>: <reason>`, `190 characters` and the `kind: maintenance` row; and, in implement.md, the sentence of step 2 and each of the five reason forms.
-      Stop condition: if `## Status board` is not in implement.md (p2 not merged), stop with status=blocked.
+      Stop condition: if `## Status board` is not in implement.md (p2b not merged), stop with status=blocked.
     acceptance:
       - ".venv/bin/python -m pytest tests/test_alerts.py -q passes"
       - "grep -c '\\[NEEDS YOU\\] <project>' plugins/devflow/skills/status-board/SKILL.md prints at least 1"
@@ -972,7 +1003,7 @@ phases:
       4. `pr-steward/SKILL.md`: the code-owner bullet of D7 under "Which pull requests to follow".
       5. `make-plan.md` section 3: the standing `mb0-second-user` item of D7, worded so that the planner adds it only when the profile has `git.bot_login`, and points to `docs/profile-reference.md#second-github-user` for the identity checklist.
       6. Tests: `tests/test_validate_profile.py`: tests for the three semantic checks and for the two new keys in a valid profile. `tests/test_identity.py`: asserts the exact stop text, the `update_pull_request` / `reviewers` wording, the steward bullet and the `mb0-second-user` item text in the files, and `### Second GitHub user` in docs/profile-reference.md.
-      Stop condition: `test_every_profile_key_in_the_schema_is_documented` must pass; if the reviewer request cannot be expressed with `update_pull_request` and `reviewers` (check the tool's schema with ToolSearch `select:mcp__github__update_pull_request`), stop with status=blocked and quote the tool's parameters.
+      Stop condition: `test_every_profile_key_in_the_schema_is_documented` must pass; if the reviewer request cannot be expressed with `update_pull_request` and `reviewers` (check the tool's schema with ToolSearch `select:mcp__github__update_pull_request`), stop with status=blocked and quote the tool's parameters; in the text you write into implement.md the orchestrator sets `needs_you` (`Review PR #<n>`) and asks the user instead.
     acceptance:
       - ".venv/bin/python -m pytest tests/test_identity.py tests/test_validate_profile.py tests/test_structure.py -q passes"
       - "grep -n 'get_me returned' plugins/devflow/commands/implement.md matches"
@@ -995,7 +1026,7 @@ phases:
       3. `make-plan.md` section 5: before the final reply add a step that rewrites the issue body with the headings of D16 in that order (copy the heading list into the file), says it contains no YAML, posts the comment `Plan ready: <plan URL>. Next: /implement <plan URL>.`, and adds the issue link to the final reply list. In the manifest field list of section 2 replace the line `tracking_issue: <n>   # optional; ...` with `tracking_issue: <n>   # always set; the issue created or named in the ask` and add `closes: [<n>]   # optional; other issues named in the ask`. In "Small scope: a single-session prompt" add the issue behaviour of D16 (item 8 Finish gets the two comments and `Closes #<n>`). In the final Never paragraph nothing is removed. If `issue_write` is refused, the planner continues without an issue and says so in the final reply (D16 risk).
       4. `plugins/devflow/commands/implement.md`: in section 2 (Scheduling) after the ledger paragraph add the list of event comments of D16 with their exact texts; in section 4 Merge step 5 add the comment `Phase <phase id> merged.`; in the places where a phase fails after retry, a final review ends and the user is asked a question, add the matching comment text of D16; in section 6 step 3 add the `Closes #<n>` lines of D16 to the PR body description, before the phase list. State that without `tracking_issue` none of this happens.
       5. Create `tests/test_issue_flow.py`: assert in make-plan.md and implement.md every exact comment text of D16, the heading list `## Request` ... `## Machine-readable plan` in order in make-plan.md, `Closes #<tracking_issue>` in implement.md, and the words `no YAML` in make-plan.md.
-      Stop condition: if section 0 step 1 of make-plan.md or section 2 of implement.md no longer has the structure described, stop with status=blocked and quote the headings you find.
+      Stop condition: if section 0 step 1 of make-plan.md or section 2 of implement.md no longer has the structure described, stop with status=blocked and quote the headings you find. `tests/test_structure.py::test_review_hands_over_to_make_plan` must still pass: keep the strings `review_slug`, `ready-for-plan`, `decisions-pending`, `Findings to fix`, `Not doing`, `Issues created`, `Suggested grouping` and `/review apply` in make-plan.md.
     acceptance:
       - ".venv/bin/python -m pytest tests/test_issue_flow.py tests/test_validate_manifest.py -q passes"
       - "grep -c 'Planning started\\.' plugins/devflow/commands/make-plan.md prints at least 1"
@@ -1004,7 +1035,7 @@ phases:
   - id: p8-profile-keys
     title: "All new profile keys for the maintenance commands, added at once"
     depends_on: [p5-identity]
-    complexity: S
+    complexity: M
     touches:
       - plugins/devflow/schema/profile.schema.json
       - plugins/devflow/scripts/validate_profile.py
@@ -1018,7 +1049,7 @@ phases:
       1. `plugins/devflow/scripts/validate_profile.py`, function `check`: add `minimum` and `maximum` for integers and `pattern` for strings (re.search; the error is `'<path>': does not match <pattern>`; `'<path>': must be at least <n>` / `at most <n>`).
       2. Schema: add the `deps`, `upstream` and `land` objects of D9 with the stated required keys (`deps.audit` entries need `ecosystem` and `run`, `cwd` is optional), `additionalProperties: false`, and `minimum`/`maximum`/`pattern` as listed (`deps.cooldown_days` 0..30, `deps.time_budget_minutes` 10..480, `land.max_prs` 1..50, `upstream.repo` pattern).
       3. `semantic_checks`: `upstream.tag_pattern` must compile with `re.compile` (message of D9).
-      4. Docs: rows for every new key in `docs/profile-reference.md` (including the nested `deps.lock_freshness` entry shape in a short subsection), commented examples in `templates/toolkit.yaml` (all three sections, commented out).
+      4. Docs: rows for every new key in `docs/profile-reference.md` (including the nested `deps.lock_freshness` entry shape in a short subsection), commented examples in `templates/toolkit.yaml` (all three sections, commented out, with neutral placeholders such as `"<audit command>"` and `"<lock command>"` instead of a particular tool).
       5. Create `tests/fixtures/maintenance-toolkit.yaml`: a minimal valid profile (`docs.must_read: []`, `git.main_branch: main`, `git.branch_pattern`, `verify.fast`, `verify.dod`, `stacks: []`) that also has all three new sections filled with the example values of D9 (use the tag pattern, `uv lock` and the `pip-audit` audit entry). Tests in `tests/test_validate_profile.py`: the fixture is valid; each of: `deps` without `cooldown_days`, `cooldown_days: 31`, `upstream.repo: "nonsense"`, an invalid regex in `tag_pattern`, `land.max_prs: 0`, an unknown key in `deps`, a `deps.audit` entry without `run` gives an error naming that key.
       Stop condition: `test_every_profile_key_in_the_schema_is_documented` must pass; every new key path (`deps.cooldown_days`, ..., `land.max_prs`) must appear in backticks in profile-reference.md.
     acceptance:
@@ -1037,11 +1068,11 @@ phases:
     brief: |
       Implement design section D11 of docs/devflow-v2-plan.md.
       0. Read docs/design/maintenance-spike.md. Assumes (each [V] or [D], not [A]): `CONCLUSION a: alerts-unreadable`; `CONCLUSION b.push: allowed`; `CONCLUSION c.session: ci-triggered`; `CONCLUSION e.unattended: ok`, `e.board-write: ok`, `e.push: ok`; `CONCLUSION g.pr: ok`. Any other value, a missing line or an [A]: stop with status=blocked and quote the line. (`b.rebase` may be `unknown` or `refused`; the command never comments a bot command.)
-      1. Create `plugins/devflow/commands/deps.md`: front matter (`description`, `model: sonnet`), the standard Profile paragraph (as in plugins/devflow/commands/dod.md), then sections in this order: `## Rules` (unattended, never merge/approve/auto-merge/force-push, untrusted text), `## 1. Pre-check`, `## 2. Group and decide`, `## 3. Fix one group`, `## 4. Verify and record`, `## Never`. Content exactly per D11. `## 1. Pre-check` lists Dependabot PRs, reads `.github/dependabot.yml` for the cooldown check and runs the `deps.audit` commands; it states that Dependabot alerts cannot be read from a session and that a session has no GraphQL.
+      1. Create `plugins/devflow/commands/deps.md`: front matter (`description`, `model: sonnet`), the standard Profile paragraph ("Load the `project-profile` skill and follow its "Loading the profile" section. If it reports an error, show the message verbatim and stop; never substitute a value of your own for a missing key."), then sections in this order: `## Rules` (unattended, never merge/approve/auto-merge/force-push, untrusted text), `## 1. Pre-check`, `## 2. Group and decide`, `## 3. Fix one group`, `## 4. Verify and record`, `## Never`. Content exactly per D11. `## 1. Pre-check` lists Dependabot PRs, reads `.github/dependabot.yml` for the cooldown check and runs the `deps.audit` commands; it states that Dependabot alerts cannot be read from a session and that a session has no GraphQL.
       2. In `## 3. Fix one group` write the "Where the fix goes" rules of D11 as plain numbered steps (Dependabot PR present, then security group without a PR), and state in one sentence which spike lines they follow (`b.push`, `c.session`, the bot-command filter).
-      3. Each step that touches the board refers to the `status-board` skill; the record uses `kind: maintenance`, `command: deps`, id `<project>--deps`, `orchestrator_session` `"scheduled"`; the command never calls `get_session` or `list_sessions` and never renames its session; `needs_you` reasons exactly: `Review deps PR #<n> (CI red)`, `Run /deps again: time budget used`, and for a stopped group `Check deps group <ecosystem>: <short cause>`.
+      3. Each step that touches the board refers to the `status-board` skill; the record uses `kind: maintenance`, `command: deps`, id `<project>--deps`, `orchestrator_session` `"scheduled"`; the command never calls `get_session` or `list_sessions` and never renames its session; `needs_you` reasons exactly: `Review deps PR #<n> (CI red)`, `Run /deps again: time budget used`, `Set Dependabot cooldown for <ecosystem>`, and for a stopped group (including a lock command that changes a file outside its `lockfiles`) `Check deps group <ecosystem>: <short cause>`.
       4. `plugins/devflow/skills/pr-steward/SKILL.md`: in the bullet that starts "**Do not follow dependency-bot PRs** unless the maintainer asks", append after the words "decision for a person." the sentence: " The `/deps` command is that request: it triages dependency-bot PRs under its own rules."
-      5. `tests/test_deps.py`: asserts the front matter, the Profile paragraph, the presence of the section headings, `cooldown_days`, `time_budget_minutes`, `untrusted`, `deps.audit`, `cooldown`, the words `cannot be read` and `GraphQL`, that the text `@dependabot` does not occur in deps.md, the exact string `Never merge, approve, enable auto-merge or force-push` in the `## Never` section, and that the file contains none of the forbidden words of tests/test_no_project_words.py.
+      5. `tests/test_deps.py`: asserts the front matter, the Profile paragraph, the presence of the section headings, `cooldown_days`, `time_budget_minutes`, `untrusted`, `deps.audit`, `cooldown`, each of the four reasons above, the words `cannot be read` and `GraphQL`, that the text `@dependabot` does not occur in deps.md, the exact string `Never merge, approve, enable auto-merge or force-push` in the `## Never` section, and that the file contains none of the forbidden words of tests/test_no_project_words.py.
       Stop condition: `deps.md` must not name any particular ecosystem tool other than in the generic examples "package manager" and "lockfile".
     acceptance:
       - ".venv/bin/python -m pytest tests/test_deps.py -q passes"
@@ -1060,10 +1091,10 @@ phases:
     brief: |
       Implement design sections D10 and D12 of docs/devflow-v2-plan.md.
       0. Read docs/design/maintenance-spike.md. Assumes (each [V] or [D], not [A]): `CONCLUSION f.peek: anonymous-ok` and `CONCLUSION f.grist-core: anonymous-ok`; `CONCLUSION e.unattended: ok`, `e.board-write: ok`; `CONCLUSION c.session: ci-triggered`; `CONCLUSION g.pr: ok`. Otherwise stop with status=blocked and quote the line. Copy the `ROUTE f` line into the command verbatim.
-      1. Create `plugins/devflow/scripts/pick_release.py` exactly per D10 and `tests/test_pick_release.py` (cases: highest stable wins; prerelease flag excluded; tag with `-rc1` suffix excluded even if the pattern allows; numeric not lexical ordering `v1.10.0` > `v1.9.0`; `--lines`; no eligible gives exit 3 and the message; a bad pattern gives exit 1).
+      1. Create `plugins/devflow/scripts/pick_release.py` exactly per D10 and `tests/test_pick_release.py` (cases: highest stable wins; prerelease flag excluded; tag with `-rc1` suffix excluded even if the pattern allows; numeric not lexical ordering `v1.10.0` > `v1.9.0`; `--lines` with a bare tag per line; `--lines` with raw ls-remote output including `^{}` lines; no eligible gives exit 3 and the message; a bad pattern gives exit 1).
       1b. Create `plugins/devflow/scripts/upstream_sync.py` (stdlib, Python 3.11, `subprocess` for git) with the two subcommands of D12 and the version-file format (parse errors are exit 1 with `upstream_sync: <message>`). It uses `pick_release.py`'s logic by importing it with importlib from the same directory (do not copy the logic).
       2. Create `tests/test_upstream.py` that builds, in `tmp_path`, a local "upstream" repo with commits and tags `v1.0.0`, `v1.1.0`, `v1.2.0-rc1`, `v1.2.0`; a "fork" repo made as: copy of upstream at `v1.0.0` as one commit, then one patch commit that edits a line, then a version file with `tag: v1.0.0`, `commit: <sha of the v1.0.0 commit in upstream>`, `synced_at: 2026-01-01`. Cases: `plan` reports latest `v1.2.0` (rc excluded); a clean `prepare` leaves a working tree with upstream changes plus the patch and the rewritten version file, exit 0, `git log` of the fork unchanged (no commit made); a `prepare` where upstream changed the patched line exits 2 and lists that path; `plan` on an up-to-date fork reports `up_to_date: true`; a malformed version file exits 1.
-      3. Create `plugins/devflow/commands/upstream.md`: front matter (`description`, `model: sonnet`), the standard Profile paragraph, then `## Rules` (unattended, linear history, release tags only, no prereleases, never upstream main, anonymous only, untrusted text, never merge), `## 1. Find the release`, `## 2. Prepare the sync`, `## 3. Resolve, verify, commit once`, `## 4. Open the PR and record`, `## Never`, with the exact commands of D12 and the `needs_you` reasons `Create <version_file> with the tag the fork is based on`, `Review upstream sync PR #<n>`, `Check upstream sync: <short cause>`; the record uses `orchestrator_session` `"scheduled"` and the command never calls `get_session` or `list_sessions`.
+      3. Create `plugins/devflow/commands/upstream.md`: front matter (`description`, `model: sonnet`), the standard Profile paragraph ("Load the `project-profile` skill and follow its "Loading the profile" section. If it reports an error, show the message verbatim and stop; never substitute a value of your own for a missing key."), then `## Rules` (unattended, linear history, release tags only, no prereleases, never upstream main, anonymous only, untrusted text, never merge), `## 1. Find the release`, `## 2. Prepare the sync`, `## 3. Resolve, verify, commit once`, `## 4. Open the PR and record`, `## Never`, with the exact commands of D12 and the `needs_you` reasons `Create <version_file> with the tag the fork is based on`, `Review upstream sync PR #<n>`, `Check upstream sync: <short cause>`; the record uses `orchestrator_session` `"scheduled"` and the command never calls `get_session` or `list_sessions`.
       4. Add `test_tag_route_matches_the_spike` (reads the text after `ROUTE f: ` in docs/design/maintenance-spike.md and asserts it occurs in upstream.md). Add to the tests a check that `upstream.md` contains no forbidden word of tests/test_no_project_words.py and that every `--flag` and subcommand on a line of `upstream.md` that contains `upstream_sync.py` exists in `upstream_sync.py --help`.
       Stop condition: if `git merge-index -o git-merge-one-file -a` does not work in the sandbox (the test of a conflicting `prepare` fails for that reason), stop with status=blocked and quote the error.
     acceptance:
@@ -1101,7 +1132,7 @@ phases:
       Implement design section D14 of docs/devflow-v2-plan.md.
       0. Read docs/design/maintenance-spike.md. Assumes (each [V] or [D], not [A]): `CONCLUSION c.session: ci-triggered`, `CONCLUSION d: approval-kept`, `RULESET d: dismiss_stale=true last_push_approval=true ...`, `CONCLUSION e.board-write: ok`. Otherwise stop with status=blocked and quote the line.
       1. Create `plugins/devflow/scripts/land_order.py` (stdlib; CLI `land_order.py [FILE|-] [--max N]`, input and rules per D14, errors as `land_order: <message>` exit 1) and its tests in `tests/test_land_command.py`: ascending numbers; a stacked PR after its base; a chain of three; a cycle is an error; `--max 2` truncates oldest-first; an unknown base (not listed) is just ascending; with ready PRs 9 and 4 where 4 is the base of 12, the order is 4, 9, 12 (Kahn, smallest first).
-      2. Create `plugins/devflow/commands/land.md`: front matter (`description`, `model: sonnet`, `argument-hint: "[PR numbers]"`), the standard Profile paragraph, then `## Rules`, `## 1. Collect and order`, `## 2. Resolve conflicts before review`, `## 3. Run CI once`, `## 4. Install the workflow`, `## 5. Report and record`, `## Never`, with the exact steps, branch names, draft-PR title, `needs_you` reasons (`Resolve conflict between #<a> and #<b>`, `Fix red integration CI for land set`, `Review PR #<n>` for the workflow-install PR, `Add .github/workflows/devflow-land.yml from the devflow template` when the push of the workflow is refused) of D14; the integration branch is `chore/land-<yyyymmdd-hhmm>`. Step 4 tells the session to read the template from the toolkit (`<devflow root>/templates/devflow-land.yml`; the project-profile skill says where `<devflow root>` is) and replace `__MAIN_BRANCH__` with `git.main_branch`.
+      2. Create `plugins/devflow/commands/land.md`: front matter (`description`, `model: sonnet`, `argument-hint: "[PR numbers]"`), the standard Profile paragraph ("Load the `project-profile` skill and follow its "Loading the profile" section. If it reports an error, show the message verbatim and stop; never substitute a value of your own for a missing key."), then `## Rules`, `## 1. Collect and order`, `## 2. Resolve conflicts before review`, `## 3. Run CI once`, `## 4. Install the workflow`, `## 5. Report and record`, `## Never`, with the exact steps, branch names, draft-PR title, `needs_you` reasons (`Resolve conflict between #<a> and #<b>`, `Fix red integration CI for land set`, `Review PR #<n>` for the workflow-install PR, `Add .github/workflows/devflow-land.yml from the devflow template` when the push of the workflow is refused) of D14; the integration branch is `chore/land-<yyyymmdd-hhmm>`. Step 4 tells the session to read the template from the toolkit (`<devflow root>/templates/devflow-land.yml`; the project-profile skill says where `<devflow root>` is) and replace `__MAIN_BRANCH__` with `git.main_branch`.
       3. In `tests/test_land_command.py` also assert: the front matter; the Profile paragraph; every `needs_you` reason string of this brief appears in `land.md`; the Never section contains the words approve, merge, auto-merge, force-push, delete; the file names `DEVFLOW_AGENT_TOKEN` and `Allow auto-merge`; no forbidden word of tests/test_no_project_words.py.
       Stop condition: if `<devflow root>/templates/devflow-land.yml` does not exist (p11a not merged), stop with status=blocked.
     acceptance:
@@ -1109,8 +1140,8 @@ phases:
       - "echo '[{\"number\":7,\"head\":\"b7\",\"base\":\"main\"},{\"number\":5,\"head\":\"b5\",\"base\":\"b7\"},{\"number\":3,\"head\":\"b3\",\"base\":\"main\"}]' | .venv/bin/python plugins/devflow/scripts/land_order.py - prints 3, 7, 5 on three lines"
       - ".venv/bin/python -m pytest tests -q passes"
   - id: p6-retire
-    title: "Documentation, version bump, delete the brief, the plan, the manual steps pages and the symlink"
-    depends_on: [p3b-board-page, p5a-issue-flow, p10-upstream, p11b-land-command]
+    title: "Documentation, version bump, delete the brief, the plan and the manual steps pages"
+    depends_on: [p3b-board-page, p5a-issue-flow, p9-deps, p10-upstream, p11b-land-command]
     complexity: M
     touches:
       - docs/design.md
@@ -1126,19 +1157,18 @@ phases:
       - docs/devflow-v2-plan.md
       - docs/devflow-v2-plan-manual-steps.html
       - docs/devflow-v2-spike-manual-steps.html
-      - .claude/devflow
     brief: |
       Implement design section D15 of docs/devflow-v2-plan.md. Work in this order.
       1. Set `"version": "0.4.0"` in the five `plugin.json` files; update the `metadata.description` and the devflow plugin description in `.claude-plugin/marketplace.json` to mention `/board`, `/deps`, `/upstream` and `/land`.
       2. Create `docs/maintenance.md`: what each of `/deps`, `/upstream`, `/land` does (three short subsections taken from D11, D12, D14), the profile sections `deps`, `upstream`, `land` with one example each, how to schedule `/deps` and `/upstream` weekly (a scheduled task per repository, permission mode auto, an environment that has `DEVFLOW_BOARD_URL`), the board and `/board prune`, the secret `DEVFLOW_AGENT_TOKEN` and the setting Allow auto-merge for `/land`, and a link to `design/maintenance-spike.md`. Do not link to any file this phase deletes.
       3. `README.md`: bullets for `/board`, `/deps`, `/upstream`, `/land` under the existing command bullets, and one sentence in the `/make-plan` and `/implement` bullets about the tracking issue (D16); in "What is here" mention the new skill `status-board`, the new scripts and `plugins/devflow/board`, `plugins/devflow/templates`, and `docs/maintenance.md`.
       4. `docs/design.md`: update the layout block (new commands, `skills/status-board`, `scripts/`, `schema/status-record.schema.json`, `board/`, `templates/`), the §5 list of commands (one line each for the four new ones), and add a short §10 "devflow v2 and the maintenance commands" that says what was added and points to docs/maintenance.md and docs/design/maintenance-spike.md.
-      5. `git rm .claude/devflow docs/design/devflow-v2.md docs/devflow-v2-plan.md docs/devflow-v2-plan-manual-steps.html docs/devflow-v2-spike-manual-steps.html` (`.claude/devflow` is a symlink). Then `git grep -n 'devflow-v2'` must print nothing except possibly a branch or slug mention inside docs/maintenance.md that is not a link; remove any link to a deleted file.
+      5. `git rm docs/design/devflow-v2.md docs/devflow-v2-plan.md docs/devflow-v2-plan-manual-steps.html docs/devflow-v2-spike-manual-steps.html`. Then `git grep -n 'devflow-v2'` must print nothing except possibly a branch or slug mention inside docs/maintenance.md that is not a link; remove any link to a deleted file.
       6. Run `/dod`.
       Stop condition: a test that still references a deleted file or the old version `0.3.0` means stop with status=blocked and quote it.
     acceptance:
       - ".venv/bin/python -m pytest tests -q passes"
-      - "test ! -e .claude/devflow && test ! -e docs/design/devflow-v2.md && test ! -e docs/devflow-v2-plan.md && test ! -e docs/devflow-v2-plan-manual-steps.html && test ! -e docs/devflow-v2-spike-manual-steps.html"
+      - "test ! -e docs/design/devflow-v2.md && test ! -e docs/devflow-v2-plan.md && test ! -e docs/devflow-v2-plan-manual-steps.html && test ! -e docs/devflow-v2-spike-manual-steps.html"
       - "grep -h '\"version\"' plugins/*/.claude-plugin/plugin.json prints five identical lines with 0.4.0"
       - "git grep -n 'devflow-v2' -- . ':!docs/maintenance.md' prints nothing"
       - "grep -c 'CONCLUSION ' docs/design/maintenance-spike.md prints 13"
