@@ -22,6 +22,8 @@ git:
   branch_pattern: "<type>/<kebab-case>"   # REQUIRED. Quoted into worker prompts
   # branch_types: [feature, fix, chore]   # optional. /implement checks the manifest's feature_branch against it
   # merge_style: merge-commit             # optional: merge-commit | squash
+  # bot_login: my-agent                   # optional: the second GitHub user the agent acts as; get_me must return it
+  # codeowners: [my-login]                # optional (needs bot_login): logins whose review /implement requests
 
 verify:
   fast:                  # REQUIRED. Run after every merge in /implement. Keep it to seconds-to-a-minute.

@@ -242,6 +242,18 @@ the dispatch table (`ci.dispatchable`: whatever the container cannot do itself, 
 builds, live external-service checks, other operating systems) runs on a runner and belongs in a
 phase's brief, not in `manual_*`.
 
+**Standing item.** When the profile has `git.bot_login`, add this as the first `manual_before` item,
+and no other plan adds it:
+
+```yaml
+  - id: mb0-second-user
+    title: Second GitHub user ready
+    why: The agent opens PRs as git.bot_login and the code owner's review is the gate
+    done_when: get_me in a new session prints <bot_login> and the main branch requires a Code Owner review
+```
+
+Its page section follows the identity checklist in `docs/profile-reference.md#second-github-user`.
+
 Secrets never travel through chat, the plan, or the artifact. A step that produces a secret says
 exactly where the user stores it (the Claude Code environment's settings, or the repo's
 **Settings → Secrets and variables → Actions**) and under which name. Call `read_documentation`
