@@ -52,7 +52,7 @@ Things about dispatching that are true everywhere:
   `Review PR #<n>`. Request the review once per pushed head. Never approve, merge or enable
   auto-merge on a PR you opened.
 - **Do not follow dependency-bot PRs** unless the maintainer asks: a version bump is a supply-chain
-  decision for a person. The project's steward file may name other PRs to leave alone.
+  decision for a person. The `/deps` command is that request: it triages dependency-bot PRs under its own rules. The project's steward file may name other PRs to leave alone.
 - **Stop at merge or close.** Nothing further is owed.
 
 ## A red check is real until proven otherwise
