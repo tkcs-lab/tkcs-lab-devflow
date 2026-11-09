@@ -155,6 +155,8 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
         paths = list(docs.get("must_read", []))
         if profile.get("project_steward"):
             paths.append(profile["project_steward"])
+        if profile.get("admin", {}).get("policy"):
+            paths.append(profile["admin"]["policy"])
         for p in paths:
             if not (root_dir / p.split("#")[0]).exists():
                 errors.append(f"file not found: '{p}' (listed in the profile; checked from {root_dir})")

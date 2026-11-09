@@ -25,6 +25,7 @@ verify:
     - "python3 -m venv --upgrade-deps .venv && .venv/bin/python -m pip install -q -r tests/requirements.txt && .venv/bin/python -m pytest tests -q"
     - ".venv/bin/python plugins/devflow/scripts/validate_profile.py templates/toolkit.yaml --no-file-checks"
     - ".venv/bin/python plugins/devflow/scripts/validate_profile.py .claude/toolkit.yaml"
+    - ".venv/bin/python plugins/devflow/scripts/repo_admin.py validate-policy plugins/devflow/templates/admin-policy.yaml"
     - 'for m in tests/fixtures/privacyfence-*-manifest.yaml; do .venv/bin/python plugins/devflow/scripts/validate_manifest.py "$m" --profile tests/fixtures/privacyfence-toolkit.yaml || exit 1; done'
   dod_manual:
     - "Every behaviour a command file promises is covered by a test that greps the exact string or runs the script."

@@ -1,0 +1,153 @@
+name: devflow-release
+
+# Cuts a release: an annotated tag on the head of __MAIN_BRANCH__ and a GitHub release with generated notes.
+# Run it by hand (Actions, devflow-release, Run workflow). It starts as a dry run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without the tag prefix, for example 1.4.0 or 1.4.0-rc.1. Empty: bump the newest tag."
+        required: false
+        default: ""
+        type: string
+      bump:
+        description: "Which part to raise when version is empty"
+        required: false
+        default: patch
+        type: choice
+        options: [patch, minor, major]
+      prerelease:
+        description: "Mark the release as a pre-release"
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: "Only show the tag and the release notes; untick to publish"
+        required: false
+        default: true
+        type: boolean
+      skip_checks:
+        description: "Release even though a check on the commit is not green"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: devflow-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  checks: read
+  statuses: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/__MAIN_BRANCH__'
+    steps:
+      - name: Decide the tag
+        id: tag
+        env:
+          # DEVFLOW_RELEASE_TOKEN is optional. Tags and releases made with the default token do not start
+          # other workflows; set the secret (a token that may write contents) when a workflow must run on the tag.
+          GH_TOKEN: ${{ secrets.DEVFLOW_RELEASE_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+          PREFIX: "__TAG_PREFIX__"
+          VERSION: ${{ inputs.version }}
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          num='(0|[1-9][0-9]*)'
+          if [ -n "$VERSION" ]; then
+            if ! [[ "$VERSION" =~ ^$num\.$num\.$num(-[0-9A-Za-z.]+)?$ ]]; then
+              echo "::error::version must look like 1.2.3 or 1.2.3-rc.1 (got: $VERSION)"
+              exit 1
+            fi
+            next="$VERSION"
+          else
+            latest=$(gh api --paginate "repos/$REPO/git/matching-refs/tags/$PREFIX" --jq '.[].ref' \
+              | sed 's#^refs/tags/##' \
+              | awk -v p="$PREFIX" 'substr($0, 1, length(p)) == p { v = substr($0, length(p) + 1); if (v ~ /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/) print v }' \
+              | sort -V | tail -n 1)
+            if [ -z "$latest" ]; then
+              echo "::error::no tag with prefix '$PREFIX' and a plain x.y.z version yet: run again with an explicit version"
+              exit 1
+            fi
+            IFS=. read -r major minor patch <<< "$latest"
+            case "$BUMP" in
+              major) next="$((major + 1)).0.0" ;;
+              minor) next="$major.$((minor + 1)).0" ;;
+              patch) next="$major.$minor.$((patch + 1))" ;;
+              *) echo "::error::bump must be patch, minor or major"; exit 1 ;;
+            esac
+          fi
+          tag="$PREFIX$next"
+          if gh api "repos/$REPO/git/ref/tags/$tag" > /dev/null 2>&1; then
+            echo "::error::tag $tag already exists"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Release tag: $tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check that the commit is green
+        if: inputs.skip_checks == false
+        env:
+          GH_TOKEN: ${{ secrets.DEVFLOW_RELEASE_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          SELF: release
+        run: |
+          set -euo pipefail
+          bad=$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[]
+            | select(.name != env.SELF)
+            | select(.status != "completed" or (.conclusion | IN("success", "skipped", "neutral") | not))
+            | "\(.name): \(.status) \(.conclusion // "")"')
+          if [ -n "$bad" ]; then
+            echo "::error::checks on $SHA are not all green:"
+            echo "$bad"
+            exit 1
+          fi
+          state=$(gh api "repos/$REPO/commits/$SHA/status" --jq .state)
+          if [ "$state" = "failure" ] || [ "$state" = "error" ]; then
+            echo "::error::commit status of $SHA is $state"
+            exit 1
+          fi
+          echo "checks on $SHA are green"
+
+      - name: Show the release notes
+        env:
+          GH_TOKEN: ${{ secrets.DEVFLOW_RELEASE_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Notes for $TAG"
+            gh api -X POST "repos/$REPO/releases/generate-notes" -f tag_name="$TAG" -f target_commitish="$SHA" --jq .body
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the tag and the release
+        if: inputs.dry_run == false
+        env:
+          GH_TOKEN: ${{ secrets.DEVFLOW_RELEASE_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          object=$(gh api -X POST "repos/$REPO/git/tags" -f tag="$TAG" -f message="Release $TAG" -f object="$SHA" -f type=commit --jq .sha)
+          gh api -X POST "repos/$REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$object" > /dev/null
+          flags=(--verify-tag --generate-notes --title "$TAG")
+          if [ "$PRERELEASE" = "true" ]; then
+            flags+=(--prerelease)
+          fi
+          if ! url=$(gh release create "$TAG" "${flags[@]}" --repo "$REPO"); then
+            echo "::error::tag $TAG was created but the release was not; run: gh release create $TAG --verify-tag --generate-notes --repo $REPO"
+            exit 1
+          fi
+          echo "Released $TAG: $url" >> "$GITHUB_STEP_SUMMARY"
+          echo "$url"

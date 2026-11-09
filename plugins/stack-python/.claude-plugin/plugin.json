@@ -1,6 +1,6 @@
 {
   "name": "stack-python",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Python stack skill for devflow: venv setup, conventions, acceptance and verify_after_merge entries",
   "author": { "name": "andras-tkcs" },
   "license": "Apache-2.0",
