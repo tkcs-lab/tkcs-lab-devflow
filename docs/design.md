@@ -2,6 +2,8 @@
 
 Status: review 1 answered; this is the design as built. The three decisions in §8 are resolved.
 
+Since devflow 0.4 the SessionStart-hook route and `toolkit.ref` no longer exist; plugins in the Claude Project are the only delivery route (see delivery.md). Section 3 is kept as the record of the probe that led to the first design.
+
 ## 1. What this is
 
 PrivacyFence's `/make-plan`, `/implement` and `/dod` (plus the generic half of its `steward` skill)
@@ -35,7 +37,6 @@ plugins/stack-python/skills/stack-python/SKILL.md
 plugins/stack-swift/skills/stack-swift/SKILL.md
 plugins/stack-ipados/skills/stack-ipados/SKILL.md
 plugins/stack-go/skills/stack-go/SKILL.md
-install/session-start.sh
 templates/toolkit.yaml                  # commented starter profile
 docs/{README.md,profile-reference.md,delivery.md,design.md,migrating-privacyfence.md}
 tests/                                  # pytest; fixtures from real PrivacyFence plans
@@ -243,12 +244,9 @@ conventions, table-driven tests with `httptest`, acceptance as `go test <pkg> -r
 pytest, stdlib + PyYAML: manifest (good; missing field; unknown `depends_on`; cycle; overlapping
 `touches` in a wave; `worker_model: opus` without reason; real PrivacyFence manifests from git history
 stored under `tests/fixtures/`), profile (good; each missing required key named; unknown key; bad
-types; PrivacyFence profile), a **no-project-words test** that greps `plugins/devflow`, `install/`,
+types; PrivacyFence profile), a **no-project-words test** that greps `plugins/devflow`,
 `plugins/stack-swift`, `plugins/stack-ipados`, `plugins/stack-go` and `templates/` for `privacyfence|ruff|pytest|src/privacyfence|connector`
-(case-insensitive; `stack-python` and `docs/` exempt), plus marketplace/plugin JSON structure and a
-`bash -n` / `shellcheck`-if-present check on the hook. Plus a hook test that runs `session-start.sh` against a
-local bare repo as the "toolkit remote": idempotent, no-op without `CLAUDE_CODE_REMOTE`, exclude
-written in project scope. Workflow `.github/workflows/test.yml` runs it all on Python 3.11 and 3.13.
+(case-insensitive; `stack-python` and `docs/` exempt), plus marketplace/plugin JSON structure. Workflow `.github/workflows/test.yml` runs it all on Python 3.11 and 3.13.
 
 Note the string check also catches the word `connector` in the generic text: I will phrase
 "live connector credentials" as "live external-service credentials".

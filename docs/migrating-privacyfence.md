@@ -9,16 +9,13 @@ same steps. That ADR links here, so keep this page.
 
 ## Delivery: Claude Project plugins
 
-PrivacyFence uses [route 1 of `delivery.md`](delivery.md#route-1-claude-project-plugins). The
-`devflow` and `stack-python` plugins are enabled in the Claude Project. There is no SessionStart hook
-for the toolkit, and the profile has no `toolkit.ref`. ADR 0132 rejected the hook route because the
+PrivacyFence uses [the plugin route of `delivery.md`](delivery.md#claude-project-plugins). The
+`devflow` and `stack-python` plugins are enabled in the Claude Project. The toolkit has no hook and no version
+pin. ADR 0132 rejected the hook route because the
 maintainer uses the toolkit in several projects: enabling the plugins once in the Project serves all
 of them, while a hook would need its tag bumped in each repository. The cost is that no version is
 pinned in the repository. ADR 0132 also rejected turning both routes on at once, because every
 command would then appear twice.
-
-A project that wants a pinned version takes route 2 instead. It adds `toolkit.ref` and the hook entry
-from `delivery.md`, next to any SessionStart hook it already has.
 
 ## What changed in the PrivacyFence repository
 
@@ -29,7 +26,7 @@ from `delivery.md`, next to any SessionStart hook it already has.
 | `.claude/skills/steward/SKILL.md` | **Trimmed** to the project half: why live connector checks run off-box, the container facts about Chromium, which PRs not to follow, red-check specifics, and branch, changelog and release conventions. The generic half (dispatch to CI instead of skipping, how to treat a red check) is now the toolkit's `pr-steward` skill. The dispatch table became `ci.dispatchable`. The profile's `project_steward` key makes every command read this file. |
 | `.claude/commands/cut-release.md`, `qa-record.md` | Kept unchanged, because they are PrivacyFence-only. |
 | `.claude/hooks/session-start.sh` | Kept: it is the project's environment setup (venv, Node, Chromium). Its closing `==>` line points at `ci.dispatchable` and the steward skill. |
-| `.claude/settings.json` | Unchanged, because route 1 needs no hook. |
+| `.claude/settings.json` | Unchanged, because the plugin route needs no hook. |
 | `CLAUDE.md` ("Commands and skills"), `docs/coding-and-testing-guidelines.md` §2.7, `docs/testing-policy.md` (`/dod` entry) | Each now says that the three commands come from the toolkit and that `/dod`'s rows are `verify` in `.claude/toolkit.yaml`. |
 | `docs/adr/0132-…md` | **Added.** |
 

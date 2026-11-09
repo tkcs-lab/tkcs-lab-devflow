@@ -23,10 +23,6 @@ jobs:
       - run: python -m pip install -r tests/requirements.txt
       - name: Tests (includes the no-project-specific-strings check)
         run: python -m pytest tests -q
-      - name: Shell syntax and shellcheck
-        run: |
-          bash -n install/session-start.sh
-          shellcheck install/session-start.sh
       - name: Validate the marketplace and plugins
         run: |
           npm install -g @anthropic-ai/claude-code
