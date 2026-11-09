@@ -21,7 +21,11 @@ its section 10) and three maintenance commands, in one plan:
    (orders open pull requests, resolves conflicts before review, runs CI once on a combined branch and
    installs the workflow that keeps auto-merge pull requests up to date).
 
-There is no tracking issue.
+6. **A tracking issue for every plan** (p5a): `/make-plan` creates one when the ask names no issue or
+   several, writes the plan into it in plain words, and keeps it current with short comments;
+   `/implement` continues the comments and the pull request closes the issue.
+
+There is no tracking issue for this plan itself (it predates the feature).
 
 ## 2. Current state
 
@@ -46,6 +50,10 @@ Measured on `origin/main` (`f0c7629`) on 2026-11-09.
   when they finish cleanly" and polls every 20 minutes (45 for long phases). Step 5 of Merge
   (`implement.md:190`) says "delete the phase branch on origin", which cannot work (brief F16). Section
   6 step 3 (`implement.md:247-251`) opens the PR with no reviewer and no list of left-over branches.
+- `make-plan.md` section 0 step 1 only reads an issue when the ask names one; it never creates one. The
+  manifest field `tracking_issue` is optional and `implement.md:92-94` keeps a ledger comment on it when
+  set. Nothing posts "planning started" or "implementation started", and the PR (`implement.md:247-251`)
+  does not close any issue.
 - There is no status record, board, alert, identity key, spike document or maintenance command.
   Plugin version is `0.3.0` in all five `plugin.json` files; `tests/test_structure.py:28-30` requires
   them equal.
@@ -534,6 +542,48 @@ a link to `docs/design/maintenance-spike.md`, which stays as a record), set all 
 `docs/devflow-v2-plan-manual-steps.html`. There is no changelog or ADR directory in this repository, so
 neither is written.
 
+### D16. The tracking issue (p5a), not in the brief
+
+Behaviour of `/make-plan` and `/implement` for every plan, large or small.
+
+- **Which issue.** If the ask names exactly one issue of this repository (`#<n>` or its URL), that is
+  the tracking issue. If it names none (free text, or the URL of a `/review` document) or more than one,
+  `/make-plan` creates a new issue at once (`issue_write`, method `create`): title = one line that sums up
+  the ask, at most 80 characters; body = the ask verbatim under `## Request`, plus, for several issues, the
+  line `Covers: #<a>, #<b>`. The new issue is the tracking issue; the issues the ask named are listed in the
+  manifest as `closes`.
+- **Planning started.** Right after the issue is known `/make-plan` posts the comment `Planning started.`
+- **The plan in the issue.** When the plan is written, `/make-plan` replaces the issue body (keeping the
+  original `## Request` first) with the plan in plain, human-readable words and no YAML. Exact headings, in
+  this order: `## Request`, `## Goal`, `## What changes` (one bullet per phase: `<phase id> - <title>
+  (<S|M>): <one plain sentence>`), `## Order` (one sentence per wave: what runs together and what waits),
+  `## Before you start` (one bullet per `manual_before`: title and why), `## After the last merge` (one
+  bullet per `manual_after`), `## Risks`, `## Machine-readable plan` (the plan file URL and the line
+  `Run: /implement <plan URL>`). The plan file with the manifest stays the source `/implement` runs; the
+  issue is its readable view. A revision of the plan updates the issue body the same way.
+- **Plan ready.** Last step of `/make-plan`: the comment `Plan ready: <plan URL>. Next: /implement <plan URL>.`
+  The final reply to the user also names the issue.
+- **Small scope.** The single-session prompt does the same with the issue (it is created and filled the
+  same way); its Finish step posts `Implementation started.` before the first change and `PR opened: <url>.`
+  after the PR, and the PR body starts with `Closes #<n>`.
+- **Manifest.** `tracking_issue: <n>` is always written by `/make-plan`; the new optional field `closes:
+  [<n>, ...]` lists the other issues named in the ask. `validate_manifest.py` checks that `tracking_issue`
+  is a positive integer and `closes` a list of positive integers, and warns if `closes` contains
+  `tracking_issue`. Hand-written plans without `tracking_issue` still run; `/implement` then posts no
+  issue comments and writes no `Closes` line.
+- **Comments of `/implement`**, one comment each, short, in addition to the ledger comment of section 2
+  (which stays a single comment edited in place): `Implementation started on <feature_branch>.` (after
+  the `manual_before` confirmation and the branch push); `Phase <phase id> merged.` (after each Merge);
+  `Waiting for you: <needs_you_reason>.` (each time `needs_you` goes false to true);
+  `Phase <phase id> failed after retry: <short cause>.`; `Final review: approve.` or `Final review:
+  changes (<n> blocking).`; `PR opened: <url>.` Board errors never matter here; a failed comment is
+  noted once and the run continues.
+- **The pull request closes the issue.** The PR body begins with one line `Closes #<tracking_issue>` and one
+  more `Closes #<n>` line for each entry of `closes`, before the phase list. GitHub closes them when the PR
+  merges.
+- Every post on GitHub ends with the attribution footer required by the session rules; the exact comment
+  texts above come before it.
+
 ## 4. Manual steps
 
 Summary; the step-by-step page is [the artifact](https://claude.ai/artifact/D38tGEYMVruuWTKcPE2xbS)
@@ -570,6 +620,8 @@ the next section.
   whether they do); the commands skip board steps silently then, as designed.
 - **`git merge-index -o git-merge-one-file`** (p10) is old plumbing. If it is missing in the cloud container
   the p10 worker stops blocked; git 2.43 is installed here.
+- **Issue creation needs the agent account to have Issues: write** (p5a). If `issue_write` is refused,
+  `/make-plan` falls back to no tracking issue and says so in its final reply; it does not stop.
 - **p0 is large for one phase** (about fifteen small edits and two deletions) but mechanical; it is one phase
   because the edits must land together for the suite to pass.
 - **`docs/design/devflow-v2.md` is committed on this branch** because the phases read it; it exists on
@@ -616,6 +668,7 @@ final_checks:
   - docs/devflow-v2-plan.md, docs/devflow-v2-plan-manual-steps.html and docs/design/devflow-v2.md are deleted and nothing links to them
   - git grep -nE "toolkit\.ref|session-start|SessionStart" -- plugins templates README.md docs/delivery.md docs/profile-reference.md prints nothing
   - docs/design/maintenance-spike.md exists and grep -cE '^CONCLUSION ' on it prints 12
+  - The pull request body starts with a line that closes the plan's tracking issue when the manifest has one
   - All five plugins/*/.claude-plugin/plugin.json have version 0.4.0
   - .claude/toolkit.yaml still validates with plugins/devflow/scripts/validate_profile.py
 phases:
@@ -820,6 +873,29 @@ phases:
       - "grep -n 'get_me returned' plugins/devflow/commands/implement.md matches"
       - "grep -n 'mb0-second-user' plugins/devflow/commands/make-plan.md matches"
       - ".venv/bin/python -m pytest tests -q passes"
+  - id: p5a-issue-flow
+    title: Tracking issue - /make-plan creates and fills it, /implement comments on it, the PR closes it
+    depends_on: [p5-identity]
+    complexity: M
+    touches:
+      - plugins/devflow/commands/make-plan.md
+      - plugins/devflow/commands/implement.md
+      - plugins/devflow/scripts/validate_manifest.py
+      - tests/test_issue_flow.py
+      - tests/test_validate_manifest.py
+    brief: |
+      Implement design section D16 of docs/devflow-v2-plan.md. Work in this order.
+      1. `plugins/devflow/scripts/validate_manifest.py`, function `validate`: after the `max_parallel` check add: `tracking_issue`, when present, must be a positive integer (error `tracking_issue must be a positive integer`); `closes`, when present, must be a list of positive integers (error `closes must be a list of positive integers`); a warning `closes contains tracking_issue` when it does. Add tests to `tests/test_validate_manifest.py` for the three messages and for a valid manifest with both fields.
+      2. `plugins/devflow/commands/make-plan.md`, section 0 step 1: replace it with the "Which issue" rule of D16 (exactly one issue named: use it and read it with its comments; none or several: create the new issue with `issue_write` method `create`, title and body as in D16). Keep the existing paragraph about a `/review` document URL, adjusted so that the review document is the ask and a new issue is created for it. Add the comment `Planning started.` as the next sentence of that step.
+      3. `make-plan.md` section 5: before the final reply add a step that rewrites the issue body with the headings of D16 in that order (copy the heading list into the file), says it contains no YAML, posts the comment `Plan ready: <plan URL>. Next: /implement <plan URL>.`, and adds the issue link to the final reply list. In the manifest field list of section 2 add `tracking_issue: <n>   # always set; the issue created or named in the ask` and `closes: [<n>]   # optional; other issues named in the ask`. In "Small scope: a single-session prompt" add the issue behaviour of D16 (item 8 Finish gets the two comments and `Closes #<n>`). In the final Never paragraph nothing is removed. If `issue_write` is refused, the planner continues without an issue and says so in the final reply (D16 risk).
+      4. `plugins/devflow/commands/implement.md`: in section 2 (Scheduling) after the ledger paragraph add the list of event comments of D16 with their exact texts; in section 4 Merge step 5 add the comment `Phase <phase id> merged.`; in the places where a phase fails after retry, a final review ends and the user is asked a question, add the matching comment text of D16; in section 6 step 3 add the `Closes #<n>` lines of D16 to the PR body description, before the phase list. State that without `tracking_issue` none of this happens.
+      5. Create `tests/test_issue_flow.py`: assert in make-plan.md and implement.md every exact comment text of D16, the heading list `## Request` ... `## Machine-readable plan` in order in make-plan.md, `Closes #<tracking_issue>` in implement.md, and the words `no YAML` in make-plan.md.
+      Stop condition: if section 0 step 1 of make-plan.md or section 2 of implement.md no longer has the structure described, stop with status=blocked and quote the headings you find.
+    acceptance:
+      - ".venv/bin/python -m pytest tests/test_issue_flow.py tests/test_validate_manifest.py -q passes"
+      - "grep -c 'Planning started\\.' plugins/devflow/commands/make-plan.md prints at least 1"
+      - "grep -n 'Closes #' plugins/devflow/commands/implement.md matches"
+      - ".venv/bin/python -m pytest tests -q passes"
   - id: p8-profile-keys
     title: "All new profile keys for the maintenance commands, added at once"
     depends_on: [p5-identity, p7-spike]
@@ -930,7 +1006,7 @@ phases:
       - ".venv/bin/python -m pytest tests -q passes"
   - id: p6-retire
     title: "Documentation, version bump, delete the brief, the plan and the manual steps page"
-    depends_on: [p3-board, p10-upstream, p11b-land-command]
+    depends_on: [p3-board, p5a-issue-flow, p10-upstream, p11b-land-command]
     complexity: S
     touches:
       - docs/design.md
@@ -949,7 +1025,7 @@ phases:
       Implement design section D15 of docs/devflow-v2-plan.md. Work in this order.
       1. Set `"version": "0.4.0"` in the five `plugin.json` files; update the `metadata.description` and the devflow plugin description in `.claude-plugin/marketplace.json` to mention `/board`, `/deps`, `/upstream` and `/land`.
       2. Create `docs/maintenance.md`: what each of `/deps`, `/upstream`, `/land` does (three short subsections taken from D11, D12, D14), the profile sections `deps`, `upstream`, `land` with one example each, how to schedule `/deps` and `/upstream` weekly (a scheduled task per repository, permission mode auto, an environment that has `DEVFLOW_BOARD_URL`), the board and `/board prune`, the secret `DEVFLOW_AGENT_TOKEN` and the setting Allow auto-merge for `/land`, and a link to `design/maintenance-spike.md`. Do not link to any file this phase deletes.
-      3. `README.md`: bullets for `/board`, `/deps`, `/upstream`, `/land` under the existing command bullets; in "What is here" mention the new skill `status-board`, the new scripts and `plugins/devflow/board`, `plugins/devflow/templates`, and `docs/maintenance.md`.
+      3. `README.md`: bullets for `/board`, `/deps`, `/upstream`, `/land` under the existing command bullets, and one sentence in the `/make-plan` and `/implement` bullets about the tracking issue (D16); in "What is here" mention the new skill `status-board`, the new scripts and `plugins/devflow/board`, `plugins/devflow/templates`, and `docs/maintenance.md`.
       4. `docs/design.md`: update the layout block (new commands, `skills/status-board`, `scripts/`, `schema/status-record.schema.json`, `board/`, `templates/`), the §5 list of commands (one line each for the four new ones), and add a short §10 "devflow v2 and the maintenance commands" that says what was added and points to docs/maintenance.md and docs/design/maintenance-spike.md.
       5. `git rm docs/design/devflow-v2.md docs/devflow-v2-plan.md docs/devflow-v2-plan-manual-steps.html`. Then `git grep -n 'devflow-v2'` must print nothing except possibly a branch or slug mention inside docs/maintenance.md that is not a link; remove any link to a deleted file.
       6. Run `/dod`.
