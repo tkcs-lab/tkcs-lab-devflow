@@ -40,3 +40,17 @@ retrying again until the next planned write.
 
 A record holds no file contents, no commit messages and no tokens. The board is readable by
 everyone who can open it.
+
+## Alerts
+
+| When | Action | Exact text |
+|---|---|---|
+| `needs_you` goes false to true | rename own session (`set_session_title`) | `[NEEDS YOU] <project> · <reason>` (the separator is the middle dot U+00B7 with a space on each side) |
+| `needs_you` goes false to true | `PushNotification` once | `<project>: <reason>` cut to 190 characters |
+| `needs_you` goes true to false | rename back to the title read with `get_session` before the first rename | the saved title |
+| `needs_you` stays true | nothing | no new push, no new rename unless the reason changed (then rename only) |
+| record has `kind: maintenance` | push only | the same push text; never rename (a scheduled session cannot read its own title: it has no `get_session`) |
+
+All of it is best effort. Alerts do not depend on a board: they go out even when no board URL is set. `<project>` is the record's `project`; `<reason>` is `needs_you_reason`.
+
+Before the first rename, read the session's current title with `get_session` and keep it in memory; that is the title to rename back to.
