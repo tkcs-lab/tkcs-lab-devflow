@@ -1,0 +1,33 @@
+# Profile of the claude-toolkit repository itself (read by /make-plan, /implement, /dod, /review).
+# Reference: docs/profile-reference.md
+
+project:
+  name: claude-toolkit
+
+docs:
+  must_read:
+    - README.md
+    - docs/design.md
+    - docs/profile-reference.md
+    - docs/delivery.md
+  plan_dir: docs/
+
+git:
+  main_branch: main
+  branch_pattern: "<type>/<kebab-case>"
+  branch_types: [feature, fix, chore]
+  merge_style: merge-commit
+
+verify:
+  fast:
+    - "python3 -m venv --upgrade-deps .venv && .venv/bin/python -m pip install -q -r tests/requirements.txt && .venv/bin/python -m pytest tests -q"
+  dod:
+    - "python3 -m venv --upgrade-deps .venv && .venv/bin/python -m pip install -q -r tests/requirements.txt && .venv/bin/python -m pytest tests -q"
+    - ".venv/bin/python plugins/devflow/scripts/validate_profile.py templates/toolkit.yaml --no-file-checks"
+    - ".venv/bin/python plugins/devflow/scripts/validate_profile.py .claude/toolkit.yaml"
+    - 'for m in tests/fixtures/privacyfence-*-manifest.yaml; do .venv/bin/python plugins/devflow/scripts/validate_manifest.py "$m" --profile tests/fixtures/privacyfence-toolkit.yaml || exit 1; done'
+  dod_manual:
+    - "Every behaviour a command file promises is covered by a test that greps the exact string or runs the script."
+    - "No project-specific word was added to plugins/devflow, plugins/stack-*, templates or .claude-plugin (tests/test_no_project_words.py)."
+
+stacks: [python]
