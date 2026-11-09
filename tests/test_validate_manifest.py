@@ -149,6 +149,29 @@ def test_artifact_without_source_warns(vm):
     assert errs == [] and any("manual_steps_source" in w for w in warns)
 
 
+@pytest.mark.parametrize("value", [0, -1, "7", True, 1.5])
+def test_tracking_issue_must_be_positive_integer(vm, value):
+    m = mutated(lambda m: m.update(tracking_issue=value))
+    assert "tracking_issue must be a positive integer" in errors(m, vm)
+
+
+@pytest.mark.parametrize("value", [5, [0], ["1"], [True], [1, 2.5]])
+def test_closes_must_be_list_of_positive_integers(vm, value):
+    m = mutated(lambda m: m.update(closes=value))
+    assert "closes must be a list of positive integers" in errors(m, vm)
+
+
+def test_closes_containing_tracking_issue_warns(vm):
+    m = mutated(lambda m: m.update(tracking_issue=7, closes=[7, 8]))
+    errs, warns = vm.validate(m)
+    assert errs == [] and "closes contains tracking_issue" in warns
+
+
+def test_valid_tracking_issue_and_closes(vm):
+    m = mutated(lambda m: m.update(tracking_issue=7, closes=[8, 9]))
+    assert vm.validate(m) == ([], [])
+
+
 def test_feature_branch_checked_against_profile_types(vm):
     profile = {"git": {"branch_types": ["feature", "fix"], "branch_pattern": "<type>/<kebab-case>"}}
     m = mutated(lambda m: m.update(feature_branch="feat/demo"))

@@ -96,6 +96,20 @@ Keep an orchestration ledger as a comment on a GitHub issue if the manifest name
 Otherwise keep it in your own replies: for each phase record its state (`pending` / `running` /
 `merged` / `failed`), its session id, and its branch. Update the ledger on every state change.
 
+If the manifest names `tracking_issue`, also post these event comments on that issue, one comment
+each, short and with exactly these texts (a failed comment is noted once and the run continues):
+
+- `Implementation started on <feature_branch>.` after the `manual_before` confirmation and the
+  branch push.
+- `Phase <phase id> merged.` after each Merge (section 4, step 5).
+- `Waiting for you: <needs_you_reason>.` each time `needs_you` goes from false to true.
+- `Phase <phase id> failed after retry: <short cause>.` when a phase fails after its retry.
+- `Final review: approve.` or `Final review: changes (<n> blocking).` when a final review ends.
+- `PR opened: <url>.` after the pull request is opened.
+
+Every post ends with the attribution footer the session rules require; the exact text comes before
+it. Without `tracking_issue` none of this happens: no event comments and no `Closes` lines.
+
 A phase is **ready** when every phase in its `depends_on` is `merged`, and, if any of those
 phases is marked `human_gate: true`, the user has approved it (see "Merge" step 6 below). Start every ready phase at
 once, up to `max_parallel` (manifest, default 2). Phases in the same wave touch different files by
@@ -173,10 +187,13 @@ On each check-in, for each `running` phase, call `get_session`:
   - `status=blocked`, or no report: read why. If the fix is small and clearly inside the phase,
     send the child a steering message (`send_message`, if you have it) or start a follow-up
     session on the same phase branch with the specific instruction. Otherwise mark the phase
-    `failed` and **ask the user**, quoting the child's reason. Do not start dependent phases.
+    `failed` and **ask the user**, quoting the child's reason, and post `Phase <phase id> failed
+    after retry: <short cause>.` and `Waiting for you: <needs_you_reason>.` on the tracking issue
+    (if any). Do not start dependent phases.
 - `failed`: start one retry session on the same phase branch, with a brief that says what the
   first attempt got to (read the branch). If a second session also fails, mark the phase `failed`
-  and ask the user.
+  and ask the user, and post `Phase <phase id> failed after retry: <short cause>.` on the
+  tracking issue (if any), followed by `Waiting for you: <needs_you_reason>.`
 
 **Merge** (one phase at a time, even when several finish together):
 
@@ -202,7 +219,8 @@ On each check-in, for each `running` phase, call `get_session`:
    wait for the run, and treat a red run like any other failed check. If anything is red, `git merge --abort` is no longer possible, so revert the merge commit
    (`git revert -m 1`), push, send the failure back to the phase, and mark the phase `running`
    again.
-5. Push the feature branch. Mark the phase `merged`, and
+5. Push the feature branch. Mark the phase `merged`, post the comment `Phase <phase id> merged.`
+   on the tracking issue (if any), and
    `archive_session` the child. If the manifest has `screenshots_after_merge`, run it and send the
    user the images (`SendUserFile`) with a one-line caption naming the phase, so they can watch
    the result take shape and object early.
@@ -242,14 +260,15 @@ start one review session with `create_session`: `source_revision` the feature br
 
 Wait for it with check-ins as in section 4. Then:
 
-- `approve`: go to Finishing.
-- `changes`: group the blocking findings by phase and start one Sonnet fix session per group on a
+- `approve`: post `Final review: approve.` on the tracking issue (if any) and go to Finishing.
+- `changes`: post `Final review: changes (<n> blocking).` on the tracking issue (if any), then group the blocking findings by phase and start one Sonnet fix session per group on a
   `<feature_branch>--fix-<n>` branch, whose brief is the findings verbatim plus the phase's
   original entry. Merge each exactly as a phase (section 4's **Merge**, trailer
   `Plan-Phase: <plan slug>/fix-<n>`). Then start one more review session with the same prompt plus
   "Earlier review findings: <list>; confirm each is fixed and review only the diff since
-  `<sha>`". If that second review still says `changes`, stop and ask the user, quoting the
-  findings.
+  `<sha>`". If that second review still says `changes`, post `Final review: changes (<n> blocking).`
+  and `Waiting for you: <needs_you_reason>.` on the tracking issue (if any), stop and ask the user,
+  quoting the findings.
 
 `archive_session` each review session once you have read its report. Non-blocking findings go into
 the PR body.
@@ -261,10 +280,12 @@ the PR body.
    added, and the plan document is deleted, with its decisions extracted into ADRs when the
    profile has `docs.adr_dir`).
 3. Open **one** pull request from the feature branch to `<main>`, following the PR template if the
-   repo has one. The body lists each phase with its merge commit, the combined acceptance
+   repo has one. The body begins with one line `Closes #<tracking_issue>` and one more `Closes #<n>` line for each entry
+   of the manifest's `closes`, before the phase list (no such lines without `tracking_issue`). It lists each phase with its merge commit, the combined acceptance
    checklist, the final review's verdict and its non-blocking findings, every out-of-scope
    finding the children reported, and a **Manual verification** section: each `manual_after`
    item as an unchecked box, with the `manual_steps_artifact` link.
+   After opening it, post `PR opened: <url>.` on the tracking issue (if any).
    The body also has a section `## Branches left on origin` listing that ledger list, and the
    sentence "The owner deletes them in the GitHub UI."
    When the profile has `git.codeowners`, request a review from every login in it (GitHub MCP
