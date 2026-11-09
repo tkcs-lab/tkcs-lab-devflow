@@ -290,3 +290,13 @@ board error never stops the run. `/implement` writes a record as follows.
 - `pr` is filled when the pull request is opened and kept current afterwards.
 - `next_check_at` equals the time of the timer you have armed, or `null` when none is armed.
 - `updated_at` is set on every write.
+
+When `needs_you` changes, follow the `## Alerts` section of the `status-board` skill (rename the session, push once, rename back).
+
+`/implement` sets `needs_you` true at these moments, with these reasons:
+
+- the `manual_before` question: `Confirm manual steps`
+- a `human_gate`: `Approve <phase id>`
+- a phase failed after its retry: `Fix <phase id>`
+- a second `changes` review: `Resolve review findings`
+- a PR waiting for the code owner: `Review PR #<n>`
