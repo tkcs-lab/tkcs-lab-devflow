@@ -27,6 +27,10 @@ its section 10) and three maintenance commands, in one plan:
    several, writes the plan into it in plain words, and keeps it current with short comments;
    `/implement` continues the comments and the pull request closes the issue.
 
+Out of scope: a skill and a `gh` wrapper script that set up repositories (ruleset, CODEOWNERS, Dependabot,
+the Actions secret, the environment variable). The owner will build them after this implementation and
+before using it; until then the owner-only steps stay as listed in the manual steps.
+
 There is no tracking issue for this plan itself (it predates the feature).
 
 ## 2. Current state
@@ -421,7 +425,7 @@ plan on `plan/devflow-v2` before `/implement` runs.
   short prompt reads the result and replaces the `g.pr` and `e.*` lines with the values for that path.
   Phases p9 and p10 stay blocked on `g.pr: ok`.
 
-**How the later phases use it.** The file must exist in the checkout (mb2-spike-done), including the `RULESET d` line and `CONCLUSION g.pr`. Each of p8, p9, p10, p11a and p11b starts by reading the spike file and
+**How the later phases use it.** The file is already committed on this branch, and must still be in the checkout, including the `RULESET d` line and `CONCLUSION g.pr`. Each of p8, p9, p10, p11a and p11b starts by reading the spike file and
 checking its own *Assumes* line (in its brief). A needed CONCLUSION line that is missing, marked `[A]`
 (except where the brief says `[A]` is fine), or different from the value the brief assumes means: stop
 with `status=blocked`, quote the line and say which assumption failed. Do not improvise around it.
@@ -662,13 +666,10 @@ Behaviour of `/make-plan` and `/implement` for every plan, large or small.
 Summary; the step-by-step page is [the artifact](https://claude.ai/artifact/D38tGEYMVruuWTKcPE2xbS)
 (source `docs/devflow-v2-plan-manual-steps.html`).
 
-- Before: `mb1-identity-done` (one confirm question: second GitHub user, ruleset, CODEOWNERS and the
-  throwaway PR are done), `mb2-spike-done` (the spike result file is on this branch and has been read).
-  The spike's own setup (private scratch repository with the same ruleset and the agent invited with
-  Write; one approved, out-of-date pull request; for round 2 the stricter ruleset settings and a second
-  approved, out-of-date pull request) is on a separate page,
-  [Spike Setup Steps](https://claude.ai/artifact/LefiPDFNQU7BoQ2fnXkpKr) (source
-  `docs/devflow-v2-spike-manual-steps.html`), and belongs to the spike prompt, not to this plan.
+- Before: nothing. The second GitHub user, the ruleset with Code Owner review and the scratch-repository
+  experiments all ran as the agent user during the spike, so they are proven. The spike's own setup page
+  ([Spike Setup Steps](https://claude.ai/artifact/LefiPDFNQU7BoQ2fnXkpKr), source
+  `docs/devflow-v2-spike-manual-steps.html`) is finished and is deleted by the last phase.
 - After: `ma1-board-live` (publish the board, set `DEVFLOW_BOARD_URL`, check the phone and the push),
   `ma2-throwaway-pr` (review gate), `ma3-scheduled-tasks` (weekly `/deps` and `/upstream` tasks, created in the claude.ai UI with the repository attached),
   `ma4-land-repos` (auto-merge setting and agent token secret for repositories using `/land`).
@@ -681,9 +682,9 @@ There is no human gate and nothing manual in the middle.
   assumes. If one differs (for example `d: approval-dismissed`, which makes the `/land` design unsound),
   the phase stops with `status=blocked` and the orchestrator asks the owner. Expected cost: a redesign of
   that phase, not of the others.
-- **The plan cannot run until the spike file exists.** `mb2-spike-done` is a `manual_before` item whose
-  `done_when` the orchestrator can check (the file and its 12 conclusion lines). Phases p0 to p5a do not
-  read the file; p8 to p11b do.
+- **The spike file is a precondition for p8 to p11b, not a manual step.** `docs/design/maintenance-spike.md` is
+  already on this branch with its 13 conclusion lines. Phases p0 to p5a do not read it; p8 to p11b do and stop
+  blocked if it is missing or contradicts them.
 - **`update_pull_request` may not offer `reviewers`** (p5, D7). The brief step then stops blocked; the
   alternative is a manual reviewer request, which the owner decides.
 - **The board page's database API is documented only in the `artifact-capabilities` skill.** If a worker
@@ -707,15 +708,7 @@ feature_branch: feature/devflow-v2
 max_parallel: 2
 manual_steps_artifact: https://claude.ai/artifact/D38tGEYMVruuWTKcPE2xbS
 manual_steps_source: docs/devflow-v2-plan-manual-steps.html
-manual_before:
-  - id: mb1-identity-done
-    title: "Confirm the second GitHub user, ruleset, CODEOWNERS and throwaway PR are in place"
-    why: "p5 and every later review gate assume the agent acts as a second GitHub user and the code owner's review is enforced"
-    done_when: "The claude.ai GitHub connection shows the agent login, main requires Code Owner review, and a throwaway PR from a session showed the agent as author with Review required"
-  - id: mb2-spike-done
-    title: "Run the maintenance spike from its own prompt and commit docs/design/maintenance-spike.md to this branch"
-    why: "p8 to p11b read the spike's conclusion lines and stop blocked without them; the plan is revised with the findings before /implement runs"
-    done_when: "On plan/devflow-v2, docs/design/maintenance-spike.md exists, grep -cE '^CONCLUSION ' on it prints 13, grep -cE '^ROUTE ' prints 2, the line starting RULESET d: says dismiss_stale=true and last_push_approval=true, and the line CONCLUSION g.pr: says ok"
+manual_before: []
 manual_after:
   - id: ma1-board-live
     title: "Publish the board with /board, set DEVFLOW_BOARD_URL, open it on the phone, check the push, try /board prune"
@@ -955,7 +948,7 @@ phases:
       - tests/fixtures/maintenance-toolkit.yaml
     brief: |
       Implement design section D9 of docs/devflow-v2-plan.md.
-      0. Read docs/design/maintenance-spike.md; if the file does not exist in your checkout, stop with status=blocked (mb2-spike-done is not done). Assumes: `CONCLUSION a: alerts-unreadable` (the key `deps.audit` exists because alerts cannot be read) and both `CONCLUSION f.peek: anonymous-ok` and `CONCLUSION f.grist-core: anonymous-ok`, each marked [V] or [D]. If any is missing, marked [A] or different, stop with status=blocked and quote the line.
+      0. Read docs/design/maintenance-spike.md; if the file does not exist in your checkout, stop with status=blocked (the spike file is missing). Assumes: `CONCLUSION a: alerts-unreadable` (the key `deps.audit` exists because alerts cannot be read) and both `CONCLUSION f.peek: anonymous-ok` and `CONCLUSION f.grist-core: anonymous-ok`, each marked [V] or [D]. If any is missing, marked [A] or different, stop with status=blocked and quote the line.
       1. `plugins/devflow/scripts/validate_profile.py`, function `check`: add `minimum` and `maximum` for integers and `pattern` for strings (re.search; the error is `'<path>': does not match <pattern>`; `'<path>': must be at least <n>` / `at most <n>`).
       2. Schema: add the `deps`, `upstream` and `land` objects of D9 with the stated required keys (`deps.audit` entries need `ecosystem` and `run`, `cwd` is optional), `additionalProperties: false`, and `minimum`/`maximum`/`pattern` as listed (`deps.cooldown_days` 0..30, `deps.time_budget_minutes` 10..480, `land.max_prs` 1..50, `upstream.repo` pattern).
       3. `semantic_checks`: `upstream.tag_pattern` must compile with `re.compile` (message of D9).
