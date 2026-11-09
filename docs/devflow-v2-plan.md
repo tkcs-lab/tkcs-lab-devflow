@@ -145,7 +145,8 @@ Follow brief section 4 and its field rules. Amendments:
   (for example `claude-toolkit--deps`), so a maintenance run never collides with an orchestration of
   the same project. Slugs match `^[a-z0-9-]+$`; the double hyphen only ever separates project and command.
 - For `maintenance`: `plan_slug`, `plan_url` and `feature_branch` are `null`; `orchestrator_session` is
-  the scheduled session; `next_check_at` is always `null` (no timers); `phases` holds the work items
+  the scheduled session's id when the session can read it, else the literal `"scheduled"` (a task fired from
+  the UI has no `get_session`, spike g3); `next_check_at` is always `null` (no timers); `phases` holds the work items
   (one per update group, per PR or per fork sync) in the same object shape, plus an optional integer
   `pr`; item `state` is one of `pending`, `running`, `done`, `failed`, `gate` (for `run` it stays
   `pending`, `running`, `merged`, `failed`, `gate`).
@@ -264,6 +265,7 @@ Exact strings, written into the `## Alerts` section of the `status-board` skill 
 | `needs_you` goes false to true | `PushNotification` once | `<project>: <reason>` cut to 190 characters |
 | `needs_you` goes true to false | rename back to the title read with `get_session` before the first rename | the saved title |
 | `needs_you` stays true | nothing | no new push, no new rename unless the reason changed (then rename only) |
+| record has `kind: maintenance` | push only | the same push text; never rename (a scheduled session cannot read its own title: it has no `get_session`) |
 
 All of it is best effort. `<project>` is the record's `project`; `<reason>` is `needs_you_reason`.
 
@@ -403,6 +405,13 @@ plan on `plan/devflow-v2` before `/implement` runs.
   refused by the sandbox proxy, so only `git ls-remote` is used.
 - GraphQL is blocked in sessions: no `gh pr view --json`, no `gh api graphql`; commands use REST
   (`gh api repos/...`) or the GitHub MCP tools, and `reviewDecision` is not available.
+- Round 3 (item g, UI-created task): a scheduled task created by the owner in the claude.ai UI with the
+  repository attached ran unattended to its end, opened pull request #7 as the agent, wrote the board
+  database without an approval and sent a push that reached the phone; `DEVFLOW_BOARD_URL` was unset there.
+  It had `ArtifactData`, `PushNotification`, `add_repo` and the repository clone, and no `get_session` or
+  `list_sessions`. Scheduled commands therefore never call those two, write `orchestrator_session:
+  "scheduled"`, and never rename their own session. The weekly tasks must be created in the UI with the
+  repository attached; a task made by a session with `create_trigger` has none of this.
 - Round 2 (item d re-test): under the strict ruleset (`RULESET d: dismiss_stale=true last_push_approval=true
   code_owner=true strict=true`) the agent's update-branch left the code owner's approval in place and the pull
   request `clean`, with `ci` re-run: `d: approval-kept [V]`. The `/land` design holds.
@@ -464,7 +473,8 @@ eligible release` when none. A `--security` flag disables the age rule (still st
 A command (`plugins/devflow/commands/deps.md`, `model: sonnet`, description "Weekly unattended
 dependency update: triage Dependabot PRs and audit findings, fix what is red, open PRs, never merge"). Rules:
 
-- **Unattended.** It never asks the user a question. Every doubt becomes `needs_you` on the board record
+- **Unattended.** It never asks the user a question, never calls `get_session` or `list_sessions`, and writes
+  `orchestrator_session: "scheduled"` in its record. Every doubt becomes `needs_you` on the board record
   and a clean stop. It never merges, approves, enables auto-merge or force-pushes.
 - **Profile.** Standard profile section; additionally requires `deps.cooldown_days` and
   `deps.time_budget_minutes`; a missing one stops with `toolkit.yaml: missing required key '<key>'`
@@ -872,7 +882,7 @@ phases:
       - tests/test_alerts.py
     brief: |
       Implement design section D6 of docs/devflow-v2-plan.md (brief section 6, "Free, no-build companion", and section 7, "Push alert").
-      1. Append to `plugins/devflow/skills/status-board/SKILL.md` a section `## Alerts` containing the table of D6 verbatim (the three rows plus the unchanged-row), the sentence "All of it is best effort.", and the instruction to read the session's current title with `get_session` and keep it in memory before the first rename.
+      1. Append to `plugins/devflow/skills/status-board/SKILL.md` a section `## Alerts` containing the table of D6 verbatim (the three rows, the unchanged-row and the `kind: maintenance` row), the sentence "All of it is best effort.", and the instruction to read the session's current title with `get_session` and keep it in memory before the first rename.
       2. In the `## Status board` section of `plugins/devflow/commands/implement.md` add one paragraph: "When `needs_you` changes, follow the `## Alerts` section of the `status-board` skill (rename the session, push once, rename back)." and list the `/implement` moments that set `needs_you` true: the `manual_before` question, a `human_gate`, a phase failed after its retry, a second `changes` review, and a PR waiting for the code owner (reason forms: `Confirm manual steps`, `Approve <phase id>`, `Fix <phase id>`, `Resolve review findings`, `Review PR #<n>`).
       3. Create `tests/test_alerts.py` asserting, in both files, the exact strings `[NEEDS YOU] <project> · <reason>`, `<project>: <reason>`, `190 characters`, and that implement.md contains each of the five reason forms.
       Stop condition: if `## Status board` is not in implement.md (p2 not merged), stop with status=blocked.
@@ -973,7 +983,7 @@ phases:
       1. Create `plugins/devflow/scripts/pick_release.py` exactly per D10 and `tests/test_pick_release.py` (cases: highest stable wins; prerelease flag excluded; tag with `-rc1` suffix excluded even if the pattern allows; too young excluded and next older chosen; `--security` ignores age; `--no-age --lines`; no eligible gives exit 3 and the message; numeric not lexical ordering `v1.10.0` > `v1.9.0`).
       2. Create `plugins/devflow/commands/deps.md`: front matter (`description`, `model: sonnet`), the standard Profile paragraph (as in plugins/devflow/commands/dod.md), then sections in this order: `## Rules` (unattended, never merge/approve/auto-merge/force-push, untrusted text), `## 1. Pre-check`, `## 2. Group and decide`, `## 3. Fix one group`, `## 4. Verify and record`, `## Never`. Content exactly per D11. `## 1. Pre-check` lists Dependabot PRs and runs the `deps.audit` commands; it states that Dependabot alerts cannot be read from a session and that a session has no GraphQL.
       3. In `## 3. Fix one group` write the "Where the fix goes" rules of D11 as plain numbered steps (Dependabot PR present, then security group without a PR), and state in one sentence which spike lines they follow (`b.push`, `c.session`, the bot-command filter).
-      4. Each step that touches the board refers to the `status-board` skill; the record uses `kind: maintenance`, `command: deps`, id `<project>--deps`; `needs_you` reasons exactly: `Review deps PR #<n> (CI red)`, `Run /deps again: time budget used`, and for a stopped group `Check deps group <ecosystem>: <short cause>`.
+      4. Each step that touches the board refers to the `status-board` skill; the record uses `kind: maintenance`, `command: deps`, id `<project>--deps`, `orchestrator_session` `"scheduled"`; the command never calls `get_session` or `list_sessions` and never renames its session; `needs_you` reasons exactly: `Review deps PR #<n> (CI red)`, `Run /deps again: time budget used`, and for a stopped group `Check deps group <ecosystem>: <short cause>`.
       5. `plugins/devflow/skills/pr-steward/SKILL.md`: change the bullet "Do not follow dependency-bot PRs unless the maintainer asks" by appending: " The `/deps` command is that request: it triages dependency-bot PRs under its own rules."
       6. `tests/test_deps.py`: asserts the front matter, the Profile paragraph, the presence of the section headings, `cooldown_days`, `time_budget_minutes`, `untrusted`, `deps.audit`, the words `cannot be read` and `GraphQL`, the absence of the text `@dependabot` followed by `rebase` as an instruction (the file may mention that it is never commented), `Never merge` wording, and that the file contains none of the forbidden words of tests/test_no_project_words.py.
       Stop condition: `deps.md` must not name any particular ecosystem tool other than in the generic examples "package manager" and "lockfile".
@@ -995,7 +1005,7 @@ phases:
       0. Read docs/design/maintenance-spike.md. Assumes (each [V] or [D], not [A]): `CONCLUSION f.peek: anonymous-ok` and `CONCLUSION f.grist-core: anonymous-ok`; `CONCLUSION e.unattended: ok`, `e.board-write: ok`; `CONCLUSION c.session: ci-triggered`; `CONCLUSION g.pr: ok`. Otherwise stop with status=blocked and quote the line. Copy `ROUTE f` into the command.
       1. Create `plugins/devflow/scripts/upstream_sync.py` (stdlib, Python 3.11, `subprocess` for git) with the two subcommands of D12 and the version-file format (parse errors are exit 1 with `upstream_sync: <message>`). It uses `pick_release.py`'s logic by importing it with importlib from the same directory (do not copy the logic).
       2. Create `tests/test_upstream.py` that builds, in `tmp_path`, a local "upstream" repo with commits and tags `v1.0.0`, `v1.1.0`, `v1.2.0-rc1`, `v1.2.0`; a "fork" repo made as: copy of upstream at `v1.0.0` as one commit, then one patch commit that edits a line, then a version file with `tag: v1.0.0`, `commit: <sha of the v1.0.0 commit in upstream>`, `synced_at: 2026-01-01`. Cases: `plan` reports latest `v1.2.0` (rc excluded); a clean `prepare` leaves a working tree with upstream changes plus the patch and the rewritten version file, exit 0, `git log` of the fork unchanged (no commit made); a `prepare` where upstream changed the patched line exits 2 and lists that path; `plan` on an up-to-date fork reports `up_to_date: true`; a malformed version file exits 1.
-      3. Create `plugins/devflow/commands/upstream.md`: front matter (`description`, `model: sonnet`), the standard Profile paragraph, then `## Rules` (unattended, linear history, release tags only, no prereleases, never upstream main, anonymous only, untrusted text, never merge), `## 1. Find the release`, `## 2. Prepare the sync`, `## 3. Resolve, verify, commit once`, `## 4. Open the PR and record`, `## Never`, with the exact commands of D12 and the `needs_you` reasons `Create <version_file> with the tag the fork is based on`, `Review upstream sync PR #<n>`, `Check upstream sync: <short cause>`.
+      3. Create `plugins/devflow/commands/upstream.md`: front matter (`description`, `model: sonnet`), the standard Profile paragraph, then `## Rules` (unattended, linear history, release tags only, no prereleases, never upstream main, anonymous only, untrusted text, never merge), `## 1. Find the release`, `## 2. Prepare the sync`, `## 3. Resolve, verify, commit once`, `## 4. Open the PR and record`, `## Never`, with the exact commands of D12 and the `needs_you` reasons `Create <version_file> with the tag the fork is based on`, `Review upstream sync PR #<n>`, `Check upstream sync: <short cause>`; the record uses `orchestrator_session` `"scheduled"` and the command never calls `get_session` or `list_sessions`.
       4. Add `test_tag_route_matches_the_spike` (reads the text after `ROUTE f: ` in docs/design/maintenance-spike.md and asserts it occurs in upstream.md). Add to the tests a check that `upstream.md` contains no forbidden word of tests/test_no_project_words.py and that every subcommand and flag named in `upstream.md` exists in `upstream_sync.py --help`.
       Stop condition: if `git merge-index -o git-merge-one-file -a` does not work in the sandbox (the test of a conflicting `prepare` fails for that reason), stop with status=blocked and quote the error.
     acceptance:
