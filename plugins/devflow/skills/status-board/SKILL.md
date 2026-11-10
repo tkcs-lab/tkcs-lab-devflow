@@ -39,7 +39,9 @@ retrying again until the next planned write.
 ## No secrets
 
 A record holds no file contents, no commit messages and no tokens. The board is readable by
-everyone who can open it.
+everyone who can open it. The one place a record names files is a phase item's optional `scope`
+field (scope-drift monitoring, written by `/implement`): at most 20 repository-relative paths, and
+counts. The board page shows only the count.
 
 ## Alerts
 

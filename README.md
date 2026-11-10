@@ -72,10 +72,10 @@ and do not cover sessions without the plugin. See [docs/hooks.md](docs/hooks.md)
 
 | Path | |
 |---|---|
-| `plugins/devflow` | the eight commands, the `project-profile`, `pr-steward`, `status-board`, `repo-admin`, `review-checklist`, `secure-code-review`, `test-review` and `docs-review` skills, the scripts in `scripts/` (manifest, profile and status-record validators, `review_decisions.py` with its page template, `build_board.py`, `board_stale.py`, `pick_release.py`, `upstream_sync.py`, `land_order.py`, `repo_admin.py`), `schema/profile.schema.json`, `schema/status-record.schema.json`, `schema/admin-policy.schema.json`, `hooks/` (the guardrail hooks and `hooks.json`), `board/` (the status board page) and `templates/` (the `/land` and release workflows, the starter admin policy) |
+| `plugins/devflow` | the eight commands, the `project-profile`, `pr-steward`, `status-board`, `repo-admin`, `review-checklist`, `secure-code-review`, `test-review` and `docs-review` skills, the scripts in `scripts/` (manifest, profile and status-record validators, `review_decisions.py` with its page template, `build_board.py`, `board_stale.py`, `pick_release.py`, `upstream_sync.py`, `land_order.py`, `repo_admin.py`, `scope_check.py`), `schema/profile.schema.json`, `schema/status-record.schema.json`, `schema/admin-policy.schema.json`, `hooks/` (the guardrail hooks and `hooks.json`), `board/` (the status board page) and `templates/` (the `/land` and release workflows, the starter admin policy) |
 | `plugins/stack-python`, `plugins/stack-go`, `plugins/stack-swift`, `plugins/stack-ipados` | stack skills the profile selects (`ipados` goes with `swift`) |
 | `templates/toolkit.yaml` | starter profile |
-| `docs/` | profile reference, delivery, design, [the guardrail hooks](docs/hooks.md), [the review flow](docs/review.md), [the maintenance commands and the board](docs/maintenance.md), [auditing and updating organisation and repository settings](docs/admin.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |
+| `docs/` | profile reference, delivery, design, [the guardrail hooks](docs/hooks.md), [the review flow](docs/review.md), [the maintenance commands and the board](docs/maintenance.md), [scope-drift monitoring in `/implement`](docs/scope-drift.md), [auditing and updating organisation and repository settings](docs/admin.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |
 | `tests/` | `python -m pytest tests -q` (Python 3.11+, PyYAML) |
 
 There is no server and nothing long-running: everything runs inside Claude Code sessions.

@@ -35,7 +35,7 @@ plugins/devflow/
   scripts/validate_manifest.py          # CLI: validate_manifest.py <plan.md|manifest.yaml> [--profile P]
   scripts/validate_profile.py           # CLI: validate_profile.py [.claude/toolkit.yaml]
   scripts/review_decisions.{py,html}    # CLI: review_decisions.py <items.json> <out.html>, /review's decisions page
-  scripts/{validate_status_record,build_board,board_stale,pick_release,upstream_sync,land_order,repo_admin}.py
+  scripts/{validate_status_record,build_board,board_stale,pick_release,upstream_sync,land_order,repo_admin,scope_check}.py
   schema/profile.schema.json
   schema/status-record.schema.json
   schema/admin-policy.schema.json       # the policy repo_admin.py reads; its own file, referenced by the profile key admin.policy
@@ -48,7 +48,7 @@ plugins/stack-swift/skills/stack-swift/SKILL.md
 plugins/stack-ipados/skills/stack-ipados/SKILL.md
 plugins/stack-go/skills/stack-go/SKILL.md
 templates/toolkit.yaml                  # commented starter profile
-docs/{README.md,profile-reference.md,delivery.md,design.md,maintenance.md,migrating-privacyfence.md}
+docs/{README.md,profile-reference.md,delivery.md,design.md,maintenance.md,scope-drift.md,migrating-privacyfence.md}
 docs/design/maintenance-spike.md        # record of the spike behind the maintenance commands
 tests/                                  # pytest; fixtures from real PrivacyFence plans
 .github/workflows/test.yml
@@ -216,6 +216,8 @@ manifests on `plan/atlassian-user-names` (7 phases) and `plan/plugin-framework`.
 * **implement**: same. Section 0.3 → `validate_manifest.py`. Post-merge verification runs
   `verify.fast` + the manifest's `verify_after_merge`. The child brief's read list is `docs.must_read`.
   Final reviewer runs `verify.fast` and reads the same list. The PR is driven to green via `pr-steward`.
+  Each merge is preceded by a monitoring-only scope check (`scope_check.py`, key `scope.ignore`) that
+  feeds the status record and the PR's Scope section: [scope-drift.md](scope-drift.md).
 * **dod**: runs `verify.dod` (honouring `narrow`/`skip_when_narrowed`), then reads `verify.dod_doc`
   and walks its rows against `git diff --stat origin/<main>...HEAD`, then the manual items; if
   `dod_doc` is absent it says so and runs only the gate.

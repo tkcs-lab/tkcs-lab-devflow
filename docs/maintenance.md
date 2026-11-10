@@ -98,6 +98,10 @@ the three maintenance commands. Run it once, store the printed URL as the enviro
 live, so it is published once and left alone; run `/board` again with the same file path to change the
 page and keep the URL. Without a board URL the commands skip every board step.
 
+A phase chip shows `drift <n>` when the phase changed `n` files outside its `touches` (and `scope ?`
+when the check was unavailable): a count only, the paths are in the pull request's Scope section. What
+is recorded, what is not and why it never blocks: [scope-drift.md](scope-drift.md).
+
 `/board prune` lists the records the board hides (no update for more than 7 days, or finished earlier;
 never one that needs you) and asks one question before it deletes them.
 

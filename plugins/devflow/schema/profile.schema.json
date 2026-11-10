@@ -132,6 +132,13 @@
       "additionalProperties": false,
       "properties": {"board_url": {"type": "string", "minLength": 1, "description": "URL of the published status board page; when unset, the environment variable DEVFLOW_BOARD_URL is used."}}
     },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ignore": {"$ref": "#/$defs/stringList", "description": "Globs of paths /implement does not count as scope drift, for files every phase may touch (lockfiles, generated files). Default: none. The changelog file (docs.changelog.file) is always ignored when the profile has docs.changelog."}
+      }
+    },
     "deps": {
       "type": "object",
       "additionalProperties": false,

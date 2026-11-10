@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Devflow status record",
-  "description": "One database document per project (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an /implement orchestration; a maintenance record (kind 'maintenance') belongs to a scheduled command and is keyed '<project>--<command>'. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, maintenance constraints) are checked by plugins/devflow/scripts/validate_status_record.py. No secrets, file contents or commit messages belong in a record.",
+  "description": "One database document per project (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an /implement orchestration; a maintenance record (kind 'maintenance') belongs to a scheduled command and is keyed '<project>--<command>'. Schema version 1 gained the optional phase field 'scope' without a bump: records without it stay valid. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, maintenance constraints) are checked by plugins/devflow/scripts/validate_status_record.py. No secrets, file contents or commit messages belong in a record.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -35,7 +35,22 @@
         "branch": {"type": ["string", "null"]},
         "started_at": {"$ref": "#/$defs/timestampOrNull"},
         "finished_at": {"$ref": "#/$defs/timestampOrNull"},
-        "pr": {"type": ["integer", "null"], "minimum": 1}
+        "pr": {"type": ["integer", "null"], "minimum": 1},
+        "scope": {"$ref": "#/$defs/scope"}
+      }
+    },
+    "scope": {
+      "description": "Optional, run records only: the scope-drift result of the phase's merge (written by /implement from scope_check.py). Absent means not checked. Counts and paths only: a path is a repository-relative file path, never contents, a diff or a commit message. Overwritten with the record, so the durable history is the pull request's Scope section.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check", "in_scope", "out_of_scope_count", "collision_count", "paths", "disposition"],
+      "properties": {
+        "check": {"enum": ["ok", "unavailable"], "description": "'unavailable' when the check itself failed; the merge went ahead."},
+        "in_scope": {"type": ["integer", "null"], "minimum": 0, "description": "Changed files inside the phase's touches; null when unavailable."},
+        "out_of_scope_count": {"type": ["integer", "null"], "minimum": 0, "description": "Changed files outside touches that no scope.ignore glob names; null when unavailable."},
+        "collision_count": {"type": ["integer", "null"], "minimum": 0, "description": "How many of those fall inside another phase's touches."},
+        "paths": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1, "maxLength": 300}, "description": "Out-of-scope paths, collisions first, at most 20; the count above is the full number."},
+        "disposition": {"enum": ["accepted", "partly_reverted", "reverted", null], "description": "What happened to the drift: accepted (merged as is), or reverted by a later commit (decided from the feature branch's final diff). null when there is no drift or the check was unavailable."}
       }
     }
   },

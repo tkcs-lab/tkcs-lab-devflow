@@ -31,6 +31,21 @@ function section(rec, nowMs) {
   return "running";
 }
 
+// Drift indicator of one phase (count only; the paths are in the pull request description):
+// null when no scope was recorded or nothing drifted, else {text, title, level}.
+function drift(phase) {
+  var s = phase && phase.scope;
+  if (!s || typeof s !== "object") return null;
+  if (s.check !== "ok") return { text: "scope ?", title: "scope check unavailable", level: "unknown" };
+  var n = s.out_of_scope_count, c = s.collision_count;
+  if (!n) return null;
+  var title = n + " file" + (n === 1 ? "" : "s") + " outside touches";
+  if (c) title += ", " + c + " in another phase's touches";
+  if (s.disposition === "reverted") title += "; reverted later";
+  else if (s.disposition === "partly_reverted") title += "; partly reverted later";
+  return { text: "drift " + n, title: title, level: c ? "collision" : "drift" };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { elapsed: elapsed, isHidden: isHidden, isSilent: isSilent, section: section };
+  module.exports = { elapsed: elapsed, isHidden: isHidden, isSilent: isSilent, section: section, drift: drift };
 }
