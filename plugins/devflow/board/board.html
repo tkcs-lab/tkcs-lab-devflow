@@ -54,6 +54,8 @@ details > summary::-webkit-details-marker { display: none; }
 .chip.running { color: var(--run); background: var(--run-bg); border-color: var(--run); }
 .chip.merged, .chip.done { color: var(--ok); background: var(--ok-bg); border-color: var(--ok); }
 .chip.failed { color: var(--need); background: var(--need-bg); border-color: var(--need); font-weight: 600; }
+.chip .drift { margin-left: 4px; font-weight: 600; color: var(--warn); }
+.chip .drift.collision, .chip .drift.unknown { color: var(--need); }
 .chip.gate { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); border-style: dashed; }
 .detail { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
 .stage { margin: 0 0 8px; }
@@ -130,6 +132,12 @@ a { color: var(--run); }
 
   function chip(phase) {
     var c = el("span", "chip " + phase.state, (STATE_GLYPH[phase.state] || "?") + " " + phase.state + " · " + phase.id);
+    var d = drift(phase);
+    if (d) {
+      var mark = el("span", "drift " + d.level, "· " + d.text);
+      mark.title = d.title;
+      c.appendChild(mark);
+    }
     return c;
   }
   function chips(rec) {
@@ -180,6 +188,8 @@ a { color: var(--run); }
         if (p.complexity) bits.push("size " + p.complexity);
         if (p.started_at) bits.push("started " + ago(p.started_at, now));
         if (p.finished_at) bits.push("finished " + ago(p.finished_at, now));
+        var dr = drift(p);
+        if (dr) bits.push(dr.level === "unknown" ? "scope check unavailable" : dr.title);
         item.appendChild(el("div", "meta", bits.join(" · ")));
         var extra = el("div", "links");
         add(extra, p.branch ? span(p.branch) : null,

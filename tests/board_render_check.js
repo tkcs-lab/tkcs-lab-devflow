@@ -57,6 +57,12 @@ async function check(browser, file, scheme) {
   assert.deepStrictEqual(silent, ["f-running-silent"], label + "silent badge");
   assert.ok((await page.textContent("body")).includes("Hidden: 2"), label + "Hidden: 2");
 
+  // Drift indicator on the chips: count only, no path.
+  const drift = await page.evaluate(() =>
+    Array.from(document.querySelectorAll(".chip .drift")).map((n) => n.textContent));
+  assert.deepStrictEqual(drift, ["· scope ?", "· drift 3"], label + "drift indicators");
+  assert.ok(!(await page.innerText("main")).includes("src/shared.py"), label + "no paths on the board");
+
   // The per-project detail opens on tap and shows the phases.
   await page.click('[data-project="f-running-ok"] > summary');
   assert.ok(await page.isVisible('[data-project="f-running-ok"] .detail'), label + "detail opens");

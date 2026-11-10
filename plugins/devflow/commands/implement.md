@@ -101,7 +101,7 @@ each, short and with exactly these texts (a failed comment is noted once and the
 
 - `Implementation started on <feature_branch>.` after the `manual_before` confirmation and the
   branch push.
-- `Phase <phase id> merged.` after each Merge (section 4, step 5).
+- `Phase <phase id> merged.` after each Merge (section 4, step 6).
 - `Waiting for you: <needs_you_reason>.` each time `needs_you` goes from false to true.
 - `Phase <phase id> failed after retry: <short cause>.` when a phase fails after its retry.
 - `Final review: approve.` or `Final review: changes (<n> blocking).` when a final review ends.
@@ -111,7 +111,7 @@ Every post ends with the attribution footer the session rules require; the exact
 it. Without `tracking_issue` none of this happens: no event comments and no `Closes` lines.
 
 A phase is **ready** when every phase in its `depends_on` is `merged`, and, if any of those
-phases is marked `human_gate: true`, the user has approved it (see "Merge" step 6 below). Start every ready phase at
+phases is marked `human_gate: true`, the user has approved it (see "Merge" step 7 below). Start every ready phase at
 once, up to `max_parallel` (manifest, default 2). Phases in the same wave touch different files by
 design. If a merge conflicts anyway, "Waiting, collecting and merging" below handles it.
 
@@ -206,33 +206,59 @@ On each check-in, for each `running` phase, call `get_session`:
    touch files other phases own, has it disabled or
    skipped a test, has it deleted an `xfail` that belongs to a different phase? Anything wrong
    goes back to the child, as above.
-3. `git checkout <feature_branch> && git merge --no-ff origin/<phase branch>` with the message
+3. **Scope check (monitoring only, never a gate).** Before the merge, with `<feature_branch>` checked
+   out, run (the plan file is the one saved in section 0; save it again if the session restarted;
+   `<results>` is `scope-results.json` in your scratchpad directory):
+
+   ```
+   python3 <devflow root>/scripts/scope_check.py check --plan <plan file> --phase <phase id> \
+     --base <feature_branch> --head origin/<phase branch> --profile .claude/toolkit.yaml \
+     --plan-slug <plan slug> --feature <feature_branch> --results <results>
+   ```
+
+   It compares the files the phase branch changed since its merge base with `<feature_branch>` against
+   the phase's `touches` (renames count as the old path deleted and the new path added), with the same
+   glob matching as `validate_manifest.py`. A path no `touches` entry of this phase names, and that no
+   scope ignore glob names, is **out of scope**; it is a **collision** when another phase's `touches`
+   names it. The changelog file (`docs.changelog.file`) is always ignored, because the worker brief
+   demands that line from every phase. It reads paths only, never file contents, diffs or commit
+   messages, and it always exits 0: when the check itself fails it records `unavailable` with a short
+   reason. A phase whose `Plan-Phase` trailer is already in the feature branch (a resumed run) is
+   reported `skipped` and not checked again. For a fix session or a `-rev<n>` session pass the original
+   phase's id as `--phase` and the session's own name as `--label` (`fix-<n>`, `<phase id>-rev<n>`).
+
+   The result is **never a reason to hold the merge back**: carry on with step 4 whatever it says. Add
+   one line to the ledger (`<phase id>: scope n out of scope, m collisions`, or `scope check
+   unavailable`, or `scope none`). Out-of-scope paths are not a hard stop either: the guardrail hooks
+   own the hard-stop list (workflow files, secrets, protected paths), and this command does not repeat
+   it. Step 2's adversarial review stays as it is.
+4. `git checkout <feature_branch> && git merge --no-ff origin/<phase branch>` with the message
    `Merge <plan slug> <phase id>: <title>` and the trailer `Plan-Phase: <plan slug>/<phase id>`.
    - **Conflict:** resolve it yourself only when it is mechanical (both sides added to the same
      list, or adjacent edits). Regenerate lockfiles and generated files with the repo's tools
      (the must-read docs say which), never by hand-editing. If a conflict is
      semantic, abort the merge and start a short session on the phase branch whose brief is "merge
      `<feature_branch>` into this branch and resolve the conflict"; then merge again.
-4. Verify **after the merge**, on the feature branch: the fast checks, then the manifest's
+5. Verify **after the merge**, on the feature branch: the fast checks, then the manifest's
    `verify_after_merge` commands. An entry of the form `dispatch <workflow>` is not a shell
    command: dispatch that workflow against the feature branch (GitHub MCP `actions_run_trigger`),
    wait for the run, and treat a red run like any other failed check. If anything is red, `git merge --abort` is no longer possible, so revert the merge commit
    (`git revert -m 1`), push, send the failure back to the phase, and mark the phase `running`
    again.
-5. Push the feature branch. Mark the phase `merged`, post the comment `Phase <phase id> merged.`
+6. Push the feature branch. Mark the phase `merged`, post the comment `Phase <phase id> merged.`
    on the tracking issue (if any), and
    `archive_session` the child. If the manifest has `screenshots_after_merge`, run it and send the
    user the images (`SendUserFile`) with a one-line caption naming the phase, so they can watch
    the result take shape and object early.
    Append the phase branch to the ledger list `Branches left on origin`.
-6. **Human gate.** If the phase is marked `human_gate: true`, stop scheduling. Send the user the
+7. **Human gate.** If the phase is marked `human_gate: true`, stop scheduling. Send the user the
    phase's review material (its screenshots and its `PHASE-REPORT`), and ask one question:
    approve, or change what. Do not arm a check-in while you wait for their answer; the reply
    wakes you. On approval, record it in the ledger and continue. On requested changes, start a
    follow-up session on a fresh `<feature_branch>--<phase id>-rev<n>` branch cut from the
    feature branch, whose brief is the user's feedback verbatim plus the phase's original brief.
    Merge it the same way, and gate again.
-7. Start any phases that just became ready.
+8. Start any phases that just became ready.
 
 ## 5. Final review (Opus)
 
@@ -275,7 +301,12 @@ the PR body.
 
 ## 6. Finishing
 
-1. Run the full `/dod` on the feature branch.
+1. Run the full `/dod` on the feature branch. Then settle what became of each scope drift:
+   `scope_check.py disposition --results <results> --base origin/<main> --head <feature_branch>` marks each recorded
+   out-of-scope path **accepted** while it is still in the feature branch's final diff against
+   `<main>` (`git diff --name-only origin/<main>...HEAD`), and a phase **reverted** (or
+   **partly reverted**) when a later commit removed all (or some) of them. It changes only the results
+   file, and a failure leaves them as they were.
 2. Check the manifest's `final_checks` (for example: no expected-failure marker left that this plan
    added, and the plan document is deleted, with its decisions extracted into ADRs when the
    profile has `docs.adr_dir`).
@@ -283,7 +314,9 @@ the PR body.
    repo has one. The body begins with one line `Closes #<tracking_issue>` and one more `Closes #<n>` line for each entry
    of the manifest's `closes`, before the phase list (no such lines without `tracking_issue`). It lists each phase with its merge commit, the combined acceptance
    checklist, the final review's verdict and its non-blocking findings, every out-of-scope
-   finding the children reported, and a **Manual verification** section: each `manual_after`
+   finding the children reported, a **Scope** section (the output of
+   `scope_check.py section --results <results>`, pasted as is: per phase the out-of-scope paths and collisions or `none`, at most 20
+   paths each, then `and n more`; paths only), and a **Manual verification** section: each `manual_after`
    item as an unchecked box, with the `manual_steps_artifact` link.
    After opening it, post `PR opened: <url>.` on the tracking issue (if any).
    The body also has a section `## Branches left on origin` listing that ledger list, and the
@@ -317,6 +350,14 @@ board error never stops the run. `/implement` writes a record as follows.
 - `status` follows the field rules of brief section 4 (`starting`, `running`, `waiting_user`,
   `reviewing`, `pr_open`, `done`, `failed`); `needs_you` is true exactly when you have asked the owner
   something or stopped on a failure, with a one-line reason.
+- Each phase item gets the optional field `scope` at its Merge (step 3 of section 4):
+  `scope_check.py record --results <results> --label <phase id>` prints it; paste that object as is. It
+  is `check`, `in_scope`, `out_of_scope_count`, `collision_count`, `paths` (at most 20) and
+  `disposition`; `check: unavailable` when the check failed, and no `scope` field when it printed
+  `null` (skipped on a resumed run). After the dispositions are settled (Finishing, step 1) write the
+  field again. It holds counts and paths only: never file contents, diffs or commit messages. The board
+  record is overwritten, so the durable history is the pull request's **Scope** section, and a fix or
+  `-rev` session's drift appears there under its own label only.
 - `pr` is filled when the pull request is opened and kept current afterwards.
 - `next_check_at` equals the time of the timer you have armed, or `null` when none is armed.
 - `updated_at` is set on every write.

@@ -40,9 +40,29 @@ def _static_prefix(pattern: str) -> str:
     return pattern[:cut]
 
 
+def _norm(path: str) -> str:
+    return path.strip().removeprefix("./")
+
+
+def path_matches(path: str, pattern: str) -> bool:
+    """True when the file `path` is named by one `touches` entry.
+
+    The one glob semantics of the toolkit (the overlap check below and scope_check.py share it):
+    an entry is a literal path, a directory prefix ending in '/', or an fnmatch glob. In a glob
+    `*` and `**` both match across '/', so `src/**/x.py` needs at least one directory between
+    `src/` and `x.py`.
+    """
+    path, pattern = _norm(path), _norm(pattern)
+    if path == pattern:
+        return True
+    if any(c in pattern for c in WILDCARDS):
+        return fnmatch.fnmatchcase(path, pattern)
+    return pattern.endswith("/") and path.startswith(pattern)
+
+
 def paths_overlap(a: str, b: str) -> bool:
     """True when two `touches` entries could name the same file."""
-    a, b = a.strip().removeprefix("./"), b.strip().removeprefix("./")
+    a, b = _norm(a), _norm(b)
     if a == b:
         return True
     a_glob, b_glob = any(c in a for c in WILDCARDS), any(c in b for c in WILDCARDS)
@@ -50,10 +70,10 @@ def paths_overlap(a: str, b: str) -> bool:
         pa, pb = _static_prefix(a), _static_prefix(b)
         return pa.startswith(pb) or pb.startswith(pa)
     if a_glob:
-        return fnmatch.fnmatchcase(b, a)
+        return path_matches(b, a)
     if b_glob:
-        return fnmatch.fnmatchcase(a, b)
-    return (a.endswith("/") and b.startswith(a)) or (b.endswith("/") and a.startswith(b))
+        return path_matches(a, b)
+    return path_matches(b, a) or path_matches(a, b)
 
 
 def _reach(phases: dict[str, list[str]]) -> dict[str, set[str]]:

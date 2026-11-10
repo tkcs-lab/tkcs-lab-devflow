@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "kind": "run",
+  "command": null,
+  "project": "claude-toolkit",
+  "repo": "andras-tkcs/claude-toolkit",
+  "plan_slug": "example-plan",
+  "plan_url": "https://github.com/andras-tkcs/claude-toolkit/blob/plan/example-plan/docs/plans/example-plan-plan.md",
+  "feature_branch": "feature/example-plan",
+  "orchestrator_session": "session_01...",
+  "status": "running",
+  "needs_you": false,
+  "needs_you_reason": "",
+  "needs_you_since": null,
+  "phases": [
+    {
+      "id": "p1-wake",
+      "title": "Child tells parent when done",
+      "depends_on": [],
+      "complexity": "S",
+      "state": "merged",
+      "session": "session_01...",
+      "branch": "feature/example-plan--p1-wake",
+      "started_at": "2026-11-08T20:00:00Z",
+      "finished_at": "2026-11-08T20:06:10Z"
+    },
+    {
+      "id": "p2-api",
+      "title": "API",
+      "depends_on": [
+        "p1-wake"
+      ],
+      "complexity": "M",
+      "state": "merged",
+      "session": null,
+      "branch": null,
+      "started_at": null,
+      "finished_at": null,
+      "scope": {
+        "check": "ok",
+        "in_scope": 5,
+        "out_of_scope_count": 2,
+        "collision_count": 1,
+        "paths": [
+          "src/core.py",
+          "docs/extra.md"
+        ],
+        "disposition": "accepted"
+      }
+    },
+    {
+      "id": "p3-ui",
+      "title": "UI",
+      "depends_on": [
+        "p1-wake"
+      ],
+      "complexity": "S",
+      "state": "merged",
+      "session": null,
+      "branch": null,
+      "started_at": null,
+      "finished_at": null,
+      "scope": {
+        "check": "unavailable",
+        "in_scope": null,
+        "out_of_scope_count": null,
+        "collision_count": null,
+        "paths": [],
+        "disposition": null
+      }
+    }
+  ],
+  "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+  },
+  "last_event": "p1-wake merged",
+  "next_check_at": "2026-11-08T20:30:00Z",
+  "finished_at": null,
+  "updated_at": "2026-11-08T20:06:40Z"
+}
