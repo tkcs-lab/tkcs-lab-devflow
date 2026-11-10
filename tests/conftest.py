@@ -33,3 +33,24 @@ def vp():
 @pytest.fixture(scope="session")
 def ra():
     return _load("repo_admin")
+
+
+# ---- guardrail hooks -------------------------------------------------------------------------
+@pytest.fixture(scope="session")
+def feature_repo(tmp_path_factory):
+    """A git repo with a profile (main branch `main`), a local tag v1.0, checked out on feature/demo."""
+    from hooks_helpers import make_repo
+    return make_repo(tmp_path_factory.mktemp("feature"), "feature/demo")
+
+
+@pytest.fixture(scope="session")
+def main_repo(tmp_path_factory):
+    """The same repo state, checked out on `main`."""
+    from hooks_helpers import make_repo
+    return make_repo(tmp_path_factory.mktemp("onmain"), "main")
+
+
+@pytest.fixture()
+def fresh_repo(tmp_path):
+    from hooks_helpers import make_repo
+    return make_repo(tmp_path / "repo", "feature/demo")
