@@ -59,9 +59,34 @@
       "needs_you_since": null,
       "phases": [
         {
+          "id": "p0",
+          "title": "Phase zero",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "merged",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null,
+          "scope": {
+            "check": "ok",
+            "in_scope": 4,
+            "out_of_scope_count": 3,
+            "collision_count": 1,
+            "paths": [
+              "src/shared.py",
+              "docs/a.md",
+              "docs/b.md"
+            ],
+            "disposition": "accepted"
+          }
+        },
+        {
           "id": "p1",
           "title": "Phase one",
-          "depends_on": [],
+          "depends_on": [
+            "p0"
+          ],
           "complexity": "S",
           "state": "running",
           "session": null,
@@ -235,7 +260,15 @@
           "session": null,
           "branch": null,
           "started_at": null,
-          "finished_at": null
+          "finished_at": null,
+          "scope": {
+            "check": "unavailable",
+            "in_scope": null,
+            "out_of_scope_count": null,
+            "collision_count": null,
+            "paths": [],
+            "disposition": null
+          }
         }
       ],
       "pr": {

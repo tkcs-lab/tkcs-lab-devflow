@@ -61,6 +61,10 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 # status:               # optional. Where /implement writes its status record (the board URL printed by /board)
 #   board_url: https://claude.ai/artifact/...
 
+# scope:                 # optional: /implement reports files a phase changed outside its `touches`
+#   ignore:              # globs not counted as drift; default none. The changelog file is ignored on its own
+#     - "package-lock.json"   # example: a lockfile every phase may regenerate
+
 # project_steward: .claude/skills/steward/SKILL.md   # optional: project skill with policy that fits no key above
 
 # deps:                  # optional: /deps stops with a missing-key message when absent
@@ -85,3 +89,21 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 
 # land:                  # optional: /land works without it
 #   max_prs: 10            # 1..50
+
+# hooks:                 # optional: settings of the guardrail hooks the devflow plugin ships (docs/hooks.md).
+#                        # The values below are the defaults; with no `hooks` section all hooks but dod-gate are on.
+#   disable: []          # escape hatch: names of hooks to switch off here, any of
+#                        #   no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate
+#   protect_paths:       # paths protect-paths refuses to edit (replaces this default list when set)
+#     - .claude/toolkit.yaml
+#     - .env
+#     - ".env.*"
+#     - "*.lock"
+#     - package-lock.json
+#     - go.sum
+#     - ".github/workflows/**"
+#   protect_paths_allow: []   # exceptions, on top of .env.example / .env.sample / .env.template / .env.dist
+#                             # and the workflow files /land and repo-admin install
+#   dod_gate:
+#     enabled: false     # opt in: block stopping until verify.dod passes (not for the /implement orchestrator)
+#     max_attempts: 3    # after this many failed attempts the session may stop, and the user is told why

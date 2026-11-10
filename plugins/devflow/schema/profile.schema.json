@@ -132,6 +132,13 @@
       "additionalProperties": false,
       "properties": {"board_url": {"type": "string", "minLength": 1, "description": "URL of the published status board page; when unset, the environment variable DEVFLOW_BOARD_URL is used."}}
     },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ignore": {"$ref": "#/$defs/stringList", "description": "Globs of paths /implement does not count as scope drift, for files every phase may touch (lockfiles, generated files). Default: none. The changelog file (docs.changelog.file) is always ignored when the profile has docs.changelog."}
+      }
+    },
     "deps": {
       "type": "object",
       "additionalProperties": false,
@@ -191,6 +198,37 @@
       "additionalProperties": false,
       "properties": {
         "policy": {"type": "string", "minLength": 1, "description": "Path of the repo-admin policy file (schema/admin-policy.schema.json), relative to the repo root."}
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Settings of the guardrail hooks the devflow plugin ships (docs/hooks.md). Every key is optional; the hooks apply the defaults in 'x-hook-default' themselves, they are not part of --resolved.",
+      "properties": {
+        "disable": {
+          "type": "array",
+          "items": {"enum": ["no-merge", "no-force-push", "no-git-tag", "secret-scan", "protect-paths", "dod-gate"]},
+          "x-hook-default": [],
+          "description": "Escape hatch: names of hooks to switch off in this repository. Off by default (no hook is disabled)."
+        },
+        "protect_paths": {
+          "$ref": "#/$defs/stringList",
+          "x-hook-default": [".claude/toolkit.yaml", ".env", ".env.*", "*.lock", "package-lock.json", "go.sum", ".github/workflows/**"],
+          "description": "Globs of repo-relative paths protect-paths refuses to edit. A pattern without a slash matches the file name at any depth; ** crosses directories. A list here replaces the default."
+        },
+        "protect_paths_allow": {
+          "$ref": "#/$defs/stringList",
+          "x-hook-default": [],
+          "description": "Globs exempt from protect_paths, added to the built-in exceptions (.env.example, .env.sample, .env.template, .env.dist and the workflow files the toolkit's own commands install)."
+        },
+        "dod_gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {"type": "boolean", "x-hook-default": false, "description": "Opt in: block stopping until verify.dod passes."},
+            "max_attempts": {"type": "integer", "minimum": 1, "maximum": 10, "x-hook-default": 3, "description": "Failed attempts after which the gate lets the session stop and says why."}
+          }
+        }
       }
     },
     "project_steward": {"type": "string", "minLength": 1, "description": "Path to a project skill with policy that fits no other key."}
