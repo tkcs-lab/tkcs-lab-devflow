@@ -8,6 +8,9 @@ ROOT = Path(__file__).resolve().parent.parent
 DEVFLOW = ROOT / "plugins" / "devflow"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
+if str(ROOT) not in sys.path:  # the evals/ package (the eval harness lives outside the plugin)
+    sys.path.insert(0, str(ROOT))
+
 
 def _load(name: str):
     spec = importlib.util.spec_from_file_location(name, DEVFLOW / "scripts" / f"{name}.py")

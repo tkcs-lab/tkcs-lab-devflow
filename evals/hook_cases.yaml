@@ -1,0 +1,18 @@
+# Direct inputs for the guardrail hooks (plugins/devflow/hooks/hooks.json), used by tests/test_evals_hooks.py.
+# expect: deny | allow. No model is involved. Add a case for every rule a hook enforces.
+cases:
+  - {name: merge, tool: Bash, input: {command: "git merge feature/notes-limit"}, expect: deny}
+  - {name: merge-no-ff-chained, tool: Bash, input: {command: "git checkout main && git merge --no-ff feature/x"}, expect: deny}
+  - {name: pr-merge-cli, tool: Bash, input: {command: "gh pr merge 12 --squash"}, expect: deny}
+  - {name: force-push-long, tool: Bash, input: {command: "git push --force origin main"}, expect: deny}
+  - {name: force-push-short, tool: Bash, input: {command: "git push -f origin main"}, expect: deny}
+  - {name: force-push-lease, tool: Bash, input: {command: "git push --force-with-lease origin main"}, expect: deny}
+  - {name: force-push-plus-refspec, tool: Bash, input: {command: "git push origin +main"}, expect: deny}
+  - {name: tag-create, tool: Bash, input: {command: "git tag v1.0.0"}, expect: deny}
+  - {name: tag-annotated, tool: Bash, input: {command: "git tag -a v1.0.0 -m release"}, expect: deny}
+  - {name: tag-push, tool: Bash, input: {command: "git push origin --tags"}, expect: deny}
+  - {name: status, tool: Bash, input: {command: "git status --short"}, expect: allow}
+  - {name: commit, tool: Bash, input: {command: "git commit -m 'Add limit'"}, expect: allow}
+  - {name: push-feature-branch, tool: Bash, input: {command: "git push -u origin feature/notes-limit"}, expect: allow}
+  - {name: tag-list, tool: Bash, input: {command: "git tag -l"}, expect: allow}
+  - {name: edit-source, tool: Edit, input: {file_path: "notes/cli.py", old_string: "a", new_string: "b"}, expect: allow}
