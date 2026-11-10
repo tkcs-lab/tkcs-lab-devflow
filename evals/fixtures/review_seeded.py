@@ -43,8 +43,10 @@ def build(dest: Path, **params) -> dict:
         "main_branch": "main",
         "seeded": [
             {"id": "injection", "file": "notes/export.py", "class": "injection",
+             "file_aliases": ["export.py", "notes.export", "export.export", "export()"],
              "class_words": ["injection", "shell", "command execution", "os.system"]},
             {"id": "missing-test", "file": "notes/auth.py", "class": "missing-test",
+             "file_aliases": ["auth.py", "notes.auth", "auth.check_token", "test_auth"],
              "class_words": ["missing test", "missing: test", "no test", "untested", "not tested", "test coverage", "without a test", "not covered"]},
         ],
         # real but minor facts the fixture accepts as non-noise (matched by file)

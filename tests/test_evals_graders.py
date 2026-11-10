@@ -259,3 +259,21 @@ def test_seeded_finding_found_in_grouped_review():
 def test_same_review_file_on_two_refs_is_counted_once():
     c = ctx([("worktree", "docs/r-review.md", GROUPED), ("review/x", "docs/r-review.md", GROUPED)], expected=SEEDED)
     assert GRADERS["noise_count"](c).value == 1  # DOC-3 only; not 2
+
+
+ALIASED = {"seeded": [{"id": "missing-test", "file": "notes/auth.py", "file_aliases": ["notes.auth", "auth.check_token"],
+                       "class": "missing-test", "class_words": ["no test"]}]}
+
+
+def _review(title, where):
+    return f"## Findings to fix\n\n### TST-3 \u00b7 medium \u00b7 {title}\n- **Where:** {where}\n"
+
+
+def test_seeded_finding_found_by_module_reference():
+    c = ctx([("r", "docs/x-review.md", _review("`auth.check_token` has no test", "missing: tests/test_auth.py"))], expected=ALIASED)
+    assert GRADERS["seeded_finding_found"](c).passed
+
+
+def test_bare_word_auth_is_not_the_seeded_file():
+    c = ctx([("r", "docs/x-review.md", _review("The auth flow has no test", "missing: tests/"))], expected=ALIASED)
+    assert not GRADERS["seeded_finding_found"](c).passed

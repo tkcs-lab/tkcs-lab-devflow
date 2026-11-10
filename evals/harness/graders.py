@@ -514,7 +514,8 @@ def seeded_finding_found(ctx: GradeContext) -> GradeResult:
     missed = []
     for s in seeded:
         words = [w.lower() for w in s["class_words"]]
-        hit = any(s["file"] in f["text"] and any(w in f["text"].lower() for w in words) for f in findings)
+        names = [s["file"], *s.get("file_aliases", [])]  # the file path, or a module reference to it
+        hit = any(any(n in f["text"] for n in names) and any(w in f["text"].lower() for w in words) for f in findings)
         if not hit:
             missed.append(f"{s['id']} ({s['file']})")
     if missed:
