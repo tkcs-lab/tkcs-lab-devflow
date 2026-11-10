@@ -169,6 +169,7 @@ def test_results_jsonl_roundtrip_and_aggregate(tmp_path):
     agg = aggregate(recs)["make-plan-large"]
     assert agg["runs"] == 3 and agg["passes"] == 1 and agg["pass_rate"] == pytest.approx(1 / 3, abs=1e-3)
     assert agg["graders"]["manifest_valid"] == {"runs": 3, "passes": 1}
+    assert agg["models"] == ["stub-model"]
     for r in recs:
         for key in ("task", "repeat", "plugin_sha", "command_hashes", "model", "graders", "turns", "tokens", "cost_usd", "duration_s"):
             assert key in r
