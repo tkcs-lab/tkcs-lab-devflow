@@ -1,15 +1,14 @@
 """Hook-only tests: feed the guardrail hook scripts directly, no model call.
 
-The harness (evals/harness/hookcheck.py) is tested against throwaway hooks now. The cases in
-evals/hook_cases.yaml run against plugins/devflow/hooks/hooks.json as soon as the guardrail hooks exist
-(until then that test is skipped, and the guardrail-* tasks are skipped with the same reason).
+The harness (evals/harness/hookcheck.py) is tested against throwaway hooks, and the cases in
+evals/hook_cases.yaml run against plugins/devflow/hooks/hooks.json (skipped if a checkout has no hooks).
 """
 import json
 import stat
 
 import pytest
 
-from evals.harness.hookcheck import CASES, HOOKS_JSON, decide, load_cases, pretooluse_hooks
+from evals.harness.hookcheck import HOOKS_JSON, decide, load_cases, pretooluse_hooks
 
 
 def make_plugin(tmp_path, script: str, matcher="Bash"):
@@ -60,15 +59,31 @@ def test_case_file_is_well_formed():
 
 
 def test_case_file_agrees_with_the_transcript_classifier():
-    """The same commands the hook must deny are the ones the forbidden_ops graders look for."""
+    """For the three operations the forbidden_ops graders look for, the classifier and the hook cases agree."""
     from evals.harness.graders import classify_command
     for c in load_cases():
-        if c["tool"] == "Bash":
-            assert bool(classify_command(c["input"]["command"])) == (c["expect"] == "deny"), c["name"]
+        cmd = c["input"].get("command", "")
+        if c["tool"] == "Bash" and cmd.startswith("git") and ".env" not in cmd:
+            assert bool(classify_command(cmd)) == (c["expect"] == "deny"), c["name"]
 
 
-@pytest.mark.skipif(not HOOKS_JSON.exists(), reason="plugins/devflow/hooks/hooks.json not in this checkout (guardrail hooks plan not merged)")
-@pytest.mark.parametrize("case", load_cases() if CASES.exists() else [], ids=lambda c: c["name"])
-def test_real_hooks(case, tmp_path):
-    verdict, reason = decide(HOOKS_JSON, case["tool"], case["input"], tmp_path)
+GH_TOKEN = "ghp_" + "Ab3dE6gH9jK2mN5pQ8sT1vW4yZ7cF0hJ3lM6"  # built here, token-shaped, not a credential
+
+
+@pytest.fixture(scope="module")
+def fixture_repo(tmp_path_factory):
+    """The cwd of the hooks: a repository with the tiny_app profile (main branch `main`)."""
+    from evals.fixtures import builder
+    d = tmp_path_factory.mktemp("hookrepo") / "r"
+    builder("tiny_app").build(d)
+    return d
+
+
+@pytest.mark.skipif(not HOOKS_JSON.exists(), reason="plugins/devflow/hooks/hooks.json is not in this checkout")
+@pytest.mark.parametrize("case", load_cases(), ids=lambda c: c["name"])
+def test_real_hooks(case, fixture_repo):
+    tool_input = json.loads(json.dumps(case["input"]).replace("@@GH_TOKEN@@", GH_TOKEN))
+    verdict, reason = decide(HOOKS_JSON, case["tool"], tool_input, fixture_repo)
     assert verdict == case["expect"], reason
+    if verdict == "deny":
+        assert GH_TOKEN not in reason  # the hook must not echo a secret back

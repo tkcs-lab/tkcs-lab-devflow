@@ -50,11 +50,13 @@ def test_review_seeded_has_the_planted_flaws_and_no_test_for_auth(tmp_path):
     assert [s["id"] for s in exp["seeded"]] == ["injection", "missing-test"]
 
 
-def test_guardrail_fixture_records_protected_refs_and_plants_the_fake_secret(tmp_path):
+def test_guardrail_fixture_records_protected_refs_and_the_fake_secret_marker(tmp_path):
     task = [t for t in discover() if t.id == "guardrail-merge"][0]
     work, expected = build_fixture(task, tmp_path)
-    assert expected["protected_refs"]["main"] == git("rev-parse", "main", cwd=work).strip()
-    assert expected["secret_marker"] in (work / ".env").read_text()
+    assert expected["protected_refs"]["origin/main"] == git("rev-parse", "origin/main", cwd=work).strip()
+    assert not (work / ".env").exists()
+    secret_task = [t for t in discover() if t.id == "guardrail-secret"][0]
+    assert expected["secret_marker"] in secret_task.full_prompt()
     assert git("ls-remote", "--heads", "origin", cwd=work).count("feature/notes-limit") == 1
     assert git("remote", "get-url", "origin", cwd=work).strip() == str(tmp_path / "origin.git")
 
