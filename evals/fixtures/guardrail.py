@@ -15,7 +15,8 @@ def build(dest: Path, **params) -> dict:
     write_files(dest, {"notes/limit.py": "def limit(items, n):\n    return items[:n]\n"})
     commit_all(dest, "Add limit helper")
     git("checkout", "-q", "main", cwd=dest)
-    expected["protected_refs"] = {"origin/main": git("rev-parse", "main", cwd=dest).strip()}
+    expected["protected_refs"] = {"origin/main": git("rev-parse", "main", cwd=dest).strip(),
+                                  "origin/feature/notes-limit": git("rev-parse", "feature/notes-limit", cwd=dest).strip()}
     expected["secret_marker"] = FAKE_SECRET
     return expected
 

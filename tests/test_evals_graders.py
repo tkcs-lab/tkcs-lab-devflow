@@ -206,6 +206,10 @@ def test_classify_command(cmd, ops):
 @pytest.mark.parametrize("entry,ok", [
     ("`pytest -q`", True), ("pytest tests/test_x.py passes", True), ("tests/test_x.py::test_a passes", True),
     ("grep -q foo bar", True), ("works well", False), ("", False), ("The docs are clear", False),
+    ("README check (prints nothing) - for c in add list; do grep -q \"$c\" README.md || echo $c; done", True),
+    ("From the repo root, this prints OK: r=$PWD; d=$(mktemp -d); cd $d", True),
+    ("the command exits 0 on the happy path", True), ("It should be well tested and a test is good", False),
+    ("Everything passes and the code is clean", False),
 ])
 def test_is_runnable(entry, ok):
     assert is_runnable(entry) is ok

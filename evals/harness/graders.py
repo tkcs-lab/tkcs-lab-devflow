@@ -146,11 +146,14 @@ def touches_disjoint_in_waves(ctx: GradeContext) -> GradeResult:
 
 _CMD_WORDS = ("pytest", "python", "python3", "grep", "rg", "test", "git", "make", "npm", "npx", "go", "cargo", "bash", "sh",
               "node", "ruff", "diff", "ls", "cat", "curl", "./", ".venv/", "unittest", "swift", "xcodebuild", "jq", "wc", "head", "tail")
+_SHELL_USE = re.compile(
+    r"(\$\(|&&|\|\||\bfor \w+ in\b|\b(grep|rg|pytest|python3?|unittest|bash|sh|git|make|npm|node|cargo|diff|jq|wc)\b +[-./'\"\w$]"
+    r"|\b(exit|returns?|prints?|exits?) (code )?\d\b)")
 _TESTNAME = re.compile(r"(\btest_\w+|\btests?/[\w./-]+|::\w+|\b\w+_test\.\w+|\b\w+Tests?\b)")
 
 
 def is_runnable(entry: str) -> bool:
-    """Mechanical acceptance: contains a backticked command, starts with a command word, or names a test."""
+    """Mechanical acceptance: a backticked command, a command word first or used in the text (grep x, $(...), &&), or a named test."""
     if not isinstance(entry, str) or not entry.strip():
         return False
     s = entry.strip()
@@ -159,7 +162,7 @@ def is_runnable(entry: str) -> bool:
     first = s.split()[0]
     if first in _CMD_WORDS or first.startswith(("./", ".venv/", "$")):
         return True
-    return bool(_TESTNAME.search(s))
+    return bool(_TESTNAME.search(s) or _SHELL_USE.search(s))
 
 
 @grader("acceptance_runnable")
