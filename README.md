@@ -41,6 +41,25 @@ Everything specific to your project lives in one file, `.claude/toolkit.yaml` (d
 rules, verify commands, CI workflows a session may dispatch, stacks, models). The commands contain no
 project facts and stop with a message naming the missing key.
 
+## Guardrails
+
+The `devflow` plugin ships Claude Code hooks (`plugins/devflow/hooks/`) that make the "never do X" rules
+deterministic. Every repository that enables the plugin gets them without a per-repository copy; project facts
+come from `.claude/toolkit.yaml`.
+
+| Hook | Denies |
+|---|---|
+| `no-merge` | merging or approving a pull request, enabling auto-merge, any push to the main branch (local `git merge` stays allowed) |
+| `no-force-push` | force pushes and deleting a branch by push |
+| `no-git-tag` | creating, moving, deleting or pushing tags (reading them stays allowed) |
+| `secret-scan` | writing a file with something that looks like a credential |
+| `protect-paths` | editing the profile, `.env*`, lockfiles and workflow files (the list is configurable) |
+| `dod-gate` | stopping while the definition of done is red; opt-in, loop-free, not for the `/implement` orchestrator |
+
+A hook that denies tells the agent what to do instead. `hooks.disable` in the profile switches a named hook off
+for one repository. **Branch protection and CI remain the hard enforcement**: the hooks are the fast in-loop layer
+and do not cover sessions without the plugin. See [docs/hooks.md](docs/hooks.md).
+
 ## Use it in a project
 
 1. Copy [`templates/toolkit.yaml`](templates/toolkit.yaml) to `.claude/toolkit.yaml` and fill it in.
@@ -53,10 +72,10 @@ project facts and stop with a message naming the missing key.
 
 | Path | |
 |---|---|
-| `plugins/devflow` | the eight commands, the `project-profile`, `pr-steward`, `status-board`, `repo-admin`, `review-checklist`, `secure-code-review`, `test-review` and `docs-review` skills, the scripts in `scripts/` (manifest, profile and status-record validators, `review_decisions.py` with its page template, `build_board.py`, `board_stale.py`, `pick_release.py`, `upstream_sync.py`, `land_order.py`, `repo_admin.py`, `scope_check.py`), `schema/profile.schema.json`, `schema/status-record.schema.json`, `schema/admin-policy.schema.json`, `board/` (the status board page) and `templates/` (the `/land` and release workflows, the starter admin policy) |
+| `plugins/devflow` | the eight commands, the `project-profile`, `pr-steward`, `status-board`, `repo-admin`, `review-checklist`, `secure-code-review`, `test-review` and `docs-review` skills, the scripts in `scripts/` (manifest, profile and status-record validators, `review_decisions.py` with its page template, `build_board.py`, `board_stale.py`, `pick_release.py`, `upstream_sync.py`, `land_order.py`, `repo_admin.py`, `scope_check.py`), `schema/profile.schema.json`, `schema/status-record.schema.json`, `schema/admin-policy.schema.json`, `hooks/` (the guardrail hooks and `hooks.json`), `board/` (the status board page) and `templates/` (the `/land` and release workflows, the starter admin policy) |
 | `plugins/stack-python`, `plugins/stack-go`, `plugins/stack-swift`, `plugins/stack-ipados` | stack skills the profile selects (`ipados` goes with `swift`) |
 | `templates/toolkit.yaml` | starter profile |
-| `docs/` | profile reference, delivery, design, [the review flow](docs/review.md), [the maintenance commands and the board](docs/maintenance.md), [scope-drift monitoring in `/implement`](docs/scope-drift.md), [auditing and updating organisation and repository settings](docs/admin.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |
+| `docs/` | profile reference, delivery, design, [the guardrail hooks](docs/hooks.md), [the review flow](docs/review.md), [the maintenance commands and the board](docs/maintenance.md), [scope-drift monitoring in `/implement`](docs/scope-drift.md), [auditing and updating organisation and repository settings](docs/admin.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |
 | `tests/` | `python -m pytest tests -q` (Python 3.11+, PyYAML) |
 
 There is no server and nothing long-running: everything runs inside Claude Code sessions.
