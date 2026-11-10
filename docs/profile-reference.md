@@ -52,6 +52,7 @@ Rules:
 | `upstream.version_file` | **yes** (in `upstream`) | File in the fork that records the synced tag |
 | `land.max_prs` | no | Integer 1..50: most pull requests one `/land` run orders. `/land` works without the `land` section |
 | `admin.policy` | **yes** (in `admin`) | Path, relative to the repo root, of the policy file the `repo-admin` skill audits and applies (see [admin.md](admin.md)). The file must exist. The skill needs the `admin` section and stops with a missing-key message when it is absent |
+| `scope.ignore` | no | List of globs. `/implement` checks at each merge which files the phase changed outside its `touches` and reports them (see [scope-drift.md](scope-drift.md)); paths matching these globs are not counted. Default: none. The changelog file (`docs.changelog.file`) is always ignored when the profile has `docs.changelog`. Same glob semantics as `touches` (`*` and `**` match across `/`; an entry ending in `/` is a directory). The check never blocks a merge |
 | `project_steward` | no | Path to a project skill or doc with policy that fits no other key; read after `pr-steward` and wins where more specific |
 
 ### Command entries

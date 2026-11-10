@@ -32,4 +32,14 @@ for (const doc of docs) {
 }
 assert.strictEqual(docs.filter((d) => rules.section(d.data, NOW) === "hidden").length, 2);
 assert.strictEqual(rules.elapsed("2026-11-09T11:58:30Z", NOW), 1);
+
+// Drift indicator: count only, nothing for a clean or unrecorded phase.
+const okRec = docs.find((d) => d.data.project === "f-running-ok").data;
+assert.deepStrictEqual(rules.drift(okRec.phases[0]), {
+  text: "drift 3", title: "3 files outside touches, 1 in another phase's touches", level: "collision" });
+assert.strictEqual(rules.drift(okRec.phases[1]), null);
+assert.strictEqual(rules.drift({ scope: { check: "unavailable", out_of_scope_count: null } }).text, "scope ?");
+assert.strictEqual(rules.drift({ scope: { check: "ok", out_of_scope_count: 0 } }), null);
+assert.strictEqual(rules.drift({ scope: { check: "ok", out_of_scope_count: 1, collision_count: 0, disposition: "reverted" } }).title,
+  "1 file outside touches; reverted later");
 console.log("OK");

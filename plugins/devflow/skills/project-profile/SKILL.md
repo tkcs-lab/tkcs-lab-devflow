@@ -68,6 +68,7 @@ rules follow from that:
 | `stacks` | Which `stack-*` skills to load |
 | `models` | `planner`, `orchestrator` (documentation of intent; the command front matter fixes them), `worker`, `reviewer` (used in `create_session`) |
 | `status.board_url` | Where the `status-board` skill writes status records; unset falls back to `DEVFLOW_BOARD_URL` |
+| `scope.ignore` | Globs `/implement` does not count as scope drift (default none; the changelog file is always ignored) |
 | `project_steward` | A project skill or doc with policy that fits none of the keys |
 
 A command entry in `verify.*` is a string or `{run, cwd?, narrow?, skip_when_narrowed?}`; a string

@@ -20,8 +20,14 @@ FIELDS = (
     "orchestrator_session", "status", "needs_you", "needs_you_reason", "needs_you_since",
     "phases", "pr", "last_event", "next_check_at", "finished_at", "updated_at",
 )
-ITEM_FIELDS = ("id", "title", "depends_on", "complexity", "state", "session", "branch", "started_at", "finished_at", "pr")
-ITEM_REQUIRED = ITEM_FIELDS[:-1]
+ITEM_FIELDS = ("id", "title", "depends_on", "complexity", "state", "session", "branch", "started_at", "finished_at", "pr", "scope")
+ITEM_REQUIRED = ITEM_FIELDS[:-2]
+SCOPE_FIELDS = ("check", "in_scope", "out_of_scope_count", "collision_count", "paths", "disposition")
+SCOPE_CHECKS = ("ok", "unavailable")
+SCOPE_DISPOSITIONS = ("accepted", "partly_reverted", "reverted")
+SCOPE_PATHS_MAX = 20
+SCOPE_PATH_MAX_LEN = 300
+CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 PR_FIELDS = ("number", "url", "state", "ci", "awaiting")
 
 KINDS = ("run", "maintenance")
@@ -58,6 +64,62 @@ def _nonempty_str(value) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def _count(value) -> bool:
+    return _is_int(value) and value >= 0
+
+
+def _check_scope(scope, where: str, kind, errors: list[str]) -> None:
+    """The optional per-phase scope-drift field: counts and paths only."""
+    where = f"{where} field 'scope'"
+    if kind == "maintenance":
+        errors.append(f"{where} is only allowed in a run record")
+        return
+    if not isinstance(scope, dict):
+        errors.append(f"{where} must be an object")
+        return
+    for key in SCOPE_FIELDS:
+        if key not in scope:
+            errors.append(f"{where} is missing '{key}'")
+    for key in scope:
+        if key not in SCOPE_FIELDS:
+            errors.append(f"{where} has unknown field '{key}'")
+    check = scope.get("check")
+    if "check" in scope and check not in SCOPE_CHECKS:
+        errors.append(f"{where} field 'check' must be 'ok' or 'unavailable'")
+    counts = [scope.get(k) for k in ("in_scope", "out_of_scope_count", "collision_count")]
+    for key in ("in_scope", "out_of_scope_count", "collision_count"):
+        if key in scope and scope[key] is not None and not _count(scope[key]):
+            errors.append(f"{where} field '{key}' must be a non-negative integer or null")
+    paths = scope.get("paths")
+    if "paths" in scope:
+        if not isinstance(paths, list):
+            errors.append(f"{where} field 'paths' must be a list")
+            paths = None
+        elif len(paths) > SCOPE_PATHS_MAX:
+            errors.append(f"{where} field 'paths' holds {len(paths)} paths, at most {SCOPE_PATHS_MAX} are allowed")
+        for path in paths or []:
+            if not (isinstance(path, str) and path):
+                errors.append(f"{where} field 'paths' must hold non-empty strings")
+            elif len(path) > SCOPE_PATH_MAX_LEN or CONTROL.search(path) or path.startswith("/") or ".." in path.split("/"):
+                errors.append(f"{where} field 'paths' must hold repository-relative file paths (no control characters, no '..', at most {SCOPE_PATH_MAX_LEN} characters)")
+    if "disposition" in scope and scope["disposition"] is not None and scope["disposition"] not in SCOPE_DISPOSITIONS:
+        errors.append(f"{where} field 'disposition' must be null, accepted, partly_reverted or reverted")
+    if check == "unavailable":
+        if any(c is not None for c in counts) or paths or scope.get("disposition") is not None:
+            errors.append(f"{where} must have null counts, no paths and a null disposition when 'check' is 'unavailable'")
+    elif check == "ok":
+        if any(c is None for c in counts):
+            errors.append(f"{where} needs all three counts when 'check' is 'ok'")
+        elif all(_count(c) for c in counts):
+            _, out, collisions = counts
+            if collisions > out:
+                errors.append(f"{where} field 'collision_count' must not exceed 'out_of_scope_count'")
+            if isinstance(paths, list) and len(paths) > out:
+                errors.append(f"{where} field 'paths' must not hold more paths than 'out_of_scope_count'")
+            if (out == 0) != (scope.get("disposition") is None) and "disposition" in scope:
+                errors.append(f"{where} field 'disposition' must be null exactly when 'out_of_scope_count' is 0")
+
+
 def _check_item(item, n: int, kind, errors: list[str]) -> None:
     where = f"'phases[{n}]'"
     if not isinstance(item, dict):
@@ -88,6 +150,8 @@ def _check_item(item, n: int, kind, errors: list[str]) -> None:
             errors.append(f"{where} field '{key}' must be null or a timestamp YYYY-MM-DDTHH:MM:SSZ")
     if item.get("pr") is not None and not (_is_int(item["pr"]) and item["pr"] > 0):
         errors.append(f"{where} field 'pr' must be a positive integer or null")
+    if "scope" in item:
+        _check_scope(item["scope"], where, kind, errors)
     if kind == "maintenance":
         if item.get("depends_on") not in ([], None):
             errors.append(f"{where} field 'depends_on' must be empty for a maintenance record")
