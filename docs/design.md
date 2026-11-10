@@ -294,3 +294,14 @@ merges. `/make-plan` and `/implement` now keep a tracking issue for every plan. 
 only. How to run and schedule the commands, the profile sections, the board and the secret and setting
 `/land` needs are in [maintenance.md](maintenance.md); what a cloud session can and cannot do, which
 shaped the design, is recorded in [design/maintenance-spike.md](design/maintenance-spike.md).
+
+## 11. git-ops
+
+A cloud session cannot push a tag or delete a remote branch: the session's git proxy refuses both. The
+toolkit therefore ships a template for a central workflow, `devflow-git-ops`, a skill (`git-ops`) that
+starts it, and the profile key `git_ops.repo` that names the central repository. The running instance
+lives in a private repository of its own, not in this one (D1), so that the repository holding a token
+with write access to other repositories contains only the workflow and its allowlist. The token is an
+environment secret limited to the default branch (D7), and the workflow starts as a dry run and checks an
+allowlist and a set of guards. Rejected: a copy of the workflow in every repository, and for now a GitHub
+App token instead of a fine-grained one. Setup, use and guards are in [git-ops.md](git-ops.md).
