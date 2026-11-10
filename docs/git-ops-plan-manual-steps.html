@@ -194,11 +194,11 @@
           <p class="see"><b>You should see:</b> both repositories in the session.</p></div></li>
         <li><input type="checkbox" id="s4-2" data-step><div class="step-body">
           <p>Send this message. It names the tool and the inputs because the skill is not installed until the toolkit pull request is merged and the plugin updated.</p>
-          <div class="code"><pre>With the GitHub tool actions_run_trigger, run workflow devflow-git-ops.yml on ref main in tkcs-lab/git-ops with inputs repo=tkcs-lab/claude-toolkit, action=create-tag, name=git-ops-test-1, dry_run=true. Then read the run and show me its summary.</pre><button type="button" data-copy>Copy</button></div>
-          <p class="see"><b>You should see:</b> a run titled <code>git-ops create-tag git-ops-test-1 in tkcs-lab/claude-toolkit (dry run)</code> that succeeds, with the summary <code>Dry run: would create annotated tag git-ops-test-1</code>.</p></div></li>
+          <div class="code"><pre>With the GitHub tool actions_run_trigger, run workflow devflow-git-ops.yml on ref main in tkcs-lab/git-ops with inputs repo=tkcs-lab/claude-toolkit, action=create-tag, name=v0.0.0-gitopstest.1, dry_run=true. Then read the run and show me its summary.</pre><button type="button" data-copy>Copy</button></div>
+          <p class="see"><b>You should see:</b> a run titled <code>git-ops create-tag v0.0.0-gitopstest.1 in tkcs-lab/claude-toolkit (dry run)</code> that succeeds, with the summary <code>Dry run: would create annotated tag v0.0.0-gitopstest.1</code>.</p></div></li>
         <li><input type="checkbox" id="s4-3" data-step><div class="step-body">
           <p>Send the same message with <code>dry_run=false</code>.</p>
-          <p class="see"><b>You should see:</b> the summary <code>Created annotated tag git-ops-test-1</code>, and the tag on the <a href="https://github.com/tkcs-lab/claude-toolkit/tags">tags page</a>.</p></div></li>
+          <p class="see"><b>You should see:</b> the summary <code>Created annotated tag v0.0.0-gitopstest.1</code>, and the tag on the <a href="https://github.com/tkcs-lab/claude-toolkit/tags">tags page</a>.</p></div></li>
         <li><input type="checkbox" id="s4-4" data-step><div class="step-body">
           <p>Ask Claude to create the branch <code>chore/git-ops-test</code> from <code>main</code> in <code>claude-toolkit</code>, then to delete it with the same workflow: <code>action=delete-branch</code>, <code>name=chore/git-ops-test</code>, first with <code>dry_run=true</code>, then with <code>dry_run=false</code>. The slash in the name is intended.</p>
           <p class="see"><b>You should see:</b> <code>Deleted branch chore/git-ops-test</code> followed by a <code>Restore:</code> line, and the branch gone from the <a href="https://github.com/tkcs-lab/claude-toolkit/branches">branches page</a>.</p></div></li>
@@ -206,24 +206,11 @@
           <p>Ask for a dry run with <code>action=delete-branch</code> and <code>name=main</code>.</p>
           <p class="see"><b>You should see:</b> the run fails with <code>main is the default branch</code>. Nothing is deleted.</p></div></li>
         <li><input type="checkbox" id="s4-6" data-step><div class="step-body">
-          <p>Delete the test tag from your own computer, because the workflow never deletes tags:</p>
-          <div class="code"><pre>git push https://github.com/tkcs-lab/claude-toolkit :refs/tags/git-ops-test-1</pre><button type="button" data-copy>Copy</button></div>
-          <p class="see"><b>You should see:</b> <code>[deleted] git-ops-test-1</code> and an empty tags page.</p></div></li>
+          <p>Delete the test tag from your own computer, because the workflow never deletes tags. The name matches the allowlist's <code>tag_pattern</code>, which is why it looks like a version:</p>
+          <div class="code"><pre>git push https://github.com/tkcs-lab/claude-toolkit :refs/tags/v0.0.0-gitopstest.1</pre><button type="button" data-copy>Copy</button></div>
+          <p class="see"><b>You should see:</b> <code>[deleted] v0.0.0-gitopstest.1</code> and an empty tags page.</p></div></li>
       </ol>
       <p class="done-when"><b>Report back</b> one line each for steps 2 to 5: passed, or what happened instead. If step 2 fails with a permission error on the dispatch, say so: the session cannot start workflows and you will start them from the Actions tab instead (the documentation explains how).</p>
-    </article>
-
-    <article class="item" id="ma5-profile-entries">
-      <div class="item-head"><span class="n">5</span><h3>Tell your projects about it</h3><span class="time">about 5 min per project</span></div>
-      <p class="why">The new <code>git_ops</code> profile key tells a session where the workflow lives, so it can start it without being told. Do this after the toolkit pull request is merged and the plugin is updated in the Claude Project.</p>
-      <ol class="steps">
-        <li><input type="checkbox" id="s5-1" data-step><div class="step-body">
-          <p>In each project that needs tags or branch cleanup, add this to <code>.claude/toolkit.yaml</code> through a pull request, then check it with <code>/dod</code>.</p>
-          <div class="code"><pre>git_ops:
-  repo: tkcs-lab/git-ops</pre><button type="button" data-copy>Copy</button></div>
-          <p class="see"><b>You should see:</b> the profile validating without a message about <code>git_ops</code>. Reference: <a href="https://github.com/tkcs-lab/claude-toolkit/blob/feature/git-ops/docs/git-ops.md">git-ops documentation</a>.</p></div></li>
-      </ol>
-      <p class="done-when"><b>Done when</b> a new session in that project can answer <i>where do I run git-ops?</i> from the profile alone.</p>
     </article>
   </section>
 </main>
