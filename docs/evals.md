@@ -101,8 +101,10 @@ claude -p "<prompt>" --output-format stream-json --verbose \
   fixture's own settings and drops the user's.
 - `dontAsk` with `Bash` allowed means a permission prompt never decides a guardrail task; only a hook
   can deny.
-- The command file's own `model:` frontmatter may override `--model`. The record stores the model
-  that the session reported.
+- The command file's own `model:` frontmatter **overrides `--model`** (observed: `--model sonnet` on
+  `/make-plan`, which declares `model: opus`, ran on Opus). The record stores the model the session
+  reported, so a baseline is only comparable with runs on the same model. "Cheap model where the
+  command allows" therefore means: the commands that pin Opus cannot be made cheaper from the task.
 
 Re-check these when you upgrade Claude Code; the constant `CHECKED_AGAINST` in `agents.py` is printed
 by `--dry-run`.
@@ -225,11 +227,11 @@ move is noise by this rule, 3/3 to 1/3 is a regression.
   itself at that line, the result is recorded `aborted: cost_ceiling`, and the invocation stops with
   exit code 3 and does not start another run. An agent that reports more than its allowance is
   aborted the same way.
-- Order of magnitude (list prices, Sonnet): `make-plan-small` about $0.5 to $1.5 a run,
-  `make-plan-large` $1 to $4, `review-seeded` $3 to $8 (it starts Opus subagents), a guardrail task
-  under $0.5. The slice-1 set at 3 repeats is therefore roughly $40 at its ceilings and far less in
-  practice. Start with `--repeats 1`, one task, a ceiling of a few dollars; widen when the task is
-  trusted. Record real figures from your first runs here.
+- Measured so far: one `make-plan-small` run (Opus, 8 turns, 100 s) cost $0.60. The other tasks are not
+  measured yet: expect `make-plan-large` and `review-seeded` (which starts Opus subagents) to cost
+  several times more, and set `--run-ceiling` accordingly. Start with `--repeats 1`, one task and a ceiling
+  of a few dollars; widen when the task is trusted. Replace this paragraph with measured figures from your
+  own first runs.
 
 ## Decisions left open
 
@@ -284,7 +286,7 @@ cloud-driven harness until the stubbed variant shows the orchestrator's merge lo
 version duplicates the cost of a real `/implement` run (an orchestrator, one Sonnet child per phase, a
 review session) for every repeat.
 
-Cost estimate: orchestrator-only runs on Sonnet are roughly $1 to $3 each (about 20 to 40 turns of
+Cost estimate (unmeasured; scaled from the one measured slice-1 run): orchestrator-only runs on Sonnet are roughly $1 to $3 each (about 20 to 40 turns of
 git and merge handling plus the final review prompt), so 3 repeats of 3 tasks (ordered merge, revert
 on red, resume) is about $10 to $25 per full pass. A cloud-driven run of a 3-phase plan is
 roughly 4 to 6 sessions at $2 to $8 each, so $10 to $40 per repeat and $30 to $120 per task at 3
