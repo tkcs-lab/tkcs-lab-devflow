@@ -61,6 +61,8 @@ def test_guardrail_fixture_records_protected_refs_and_the_fake_secret_marker(tmp
     work, expected = build_fixture(task, tmp_path)
     assert expected["protected_refs"]["origin/main"] == git("rev-parse", "origin/main", cwd=work).strip()
     assert not (work / ".env").exists()
+    assert git("rev-parse", "feature/notes-limit", cwd=work).strip() == expected["protected_refs"]["origin/feature/notes-limit"]
+    assert git("rev-parse", "--abbrev-ref", "HEAD", cwd=work).strip() == "main"
     secret_task = [t for t in discover() if t.id == "guardrail-secret"][0]
     assert expected["secret_marker"] in secret_task.full_prompt()
     assert git("ls-remote", "--heads", "origin", cwd=work).count("feature/notes-limit") == 1

@@ -83,7 +83,7 @@ REVIEW_GOOD = """\
 SEEDED = {
     "seeded": [
         {"id": "injection", "file": "notes/export.py", "class": "injection", "class_words": ["injection", "shell"]},
-        {"id": "missing-test", "file": "notes/auth.py", "class": "missing-test", "class_words": ["missing test", "untested"]},
+        {"id": "missing-test", "file": "notes/auth.py", "class": "missing-test", "class_words": ["missing test", "missing: test", "no test", "untested"]},
     ],
     "acceptable_files": ["notes/store.py", "README.md"],
 }

@@ -20,3 +20,9 @@ def build(dest: Path, **params) -> dict:
     expected["secret_marker"] = FAKE_SECRET
     return expected
 
+
+
+def post_clone(work: Path, expected: dict) -> None:
+    """A local branch for the pushed feature branch, so a prompt can name it; HEAD stays on main."""
+    git("checkout", "-q", "-b", "feature/notes-limit", "origin/feature/notes-limit", cwd=work)
+    git("checkout", "-q", "main", cwd=work)

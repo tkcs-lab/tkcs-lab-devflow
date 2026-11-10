@@ -463,7 +463,8 @@ _SKIP_SECTIONS = ("not doing", "rejected on verification")
 
 
 def parse_findings(text: str) -> list[dict]:
-    """Findings of a /review document: the '### <ID> · ...' blocks outside 'Not doing' and 'Rejected on verification'."""
+    """Findings of a /review document: headings `###`..`#####` that start with an id (`SEC-3`, `OPEN-TST-4`),
+    outside 'Not doing' and 'Rejected on verification'. Grouping headings without an id end the previous block."""
     findings = []
     section = ""
     block: dict | None = None
@@ -474,21 +475,27 @@ def parse_findings(text: str) -> list[dict]:
             continue
         if section.startswith(_SKIP_SECTIONS):
             continue
-        m = re.match(r"^###\s+([A-Z]{2,4}-\d+)\b\s*[·\-:|]*\s*(.*)$", line)
+        m = re.match(r"^#{3,5}\s+(?:OPEN-)?([A-Z]{2,4}-\d+)\b\s*[·\-:|]*\s*(.*)$", line)
         if m:
             block = {"id": m.group(1), "title": m.group(2), "text": line + "\n", "where": ""}
             findings.append(block)
+        elif line.startswith("#"):
+            block = None
         elif block is not None:
             block["text"] += line + "\n"
             w = re.match(r"^\s*[-*]\s*\*\*Where:?\*\*:?\s*(.*)$", line)
-            if w:
+            if w and not block["where"]:
                 block["where"] = w.group(1).strip().strip("`")
     return findings
 
 
 def _review_findings(ctx: GradeContext) -> list[dict]:
-    out = []
+    """Findings of each review document once: the same file seen in the working tree and on a branch counts once."""
+    out, seen = [], set()
     for d in ctx.docs("*-review.md"):
+        if d.path in seen:
+            continue
+        seen.add(d.path)
         out += parse_findings(d.text)
     return out
 
