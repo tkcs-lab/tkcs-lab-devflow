@@ -87,6 +87,10 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 # admin:                 # optional: the repo-admin skill stops with a missing-key message when absent
 #   policy: .claude/admin-policy.yaml   # starter: plugins/devflow/templates/admin-policy.yaml
 
+# git_ops:               # optional: the git-ops skill stops with a missing-key message when absent
+#   repo: owner/name       # the central repository that holds the devflow-git-ops workflow
+#   workflow: devflow-git-ops.yml   # optional, this is the default
+
 # land:                  # optional: /land works without it
 #   max_prs: 10            # 1..50
 
