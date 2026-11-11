@@ -9,7 +9,7 @@ from evals.harness.common import git
 from evals.harness.runner import build_fixture
 from evals.harness.taskspec import discover
 
-BUILDERS = ["tiny_app", "review_seeded", "guardrail"]
+BUILDERS = ["tiny_app", "review_seeded", "guardrail", "setup_repos"]
 
 
 @pytest.mark.parametrize("name", BUILDERS)
