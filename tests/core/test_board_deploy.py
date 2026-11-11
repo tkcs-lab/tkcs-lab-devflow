@@ -12,9 +12,9 @@ DOCKERFILE = ROOT / "deploy" / "board" / "Dockerfile"
 DOC = ROOT / "docs" / "guides" / "board-server.md"
 
 SECTIONS = [
-    "What it is", "Run it locally", "Configuration", "Docker", "TLS and a reverse proxy",
-    "Connect Claude Code sessions", "HTTP API", "MCP tools", "Security notes", "Backup and restore",
-    "Troubleshooting", "Replacing the artifact board",
+    "What it is", "Run it locally", "Configuration", "Docker", "TLS and a reverse proxy", "Deploy it",
+    "Connect Claude Code sessions", "Rotating the token and the passphrase", "HTTP API", "MCP tools",
+    "The issue fallback", "Security notes", "Backup and restore", "Troubleshooting", "Replacing the artifact board",
 ]
 
 
@@ -87,10 +87,14 @@ def test_doc_has_the_sections_in_order() -> None:
 def test_doc_names_every_variable_and_route_and_tool() -> None:
     text = DOC.read_text()
     for needle in (
-        "TLD_BOARD_TOKEN", "TLD_BOARD_READ_TOKEN", "TLD_BOARD_URL", "TLD_BOARD_DB",
-        "TLD_BOARD_ALLOW_HTTP", "--host", "--port", "--db", "--title", "--allow-origin",
-        "/healthz", "/api/records", "/api/records/<id>", "/mcp", "/index.html",
-        "board_get", "board_list", "board_set", "board_delete",
+        "TLD_BOARD_TOKEN", "TLD_BOARD_OWNER_PASSPHRASE", "TLD_BOARD_SECRET", "TLD_BOARD_PUBLIC_ORIGIN",
+        "TLD_BOARD_SESSION_URL", "TLD_BOARD_URL", "TLD_BOARD_DB", "TLD_BOARD_ALLOW_HTTP",
+        "--host", "--port", "--db", "--title", "--allow-origin", "--public-origin", "--insecure-cookie",
+        "--session-hours", "--trust-proxy",
+        "/healthz", "/api/records", "/api/records/<id>", "/mcp", "/index.html", "/login", "/logout",
+        "/api/session", "/api/asks", "/api/asks/<id>", "/api/asks/<id>/answer", "/api/asks/<id>/cancel",
+        "board_get", "board_list", "board_set", "board_ask", "board_answers", "board_cancel",
+        "Allowed domains", "Network secrets", "https://claude.ai/code/", "git.owner_login",
         "reverse_proxy", "proxy_pass", "client_max_body_size 1m", "unknown key 'status'",
         'sqlite3 board.sqlite3 ".backup',
     ):
@@ -109,3 +113,25 @@ def test_doc_has_no_token_looking_value() -> None:
     text = DOC.read_text()
     assert not re.search(r"[A-Za-z0-9_-]{32,}", text)
     assert "mcp__plugin" not in text
+
+
+def test_doc_names_every_server_flag_and_route() -> None:
+    """Every flag of the server's argparse and every route of the server is in the guide."""
+    from tld.board import server as board_server
+    text = DOC.read_text()
+    source = (ROOT / "src" / "tld" / "board" / "server.py").read_text()
+    for flag in re.findall(r'add_argument\("(--[a-z-]+)"', source):
+        assert flag in text, flag
+    assert len(board_server.ROUTES) == 11
+    for name, method in board_server.POLICY:
+        assert name in {r[1] for r in board_server.ROUTES}
+
+
+def test_doc_has_no_board_delete_tool() -> None:
+    assert "| `board_delete`" not in DOC.read_text()
+
+
+def test_dockerfile_keeps_secrets_out_and_trusts_the_proxy() -> None:
+    text = DOCKERFILE.read_text()
+    assert "TLD_BOARD_TOKEN" not in text and "PASSPHRASE" not in text
+    assert "--trust-proxy" in text and "chmod 700 /data" in text
