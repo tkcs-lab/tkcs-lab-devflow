@@ -10,9 +10,10 @@ import pytest
 import yaml
 
 from conftest import DEVFLOW, ROOT
-from hooks_helpers import HOOKS, MODULES, bash, git, make_repo, run, run_script
+from hooks_helpers import FAIL_CLOSED, HOOKS, MODULES, bash, git, make_repo, module, run, run_script
 
 import _common
+from evals.harness.hookcheck import matcher_matches
 
 HOOKS_JSON = HOOKS / "hooks.json"
 
@@ -47,6 +48,8 @@ def test_hooks_json_is_valid_and_every_script_exists():
     ("no_merge.py", "mcp__github__enable_pr_auto_merge", True), ("no_merge.py", "mcp__github__pull_request_review_write", True),
     ("no_merge.py", "mcp__github__push_files", True), ("no_merge.py", "mcp__github__create_branch", False),
     ("no_merge.py", "Write", False),
+    ("no_merge.py", "mcp__github__create_or_update_file", True), ("no_merge.py", "mcp__github__delete_file", True),
+    ("secret_scan.py", "NotebookEdit", True), ("protect_paths.py", "NotebookEdit", True),
     ("no_force_push.py", "Bash", True), ("no_force_push.py", "Write", False),
     ("no_git_tag.py", "Bash", True), ("no_git_tag.py", "Edit", False),
     ("no_git_tag.py", "mcp__github__actions_run_trigger", True), ("no_git_tag.py", "mcp__github__merge_pull_request", False),
@@ -59,7 +62,30 @@ def test_hooks_json_is_valid_and_every_script_exists():
 def test_matchers(script, tool, listens):
     for _, matcher, hook in entries():
         if hook["command"].endswith(f'/hooks/{script}"'):
-            assert bool(re.fullmatch(matcher, tool)) is listens, (script, matcher, tool)
+            assert matcher_matches(matcher, tool) is listens, (script, matcher, tool)
+
+
+@pytest.mark.parametrize("matcher, tool, expected", [
+    ("Bash", "Bash", True), ("Bash", "BashOutput", False), ("Write|Edit", "Edit", True), ("Write|Edit", "MultiEdit", False),
+    ("mcp__.*__push_files", "mcp__github__push_files", True), ("mcp__.*__push", "mcp__github__push_files", True),
+    ("", "Anything", True), ("*", "Anything", True), (None, "Anything", True),
+])
+def test_matcher_matches_follows_claude_codes_rule(matcher, tool, expected):
+    assert matcher_matches(matcher, tool) is expected
+
+
+@pytest.mark.parametrize("hook", sorted(MODULES))
+def test_internal_error_fails_per_hook(hook, monkeypatch, tmp_path):
+    mod = module(hook)
+
+    def boom(ctx):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(mod, "evaluate", boom)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    result = _common.execute(mod.NAME, mod.evaluate, FAIL_CLOSED[hook], json.dumps(bash("ls", tmp_path)))
+    assert result.code == (2 if FAIL_CLOSED[hook] else 1)
+    assert "internal error (RuntimeError" in result.stderr
 
 
 def test_stop_hook_has_the_longest_timeout():
