@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -71,7 +72,11 @@ def cmd_run(args) -> int:
             return 1
         agent = StubAgent.from_dir(Path(args.stub_dir))
     else:
-        agent = ClaudeCodeAgent()
+        if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")):
+            print("evals: set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN; the agent runs with an empty HOME "
+                  "and cannot use a stored login.", file=sys.stderr)
+            return 2
+        agent = ClaudeCodeAgent(keep_proxy=args.keep_proxy)
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = Path(args.out) if args.out else RESULTS_DIR / f"{stamp}.jsonl"
     budget = Budget(args.run_ceiling)
@@ -134,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--agent", choices=["claude", "stub"], default="claude")
     p.add_argument("--stub-dir")
     p.add_argument("--out")
+    p.add_argument("--keep-proxy", action="store_true", help="pass the proxy and CA variables through to the agent")
     p.add_argument("--keep", action="store_true", help="keep the temp directory of each run")
     p.set_defaults(fn=cmd_run)
     p = sub.add_parser("aggregate")
