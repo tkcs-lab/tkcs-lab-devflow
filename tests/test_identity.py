@@ -30,12 +30,12 @@ def test_make_plan_standing_item():
         "title: Second GitHub user ready",
         "why: The agent opens PRs as git.bot_login and the code owner's review is the gate",
         "done_when: get_me in a new session prints <bot_login> and the main branch requires a Code Owner review",
-        "docs/profile-reference.md#second-github-user",
+        "docs/reference/profile-reference.md#second-github-user",
     ]:
         assert line in text, line
 
 
 def test_reference_has_the_checklist():
-    text = (ROOT / "docs" / "profile-reference.md").read_text()
+    text = (ROOT / "docs" / "reference" / "profile-reference.md").read_text()
     assert "### Second GitHub user" in text
     assert "8. Open a session and ask it to call `get_me`" in text

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stop hook `dod-gate`: block stopping until the profile's definition-of-done commands pass.
 
-Opt-in (`hooks.dod_gate.enabled: true`). Which sessions it applies to is documented in docs/hooks.md:
+Opt-in (`hooks.dod_gate.enabled: true`). Which sessions it applies to is documented in docs/architecture/hooks.md:
 every session in a checkout, except one that marked itself exempt with `dod_gate.py --exempt` (the
 /implement orchestrator, which legitimately stops at human gates). It never loops: it honours
 `stop_hook_active`, counts failed attempts, and lets the session stop after `max_attempts` of them,

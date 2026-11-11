@@ -219,7 +219,7 @@
     "hooks": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Settings of the guardrail hooks the devflow plugin ships (docs/hooks.md). Every key is optional; the hooks apply the defaults in 'x-hook-default' themselves, they are not part of --resolved.",
+      "description": "Settings of the guardrail hooks the devflow plugin ships (docs/architecture/hooks.md). Every key is optional; the hooks apply the defaults in 'x-hook-default' themselves, they are not part of --resolved.",
       "properties": {
         "disable": {
           "type": "array",

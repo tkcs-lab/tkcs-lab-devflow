@@ -4,7 +4,7 @@ Three commands keep a repository up to date and tidy without you doing the work:
 and `/land`. `/deps` and `/upstream` run unattended from a scheduled task; `/land` is run by you. None
 of them ever merges, approves or enables auto-merge. Each writes a status record to the board (see
 below) when one exists. What the spike found about what a cloud session can and cannot do is in
-[design/maintenance-spike.md](design/maintenance-spike.md).
+[design/maintenance-spike.md](architecture/maintenance-spike.md).
 
 ## What each command does
 
@@ -47,7 +47,7 @@ pull request and enable auto-merge on each. Run `/land` yourself; no schedule ru
 ## Profile sections
 
 All three sections are optional. A command whose section is missing stops with
-`toolkit.yaml: missing required key '<key>'`. Reference: [profile-reference.md](profile-reference.md).
+`toolkit.yaml: missing required key '<key>'`. Reference: [profile-reference.md](reference/profile-reference.md).
 
 ```yaml
 deps:
@@ -100,7 +100,7 @@ there are; `/board prune` prunes.
 
 A phase chip shows `drift <n>` when the phase changed `n` files outside its `touches` (and `scope ?`
 when the check was unavailable): a count only, the paths are in the pull request's Scope section. What
-is recorded, what is not and why it never blocks: [scope-drift.md](scope-drift.md).
+is recorded, what is not and why it never blocks: [scope-drift.md](architecture/scope-drift.md).
 
 The records are those of `/implement` runs and of the maintenance commands `deps`, `upstream`, `land` and `setup`.
 `/setup` ([setup.md](setup.md)) writes a `setup` record with the document id `<project>--setup`; unlike the

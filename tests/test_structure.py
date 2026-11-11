@@ -97,12 +97,12 @@ def test_review_hands_over_to_make_plan():
 
 def test_every_profile_key_in_the_schema_is_documented():
     schema = json.loads((DEVFLOW / "schema" / "profile.schema.json").read_text())
-    reference = (ROOT / "docs" / "profile-reference.md").read_text()
+    reference = (ROOT / "docs" / "reference" / "profile-reference.md").read_text()
 
     def walk(node, prefix):
         for key, sub in node.get("properties", {}).items():
             dotted = f"{prefix}{key}"
-            assert f"`{dotted}" in reference, f"{dotted} is not in docs/profile-reference.md"
+            assert f"`{dotted}" in reference, f"{dotted} is not in docs/reference/profile-reference.md"
             if sub.get("type") == "object":
                 walk(sub, dotted + ".")
 

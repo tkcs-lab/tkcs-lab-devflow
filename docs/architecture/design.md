@@ -26,7 +26,7 @@ plugins/devflow/
   commands/{make-plan,implement,dod,review}.md   # review: see docs/review.md
   commands/{board,deps,upstream,land}.md         # maintenance commands: see docs/maintenance.md
   commands/setup.md                     # /setup: survey a repository, create or update the profile: see docs/setup.md
-  agents/<name>.md                      # the ten generic agents (architect ... refactorer): see docs/agents.md
+  agents/<name>.md                      # the ten generic agents (architect ... refactorer): see docs/architecture/agents.md
   skills/project-profile/SKILL.md       # how every command reads, validates and quotes the profile
   skills/pr-steward/SKILL.md            # generic steward policy; table comes from ci.dispatchable
   skills/review-checklist/SKILL.md      # Nightshift, adapted (no run-ledger / R-AG rules)
@@ -49,7 +49,7 @@ plugins/devflow/
   .mcp.json                             # declares the board_mcp_stdio.py bridge (the devflow-board MCP server)
   board/                                # the status board page (board.html, rules.js) and its Dockerfile
   board/Dockerfile                      # image of the board server
-  hooks/hooks.json, hooks/*.py          # guardrail hooks: see docs/hooks.md
+  hooks/hooks.json, hooks/*.py          # guardrail hooks: see docs/architecture/hooks.md
   templates/devflow-land.yml            # the workflow /land installs
   templates/devflow-release.yml         # the release (tag) workflow repo-admin installs
   templates/admin-policy.yaml           # starter policy
@@ -59,9 +59,11 @@ plugins/stack-swift/skills/stack-swift/SKILL.md
 plugins/stack-ipados/skills/stack-ipados/SKILL.md
 plugins/stack-go/skills/stack-go/SKILL.md
 templates/toolkit.yaml                  # commented starter profile
-evals/                                  # eval harness (not shipped): see docs/evals.md
-docs/{profile-reference.md,delivery.md,design.md,board-server.md,hooks.md,evals.md,review.md,admin.md,git-ops.md,maintenance.md,scope-drift.md,migrating-privacyfence.md}
-docs/design/maintenance-spike.md        # record of the spike behind the maintenance commands
+evals/                                  # eval harness (not shipped): see docs/architecture/evals.md
+docs/architecture/{design.md,hooks.md,evals.md,scope-drift.md,agents.md}
+docs/architecture/maintenance-spike.md  # record of the spike behind the maintenance commands
+docs/reference/profile-reference.md
+docs/{delivery.md,board-server.md,review.md,admin.md,git-ops.md,maintenance.md,setup.md,migrating-privacyfence.md}
 tests/                                  # pytest; fixtures from real PrivacyFence plans
 .github/workflows/test.yml
 ```
@@ -127,7 +129,7 @@ The vendoring-script + PR-bot fallback you described is **not needed** and I wil
 ## 4. The profile: `.claude/toolkit.yaml`
 
 Rules: a key marked **required** that is absent makes the command stop with
-`toolkit.yaml: missing required key 'verify.fast' (see docs/profile-reference.md)`, naming the key.
+`toolkit.yaml: missing required key 'verify.fast' (see docs/reference/profile-reference.md)`, naming the key.
 An optional key that is absent means "not used in this project". Only two keys have a stated
 default, both from your brief: `docs.plan_dir` (`docs/`) and `models` (below). Unknown keys are an
 error (typos must not be silent). Commands never fall back to a PrivacyFence value.
@@ -303,8 +305,8 @@ the first two run unattended from a scheduled task, `/land` is run by the owner,
 merges. `/make-plan` and `/implement` now keep a tracking issue for every plan. Profile sections
 `deps`, `upstream`, `land` and the key `git.bot_login` configure the new commands. Delivery is by plugins
 only. How to run and schedule the commands, the profile sections, the board and the secret and setting
-`/land` needs are in [maintenance.md](maintenance.md); what a cloud session can and cannot do, which
-shaped the design, is recorded in [design/maintenance-spike.md](design/maintenance-spike.md).
+`/land` needs are in [maintenance.md](../maintenance.md); what a cloud session can and cannot do, which
+shaped the design, is recorded in [design/maintenance-spike.md](maintenance-spike.md).
 
 ## 11. git-ops
 
@@ -315,12 +317,12 @@ lives in a private repository of its own, not in this one (D1), so that the repo
 with write access to other repositories contains only the workflow and its allowlist. The token is an
 environment secret limited to the default branch (D7), and the workflow starts as a dry run and checks an
 allowlist and a set of guards. Rejected: a copy of the workflow in every repository, and for now a GitHub
-App token instead of a fine-grained one. Setup, use and guards are in [git-ops.md](git-ops.md).
+App token instead of a fine-grained one. Setup, use and guards are in [git-ops.md](../git-ops.md).
 
 ## 12. A self-hosted status board
 
 Why: the board was a private claude.ai Artifact page whose data lived in the Artifact database, so
-everything about it depended on claude.ai. It is now a server you host; see [board-server.md](board-server.md).
+everything about it depended on claude.ai. It is now a server you host; see [board-server.md](../board-server.md).
 
 What was built:
 
@@ -350,7 +352,7 @@ validation with `unknown key 'status'`. This breaking change shipped in 0.7.0.
 
 ## 13. Agents and /setup
 
-Ten generic agents and the `/setup` command were added. [agents.md](agents.md) and [setup.md](setup.md) describe what
+Ten generic agents and the `/setup` command were added. [agents.md](agents.md) and [setup.md](../setup.md) describe what
 they do; this section records why.
 
 - **The agents live in devflow, not in a new plugin.** They are wired into `/make-plan`, `/implement`, `/review` and

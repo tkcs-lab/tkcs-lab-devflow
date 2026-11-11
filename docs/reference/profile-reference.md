@@ -2,9 +2,9 @@
 
 The profile is the only place a project's facts live. The commands read it through the
 `project-profile` skill, which runs `validate_profile.py` first. The schema is
-[`plugins/devflow/schema/profile.schema.json`](../plugins/devflow/schema/profile.schema.json); a
-commented starter is [`templates/toolkit.yaml`](../templates/toolkit.yaml); a complete worked example
-for a real project is PrivacyFence's profile, [`tests/fixtures/privacyfence-toolkit.yaml`](../tests/fixtures/privacyfence-toolkit.yaml) (see [`migrating-privacyfence.md`](migrating-privacyfence.md)).
+[`plugins/devflow/schema/profile.schema.json`](../../plugins/devflow/schema/profile.schema.json); a
+commented starter is [`templates/toolkit.yaml`](../../templates/toolkit.yaml); a complete worked example
+for a real project is PrivacyFence's profile, [`tests/fixtures/privacyfence-toolkit.yaml`](../../tests/fixtures/privacyfence-toolkit.yaml) (see [`migrating-privacyfence.md`](../migrating-privacyfence.md)).
 
 Rules:
 
@@ -14,7 +14,7 @@ Rules:
 - An **optional** key that is missing means "not used in this project".
 - Only two things have defaults, and `validate_profile.py --resolved` is where they are applied:
   `docs.plan_dir` (`docs`) and `models` (`opus / sonnet / sonnet / opus`). The `hooks` section also has
-  defaults, but the hook scripts apply those themselves ([hooks.md](hooks.md)); `--resolved` leaves them out.
+  defaults, but the hook scripts apply those themselves ([hooks.md](../architecture/hooks.md)); `--resolved` leaves them out.
   The `agents` defaults are applied by `scripts/agents.py` and are not part of `--resolved`.
 - An unknown key is an error, so a typo is never silent.
 - A file listed in `docs.must_read` or `project_steward` that does not exist is an error.
@@ -57,15 +57,15 @@ Rules:
 | `upstream.tag_pattern` | **yes** (in `upstream`) | Regular expression a release tag must match; must compile |
 | `upstream.version_file` | **yes** (in `upstream`) | File in the fork that records the synced tag |
 | `land.max_prs` | no | Integer 1..50: most pull requests one `/land` run orders. `/land` works without the `land` section |
-| `admin.policy` | **yes** (in `admin`) | Path, relative to the repo root, of the policy file the `repo-admin` skill audits and applies (see [admin.md](admin.md)). The file must exist. The skill needs the `admin` section and stops with a missing-key message when it is absent |
-| `git_ops.repo` | **yes** (in `git_ops`) | Owner/name of the central repository that holds the `devflow-git-ops` workflow. The `git-ops` skill needs the section and stops with a missing-key message when it is absent; see [git-ops.md](git-ops.md) |
+| `admin.policy` | **yes** (in `admin`) | Path, relative to the repo root, of the policy file the `repo-admin` skill audits and applies (see [admin.md](../admin.md)). The file must exist. The skill needs the `admin` section and stops with a missing-key message when it is absent |
+| `git_ops.repo` | **yes** (in `git_ops`) | Owner/name of the central repository that holds the `devflow-git-ops` workflow. The `git-ops` skill needs the section and stops with a missing-key message when it is absent; see [git-ops.md](../git-ops.md) |
 | `git_ops.workflow` | no | File name of the workflow in that repository. Default `devflow-git-ops.yml` |
-| `hooks.disable` | no (default none) | Names of guardrail hooks to switch off in this repository: any of `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths`, `dod-gate`. Read from the committed `<main>` profile, so a branch cannot switch a hook off for itself; it must be a list. The escape hatch; see [hooks.md](hooks.md) |
+| `hooks.disable` | no (default none) | Names of guardrail hooks to switch off in this repository: any of `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths`, `dod-gate`. Read from the committed `<main>` profile, so a branch cannot switch a hook off for itself; it must be a list. The escape hatch; see [hooks.md](../architecture/hooks.md) |
 | `hooks.protect_paths` | no | Globs of repo-relative paths `protect-paths` refuses to edit. Default `.claude/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`, `go.sum`, `.github/workflows/**`. A list here replaces the default. A pattern without a slash matches the file name at any depth; `**` crosses directories. `*` and `?` do **not** cross `/` (unlike `touches` and `scope.ignore`) |
 | `hooks.protect_paths_allow` | no | Globs exempt from `protect_paths`, on top of the built-in exceptions (`.env.example`, `.env.sample`, `.env.template`, `.env.dist`, the workflow files `/land` and `repo-admin` install) |
 | `hooks.dod_gate.enabled` | no (default `false`) | Opt in to the `dod-gate` Stop hook: the session cannot stop while `verify.dod` fails. Not applied to sessions that marked themselves exempt, such as the `/implement` orchestrator |
 | `hooks.dod_gate.max_attempts` | no (default `3`) | Integer 1..10: failed attempts after which the gate lets the session stop and tells the user why |
-| `scope.ignore` | no | List of globs. `/implement` checks at each merge which files the phase changed outside its `touches` and reports them (see [scope-drift.md](scope-drift.md)); paths matching these globs are not counted. Default: none. The changelog file (`docs.changelog.file`) is always ignored when the profile has `docs.changelog`. Same glob semantics as `touches` (`*` and `**` match across `/`; an entry ending in `/` is a directory). The check never blocks a merge |
+| `scope.ignore` | no | List of globs. `/implement` checks at each merge which files the phase changed outside its `touches` and reports them (see [scope-drift.md](../architecture/scope-drift.md)); paths matching these globs are not counted. Default: none. The changelog file (`docs.changelog.file`) is always ignored when the profile has `docs.changelog`. Same glob semantics as `touches` (`*` and `**` match across `/`; an entry ending in `/` is a directory). The check never blocks a merge |
 | `agents` | no | Which agents are mandatory and how they run; see [`agents`](#agents) below |
 | `agents.posture` | no | Holds `security` |
 | `agents.posture.security` | no (default `standard`) | `critical`, `standard` or `low`: how deep `security-reviewer` goes |

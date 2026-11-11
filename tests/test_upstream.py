@@ -147,7 +147,7 @@ def test_missing_version_file_exit_1(world):
 
 
 def test_tag_route_matches_the_spike():
-    spike = (ROOT / "docs" / "design" / "maintenance-spike.md").read_text()
+    spike = (ROOT / "docs" / "architecture" / "maintenance-spike.md").read_text()
     route = re.search(r"^ROUTE f: (.+)$", spike, re.M).group(1).strip()
     assert route in COMMAND.read_text()
 

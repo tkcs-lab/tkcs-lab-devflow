@@ -62,7 +62,7 @@ under the time budget.
 ## 3. Fix one group
 
 These rules follow the spike lines `CONCLUSION b.push: allowed`, `CONCLUSION c.session: ci-triggered`
-and the bot-command filter, in `docs/design/maintenance-spike.md`.
+and the bot-command filter, in `docs/architecture/maintenance-spike.md`.
 
 1. A group with a Dependabot pull request: check out its branch and commit the fix onto it with a normal
    push, never forced.

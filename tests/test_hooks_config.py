@@ -190,7 +190,7 @@ def test_which_commands_mark_the_session_exempt(name, exempt):
 
 # ---- docs ----------------------------------------------------------------------------------------
 def test_docs_cover_every_hook_and_key():
-    doc = (ROOT / "docs" / "hooks.md").read_text()
+    doc = (ROOT / "docs" / "architecture" / "hooks.md").read_text()
     for name in _common.HOOK_NAMES:
         assert f"`{name}`" in doc, name
     for key in ("hooks.disable", "hooks.protect_paths", "hooks.protect_paths_allow", "hooks.dod_gate.enabled",
@@ -201,8 +201,8 @@ def test_docs_cover_every_hook_and_key():
     for command in ("/implement", "/land", "/deps", "/upstream", "/review", "/make-plan"):
         assert command in doc, command
     readme = (ROOT / "README.md").read_text()
-    assert "## Guardrails" in readme and "docs/hooks.md" in readme
-    assert "hooks.md" in (ROOT / "docs" / "profile-reference.md").read_text()
+    assert "## Guardrails" in readme and "docs/architecture/hooks.md" in readme
+    assert "hooks.md" in (ROOT / "docs" / "reference" / "profile-reference.md").read_text()
 
 
 # ---- profile trust and loud errors ---------------------------------------------------------------
