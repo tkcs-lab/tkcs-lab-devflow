@@ -171,7 +171,45 @@ def run_gate(project: str, commands: list[tuple[str, str | None]]) -> list[tuple
     return failures
 
 
+MAX_ATTEMPTS_LIMIT = 10
+
+
+def _limit_for_errors(ctx: Ctx) -> int:
+    """The attempt limit to use when the profile itself is broken: the configured one if it is valid, else the default."""
+    try:
+        gate = ctx.hooks_section().get("dod_gate")
+    except ProfileError:
+        return DEFAULT_MAX_ATTEMPTS
+    value = gate.get("max_attempts") if isinstance(gate, dict) else None
+    if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= MAX_ATTEMPTS_LIMIT:
+        return value
+    return DEFAULT_MAX_ATTEMPTS
+
+
 def evaluate(ctx: Ctx) -> str | None:
+    """A profile error counts as a failed attempt like any other failure, so it cannot block the session forever."""
+    try:
+        return _evaluate(ctx)
+    except ProfileError as exc:
+        project = ctx.project_dir
+        sid = ctx.payload.get("session_id")
+        state = load_state(project, sid)
+        now = fingerprint(project)
+        if now == state.get("gave_up"):
+            return None
+        attempts = int(state.get("profile_attempts", 0)) + 1
+        limit = _limit_for_errors(ctx)
+        saved = save_state(project, sid, {"profile_attempts": attempts})
+        if attempts >= limit or (ctx.payload.get("stop_hook_active") and not saved):
+            save_state(project, sid, {"gave_up": now, "profile_attempts": 0})
+            ctx.notice = (f"letting the session stop although the profile is still broken ({exc}): "
+                          f"{attempts} failed attempt(s) reached the limit of {limit}"
+                          + ("" if saved else ", and the attempt counter could not be saved") + ". Fix the profile.")
+            return None
+        return f"{exc} (attempt {attempts} of {limit})"
+
+
+def _evaluate(ctx: Ctx) -> str | None:
     gate = ctx.hooks_section().get("dod_gate")
     if gate is None:
         return None
@@ -182,6 +220,8 @@ def evaluate(ctx: Ctx) -> str | None:
     max_attempts = gate.get("max_attempts", DEFAULT_MAX_ATTEMPTS)
     if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts < 1:
         raise ProfileError("toolkit.yaml: 'hooks.dod_gate.max_attempts' must be a positive integer")
+    if max_attempts > MAX_ATTEMPTS_LIMIT:
+        raise ProfileError("toolkit.yaml: 'hooks.dod_gate.max_attempts' must be between 1 and 10")
     main = ctx.require_main_branch()
     commands = dod_commands(ctx)
     project = ctx.project_dir
