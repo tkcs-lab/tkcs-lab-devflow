@@ -206,16 +206,34 @@ What only the owner can do:
 
 ## The release workflow
 
-`template: release` installs `.github/workflows/tld-release.yml`. Parameters: `tag_prefix` (default `v`) and
-`release_environment` (default `release.environment`, else `tld-release`).
+`template: release` installs `.github/workflows/tld-release.yml`. Parameters:
+
+| Parameter | Default | |
+|---|---|---|
+| `tag_prefix` | `v` | the tag is `<tag_prefix><version>` |
+| `release_environment` | `release.environment`, else `tld-release` | the environment the job runs in |
+| `version_style` | `semver` | `semver` (`1.4.0`, `1.4.0-rc.1`) or `pep440` (`1.4.0`, `1.4.0a1`, `1.4.0b2`, `1.4.0rc1`) |
+| `check_script` | empty: none | a repository-relative script run before the tag, with the version (without the prefix) as its one argument; `.py` runs with `python3`, `.sh` with `bash`, anything else must be executable. A non-zero exit stops the release |
+| `create_release` | `true` | `false`: only the tag; the repository's own `on: push: tags` workflow makes the GitHub release |
+
+`tld ops repo-admin validate-policy` checks `version_style`, `create_release` and that `check_script` is a path
+inside the repository.
+
+The pattern for many repositories is one release workflow everywhere: `tld-release` cuts every tag, and each
+repository's own workflows react to the tag (`on: push: tags`) to build and publish. Set `create_release: false`
+where such a workflow already creates the GitHub release, and point `check_script` at a repository's own
+pre-release checks (version sequence, changelog section) instead of keeping a second tagging workflow.
 
 - The owner runs it by hand: Actions, `tld-release`, Run workflow, on the main branch, and approves the run in the
   environment. It has no other trigger. What stops anyone else from tagging is the `tld-tags` ruleset and the
   environment above, not the workflow's branch check.
 - Inputs: `version` (for example `1.4.0`; empty bumps the newest `<tag_prefix>x.y.z` tag by `bump`: `patch`, `minor`, `major`),
   `prerelease`, `skip_checks`, and `dry_run`, which is ticked by default. A dry run shows the tag and the generated notes in the run summary.
+- With a `check_script`, every run (a dry run too) clones the repository with every tag, checks out the main branch
+  at the commit to be tagged, and runs the script there. The read-only workflow token is used for the fetch only; the
+  script gets no token.
 - Unticked, it checks that every check run on the head commit succeeded (and the commit status is neither failing nor pending), creates an
-  annotated tag on that commit and a GitHub release with generated notes. It stops if the tag exists.
+  annotated tag on that commit and, unless `create_release` is `false`, a GitHub release with generated notes. It stops if the tag exists.
 - Its `GITHUB_TOKEN` only reads (`contents: read`); the notes, the tag and the release are made with
   `TLD_RELEASE_TOKEN`, and the run stops when that secret is missing. A tag made with it starts other workflows (a
   build, a publish). It is separate from `TLD_AGENT_TOKEN` so the release never runs as the agent.
