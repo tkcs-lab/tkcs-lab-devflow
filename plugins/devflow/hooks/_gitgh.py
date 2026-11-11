@@ -299,6 +299,7 @@ class GhApi:
     method: str = "GET"
     fields: dict[str, str] = field(default_factory=dict)
     input_file: str | None = None
+    field_files: list[str] = field(default_factory=list)  # -F / --field values that start with "@"
     texts: list[str] = field(default_factory=list)  # every field value, for GraphQL scanning
 
 
@@ -330,6 +331,9 @@ def parse_gh_api(words: list[str]) -> GhApi:
         elif name in ("-f", "--raw-field", "-F", "--field"):
             has_body = True
             key, _, v = val.partition("=")
+            if name in ("-F", "--field") and v.startswith("@"):
+                api.field_files.append(v[1:])
+                continue
             api.fields[key] = v
             api.texts.append(v)
         elif name == "--input":
@@ -343,11 +347,13 @@ def parse_gh_api(words: list[str]) -> GhApi:
     return api
 
 
-def read_input_text(api: GhApi, cwd: str) -> str | None:
-    """Contents of `--input <file>` (up to 1 MB) or None when it cannot be read (stdin, missing)."""
-    if not api.input_file or api.input_file == "-":
+def read_input_text(api: GhApi, cwd: str, name: str | None = None) -> str | None:
+    """Contents of `--input <file>` (or the given `-F key=@file` name), up to 1 MB, or None when it cannot
+    be read (stdin, missing)."""
+    name = api.input_file if name is None else name
+    if not name or name == "-":
         return None
-    path = api.input_file if os.path.isabs(api.input_file) else os.path.join(cwd, api.input_file)
+    path = name if os.path.isabs(name) else os.path.join(cwd, name)
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
             return fh.read(1_000_000)
