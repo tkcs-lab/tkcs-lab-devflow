@@ -182,17 +182,66 @@ def test_a_fresh_checkout_has_no_marker(tmp_path):
 
 
 # ---- profile problems -------------------------------------------------------------------------
-def test_missing_dod_key_fails_loudly(tmp_path):
+def three_stops(repo):
+    return [run(HOOK, stop(repo, active=True)) for _ in range(3)]
+
+
+def test_missing_dod_key_fails_loudly_then_gives_up(tmp_path):
     repo = make_repo(tmp_path / "r", "feature/demo", "git:\n  main_branch: main\nhooks:\n  dod_gate:\n    enabled: true\n")
     (repo / "w.txt").write_text("x")
-    r = run(HOOK, stop(repo))
-    assert r.code == 2 and "toolkit.yaml: missing required key 'verify.dod'" in r.stderr
+    first, second, third = three_stops(repo)
+    assert first.code == 2 and "toolkit.yaml: missing required key 'verify.dod'" in first.stderr
+    assert second.code == 2
+    assert third.code == 0 and "missing required key 'verify.dod'" in json.loads(third.stdout)["systemMessage"]
 
 
-def test_missing_main_branch_fails_loudly(tmp_path):
+def test_missing_main_branch_fails_loudly_then_gives_up(tmp_path):
     repo = make_repo(tmp_path / "r", "feature/demo",
                      "verify:\n  dod: ['true']\nhooks:\n  dod_gate:\n    enabled: true\n")
-    assert "missing required key 'git.main_branch'" in run(HOOK, stop(repo)).stderr
+    first, second, third = three_stops(repo)
+    assert first.code == 2 and "missing required key 'git.main_branch'" in first.stderr
+    assert second.code == 2
+    assert third.code == 0 and "missing required key 'git.main_branch'" in json.loads(third.stdout)["systemMessage"]
+
+
+def test_max_attempts_above_10_is_rejected(tmp_path):
+    repo = repo_with(tmp_path, ["true"], extra="    max_attempts: 50\n")
+    r = run(HOOK, stop(repo))
+    assert r.code == 2 and "hooks.dod_gate.max_attempts" in r.stderr and "between 1 and 10" in r.stderr
+
+
+# ---- how the tree is compared with main ------------------------------------------------------
+def test_origin_main_is_compared_even_when_local_main_was_fast_forwarded(tmp_path):
+    src = make_repo(tmp_path / "src", "main", profile(["exit 1"]))
+    subprocess.run(["git", "clone", "-q", "--bare", str(src), str(tmp_path / "origin.git")], check=True)
+    clone = tmp_path / "clone"
+    subprocess.run(["git", "clone", "-q", str(tmp_path / "origin.git"), str(clone)], check=True)
+    git(clone, "checkout", "-q", "-b", "feature/x")
+    (clone / "a.txt").write_text("x")
+    git(clone, "add", "-A")
+    git(clone, "commit", "-q", "-m", "work")
+    git(clone, "branch", "-f", "main", "HEAD")
+    assert run(HOOK, stop(clone)).code == 2, "origin/main..HEAD is not empty, although main..HEAD is"
+
+
+def test_cannot_tell_when_neither_main_nor_origin_main_exists(tmp_path):
+    repo = tmp_path / "orphan"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "other")
+    (repo / ".claude").mkdir()
+    (repo / ".claude" / "toolkit.yaml").write_text(profile(["false"]))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "init")
+    assert run(HOOK, stop(repo)).code == 2, "cannot tell what is new: treated as changed"
+
+
+def test_budget_used_up_marks_the_remaining_commands_not_run(tmp_path, monkeypatch):
+    repo = repo_with(tmp_path, ["sleep 1", "true"])
+    monkeypatch.setattr(hh.module(HOOK), "TOTAL_BUDGET_SECONDS", 0.5)
+    r = run(HOOK, stop(repo))
+    assert r.code == 2
+    assert "`sleep 1`: timed out" in r.stderr
+    assert "`true`: not run: the gate's time budget was used up" in r.stderr
 
 
 @pytest.mark.parametrize("bad", ["    max_attempts: 0\n", "    max_attempts: lots\n"])
@@ -202,9 +251,25 @@ def test_bad_max_attempts_is_reported(tmp_path, bad):
 
 
 def test_disable_flag(tmp_path):
-    repo = repo_with(tmp_path, ["exit 1"])
+    repo = repo_with(tmp_path, ["exit 1"], change=False)
     (repo / ".claude" / "toolkit.yaml").write_text(profile(["exit 1"]) + "  disable: [dod-gate]\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "disable on main")
+    git(repo, "branch", "-f", "main", "HEAD")  # the disable is committed on main
+    (repo / "work.txt").write_text("new work\n")
     assert run(HOOK, stop(repo)).code == 0
+
+
+def test_malformed_disable_does_not_loop_dod_gate(tmp_path):
+    repo = repo_with(tmp_path, ["exit 1"])
+    cfg = profile(["exit 1"]) + "  disable: dod-gate\n"
+    (repo / ".claude" / "toolkit.yaml").write_text(cfg)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "bad disable")
+    git(repo, "branch", "-f", "main", "HEAD")
+    (repo / "work.txt").write_text("more work\n")
+    codes = [run(HOOK, stop(repo, active=True)).code for _ in range(3)]
+    assert codes == [2, 2, 0], codes  # three profile-error attempts, then it lets go
 
 
 def test_script_contract(tmp_path):

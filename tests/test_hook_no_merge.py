@@ -159,6 +159,43 @@ def test_disable_flag(tmp_path):
     assert run("no-force-push", bash("git push -f", repo)).code == 2, "other hooks stay on"
 
 
+def _repo_with_origin(tmp_path, committed_profile):
+    repo = make_repo(tmp_path / "r", "main", committed_profile)
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", "main")
+    git(repo, "checkout", "-q", "-b", "feature/demo")
+    return repo
+
+
+_DISABLE_ALL = "hooks:\n  disable: [no-merge, no-force-push, no-git-tag]\n"
+
+
+def test_disable_in_a_merged_branch_is_ignored(tmp_path):
+    repo = _repo_with_origin(tmp_path, "git:\n  main_branch: main\n")
+    (repo / ".claude" / "toolkit.yaml").write_text("git:\n  main_branch: main\n" + _DISABLE_ALL)
+    assert run(HOOK, bash("gh pr merge 12 --squash", repo)).code == 2
+    assert run("no-force-push", bash("git push -f origin HEAD:main", repo)).code == 2
+    assert run("no-git-tag", bash("git push origin v1.0", repo)).code == 2
+    assert "differs from the committed main profile" not in run(HOOK, bash("git status", repo)).stderr
+
+
+def test_a_disable_committed_on_main_is_honoured(tmp_path):
+    repo = _repo_with_origin(tmp_path, "git:\n  main_branch: main\n" + _DISABLE_ALL)
+    assert run(HOOK, bash("gh pr merge 12 --squash", repo)).code == 0
+    assert run("no-force-push", bash("git push -f origin HEAD:main", repo)).code == 0
+
+
+def test_profile_outside_project_dir_cannot_disable(tmp_path):
+    repo = _repo_with_origin(tmp_path, "git:\n  main_branch: main\n")
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / ".claude").mkdir(parents=True)
+    (elsewhere / ".claude" / "toolkit.yaml").write_text("git:\n  main_branch: main\n" + _DISABLE_ALL)
+    assert run(HOOK, bash("gh pr merge 12", elsewhere), project=repo).code == 2
+    assert run(HOOK, bash("gh pr merge 12", repo), project=repo).code == 2
+
+
 # ---- GitHub MCP tools ----------------------------------------------------------------------------
 @pytest.mark.parametrize("tool, args", [
     ("mcp__github__merge_pull_request", {"pullNumber": 3}),
@@ -199,3 +236,148 @@ def test_script_contract(feature_repo):
     assert (allowed.returncode, allowed.stdout, allowed.stderr) == (0, "", "")
     assert run_script(HOOK, {}, project=feature_repo, stdin="not json").returncode == 2, "fail closed"
     assert run_script(HOOK, {}, project=feature_repo, stdin="[]").returncode == 2
+
+
+# ---- destination of a push without a refspec (SEC-H1), GraphQL -F @file (SEC-H7) ------------------
+def _with_origin(tmp_path, branch):
+    """A repo on `branch`, cut from origin/main, with a real bare origin that has main (and `feature`)."""
+    repo = make_repo(tmp_path / "w", branch)
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", "main")
+    git(repo, "push", "-q", "origin", f"{branch}:feature")
+    git(repo, "fetch", "-q", "origin")
+    return repo
+
+
+UP_MAIN = ("origin/main", "git push")
+CFG_DENIED = [
+    ("origin/main", ["push.default=upstream"], "git push"),
+    ("origin/main", [], "git -c push.default=upstream push"),
+    ("origin/main", [], "git -c remote.origin.push=HEAD:refs/heads/main push origin"),
+    ("origin/main", [], "git -c remote.origin.mirror=true push origin"),
+    ("origin/main", [], "git -c REMOTE.origin.push=refs/heads/x:refs/heads/main push"),
+    ("origin/main", ["remote.origin.push=HEAD:refs/heads/main"], "git push"),
+    ("origin/main", ["remote.origin.mirror=true"], "git push"),
+    ("origin/main", ["push.default=matching"], "git push"),
+    ("origin/main", ["push.default=tracking"], "git push"),
+]
+CFG_ALLOWED = [
+    ("origin/main", ["push.default=simple"], "git push -u origin feature"),
+    ("origin/main", ["push.default=simple"], "git push"),
+    ("origin/feature", ["push.default=upstream"], "git push"),
+    ("origin/main", ["push.default=current"], "git push"),
+    ("origin/main", ["push.default=nothing"], "git push"),
+    ("origin/main", ["remote.origin.push=HEAD:refs/heads/feature"], "git push"),
+]
+
+
+@pytest.mark.parametrize("upstream, config, command", CFG_DENIED + CFG_ALLOWED,
+                         ids=[f"{'deny' if r in CFG_DENIED else 'allow'}-{i}" for i, r in
+                              enumerate(CFG_DENIED + CFG_ALLOWED)])
+def test_upstream_and_config_refspec_to_main_denied(tmp_path, upstream, config, command):
+    repo = _with_origin(tmp_path, "feature/demo")
+    git(repo, "branch", f"--set-upstream-to={upstream}")
+    for item in config:
+        key, _, value = item.partition("=")
+        git(repo, "config", "--add", key, value)
+    expected = 2 if (upstream, config, command) in CFG_DENIED else 0
+    assert run(HOOK, bash(command, repo)).code == expected, command
+
+
+def test_graphql_field_file_is_scanned(feature_repo):
+    (feature_repo / "q.graphql").write_text("mutation { mergePullRequest(input: {}) { clientMutationId } }")
+    (feature_repo / "ok.graphql").write_text("query { viewer { login } }")
+    assert run(HOOK, bash("gh api graphql -F query=@q.graphql", feature_repo)).code == 2
+    assert run(HOOK, bash("gh api graphql --field query=@q.graphql", feature_repo)).code == 2
+    assert run(HOOK, bash("gh api graphql -F query=@-", feature_repo)).code == 2
+    assert run(HOOK, bash("gh api graphql -F query=@missing.graphql", feature_repo)).code == 2
+    assert run(HOOK, bash("gh api graphql -F query=@ok.graphql", feature_repo)).code == 0
+    assert run(HOOK, bash("gh api graphql -f query=@x", feature_repo)).code == 0, "-f is raw text"
+
+
+@pytest.mark.parametrize("tool, args", [
+    ("mcp__github__create_or_update_file", {"path": "a"}),
+    ("mcp__github__create_or_update_file", {"path": "a", "branch": ""}),
+    ("mcp__github__create_or_update_file", {"path": "a", "branch": "refs/heads/main"}),
+    ("mcp__github__create_or_update_file", {"path": "a", "branch": "heads/main"}),
+    ("mcp__github__push_files", {"files": []}),
+    ("mcp__github__delete_file", {"path": "a"}),
+])
+def test_mcp_denied_without_or_with_qualified_main_branch(feature_repo, tool, args):
+    assert run(HOOK, event(tool, feature_repo, **args)).code == 2
+
+
+@pytest.mark.parametrize("command", [
+    "gh api -X POST repos/o/r/merge-upstream -f branch=main",
+    "gh api -X POST repos/o/r/merge-upstream",
+    "gh api -X POST repos/o/r/branches/main/rename -f new_name=old",
+    "gh api repos/o/r/branches/main/rename -X PUT -f new_name=old",
+    "gh repo sync o/r --branch main --force",
+    "gh repo sync o/r -b main",
+    "gh repo sync o/r --force",
+])
+def test_gh_routes_to_main_denied(feature_repo, command):
+    assert run(HOOK, bash(command, feature_repo)).code == 2, command
+
+
+@pytest.mark.parametrize("command", [
+    "gh api -X POST repos/o/r/merge-upstream -f branch=feature/demo",
+    "gh api -X POST repos/o/r/branches/feature/rename -f new_name=x",
+    "gh repo sync o/r --branch feature/demo", "gh repo sync o/r",
+])
+def test_gh_routes_allowed(feature_repo, command):
+    assert run(HOOK, bash(command, feature_repo)).code == 0, command
+
+
+# ---- fail closed: a failed lookup, a slow hook, an import crash (SEC-H14) ------------------------
+def test_failed_branch_lookup_denies(feature_repo, monkeypatch):
+    import _gitcfg
+
+    def broken(*args, **kwargs):
+        raise _gitcfg.GitLookupError("git timed out")
+    monkeypatch.setattr(_gitcfg, "_run_git", broken)
+    r = run(HOOK, bash("git push", feature_repo))
+    assert r.code == 2 and "GitLookupError" in r.stderr
+    monkeypatch.undo()
+    git(feature_repo, "checkout", "-q", "--detach")
+    assert run(HOOK, bash("git push origin feature", feature_repo)).code == 0
+
+
+def test_hook_budget_denies(monkeypatch):
+    import json
+    import time
+
+    import _common
+    monkeypatch.setattr(_common, "HOOK_BUDGET_SECONDS", 1)
+
+    def slow(ctx):
+        try:
+            time.sleep(3)
+        except OSError:  # must not swallow the alarm
+            pass
+        return None
+    payload = json.dumps({"cwd": "/", "tool_name": "Bash", "tool_input": {"command": "true"}})
+    start = time.monotonic()
+    r = _common.execute("no-merge", slow, True, payload)
+    assert r.code == 2 and "took longer than" in r.stderr and time.monotonic() - start < 2.5
+    r = _common.execute("secret-scan", slow, False, payload)
+    assert r.code == 0 and time.monotonic() - start >= 3
+
+
+@pytest.mark.parametrize("script", ["no_merge.py", "no_force_push.py", "no_git_tag.py"])
+def test_import_crash_exits_2(tmp_path, script):
+    import json
+    import shutil
+    import subprocess
+    import sys
+
+    from hooks_helpers import HOOKS
+    copy = tmp_path / "hooks"
+    shutil.copytree(HOOKS, copy, ignore=shutil.ignore_patterns("__pycache__"))
+    (copy / "_gitgh.py").write_text('raise RuntimeError("boom")\n')
+    event_json = json.dumps(bash("git status", tmp_path))
+    r = subprocess.run([sys.executable, str(copy / script)], input=event_json, capture_output=True, text=True,
+                       timeout=30)
+    assert r.returncode == 2 and "internal error while loading" in r.stderr

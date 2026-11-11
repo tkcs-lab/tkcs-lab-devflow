@@ -18,19 +18,27 @@ import re
 import shlex
 from dataclasses import dataclass, field
 
+from _ansi import ansi_c_decode
+from _wrappers import (ASSIGN, WRAPPER_POSITIONALS, WRAPPER_VALUE_OPTS, WRAPPERS, ParseError,  # noqa: F401
+                       script_command, strip_wrapper as _strip_wrapper)
+
 DYN = ""    # a substitution or expansion this module does not evaluate
 REDIR = ""  # marks a redirection operator in the intermediate text
 MAX_DEPTH = 8
-
-
-class ParseError(ValueError):
-    pass
 
 
 @dataclass
 class Command:
     words: list[str]
     redirects: list[tuple[str, str]] = field(default_factory=list)  # (operator, target)
+    stdin_text: str | None = None  # the text a `<<<` herestring or `<<` heredoc feeds to the command
+    reads_stdin_shell: bool = False  # a shell that reads its commands from a pipe, a file or the terminal
+    env: dict[str, str] = field(default_factory=dict)  # the leading NAME=value words stripped in front of it
+
+
+class _Seg(str):
+    """A raw command segment; `bodies` collects the heredoc bodies its `<<` redirects introduce."""
+    bodies: list[str]
 
 
 def is_dynamic(word: str) -> bool:
@@ -60,6 +68,8 @@ def _to_command(segment: str) -> Command:
         raise ParseError(str(exc)) from None
     words: list[str] = []
     redirects: list[tuple[str, str]] = []
+    bodies = list(getattr(segment, "bodies", []))
+    stdin: str | None = None
     i = 0
     while i < len(tokens):
         tok = tokens[i]
@@ -69,10 +79,16 @@ def _to_command(segment: str) -> Command:
                 target = tokens[i + 1]
                 i += 1
             redirects.append((tok[1:], target))
+            if tok[1:] == "<<<":
+                stdin = target
+            elif tok[1:] in ("<<", "<<-"):
+                stdin = bodies.pop(0) if bodies else ""
+            elif tok[1:] in ("<", "<>"):
+                stdin = None
         else:
             words.append(tok)
         i += 1
-    return Command(words, redirects)
+    return Command(words, redirects, stdin)
 
 
 def _scan(text: str, i: int, out: list[str], depth: int, inner: bool) -> int:
@@ -83,13 +99,18 @@ def _scan(text: str, i: int, out: list[str], depth: int, inner: bool) -> int:
     n = len(text)
     buf: list[str] = []
     paren = 0
-    heredocs: list[tuple[str, bool, bool]] = []  # (delimiter, strip tabs, quoted)
+    heredocs: list[list] = []  # [delimiter, strip tabs, quoted, owning segment]
 
     def flush() -> None:
         s = "".join(buf).strip()
         buf.clear()
         if s:
-            out.append(s)
+            seg = _Seg(s)
+            seg.bodies = []
+            for h in heredocs:
+                if h[3] is None:
+                    h[3] = seg
+            out.append(seg)
 
     def prev() -> str:
         return buf[-1][-1:] if buf else ""
@@ -119,13 +140,13 @@ def _scan(text: str, i: int, out: list[str], depth: int, inner: bool) -> int:
             if nxt == "(":
                 i = _scan(text, i + 2, out, depth + 1, True)
                 buf.append(DYN)
-            elif nxt == "'":  # ANSI-C quoting: opaque
+            elif nxt == "'":  # ANSI-C quoting: decoded to its literal value
                 j = i + 2
                 while j < n and text[j] != "'":
                     j += 2 if text[j] == "\\" else 1
                 if j >= n:
                     raise ParseError("unterminated $'...' quote")
-                buf.append(DYN)
+                buf.append(shlex.quote(ansi_c_decode(text[i + 2:j])))
                 i = j + 1
             else:
                 buf.append("$")
@@ -162,8 +183,10 @@ def _scan(text: str, i: int, out: list[str], depth: int, inner: bool) -> int:
         elif c == "\n":
             flush()
             i += 1
-            for delim, strip, quoted in heredocs:
-                i = _skip_heredoc(text, i, delim, strip, quoted, out, depth)
+            for delim, strip, quoted, owner in heredocs:
+                i, body = _read_heredoc(text, i, delim, strip, quoted, out, depth)
+                if owner is not None:
+                    owner.bodies.append(body)
             heredocs.clear()
         elif c == "(":
             flush()
@@ -247,11 +270,13 @@ def _heredoc_delimiter(text: str, i: int, strip: bool, buf: list[str], heredocs:
     if i == start:
         raise ParseError("heredoc without a delimiter")
     buf.append(" " + shlex.quote("".join(delim)) + " ")
-    heredocs.append(("".join(delim), strip, quoted))
+    heredocs.append(["".join(delim), strip, quoted, None])
     return i
 
 
-def _skip_heredoc(text: str, i: int, delim: str, strip: bool, quoted: bool, out: list[str], depth: int) -> int:
+def _read_heredoc(text: str, i: int, delim: str, strip: bool, quoted: bool, out: list[str],
+                  depth: int) -> tuple[int, str]:
+    """Read a heredoc body starting at `i`; return (index after the delimiter line, body)."""
     n = len(text)
     body: list[str] = []
     while i < n:
@@ -259,31 +284,22 @@ def _skip_heredoc(text: str, i: int, delim: str, strip: bool, quoted: bool, out:
         end = n if j < 0 else j
         line = text[i:end]
         i = end + 1 if j >= 0 else n
-        if (line.lstrip("\t") if strip else line) == delim:
+        if strip:
+            line = line.lstrip("\t")
+        if line == delim:
             break
         body.append(line)
+    text_body = "".join(line + "\n" for line in body)
     if not quoted:  # an unquoted heredoc body still runs $(...) and backticks
-        _expand_text("\n".join(body), 0, None, out, depth)
-    return min(i, n)
+        _expand_text(text_body, 0, None, out, depth)
+    return min(i, n), text_body
 
 
 # --------------------------------------------------------------------------- command words
 
 RESERVED = {"if", "then", "else", "elif", "fi", "do", "done", "while", "until", "for", "case", "esac",
             "in", "!", "{", "}", "time", "select", "function", "coproc"}
-ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\+?=")
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh", "ash"}
-WRAPPERS = {"sudo", "doas", "env", "nice", "ionice", "timeout", "command", "builtin", "exec", "nohup",
-            "stdbuf", "setsid", "chronic", "unbuffer", "time"}
-WRAPPER_VALUE_OPTS = {
-    "sudo": {"-u", "-g", "-C", "-h", "-p", "-r", "-t", "-U", "-D"},
-    "doas": {"-u", "-C"},
-    "env": {"-u", "-C", "-S", "--unset", "--chdir"},
-    "nice": {"-n"},
-    "ionice": {"-c", "-n", "-p", "-P", "-u"},
-    "timeout": {"-k", "-s", "--kill-after", "--signal"},
-    "exec": {"-a"},
-}
 SCANNING = {"xargs", "find", "parallel", "watch", "ssh"}  # run other commands whose words follow
 
 
@@ -291,65 +307,99 @@ def base(word: str) -> str:
     return os.path.basename(word)
 
 
-def _strip_wrapper(name: str, rest: list[str]) -> list[str]:
-    value_opts = WRAPPER_VALUE_OPTS.get(name, set())
-    i = 0
-    while i < len(rest):
-        tok = rest[i]
-        if tok == "--":
-            i += 1
-            break
-        if tok.startswith("-") and tok != "-":
-            i += 2 if tok in value_opts else 1
-        elif name == "env" and ASSIGN.match(tok):
-            i += 1
-        else:
-            break
-    rest = rest[i:]
-    return rest[1:] if name == "timeout" and rest else rest
+SHELL_VALUE_OPTS = {"--rcfile", "--init-file"}  # long options of a shell that take the next word
+NOT_RUN_OPTS = {"--version", "--help", "-n"}  # a shell given only these runs no commands
 
 
-def candidates(words: list[str], redirects: list[tuple[str, str]] | None = None, depth: int = 0) -> list[Command]:
+def reads_stdin(args: list[str]) -> bool:
+    """True when a shell invoked with `args` (no `-c`) reads its commands from stdin: it has no
+    script argument, or `-s` says the remaining words are positional parameters."""
+    if args and all(a in NOT_RUN_OPTS for a in args):
+        return False
+    k = 0
+    while k < len(args):
+        tok = args[k]
+        if tok in ("-", "--"):
+            return k + 1 >= len(args)
+        if tok in SHELL_VALUE_OPTS:
+            k += 2
+            continue
+        if tok.startswith("--"):
+            k += 1
+            continue
+        if len(tok) > 1 and tok[0] in "-+" and not is_dynamic(tok):
+            if "s" in tok[1:] and tok[0] == "-":
+                return True
+            k += 1 + tok.count("o") + tok.count("O")  # -o NAME / -O NAME take a value
+            continue
+        return False  # a script path
+    return True
+
+
+def candidates(words: list[str], redirects: list[tuple[str, str]] | None = None, depth: int = 0,
+               stdin_text: str | None = None) -> list[Command]:
     """Commands that may be executed because of `words`: the command itself without prefixes and
     wrappers, plus whatever a shell `-c` string, `eval`, `xargs`, `find -exec` ... would run."""
     if depth > MAX_DEPTH:
         raise ParseError("command nesting is too deep")
     w = list(words)
+    out: list[Command] = []
+    env: dict[str, str] = {}
     while w:
         head = w[0]
+        if ASSIGN.match(head):
+            name, _, val = head.partition("=")
+            env[name] = DYN if is_dynamic(val) else val
         if head in RESERVED or ASSIGN.match(head):
             w = w[1:]
+            if head == "time":  # `time -p` / `time --`: the flag is not the command
+                while w and w[0] in ("-p", "--"):
+                    w = w[1:]
         elif base(head) in WRAPPERS:
+            if base(head) == "script":  # `script -c CMD FILE` runs CMD
+                cmd_text = script_command(w[1:])
+                if cmd_text is not None:
+                    for cmd in split_commands(cmd_text, depth + 1):
+                        out += candidates(cmd.words, cmd.redirects, depth + 1, cmd.stdin_text)
             w = _strip_wrapper(base(head), w[1:])
         else:
             break
     if not w:
-        return [Command([], list(redirects or []))] if redirects else []
-    out: list[Command] = []
+        return out + ([Command([], list(redirects or []))] if redirects else [])
     name = base(w[0])
     if name in SHELLS:
-        for k, tok in enumerate(w[1:], 1):
-            if tok.startswith("-") and not tok.startswith("--") and "c" in tok[1:] and k + 1 < len(w):
-                for cmd in split_commands(w[k + 1], depth + 1):
-                    out += candidates(cmd.words, cmd.redirects, depth + 1)
-                break
+        c_opts = [k for k, t in enumerate(w[1:], 1) if t.startswith("-") and not t.startswith("--") and "c" in t[1:]]
+        script = w[c_opts[0] + 1] if c_opts and c_opts[0] + 1 < len(w) else None  # `bash -c` alone runs nothing
+        if not c_opts and reads_stdin(w[1:]):
+            if stdin_text is None:  # stdin is a pipe, a file or the terminal: iter_items denies it
+                return out + [Command(w, list(redirects or []), None, True, env)]
+            script = stdin_text  # a herestring or heredoc is parsed like a `-c` string
+        if script is not None:
+            for cmd in split_commands(script, depth + 1):
+                out += candidates(cmd.words, cmd.redirects, depth + 1, cmd.stdin_text)
     elif name == "eval":
         for cmd in split_commands(" ".join(w[1:]), depth + 1):
-            out += candidates(cmd.words, cmd.redirects, depth + 1)
+            out += candidates(cmd.words, cmd.redirects, depth + 1, cmd.stdin_text)
     elif name in SCANNING:
         for k, tok in enumerate(w[1:], 1):
             if base(tok) in ("git", "gh"):
                 out += candidates(w[k:], None, depth + 1)
-    out.append(Command(w, list(redirects or [])))
+    out.append(Command(w, list(redirects or []), env=env))
     return out
 
 
-def walk(command: str):
-    """Yield (cwd_hint, words, redirects) for every command `command` may run; cwd_hint is the
+def walk_commands(command: str):
+    """Yield (cwd_hint, Command) for every command `command` may run; cwd_hint is the
     directory the last `cd` / `pushd` in front of it named (or None)."""
     cwd: str | None = None
     for cmd in split_commands(command):
-        for c in candidates(cmd.words, cmd.redirects):
+        for c in candidates(cmd.words, cmd.redirects, 0, cmd.stdin_text):
             if c.words and base(c.words[0]) in ("cd", "pushd") and len(c.words) > 1 and not is_dynamic(c.words[1]):
                 cwd = c.words[1] if os.path.isabs(c.words[1]) or cwd is None else os.path.join(cwd, c.words[1])
-            yield cwd, c.words, c.redirects
+            yield cwd, c
+
+
+def walk(command: str):
+    """Yield (cwd_hint, words, redirects) for every command `command` may run (see walk_commands)."""
+    for cwd, c in walk_commands(command):
+        yield cwd, c.words, c.redirects

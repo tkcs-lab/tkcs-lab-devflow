@@ -32,8 +32,9 @@ goes ahead.
 
 A phase whose `Plan-Phase` trailer is already in the feature branch's history (a resumed run) is not
 checked again; the pull request section says "not checked". Fix sessions (`fix-<n>`) and rework
-sessions (`<phase id>-rev<n>`) are checked against the original phase's `touches` and listed under
-their own name in the pull request section.
+sessions (`<phase id>-rev<n>`) are always checked, even though the original phase's trailer is already
+in the feature branch: they run under their own name against the original phase's `touches`, are never
+reported as merged before the run resumed, and are listed under their own name in the pull request section.
 
 ## Why it never blocks
 

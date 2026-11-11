@@ -1,7 +1,7 @@
 # .claude/toolkit.yaml — the project profile read by the devflow commands (/review, /make-plan, /implement, /dod).
 # Every command checks this file first and stops, naming the key, if a required key is missing.
 # An optional key you leave out means "this project does not use that".
-# Reference: docs/profile-reference.md in https://github.com/andras-tkcs/claude-toolkit
+# Reference: docs/profile-reference.md in https://github.com/tkcs-lab/claude-toolkit
 
 project:
   name: My Project       # optional; used in prose. Default: the repository name

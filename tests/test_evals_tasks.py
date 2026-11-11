@@ -81,3 +81,42 @@ def test_full_prompt():
     from evals.harness.taskspec import load_task
     t = [t for t in discover(graders_known=KNOWN) if t.id == "make-plan-small"][0]
     assert t.full_prompt().startswith("/devflow:make-plan Add a --limit")
+
+
+def test_task_rejects_traversal_and_option_refs(tmp_path):
+    from evals.harness.runner import prepare_plugin
+    data = _with(command=None, prompt="p", fixture={"path": "../../../../etc"},
+                 plugin={"extra": ["../../evals"], "ref": "--output=x"})
+    assert len(validate_task_data(data, KNOWN)) == 3
+    for ref in ("--output=x", "-x"):
+        with pytest.raises(RuntimeError, match="must not start with"):
+            prepare_plugin(ref, tmp_path / "p")
+    assert not (tmp_path / "x").exists() and not list(tmp_path.rglob("x"))
+    assert validate_task_data(_with(fixture={"path": "fixtures/app"}), KNOWN) == []
+    for ok in ("/abs", "a/../b", ".."):
+        assert validate_task_data(_with(fixture={"path": ok}), KNOWN), ok
+
+
+@pytest.mark.parametrize("key", ["../x", "/etc/x", "a/../../x"])
+def test_stub_agent_refuses_files_outside_the_workdir(tmp_path, key):
+    from evals.harness.agents import AgentError, StubAgent
+    from evals.harness.model import AgentRequest
+    wd = tmp_path / "work"
+    wd.mkdir()
+    req = AgentRequest(workdir=wd, prompt="p", plugin_dirs=[], model=None, timeout_s=10, max_budget_usd=1, task_id="t")
+    with pytest.raises(AgentError):
+        StubAgent({"files": {key: "x"}}).run(req)
+    assert not (tmp_path / "x").exists()
+
+
+def test_infinite_cost_ceiling_is_rejected():
+    assert validate_task_data(_with(cost_ceiling_usd=float("inf")), KNOWN)
+
+
+def test_dry_run_shows_the_pinned_model_for_opus_commands(capsys):
+    from evals.harness import cli
+    assert cli.main(["run", "--dry-run", "--task", "make-plan-small", "--task", "make-plan-large",
+                     "--task", "review-seeded"]) == 0
+    out = capsys.readouterr().out
+    assert "model=sonnet" not in out
+    assert out.count("model=opus (command frontmatter)") == 3

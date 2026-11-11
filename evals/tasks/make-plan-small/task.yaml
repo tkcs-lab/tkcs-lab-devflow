@@ -6,7 +6,6 @@ arguments: >-
   This is a small change that one session can do. Decide every open question yourself; nobody can answer.
 fixture:
   builder: tiny_app
-model: sonnet
 repeats: 3
 timeout_s: 900
 cost_ceiling_usd: 1.5

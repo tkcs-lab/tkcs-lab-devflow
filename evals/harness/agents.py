@@ -15,6 +15,7 @@ import json
 import os
 import signal
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import Protocol
@@ -38,14 +39,31 @@ class AgentError(RuntimeError):
     pass
 
 
-def clean_env() -> dict[str, str]:
-    """The environment of the headless session: no GitHub or cloud credentials, so a stray push or API call cannot succeed."""
+_PROXY_VARS = {"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS",
+               "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"}
+_GIT_IDENTITY = {"GIT_AUTHOR_NAME": "devflow-evals", "GIT_COMMITTER_NAME": "devflow-evals",
+                 "GIT_AUTHOR_EMAIL": "evals@example.invalid", "GIT_COMMITTER_EMAIL": "evals@example.invalid"}
+
+
+def clean_env(home: Path | None = None, keep_proxy: bool = False) -> dict[str, str]:
+    """The environment of the headless session: an empty HOME (no stored logins or config), no GitHub or cloud
+    credentials, no proxy or session variables of the caller, so a stray push or API call cannot succeed."""
     env = {}
     for k, v in os.environ.items():
         up = k.upper()
         if k not in _KEEP_TOKEN_VARS and any(s in up for s in ("TOKEN", "SECRET", "PASSWORD", "AWS_", "GH_", "GITHUB")):
             continue
+        if up in _PROXY_VARS and not keep_proxy:
+            continue
+        if up.startswith("CLAUDE_CODE_") and k != "CLAUDE_CODE_OAUTH_TOKEN" and not up.startswith(("CLAUDE_CODE_USE_", "CLAUDE_CODE_SKIP_")):
+            continue
         env[k] = v
+    if home is None:
+        home = Path(tempfile.mkdtemp(prefix="evals-home-"))
+    home.mkdir(parents=True, exist_ok=True)
+    env["HOME"] = str(home)
+    for k, v in _GIT_IDENTITY.items():
+        env.setdefault(k, v)
     env["GIT_TERMINAL_PROMPT"] = "0"
     return env
 
@@ -110,8 +128,9 @@ def parse_stream(lines: list[str]) -> AgentResult:
 class ClaudeCodeAgent:
     name = "claude"
 
-    def __init__(self, claude_bin: str = "claude"):
+    def __init__(self, claude_bin: str = "claude", keep_proxy: bool = False):
         self.claude_bin = claude_bin
+        self.keep_proxy = keep_proxy
 
     def run(self, req: AgentRequest) -> AgentResult:
         if os.environ.get("PYTEST_CURRENT_TEST"):
@@ -119,7 +138,7 @@ class ClaudeCodeAgent:
         cmd = build_command(req)
         cmd[0] = self.claude_bin
         start = time.monotonic()
-        proc = subprocess.Popen(cmd, cwd=req.workdir, env=clean_env(), stdin=subprocess.DEVNULL,
+        proc = subprocess.Popen(cmd, cwd=req.workdir, env=clean_env(home=Path(req.workdir).parent / "home", keep_proxy=self.keep_proxy), stdin=subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
         timed_out = False
         try:
@@ -171,9 +190,14 @@ class StubAgent:
         c = self._entry(req)
         wd = req.workdir
         for rel in c.get("delete_files", []):
+            if not (wd / rel).resolve().is_relative_to(wd.resolve()):
+                raise AgentError(f"stub file path escapes the workdir: {rel}")
             (wd / rel).unlink(missing_ok=True)
+        root = wd.resolve()
         for rel, text in c.get("files", {}).items():
             p = wd / rel
+            if not p.resolve().is_relative_to(root):
+                raise AgentError(f"stub file path escapes the workdir: {rel}")
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(text)
         if c.get("branch"):

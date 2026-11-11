@@ -46,6 +46,7 @@ jobs:
   release:
     name: devflow-release
     runs-on: ubuntu-latest
+    environment: release
     if: github.ref == 'refs/heads/__MAIN_BRANCH__'
     steps:
       - name: Decide the tag

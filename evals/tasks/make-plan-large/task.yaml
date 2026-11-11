@@ -8,7 +8,6 @@ arguments: >-
   Decide every open question yourself; nobody can answer.
 fixture:
   builder: tiny_app
-model: sonnet
 repeats: 3
 timeout_s: 1200
 cost_ceiling_usd: 4.0
