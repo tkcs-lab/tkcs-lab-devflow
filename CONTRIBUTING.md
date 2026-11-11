@@ -83,9 +83,18 @@ and every file the playbook links. A change to any of them makes `tests/core/tes
 (`python3 evals/run.py baseline <results.jsonl>`), or, for a change that cannot affect them, refresh the hashes only
 (`python3 evals/run.py baseline --refresh-hashes`) and say why in the commit message.
 
-## Plugin versions
+## Versions and releases
 
-There is one plugin, `tld`, with its manifest in `.claude-plugin/plugin.json`. Its version and the package version in `pyproject.toml` must agree; `tests/adapters/claude/test_structure.py::test_plugin_versions_agree` enforces it. A plan's retirement phase bumps them together, because a Claude Project caches the plugin per version (see [docs/guides/delivery.md](docs/guides/delivery.md)).
+There is one version, in `pyproject.toml`, `.claude-plugin/plugin.json` and `src/tld/__init__.py`; they are the same
+string (`tests/core/test_repo_release.py`, `tests/adapters/claude/test_structure.py::test_plugin_versions_agree`). A
+Claude Project caches the plugin per version, so a change users should get ships as a new version.
+
+To release: in a pull request, bump the three to `X.Y.Z` and add a `## [X.Y.Z]` entry to `CHANGELOG.md` (the test
+requires one for a release version). After the merge the owner runs the workflow `release`
+(`.github/workflows/release.yml`) on `main`: a dry run first shows the tag `vX.Y.Z` and the notes (the changelog
+entry plus the pull requests merged since the previous tag); unticking `dry_run` publishes, after the owner approves
+the run in the environment `tld-release`, which holds `TLD_RELEASE_TOKEN`. The workflow's own token only reads. A
+breaking change to the profile raises the major version, and the release notes say how to update `tld.version`.
 
 ## Adding a hook case
 

@@ -1,397 +1,137 @@
-# Design: tld, a plan → implement toolkit for Claude Code on the web
-
-Status: review 1 answered; this is the design as built. The three decisions in §8 are resolved.
-
-Since tld 0.4 the SessionStart-hook route and `toolkit.ref` no longer exist; plugins in the Claude Project are the only delivery route (see guides/delivery.md). Section 3 is kept as the record of the probe that led to the first design.
-
-## 1. What this is
-
-PrivacyFence's `/make-plan`, `/implement` and `/dod` (plus the generic half of its `steward` skill)
-moved into a plugin marketplace, with every project fact lifted into `.tld/toolkit.yaml`. The
-commands keep their structure and wording; each hard-coded path or command becomes a lookup through
-one skill, `project-profile`.
-
-I read all of the PrivacyFence files you listed in full, plus the PrivacyFence docs they point at
-(`docs/coding-and-testing-guidelines.md` §2.7, `docs/testing-policy.md`, `docs/adr/README.md`,
-`.github/`), and Nightshift's marketplace, stack schema, `ns-python` stack and the four skills.
-Nightshift's runtime is not used. From it I take: the marketplace shape, the `review-checklist` and
-`secure-code-review` skills, and the idea that a stack is a skill the profile selects.
-
-## 2. Layout
-
-Since WP4 of the migration plan the procedures are neutral: a **core** of playbooks, roles, checklists and stacks,
-and a thin Claude adapter that only maps runtime actions to Claude tools.
-
-```
-.claude-plugin/marketplace.json         # name: tkcs-lab-devflow; one plugin, tld, with source "./"
-.claude-plugin/plugin.json              # component paths point into adapters/claude/
-pyproject.toml                          # package "tld", console script "tld"
-bin/tld                                 # the CLI launcher (puts src/ on sys.path): see docs/reference/cli.md
-src/tld/
-  cli.py                                # tld <group> <command>, tld --version
-  profile/{validate,version,patch,survey,survey_docs,survey_signals,survey_proposal}.py   # the profile, tld.version, setup's survey
-  plan/{manifest,scope,phases}.py       # manifest validation, scope drift, check-url / branch-name / phase-status
-  roles/dispatch.py                     # tld roles required|verify: which roles a point requires, in which mode, and whether they reported
-  dod/gate.py                           # the dod-gate hook policy
-  guard/                                # the guardrail hook policies and their shell, git and gh parsing: see docs/architecture/hooks.md
-  board/{store,server,client,mcp,mcp_stdio,stale,build,record}.py, board/web/{board.html,rules.js}   # the status board
-  ops/{land_order,pick_release,upstream_sync,repo_admin,docs_index}.py
-  review/decisions.{py,html}            # the former decisions page; no playbook uses it (the board's asks replace it)
-  schema/{profile,status-record,admin-policy}.schema.json
-  templates/{toolkit.yaml,tld-land.yml,tld-release.yml,tld-git-ops.yml,admin-policy.yaml,git-ops-allowlist.json}
-playbooks/
-  {setup,review,make-plan,implement,dod,land,deps,upstream,docs,board}.md   # one neutral procedure per command
-  {git-ops,repo-admin}.md               # the two procedures run on request (no command)
-  runtime.md                            # the runtime actions the playbooks name: start_worker, check_in, run_role, ask_human, github.* ...
-  policies/{profile,untrusted-text,pr-steward,status-board,roles,docs}.md   # rules several playbooks share; each rule lives in one file
-roles/<role>.md                         # the ten role cards (architect ... refactorer): see docs/architecture/roles.md
-checklists/{review,security,test,docs}.md   # what a review checks; used by the roles
-stacks/{python,go,swift,ipados}.md      # the stack guides the profile's `stacks` selects
-adapters/claude/
-  commands/<cmd>.md                     # front matter + "follow playbooks/<cmd>.md, map runtime actions with tld:runtime"
-  agents/<role>.md                      # front matter (tools, the model of the role's level) + "apply roles/<role>.md"
-  skills/runtime/SKILL.md               # the runtime map: every runtime action -> Claude tools; the level -> model table
-  skills/{git-ops,repo-admin}/SKILL.md  # pointers to the playbooks, loadable on request
-  hooks/hooks.json, hooks/*.py          # the hook entries: thin shims over src/tld/guard and src/tld/dod
-  mcp.json                              # declares the tld board mcp-stdio bridge (the tld-board MCP server)
-deploy/board/Dockerfile                 # image of the board server
-evals/                                  # eval harness (not shipped): see docs/architecture/evals.md
-docs/                                   # see docs/README.md
-tests/core, tests/adapters/claude       # pytest; contract tests in tests/core/test_contracts.py and tests/adapters/claude/test_structure.py
-.tld/toolkit.yaml                       # this repository's own profile
-```
-
-I did not add `test-strategy` and `adr` as skills: `test-strategy` is Nightshift-run-specific
-(`RUN/`, `ns:<id>` xfail reasons), and ADR guidance in PrivacyFence is project-owned
-(`docs/adr/README.md`), so the profile points at it (`docs.adr_dir`, `docs.adr_bar`) instead of
-shipping a competing template. Say so if you want a generic `adr` skill anyway.
-
-Scripts are standard library plus PyYAML; the schema is checked by a small hand-rolled validator in
-`tld profile validate` (no `jsonschema` dependency), with `profile.schema.json` as the documented,
-editor-friendly source of truth that a test keeps in sync with the code.
-
-## 3. Delivery test result (real cloud session)
-
-I started a real cloud session with `create_session` on this repo (Sonnet, `auto` permission mode)
-whose committed `.claude/settings.json` ran a SessionStart hook. The hook wrote, at startup:
-
-| written by the hook | location |
-|---|---|
-| command `probe-user-cmd` | `~/.claude/commands/` |
-| skill `probe-user-skill` | `~/.claude/skills/probe-user-skill/SKILL.md` |
-| command `probe-proj-cmd` | `<project>/.claude/commands/` |
-| skill `probe-proj-skill` | `<project>/.claude/skills/probe-proj-skill/SKILL.md` |
-
-plus two committed controls (`probe-committed`, `probe-committed-cmd`).
-
-**Observed: all six were in the session's skill listing at the first turn, and all six were invoked
-successfully through the `Skill` tool in that same session.** Hook log: started at
-`…958.447`, finished at `…958.464` (17 ms of file writes); the session's first tool call was at
-`…974`. So the hook finishes before the listing is built, and both locations are picked up with no
-restart. Nothing needs to be installed a second time.
-
-Two further facts from that run:
-
-* **Project-level files are untracked files.** The session's stop hook
-  (`~/.claude/stop-hook-git-check.sh`) immediately complained "There are untracked files in the
-  repository. Please commit and push", which is the failure you want to prevent for workers.
-  `~/.claude/` is outside the repo and has no such problem.
-* `CLAUDE_CODE_REMOTE=true`, `HOME=/root`, `CLAUDE_PROJECT_DIR=/home/user/<repo>` were set in the hook.
-
-**Decision: install into `~/.claude/` by default** (`commands/`, `skills/`, and the scripts under
-`~/.claude/tld/`). It cannot collide with the project's own `.claude/commands/` or `skills/`
-(a project `steward` skill stays untouched), and it cannot be committed. `TLD_SCOPE=project`
-switches to `<project>/.claude/` for people who want it; in that mode the script appends every
-installed path to `.git/info/exclude`, as you asked. (In user scope the exclude is moot, so the script
-does not write it.)
-
-Not tested, and said so in `docs/guides/delivery.md`:
-
-1. **Route 1 (Claude Project plugins)**: it is a settings-UI feature of claude.ai and cannot be driven
-   from a session. The marketplace is validated structurally (`claude plugin validate`, if the CLI is
-   in the container, else by a test of the JSON against Anthropic's documented fields).
-2. **Typing `/probe-user-cmd` in the web UI.** The `Skill` tool resolved the command names, which is
-   the same registry; I did not drive the UI.
-3. **Fetching the pinned tag from a PrivacyFence session**: from this container
-   `git ls-remote https://github.com/tkcs-lab/tkcs-lab-devflow` and `codeload.github.com` both work.
-   Whether a *private* toolkit repo is reachable from a project's session depends on the session's
-   repo access. Decision 2 below.
-
-The vendoring-script + PR-bot fallback you described is **not needed** and I will not build it.
-
-## 4. The profile: `.tld/toolkit.yaml`
-
-Rules: a key marked **required** that is absent makes the command stop with
-`toolkit.yaml: missing required key 'verify.fast' (see docs/reference/profile-reference.md)`, naming the key.
-An optional key that is absent means "not used in this project". Only two keys have a stated
-default, both from your brief: `docs.plan_dir` (`docs/`) and `models` (below). Unknown keys are an
-error (typos must not be silent). Commands never fall back to a PrivacyFence value.
-
-| Key | Req. | Meaning | PrivacyFence value |
-|---|---|---|---|
-| `toolkit.ref` | for hook | tag the SessionStart hook installs | `v0.1.0` |
-| `project.name` | no | used in prose ("planner for X"); absent → the repo name | `PrivacyFence` |
-| `docs.must_read` | **yes** (may be `[]`) | files planner, workers and final reviewer read first | `CLAUDE.md`, `CONTRIBUTING.md`, `docs/releasing.md`, `docs/coding-and-testing-guidelines.md`, `docs/testing-policy.md`, `docs/adr/README.md` |
-| `docs.plan_dir` | no (default `docs/`) | where `<slug>-plan.md` and the manual-steps HTML live | `docs/` |
-| `docs.adr_dir` | no | ADRs used iff present | `docs/adr` |
-| `docs.adr_index` | no | index file that must list each new ADR | `docs/adr/README.md` |
-| `docs.adr_bar` | no (with `adr_dir`) | where the "needs an ADR" criteria are written | `CONTRIBUTING.md#decisions-plans-and-adrs` |
-| `docs.changelog.file` / `.section` | no | user-visible changes are added here; never a version heading | `CHANGELOG.md` / `## [Unreleased]` |
-| `git.main_branch` | **yes** | base for plans, features, PRs | `main` |
-| `git.branch_pattern` | **yes** | human-readable rule, used in prompts | `<type>/<kebab-case>` |
-| `git.branch_types` | no | allowed `<type>` values | `[feature, fix, chore, tests]` |
-| `git.merge_style` | no | `merge-commit` or `squash`; only quoted in worker/steward text | `merge-commit` |
-| `verify.fast` | **yes** | run after every merge in `/implement` | `ruff check .`, `python3 -m pytest tests/unit -q` |
-| `verify.dod` | **yes** | the blocking gate `/dod` runs, in order | see below |
-| `verify.dod_conditional[]` | no | `{when: [globs], do: text}` rows `/dod` checks against the diff | 5 rows (connector clients, MCP dispatch, MCP auth/shim, dependencies, `cloudflare/downloads/`) |
-| `verify.dod_manual[]` | no | judgement rows `/dod` reports `ok / needs attention / n/a` | 7 rows |
-| `verify.dod_doc` | no | pointer to the project's human-readable DoD, quoted in the report | `docs/coding-and-testing-guidelines.md#27-…` |
-| `ci.dispatchable[]` | no | `{workflow, use_when, notes?}`: work the container cannot do, dispatched against the session's own branch | 7 entries, see below |
-| `stacks` | **yes** (may be `[]`) | stack skills to load | `[python]` |
-| `models.planner/orchestrator/worker/reviewer` | no | default `opus / sonnet / sonnet / opus` | the defaults |
-| `project_steward` | no | project skill with policy that fits no key | `.claude/skills/steward/SKILL.md` |
-
-`verify.fast` and `verify.dod` entries are a string (`"ruff check ."`) or a mapping
-`{run, cwd?, narrow?, skip_when_narrowed?}`. That carries PrivacyFence's `/dod` details without PF
-words in the plugin: `cwd: mcpb/shim` for the `npm` rows; `narrow: "pytest -v {args}"` so `/dod
-tests/unit/test_gate.py` narrows the run, and `skip_when_narrowed: true` on the coverage-floor row,
-which `/dod` then reports as `n/a (partial run)` exactly as today. PrivacyFence's `verify.dod`:
-
-```yaml
-verify:
-  fast: ["ruff check .", "python3 -m pytest tests/unit -q"]
-  dod:
-    - run: "pytest -v --cov=src/privacyfence --cov-branch --cov-report=term-missing --cov-report=json:coverage.json"
-      narrow: "pytest -v {args}"
-    - run: "python3 scripts/check_coverage_floor.py coverage.json"
-      skip_when_narrowed: true
-    - "ruff check ."
-    - "bandit -c pyproject.toml -r src"
-    - "python3 scripts/mypy_strict_modules.py"
-    - {run: "npm test", cwd: mcpb/shim}
-    - {run: "npm run typecheck", cwd: mcpb/shim}
-```
-
-`ci.dispatchable` for PrivacyFence: `qa-record-fixture.yml`, `connector-live-check.yml`,
-`windows-graphical-session.yml`, `linux-graphical-session.yml`, `macos-graphical-session.yml`,
-`build.yml`, `release.yml` (the "dry run first, maintainer decides" note goes in `notes`).
-The container facts in the PrivacyFence steward file (concurrency group, "workflow must already be on
-`main`", fixture-diff review, no tag push, Chromium via `PRIVACYFENCE_TEST_CHROMIUM`, "do not follow
-Dependabot PRs") stay in the project's own `steward` skill via `project_steward`. "Workflow must be on
-the default branch" is true everywhere, so it moves into the generic `pr-steward`.
-
-### What moves where (every PrivacyFence fact I found)
-
-| In the originals | Becomes |
-|---|---|
-| `CLAUDE.md`, `CONTRIBUTING.md`, `docs/releasing.md`, … read lists (make-plan §0.2, child brief rule 2, final reviewer) | `docs.must_read` |
-| `docs/<slug>-plan.md`, `…-plan-manual-steps.html`, `final_checks` example | `docs.plan_dir` |
-| `docs/adr/`, "CONTRIBUTING.md's ADR bar", next free ADR number, ADR `final_checks` line | `docs.adr_dir`, `adr_index`, `adr_bar`; whole ADR parts are skipped when absent |
-| `CHANGELOG.md [Unreleased]` in briefs, retirement phase, `final_checks` | `docs.changelog` (skipped when absent) |
-| `main`; `<type>/<kebab-case>`; "never `feat/`" | `git.main_branch`, `git.branch_pattern`, `git.branch_types` |
-| `ruff check .` + `pytest tests/unit` after merge; in final review | `verify.fast` |
-| `/dod` command list, conditional + manual rows | `verify.dod`, `verify.dod_doc` |
-| steward dispatch table | `ci.dispatchable`; container facts → `project_steward` |
-| Opus/Sonnet table | `models`; the command front-matter `model:` stays `opus`/`sonnet` |
-| `src/privacyfence/…`, `pytest …` in the manifest example | stack skill supplies examples; the example in `make-plan.md` uses placeholders |
-| "A missing QA credential is not a test failure" | generic: "a missing credential/capability is a dispatch, not a failure" (pr-steward) |
-| `/cut-release`, `/qa-record` | stay in PrivacyFence |
-
-Model ids stay in the commands as an alias table (`opus → claude-opus-5-5`, `sonnet →
-claude-sonnet-5-5`), as in the original; the profile holds aliases. The `model:` line in command
-front-matter is static, so `models.planner`/`orchestrator` only document intent and are checked
-against it; `worker` and `reviewer` drive `create_session`.
-
-### Manifest compatibility
-
-Same fields as today, unchanged. `tld plan validate-manifest` checks exactly what `implement.md` §0.3 and
-`make-plan.md` §4 list: YAML parses; required top-level keys; phase `id` unique; every `depends_on`
-exists; no cycle; `brief` and `acceptance` present and non-empty; `complexity` ∈ {S, M} if present;
-`worker_model: opus` needs `worker_model_reason`; same-wave (neither reaches the other) phases have
-disjoint `touches` (glob-aware overlap, not just string equality); `manual_before`/`manual_after`
-items have `id`/`title`; an old `manual:` is read as `manual_after`; `manual_steps_artifact` needs
-`manual_steps_source`. It accepts a plan `.md` (extracts the block under `## Implementation
-manifest`) or a bare YAML file. Exit 0/1, one error per line. I will run it against the real
-manifests on `plan/atlassian-user-names` (7 phases) and `plan/plugin-framework`.
-
-## 5. Commands: how they change
-
-(The history of the first port. Since WP4 the procedures below live in `playbooks/`, the profile is read as
-`playbooks/policies/profile.md` says, and the commands are wrappers.)
-
-* **make-plan**: same sections and wording. Section 0.2 reads `docs.must_read` + the stack skills +
-  `project_steward`. ADR bullets conditional on `docs.adr_dir`. Plan path from `docs.plan_dir`. The
-  "can the steward table dispatch it?" check reads `ci.dispatchable`. The manifest example uses
-  `<verify command from the stack skill>`. Inline Python in §4 → `tld plan validate-manifest`.
-* **implement**: same. Section 0.3 → `tld plan validate-manifest`. Post-merge verification runs
-  `verify.fast` + the manifest's `verify_after_merge`. The child brief's read list is `docs.must_read`.
-  Final reviewer runs `verify.fast` and reads the same list. The PR is driven to green via `pr-steward`.
-  Each merge is preceded by a monitoring-only scope check (`tld plan scope-check`, key `scope.ignore`) that
-  feeds the status record and the PR's Scope section: [scope-drift.md](scope-drift.md).
-* **dod**: runs `verify.dod` (honouring `narrow`/`skip_when_narrowed`), then reads `verify.dod_doc`
-  and walks its rows against `git diff --stat origin/<main>...HEAD`, then the manual items; if
-  `dod_doc` is absent it says so and runs only the gate.
-* **board**: checks the connection to the board; `/board prune` deletes stale records after one confirmation.
-* **deps**: weekly unattended dependency triage; fixes red Dependabot and audit groups, opens pull requests, never merges.
-* **upstream**: weekly unattended sync of a patch-carrying fork to the newest upstream release tag, one commit, one pull request.
-* **land**: orders the bot's open pull requests, resolves conflicts before review, runs CI once, installs the land workflow.
-* Every command starts with the same two lines: load `project-profile`, run `tld profile validate`;
-  a failure message is shown verbatim and the command stops.
-* Finding the scripts: `project-profile` documents one resolution order (plugin root → `~/.claude/tld`)
-  so the same command text works under both delivery routes.
-
-## 6. Stack skills
-
-(Since WP4 these are the stack guides `stacks/<name>.md`, read by the playbooks from the profile's `stacks` (D14).)
-
-`stack-python`: venv at `.venv`, never the system `pip`; install `-e .[dev,test]` if extras exist; tool
-conventions; how to write `acceptance` (named test node ids, `grep`, command + expected output) and
-`verify_after_merge` (targeted `pytest <paths> -q`, never the whole suite per merge). Mentions ruff/pytest
-by design (allowed in this plugin only).
-
-`stack-swift`: `swift build` / `swift test` work in the container for SwiftPM packages (Linux
-Foundation only, no UIKit/AppKit/SwiftUI); `xcodebuild`, simulators, signing do not. Workers write
-code and tests; iOS/macOS verification is a `ci.dispatchable` macOS workflow, and the planner must put
-it in `verify_after_merge` as `dispatch <workflow> on <branch>`, not as a shell command. A starter
-workflow snippet goes in the skill. The profile key `ci.dispatchable` must contain a workflow whose
-`use_when` mentions the macOS runner; `tld profile validate` warns (not errors) when `stacks`
-includes `swift` and `ci.dispatchable` is empty.
-
-`stack-ipados` (added later): layered on `stack-swift`, never alone (the validator warns). A layout
-that keeps models and view models in a local SwiftPM package (`swift test` here) and leaves a thin
-app target with synchronized folders (no `.pbxproj` edits); the iPad behaviours a UI phase must name
-(any window size, split view, scenes, keyboard, pointer, Pencil, drag and drop, accessibility);
-a starter workflow that picks an iPad simulator by query. Same dispatchable warning as `swift`.
-
-`stack-go` (added later): toolchain from `go.mod`, the project's task runner over bare commands,
-the gofmt / vet / build / test / race / lint / govulncheck ladder, error, context and goroutine
-conventions, table-driven tests with `httptest`, acceptance as `go test <pkg> -run '^Name$'`, and
-`go.mod` as the usual overlap between parallel phases.
-
-## 7. Tests and CI
-
-pytest, stdlib + PyYAML: manifest (good; missing field; unknown `depends_on`; cycle; overlapping
-`touches` in a wave; `worker_model: opus` without reason; real PrivacyFence manifests from git history
-stored under `tests/fixtures/`), profile (good; each missing required key named; unknown key; bad
-types; PrivacyFence profile), a **no-project-words test** that greps `src/`, `bin/`, `adapters/`
-and `.claude-plugin/` (and `playbooks/` once it exists) for `privacyfence|ruff|pytest|src/privacyfence|connector`
-(case-insensitive; the `stack-python` skill and `docs/` exempt), plus marketplace/plugin JSON structure. Workflow `.github/workflows/test.yml` runs it all on Python 3.11 and 3.13.
-
-Note the string check also catches the word `connector` in the generic text: I will phrase
-"live connector credentials" as "live external-service credentials".
-
-## 8. Decisions (answered at review 1)
-
-1. **Install location: user scope.** In claude.ai/code a session runs in a fresh Linux container whose
-   `HOME` is `/root`; `~/.claude/` there is the container's own, re-created per session (the probe
-   listed `/root/.claude/{skills,commands,plugins}`). Nothing touches your machine or the repo.
-2. **Toolkit repo is public**; the hook needs no token.
-3. **DoD lives in the profile.** `verify.dod_conditional` (`when` globs + `do` text) and
-   `verify.dod_manual` (text rows) replace `verify.dod_doc`, which stays optional as a pointer only.
-   PrivacyFence's rows are in its profile, copied to `tests/fixtures/privacyfence-toolkit.yaml`.
-
-## 9. Housekeeping note
-
-The probe commit (`WIP delivery probe`) is in this branch's history and removed again in the next
-commit, so the final PR diff does not contain it.
-
-## 10. tld v2 and the maintenance commands
-
-Version 0.4 added four commands and what they share. `/board` checks the connection to the status board, a server that holds the status records every session writes through the `status-board` skill (format:
-`schema/status-record.schema.json`). `/deps`, `/upstream` and `/land` are the maintenance commands:
-the first two run unattended from a scheduled task, `/land` is run by the owner, and none of them
-merges. `/make-plan` and `/implement` now keep a tracking issue for every plan. Profile sections
-`deps`, `upstream`, `land` and the key `git.bot_login` configure the new commands. Delivery is by plugins
-only. How to run and schedule the commands, the profile sections, the board and the secret and setting
-`/land` needs are in [maintenance.md](../guides/maintenance.md); what a cloud session can and cannot do, which
-shaped the design, is recorded in [design/maintenance-spike.md](maintenance-spike.md).
-
-## 11. git-ops
-
-A cloud session cannot delete a remote branch: the session's git proxy refuses it. The toolkit therefore
-ships a template for a central workflow, `tld-git-ops`, a skill (`git-ops`) that
-starts it, and the profile key `git_ops.repo` that names the central repository. The running instance
-lives in a private repository of its own, not in this one (D1), so that the repository holding a token
-with write access to other repositories contains only the workflow and its allowlist. The token is an
-environment secret limited to the default branch (D7), and the workflow starts as a dry run and checks an
-allowlist and a set of guards. Rejected: a copy of the workflow in every repository, and for now a GitHub
-App token instead of a fine-grained one. It used to create tags too; since D13 tags have one route, the release
-workflow, and git-ops only deletes branches. Setup, use and guards are in [git-ops.md](../guides/git-ops.md).
-
-## 12. A self-hosted status board
-
-Why: the board was a private claude.ai Artifact page whose data lived in the Artifact database, so
-everything about it depended on claude.ai. It is now a server you host; see [board-server.md](../guides/board-server.md).
-
-What was built:
-
-* `src/tld/board/store.py`: SQLite storage of records and asks; a record write needs the version last read
-  (`if_version`), no version means create only; the schema version is SQLite's `user_version`.
-* `tld board server`: stdlib HTTP server with a JSON API and the page. Two principals: the session token (writes
-  records, posts, reads and cancels asks) and the owner's login (passphrase, signed `SameSite=Strict` cookie,
-  CSRF token and Origin check; answers and cancels asks, never writes records). The former read token is gone:
-  the owner login replaces it.
-* `src/tld/board/mcp.py`: the record and ask operations as an MCP endpoint (`POST /mcp`, stateless, JSON only);
-  no delete tool (S19).
-* `tld board client` (records) and `tld board ask | answers | cancel` (asks), for sessions without the MCP server;
-  without a board, `tld board ask --fallback-issue` prints the GitHub comment the session posts (D7).
-* `tld board mcp-stdio`: a stdio bridge to `/mcp` that keeps the token inside our own process.
-* `board.html`: the inbox (open asks first in "Needs you", then the runs), an ask view of form controls built
-  with `textContent`, and the login; it polls every 15 seconds.
-* `deploy/board/Dockerfile` and `docs/guides/board-server.md` for deployment.
-
-Rejected:
-
-* Keeping the Artifact board (or both): the point is to not depend on claude.ai.
-* A remote `type: http` entry in `.mcp.json`: credential variables in a remote server's `url` and `headers` are read as empty; a stdio bridge reads the token with `os.environ`.
-* The `mcp` SDK, FastAPI or Flask: the repository is stdlib-only and the MCP subset needed is small.
-* Server-sent events or WebSockets: records change a few times an hour, polling is enough.
-* Per-project tokens and OAuth: a board for one owner does not need them.
-* Letting the session token answer asks, or Artifact pages for decisions: an agent must not be able to answer
-  for the owner (D7, D10).
-* `tld board ask` posting the fallback comment with `gh`: a session's `gh` may have no token, and one GitHub
-  path (the runtime's GitHub tools) is easier to guard; the command prints the body and exits 5 instead.
-* Automatic expiry of old records on the server: pruning stays a command that asks the owner once.
-* Migrating old records: the next run rewrites them.
-
-Breaking change: the profile key `status.board_url` is removed; a profile that still has `status:` fails
-validation with `unknown key 'status'`. This breaking change shipped in 0.7.0.
-
-## 13. Roles and /setup
-
-Ten generic agents (now **roles**: role cards in `roles/`, wrapped by the Claude agents) and the `/setup` command were
-added. [roles.md](roles.md) and [setup.md](../guides/setup.md) describe what they do; this section records why.
-
-- **The agents live in tld, not in a new plugin.** They are wired into `/make-plan`, `/implement`, `/review` and
-  `/dod`, use the profile and the checklist skills, and must stay in step with those commands, so one plugin and one
-  version is simpler than a second plugin that depends on the first. Rejected: a separate `agents` plugin.
-- **Posture is profile-driven.** The agents contain nothing about a project. Whether the security reviewer is strict,
-  which agents are mandatory where and whether they block is the `agents` block of the profile. The schema carries no
-  defaults for it; `tld roles` applies them, so a profile without the block resolves exactly as before.
-- **A required agent that did not run fails visibly.** Every agent ends with one `AGENT-REPORT` line and
-  `tld roles verify` reads it, rather than trusting that the dispatching session remembered to run the agent.
-- **`/setup` patches the profile at text level.** `tld profile patch` replaces or appends a block and keeps every other
-  byte. Round-tripping the file through a YAML library would drop the comments that make the starter profile readable.
-- **The survey proposes, a person decides.** The heuristics (security score, UI globs, test levels) can be wrong, so the
-  posture is always asked about, `blocking: true` is written only after confirmation, and the pull request lists the
-  evidence. `/setup` never merges.
-- **The `protect-paths` convention.** The profile is protected from hand edits. `/setup` has to write it, so it runs
-  `tld guard allow-profile`, which writes a marker with a two-hour lifetime inside the git directory (per
-  checkout) that lets exactly `.tld/toolkit.yaml` through. Like the `dod-gate` marker it is a convention, not a lock;
-  branch protection and the pull request review remain the hard control ([hooks.md](hooks.md#protect-paths)).
-
-## 14. Docs structure
-
-The docs are read through one index. `CLAUDE.md` (at most 60 lines) points to `docs/README.md` (at most
-150 lines, one row per doc), and the index routes to leaf docs under `docs/architecture/`, `docs/guides/`
-and `docs/reference/`. Plans are transient and never indexed.
-
-- **Why.** Every session pays for what it reads. A flat set of docs made each planner and worker read the
-  must-read docs of every phase; the index makes the choice a row match.
-- **Deterministic checks.** `tld ops docs-index` checks the limits and links and moves a doc with every
-  reference rewritten; the `docs-keeper` skill and `/docs` carry the procedures.
-- **Same profile, one new key.** `docs.index`; without it every command behaves as before.
-- **No eleventh agent.** The `tech-writer` agent checks the index through `docs-review`.
-- **Rejected:** generating the index from the docs' first lines (the "read when" condition cannot be derived).
-
-The structure, the rules and the procedures are in [guides/docs-index.md](../guides/docs-index.md).
+# Design
+
+tld is a plan → implement → review workflow for coding agents on GitHub. This document describes the design as
+built in 1.0: the concepts, how they fit, what is neutral and what is the Claude adapter, and the alternatives that
+were rejected. The decisions D1 to D14 it cites are recorded in
+[the migration plan](../plans/tld-migration-plan.md#1-decisions).
+
+## 1. Two halves
+
+- **The core** knows nothing about an agent runtime. It is the Python package `tld` with one command line
+  (`src/tld/`, `bin/tld`, [cli.md](../reference/cli.md)) and plain-text content: playbooks, roles, checklists,
+  stacks and policies. It is neutral about Claude, not about GitHub (D4): issues, pull requests, workflows,
+  rulesets and environments are GitHub's.
+- **The adapter** maps the core to one runtime. The only one is Claude Code, `adapters/claude/`: commands,
+  agents, the `runtime` skill, the hook entries and `mcp.json`. A second runtime would add a sibling directory,
+  not change the core.
+
+The plugin is sourced from the repository root (`.claude-plugin/marketplace.json`, `source: "./"`), so
+`${CLAUDE_PLUGIN_ROOT}` holds the whole core and a command calls `"${CLAUDE_PLUGIN_ROOT}/bin/tld"` directly.
+`tests/core/test_contracts.py` keeps the two halves honest: every `tld` call in a playbook or command parses with the
+real CLI, every runtime action a playbook uses is defined, every role, checklist, stack and policy it names exists,
+and no runtime tool or model name appears in the core content.
+
+## 2. Concepts
+
+### Profile
+
+`.tld/toolkit.yaml` holds every project fact ([profile-reference.md](../reference/profile-reference.md)); the schema
+is `src/tld/schema/profile.schema.json`, checked by a small hand-rolled validator (`tld profile validate`, no
+`jsonschema` dependency). Required keys are few (`docs.must_read`, `git.main_branch`, `git.branch_pattern`,
+`verify.fast`, `verify.dod`, `stacks`); a missing optional key means "not used here", and an unknown key is an
+error so that a typo is never silent. A playbook never guesses a value: it names the missing key and stops
+([policies/profile.md](../../playbooks/policies/profile.md)). `tld.version` (D9) is a version specifier checked
+against the running tld, so a profile written for 1.x stops cleanly under 2.0. `/setup` writes the profile from a
+survey, at text level (`tld profile patch`), so comments survive; the survey proposes and a person decides.
+
+### Playbooks
+
+Every procedure is a neutral playbook in `playbooks/` (D6): `setup`, `review`, `make-plan`, `implement`, `dod`,
+`land`, `deps`, `upstream`, `docs`, `board`, `migrate`, and `git-ops` and `repo-admin`, which run on request. A
+playbook is plain steps: git, shell, `tld` commands, and named **runtime actions** for what only the runtime can do.
+Rules that several playbooks share live once in `playbooks/policies/`: the profile, untrusted text (D10), pull
+request stewardship, the status board, roles and docs.
+
+### Runtime actions
+
+[playbooks/runtime.md](../../playbooks/runtime.md) defines the actions a playbook may name: workers
+(`start_worker`, `read_worker`, `message_worker`, `stop_worker`, `wait_for_workers` / `check_in`), roles and helpers
+(`run_role`, `run_helper`), the human (`ask_human`, `notify_human`, `show_human`, `secrets_help`), time
+(`schedule_wakeup`), GitHub (`github.*`, `identity`). An adapter maps each to its tools; for Claude that map is the
+`tld:runtime` skill, which also holds the one table of models for the levels `strong`, `standard` and `fast`
+(D11). The profile's `models.worker` / `models.reviewer` and a manifest phase's `worker_level` are levels.
+
+### Roles and checklists
+
+A role is the one review concept (D5): a role card `roles/<role>.md` (purpose, inputs, method, report, modes,
+default level) and, for most roles, a checklist in `checklists/` (review, security, test, docs). The profile's
+`roles` block says which roles are mandatory at which point (`make_plan`, `implement_phase`, `implement_final`,
+`review`, `dod`), whether their findings block, and the security posture; `tld roles required` resolves it and
+`tld roles verify` checks the `AGENT-REPORT` line every role ends with, so a required role that did not run fails
+visibly. A role runs at most once per point, and only in review mode at the final review (C2). The Claude adapter
+wraps each role as an agent. Details: [roles.md](roles.md).
+
+### Stacks
+
+Language and platform conventions are stack guides in `stacks/` (python, go, swift, ipados; D14), loaded by the
+playbooks from the profile's `stacks`. They are the only place a tool name of a stack may appear; the
+project-words test keeps the rest generic.
+
+### Plans and manifests
+
+A large change is a plan document with an implementation manifest: phases with `depends_on`, `touches`, `brief`,
+`acceptance`, `verify_after_merge` and an optional `worker_level`, plus manual steps before and after. `tld plan
+validate-manifest` checks it (cycles, unknown dependencies, overlapping `touches` within a wave, the reason for a
+`strong` worker). `/implement` runs only plans from `main` or a `plan/*` branch of the same repository (S14), starts
+one worker per ready phase, merges each into one feature branch after a scope-drift check
+([scope-drift.md](scope-drift.md)), runs `verify.fast` after every merge, and ends with one final review and one
+pull request. Branch names come from `tld plan branch-name` (C12).
+
+### Guard
+
+The guardrails are a neutral policy, `src/tld/guard/`: an `Action` (`shell`, `write`, `github_op`, `stop`) goes in,
+a `Decision` (`allow`, `deny`, `error`) comes out. The Claude hooks are thin shims over it. They are a seatbelt, not
+the control (D1): they deny merges, pushes to the main branch, force pushes, tags, credential-like writes and edits
+of protected paths before the call runs, and they read the protect lists from the profile on the remote default
+branch, so a branch cannot switch them off. What a parser cannot see (`python -c`, a script file) is out of their
+reach by design. Details: [hooks.md](hooks.md).
+
+### Ops and GitHub-side control
+
+`src/tld/ops/` holds what talks to GitHub or the repository at large: `land-order`, `upstream-sync`,
+`pick-release`, `docs-index`, `migrate` and `repo-admin`. repo-admin audits and applies a policy file and is where
+the real control lives: the rulesets `tld-main` and `tld-tags`, an agent account with the `write` role, and the
+environments `tld-agent` and `tld-release` that hold the tokens ([admin.md](../guides/admin.md)). Tags have one
+route, the release workflow `tld-release`, run by the owner with `TLD_RELEASE_TOKEN` (D13); the central git-ops
+workflow only deletes branches ([git-ops.md](../guides/git-ops.md)).
+
+### Board
+
+The board is a server the owner hosts (`src/tld/board/`, [board-server.md](../guides/board-server.md)) and the owner's
+inbox (D7, D8): every command writes a status record (one model: `attended`, final states `done`, `failed`,
+`pr_open`; C7), and every question, decision or manual step is an **ask**. The session token writes records and
+posts asks; only the owner, logged in on the page, answers one (D10). When the board cannot be reached,
+`tld board ask` prints a GitHub comment that mentions the owner, and only replies of the owner or a collaborator
+count. Sessions reach it through `tld board client` / `ask` / `answers` or the `tld-board` MCP bridge.
+
+## 3. Rejected alternatives
+
+- **A SessionStart hook that installs the toolkit into `~/.claude/`.** It worked in a probe, but it needs a pin in
+  every repository and a fetch at every start; plugins in the Claude Project are the one delivery route
+  ([delivery.md](../guides/delivery.md)).
+- **Separate plugins per stack, or for the agents.** One plugin and one version keep the playbooks, roles and
+  guides in step.
+- **Hooks as the security boundary.** A manipulated agent can run code the hooks cannot read; GitHub rulesets
+  cannot be talked out of a rule (D1).
+- **A second tag route through git-ops.** One route, one environment, one reviewer (D13).
+- **Artifact pages for the board and for decisions.** The board must not depend on claude.ai, and an agent must not
+  be able to answer for the owner. Also rejected for the board: a remote `type: http` MCP entry (its credential
+  variables are read as empty), an SDK or web framework (the repository is stdlib plus PyYAML), push channels
+  (records change a few times an hour), per-project tokens, and automatic expiry (pruning asks the owner once).
+- **Round-tripping the profile through a YAML library.** It would drop the comments that make it readable;
+  `tld profile patch` and `tld migrate` edit text and prove the result loads as intended.
+- **A generated docs index.** The "read when" condition of a row cannot be derived; the index is written by hand and
+  checked by `tld ops docs-index` ([docs-index.md](../guides/docs-index.md)).
+- **A mutation generator.** Hand-written mutants stand for the bypasses that matter and run in minutes
+  (CONTRIBUTING.md).
+
+## 4. History
+
+tld started as claude-toolkit: PrivacyFence's `/make-plan`, `/implement` and `/dod` lifted into a plugin
+marketplace with every project fact moved into a profile ([migrating-privacyfence.md](../migrating-privacyfence.md)).
+It grew the maintenance commands, the self-hosted board, the agents and `/setup`, and the docs index. A review of
+claude-toolkit at 4c14071 ([../reviews/claude-toolkit-review.md](../reviews/claude-toolkit-review.md)) led to the move
+into this repository in eight work packages: the layout and renames, the guard fixes, the GitHub-side control,
+the neutral concepts, the board inbox, tests and CI, the evals, and the docs, migration and release. The early
+design record (the delivery probe, the PrivacyFence key mapping) is in git history before 1.0.0. What a cloud
+session can and cannot do, which shaped the maintenance commands, is in [maintenance-spike.md](maintenance-spike.md).

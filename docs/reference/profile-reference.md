@@ -21,6 +21,9 @@ Rules:
 - `tld.version`, when set, must be satisfied by the running tld, or validation fails.
 - An unknown key is an error, so a typo is never silent.
 - A file listed in `docs.must_read` or `project_steward` that does not exist is an error.
+- A claude-toolkit profile (`.claude/toolkit.yaml`, `agents`, model names in `models`) is converted by `tld migrate`
+  ([migrating-from-claude-toolkit.md](../guides/migrating-from-claude-toolkit.md)); its fixtures are in
+  `tests/fixtures/legacy/`.
 
 ## Keys
 

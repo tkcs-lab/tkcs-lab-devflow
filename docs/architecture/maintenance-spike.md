@@ -1,5 +1,9 @@
 # Maintenance spike
 
+> **Historical record** of experiments in a cloud session (2026-11-09, claude-toolkit era). The facts about what a
+> session can and cannot do still hold; the status board it mentions was then an Artifact database, replaced by the
+> self-hosted board ([board-server.md](../guides/board-server.md)).
+
 - Date: 2026-11-09 (runs between 07:30 and 07:50 UTC)
 - Agent login (`get_me`): `<agent-login>`
 - Scratch repository: `<org>/<scratch-repo>` (code owner `<owner-login>`, `.github/CODEOWNERS` is the single line `* @<owner-login>`)

@@ -1,5 +1,10 @@
 # How PrivacyFence moved to the toolkit
 
+> **Historical.** This page records the move of 2026-10 onto claude-toolkit (the `devflow` plugins). Those names are
+> retired: the plugin is `tld`, the profile is `.tld/toolkit.yaml`, the commands are `/tld:<cmd>`. A repository on
+> claude-toolkit today follows [guides/migrating-from-claude-toolkit.md](guides/migrating-from-claude-toolkit.md).
+> The page stays because an ADR outside this repository links it.
+
 `privacyfence/privacyfence` was the first project to move to devflow, and the move is done. Before it,
 the project kept its own `.claude/commands/{make-plan,implement,dod}.md` and a full
 `.claude/skills/steward`. Its

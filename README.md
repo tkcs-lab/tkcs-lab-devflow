@@ -1,115 +1,100 @@
-# tkcs-lab-devflow
+# tkcs-lab-devflow (`tld`)
 
-A plan → implement workflow for Claude Code on the web (claude.ai/code), for any repository in any
-language.
+A plan → implement → review workflow for coding agents, for any repository in any language, on GitHub. A plan is
+researched once, split into phases with an implementation manifest, built by one worker session per phase on one
+feature branch, reviewed, and delivered as one pull request that a person merges.
 
-- **`/setup`** (Sonnet) surveys the repository and creates or updates `.tld/toolkit.yaml`, including the `roles`
-  block, and delivers it as one pull request that it never merges. See [docs/guides/setup.md](docs/guides/setup.md).
-- **Roles.** Ten roles (architect, code-reviewer, security-reviewer, test-architect, tech-writer,
-  website-maintainer, ux-reviewer, debugger, dependency-auditor, refactorer) ship in `tld` as role cards in `roles/`
-  with checklists in `checklists/`; the Claude plugin wraps each as an agent. The profile decides
-  which are mandatory at `/make-plan`, each `/implement` phase, the final review, `/review` and `/dod`, whether their
-  findings block, and how strict the security reviewer is. See [docs/architecture/roles.md](docs/architecture/roles.md).
-- **`/make-plan <what you want>`** (Opus) researches the repo, then writes either a self-contained
-  single-session prompt (small scope) or a plan document with a YAML implementation manifest on a
-  `plan/<slug>` branch (large scope), with step-by-step instructions for anything only a human can do. It
-  opens a tracking issue for the ask and keeps it up to date with the plan in plain words.
-- **`/implement <plan URL>`** (Sonnet) orchestrates a plan: one child cloud session per phase,
-  periodic check-ins, merges into one feature branch, verification after every merge, one Opus review
-  session, and one PR driven to green. It comments its progress on the tracking issue and the PR
-  closes it.
-- **`/dod`** runs the project's definition of done and reports a table.
-- **`/review [scope]`** (Opus) reviews the whole repository, some paths, or a PR in depth: security,
-  tests at the unit, integration and e2e levels, and the documentation and website (accuracy,
-  validity, completeness, clarity, readability). It verifies every finding, decides itself what to
-  fix and what not, and writes a review document on a `review/<slug>` branch. What only you can
-  decide becomes one ask on the status board (add to the plan, create an issue, or drop); once you have
-  answered, it updates the review and creates the issues. Then run `/make-plan <review URL>`.
-- **`/board [prune]`**: `/board` checks the connection to your self-hosted status board (a small Python
-  server you run, see [docs/guides/board-server.md](docs/guides/board-server.md)), and `/board prune` deletes the
-  stale records after you confirm.
-- **`/deps`** (scheduled, unattended) triages Dependabot pull requests and audit findings, fixes what
-  is red and opens pull requests. It never merges.
-- **`/upstream`** (scheduled, unattended) syncs a patch-carrying fork to the newest upstream release
-  tag as one commit in one pull request.
-- **`/land`** orders the bot's open pull requests, resolves conflicts before review, runs CI once on
-  the combined set and installs the workflow that updates the next pull request after each merge.
-- **`/docs [check | init | tidy]`** keeps the docs cheap to read: a thin `CLAUDE.md`, one docs index, docs opened
-  only when a row matches. `check` reports, `init` builds the structure and moves docs into place, `tidy` is the
-  unattended weekly cleanup. See [docs/guides/docs-index.md](docs/guides/docs-index.md).
+Everything specific to a repository lives in one file, its **profile** `.tld/toolkit.yaml`: the docs to read, the
+branch rules, the verify commands, the CI workflows a session may dispatch, the stacks, the roles and the worker
+levels. The procedures contain no project facts and stop with a message naming a missing key.
 
-- **`repo-admin`** (a skill, run it with an organisation owner's token) audits a GitHub organisation and
-  its repositories against a policy file and updates what differs: settings, apps, tokens, secrets,
-  variables, labels, webhooks, deploy keys, unused config directories such as `.archon`, and the
-  workflows (for example the release workflow that cuts a tag). Dry run by default; irreversible changes
-  need `--allow-delete`; file changes go into a pull request it never merges.
-- **`git-ops`** (a skill) deletes a remote branch, which a cloud session cannot do itself, by starting a central workflow with its own token. Dry run first, an allowlist, no default or protected branch. It never makes a tag: the release workflow is the only route to one.
+## Core and adapter
 
-See [docs/guides/review.md](docs/guides/review.md) for the review flow, [docs/guides/maintenance.md](docs/guides/maintenance.md)
-for the maintenance commands and the board, and [docs/guides/admin.md](docs/guides/admin.md) for `repo-admin`.
+- **The core** is neutral about the agent runtime: a Python package with one command line, `tld`
+  (`src/tld/`: profile, plan, roles, dod, guard, board, ops), and the content the agents follow: **playbooks**
+  (one procedure per command, `playbooks/`), ten **roles** (a role card in `roles/` plus a checklist in
+  `checklists/`), **stack guides** (`stacks/`: python, go, swift, ipados) and shared **policies**.
+- **The Claude Code adapter** (`adapters/claude/`) is the plugin `tld`: each command is a few lines that say
+  "follow `playbooks/<cmd>.md`", the `tld:runtime` skill maps the playbooks' runtime actions (start a worker, wait,
+  ask the human, notify, GitHub) to Claude tools and the levels `strong` / `standard` / `fast` to models, one agent
+  wraps each role, and the hooks call the guard.
 
-Everything specific to your project lives in one file, `.tld/toolkit.yaml` (docs to read, branch
-rules, verify commands, CI workflows a session may dispatch, stacks, model levels). The procedures are neutral
-playbooks in `playbooks/` (the Claude commands only point to them and map their runtime actions); they contain no
-project facts and stop with a message naming the missing key.
+[docs/architecture/design.md](docs/architecture/design.md) describes the concepts and why they are split this way.
 
-## Guardrails
+## Install
 
-The `tld` plugin ships Claude Code hooks (`adapters/claude/hooks/`, with the policies in `src/tld/guard/`) that make the "never do X" rules
-deterministic. Every repository that enables the plugin gets them without a per-repository copy; project facts
-come from `.tld/toolkit.yaml`.
+In claude.ai, open the settings of the Claude Project your repository's sessions belong to, add the marketplace
+`tkcs-lab/tkcs-lab-devflow` and enable the plugin `tld` (a cloud session ignores plugins a repository enables in
+its own settings). In a local Claude Code:
 
-| Hook | Denies |
+```
+/plugin install tld --marketplace tkcs-lab/tkcs-lab-devflow
+```
+
+The command line alone, for scripts, CI or a migration from a plain checkout (Python 3.11+, PyYAML):
+
+```
+pip install git+https://github.com/tkcs-lab/tkcs-lab-devflow@v1.0.0
+tld --help
+```
+
+Then run `/tld:setup` in a session to create `.tld/toolkit.yaml` (one pull request, never merged), or copy
+[`src/tld/templates/toolkit.yaml`](src/tld/templates/toolkit.yaml) and fill it in. The profile's `tld.version`
+(`">=1.0,<2"`) says which releases it is written for. Details: [docs/guides/delivery.md](docs/guides/delivery.md).
+Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/guides/migrating-from-claude-toolkit.md).
+
+## Commands
+
+| Command | What it does |
 |---|---|
-| `no-merge` | merging or approving a pull request, enabling auto-merge, any push to the main branch (local `git merge` stays allowed) |
-| `no-force-push` | force pushes and deleting a branch by push |
-| `no-git-tag` | creating, moving, deleting or pushing tags (reading them stays allowed) |
-| `secret-scan` | writing a file with something that looks like a credential |
-| `protect-paths` | editing the profile, `.env*`, lockfiles and workflow files (the list is configurable) |
-| `dod-gate` | stopping while the definition of done is red; opt-in, loop-free, not for the `/implement` orchestrator |
+| `/tld:setup [create \| update]` | surveys the repository and writes or updates the profile, including the `roles` block; asks you the posture; one pull request ([guide](docs/guides/setup.md)) |
+| `/tld:make-plan <what you want>` | researches the repository, then writes a single-session prompt (small scope) or a plan with an implementation manifest on a `plan/<slug>` branch (large scope); manual steps become an ask |
+| `/tld:implement <plan URL>` | one worker session per phase, merges into one feature branch, verification after every merge, scope-drift monitoring, one final review, one pull request driven to green ([scope drift](docs/architecture/scope-drift.md)) |
+| `/tld:review [scope]` | deep review of security, tests (unit, integration, e2e) and docs by the roles; verified findings in a review document on a `review/<slug>` branch; your decisions are one ask ([guide](docs/guides/review.md)) |
+| `/tld:dod` | runs the profile's definition of done and reports a table |
+| `/tld:land` | orders the bot's open pull requests, resolves conflicts before review, runs CI once on the set, installs the land workflow |
+| `/tld:deps` | weekly, unattended: triages Dependabot pull requests and audit findings, fixes what is red, opens pull requests |
+| `/tld:upstream` | weekly, unattended: syncs a patch-carrying fork to the newest upstream release tag, one pull request |
+| `/tld:docs [check \| init \| tidy]` | a thin CLAUDE.md, one docs index, docs read only when a row matches ([guide](docs/guides/docs-index.md)) |
+| `/tld:board [prune]` | checks the connection to your board, or prunes its stale records after you confirm |
+| `/tld:migrate` | moves a repository from claude-toolkit to tld: shows the plan, writes it on a branch after you confirm, one pull request |
 
-A hook that denies tells the agent what to do instead. `hooks.disable` in the profile switches a named hook off
-for one repository. **Branch protection and CI remain the hard enforcement**: the hooks are the fast in-loop layer
-and do not cover sessions without the plugin. See [docs/architecture/hooks.md](docs/architecture/hooks.md).
+No command merges, approves, tags or force-pushes. Two procedures run on request through skills:
+`tld:repo-admin` (audit and apply organisation and repository settings, rulesets, environments and workflows from
+a policy file; [guide](docs/guides/admin.md)) and `tld:git-ops` (delete a remote branch through a central workflow;
+[guide](docs/guides/git-ops.md)). The maintenance commands and scheduling: [docs/guides/maintenance.md](docs/guides/maintenance.md).
 
-Plugins are enabled per Claude Project, so every repository in a Project that enables `tld` needs at least
-`git.main_branch` in its `.tld/toolkit.yaml`: without it `no-merge` denies every `git push` there. The hooks need
-`python3` 3.11+ and PyYAML on the `PATH` of the session; see
-[Installing and checking](docs/architecture/hooks.md#installing-and-checking).
+## Guardrails: seatbelt and control
 
-## Use it in a project
+- **Control: GitHub.** `tld ops repo-admin` sets up the rulesets `tld-main` (pull request with one approval,
+  required checks, no force push, no deletion) and `tld-tags` (no workflow token can tag), an agent account with
+  the `write` role, and the environments `tld-agent` and `tld-release` that hold `TLD_AGENT_TOKEN` and
+  `TLD_RELEASE_TOKEN`. Tags have one route: the release workflow, run by the owner.
+- **Seatbelt: the hooks.** `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths` and the opt-in
+  `dod-gate` deny the action before it runs and tell the agent what to do instead. The protect lists and
+  `hooks.disable` are read from the profile on the remote default branch. They need `python3` 3.11+ and PyYAML in
+  the session, and every repository in a Project that enables `tld` needs at least `git.main_branch` in its profile.
 
-1. Run `/setup` to create `.tld/toolkit.yaml` from what the repository shows (one pull request, never merged).
-   As the fallback, copy [`src/tld/templates/toolkit.yaml`](src/tld/templates/toolkit.yaml) to `.tld/toolkit.yaml` and fill it in by
-   hand. Reference: [docs/reference/profile-reference.md](docs/reference/profile-reference.md).
-2. Add the plugin `tld` in your Claude Project's settings (marketplace `tkcs-lab/tkcs-lab-devflow`), see
-   [docs/guides/delivery.md](docs/guides/delivery.md). `/setup` needs it, so add it before step 1 when you use it.
-3. Start a session and run `/make-plan <what you want>`.
+See [docs/architecture/hooks.md](docs/architecture/hooks.md) and [SECURITY.md](SECURITY.md).
 
-## What is here
+## The board: your inbox
+
+A small server you host ([docs/guides/board-server.md](docs/guides/board-server.md)) holds a status record of every
+run and the **asks**: questions, decisions and manual steps a playbook puts to you. You answer in the browser after
+logging in; a session cannot answer for you. Without a board, an ask becomes a comment on the tracking issue that
+mentions you, and only replies of the owner or a collaborator count.
+
+## Repository
 
 | Path | |
 |---|---|
-| `src/tld/` | the core package: profile, plan, roles, dod, guard (the guardrail hook policies), board (store, server, client, MCP, the status board page in `board/web/`), ops (land order, upstream sync, release pick, repo-admin, docs index), `schema/` and `templates/` (the starter profile, the `/land`, release and git-ops workflows, the starter admin policy and the git-ops allowlist example) |
-| `bin/tld` | the `tld` command line, runnable from a checkout; see [docs/reference/cli.md](docs/reference/cli.md) |
-| `playbooks/` | the neutral procedures (setup, review, make-plan, implement, dod, land, deps, upstream, docs, board, git-ops, repo-admin), `runtime.md` (the runtime actions they use) and `policies/` (profile, untrusted text, pr-steward, status board, roles, docs) |
-| `roles/`, `checklists/`, `stacks/` | the ten role cards; the review, security, test and docs checklists; the python, go, swift and ipados stack guides |
-| `adapters/claude/` | the Claude Code plugin `tld`: the ten thin commands, the ten agents (one per role), the `runtime` skill (the runtime map and the model levels) and two pointer skills, the hook entry scripts with `hooks.json`, and `mcp.json` |
-| `.claude-plugin/` | the marketplace `tkcs-lab-devflow` and the plugin manifest; the plugin is sourced from the repository root |
-| `deploy/board/Dockerfile` | the status board server image |
-| `src/tld/templates/toolkit.yaml` | starter profile |
-| `docs/` | [the docs index](docs/README.md), [the docs structure and `/docs`](docs/guides/docs-index.md), profile reference, delivery, design, [the guardrail hooks](docs/architecture/hooks.md), [the review flow](docs/guides/review.md), [the maintenance commands and the board](docs/guides/maintenance.md), [scope-drift monitoring in `/implement`](docs/architecture/scope-drift.md), [auditing and updating organisation and repository settings](docs/guides/admin.md), [the central git-ops workflow](docs/guides/git-ops.md), [the eval harness](docs/architecture/evals.md), [the roles](docs/architecture/roles.md), [`/setup`](docs/guides/setup.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |
-| `evals/` | eval harness: `python3 evals/run.py list\|validate\|run --dry-run`; real runs call the model and cost money, see [docs/architecture/evals.md](docs/architecture/evals.md) |
-| `tests/` | `python -m pytest tests -q` (Python 3.11+, PyYAML) |
+| `src/tld/`, `bin/tld` | the core package and its launcher ([CLI reference](docs/reference/cli.md)); `schema/` and `templates/` hold the profile, manifest, record, ask and admin-policy formats and the starter files |
+| `playbooks/`, `roles/`, `checklists/`, `stacks/` | the neutral procedures (with `runtime.md` and `policies/`), role cards, checklists and stack guides |
+| `adapters/claude/` | the Claude Code plugin: commands, agents, the runtime skill, hooks, `mcp.json` |
+| `.claude-plugin/` | the marketplace `tkcs-lab-devflow` and the plugin manifest (sourced from the repository root) |
+| `deploy/board/` | the board server image |
+| `evals/`, `tests/` | the eval harness ([docs](docs/architecture/evals.md)) and the tests |
+| `docs/` | everything else, through [the docs index](docs/README.md); the profile keys are in [docs/reference/profile-reference.md](docs/reference/profile-reference.md) |
 
-Everything runs inside agent sessions, apart from the status board, a small server you host yourself.
-
-## Development
-
-```
-python3 -m venv .venv && .venv/bin/pip install -r tests/requirements.txt
-.venv/bin/python -m pytest tests -q
-```
-
-The tests include a check that no project-specific word (a particular project's name, test runner
-or linter) appears in the generic plugin. Stack-specific words belong in the `stacks/` guides.
+Changes per release: [CHANGELOG.md](CHANGELOG.md). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).
+Licence: Apache-2.0.
