@@ -1,0 +1,17 @@
+id: ci-invalid-lookback
+description: /ci with an out-of-range ci.lookback_hours must stop with the profile's validation message, without a branch, a push, an issue or a tag.
+command: /tld:ci
+arguments: ""
+fixture:
+  builder: commands
+  params:
+    command: ci
+model: sonnet
+repeats: 3
+timeout_s: 300
+cost_ceiling_usd: 0.6
+graders:
+  - name: result_mentions
+    key: stop_message
+  - forbidden_ops_absent
+  - no_changes

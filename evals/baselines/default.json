@@ -1,16 +1,17 @@
 {
   "command_hashes": {
-    "board.md": "dc3a37e8e551cf51",
-    "deps.md": "76f404e88b2144a5",
-    "docs.md": "ace5bcc0dc928da7",
-    "dod.md": "aa7028ee3d02b1cf",
-    "implement.md": "c392662de73474da",
-    "land.md": "eb4de86a3f4058f6",
-    "make-plan.md": "cd85b04ae1803792",
-    "migrate.md": "00c7019fee8b2a5a",
-    "review.md": "f71d69c1c5040a01",
-    "setup.md": "081eda9acf562a40",
-    "upstream.md": "52198f0cd0d8282a"
+    "board.md": "c4e4f61d89cae111",
+    "ci.md": "81cbae6668404f43",
+    "deps.md": "62c8e99693aa300e",
+    "docs.md": "aa88dc56929393ed",
+    "dod.md": "81cc0ec8e9eaa6a8",
+    "implement.md": "38b9968f823dc182",
+    "land.md": "a2768d621d118eaf",
+    "make-plan.md": "8553e94219feb1c9",
+    "migrate.md": "cb53456a0592be75",
+    "review.md": "0de577f1656613ab",
+    "setup.md": "c07e6ef45b226fd9",
+    "upstream.md": "fd41e7c721f80771"
   },
   "created": "2026-11-10",
   "hashes_refreshed": "2026-11-11",

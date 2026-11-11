@@ -5,6 +5,7 @@ judgement, so the task checks the command still reads the profile and stops wher
 - `land`: no `git.bot_login`, so land stops with the missing-key message.
 - `deps`: no `deps` block, so deps stops with the missing-key message.
 - `upstream`: an `upstream` block, but no version file, so the sync stops and asks for the file.
+- `ci`: `ci.lookback_hours: 0`, out of range, so ci stops with the validation message.
 - `docs`: a docs index that misses one doc (`docs/sync.md`); `docs check` reports it and changes nothing.
 - `board`: no board variables; the board check prints the setup text.
 - `implement`: a plan on `plan/tags` whose manifest has a dependency cycle; implement must stop before it
@@ -59,6 +60,9 @@ def build(dest: Path, command: str = "land") -> dict:
             "\nupstream:\n  repo: example-org/notes-upstream\n  tag_pattern: '^v[0-9]+\\.[0-9]+\\.[0-9]+$'\n"
             "  version_file: UPSTREAM_VERSION\n")
         expected["stop_message"] = "UPSTREAM_VERSION"
+    elif command == "ci":
+        files[".tld/toolkit.yaml"] = _profile("\nci:\n  lookback_hours: 0\n")
+        expected["stop_message"] = "ci.lookback_hours"
     elif command == "docs":
         files[".tld/toolkit.yaml"] = _profile(docs_index=True)
         files["CLAUDE.md"] = "Read [docs/README.md](docs/README.md) first.\n"
