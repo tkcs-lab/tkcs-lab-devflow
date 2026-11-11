@@ -18,13 +18,13 @@ import re
 import shlex
 from dataclasses import dataclass, field
 
+from _ansi import ansi_c_decode
+from _wrappers import (ASSIGN, WRAPPER_POSITIONALS, WRAPPER_VALUE_OPTS, WRAPPERS, ParseError,  # noqa: F401
+                       script_command, strip_wrapper as _strip_wrapper)
+
 DYN = ""    # a substitution or expansion this module does not evaluate
 REDIR = ""  # marks a redirection operator in the intermediate text
 MAX_DEPTH = 8
-
-
-class ParseError(ValueError):
-    pass
 
 
 @dataclass
@@ -119,13 +119,13 @@ def _scan(text: str, i: int, out: list[str], depth: int, inner: bool) -> int:
             if nxt == "(":
                 i = _scan(text, i + 2, out, depth + 1, True)
                 buf.append(DYN)
-            elif nxt == "'":  # ANSI-C quoting: opaque
+            elif nxt == "'":  # ANSI-C quoting: decoded to its literal value
                 j = i + 2
                 while j < n and text[j] != "'":
                     j += 2 if text[j] == "\\" else 1
                 if j >= n:
                     raise ParseError("unterminated $'...' quote")
-                buf.append(DYN)
+                buf.append(shlex.quote(ansi_c_decode(text[i + 2:j])))
                 i = j + 1
             else:
                 buf.append("$")
@@ -271,42 +271,12 @@ def _skip_heredoc(text: str, i: int, delim: str, strip: bool, quoted: bool, out:
 
 RESERVED = {"if", "then", "else", "elif", "fi", "do", "done", "while", "until", "for", "case", "esac",
             "in", "!", "{", "}", "time", "select", "function", "coproc"}
-ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\+?=")
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh", "ash"}
-WRAPPERS = {"sudo", "doas", "env", "nice", "ionice", "timeout", "command", "builtin", "exec", "nohup",
-            "stdbuf", "setsid", "chronic", "unbuffer", "time"}
-WRAPPER_VALUE_OPTS = {
-    "sudo": {"-u", "-g", "-C", "-h", "-p", "-r", "-t", "-U", "-D"},
-    "doas": {"-u", "-C"},
-    "env": {"-u", "-C", "-S", "--unset", "--chdir"},
-    "nice": {"-n"},
-    "ionice": {"-c", "-n", "-p", "-P", "-u"},
-    "timeout": {"-k", "-s", "--kill-after", "--signal"},
-    "exec": {"-a"},
-}
 SCANNING = {"xargs", "find", "parallel", "watch", "ssh"}  # run other commands whose words follow
 
 
 def base(word: str) -> str:
     return os.path.basename(word)
-
-
-def _strip_wrapper(name: str, rest: list[str]) -> list[str]:
-    value_opts = WRAPPER_VALUE_OPTS.get(name, set())
-    i = 0
-    while i < len(rest):
-        tok = rest[i]
-        if tok == "--":
-            i += 1
-            break
-        if tok.startswith("-") and tok != "-":
-            i += 2 if tok in value_opts else 1
-        elif name == "env" and ASSIGN.match(tok):
-            i += 1
-        else:
-            break
-    rest = rest[i:]
-    return rest[1:] if name == "timeout" and rest else rest
 
 
 def candidates(words: list[str], redirects: list[tuple[str, str]] | None = None, depth: int = 0) -> list[Command]:
@@ -315,17 +285,25 @@ def candidates(words: list[str], redirects: list[tuple[str, str]] | None = None,
     if depth > MAX_DEPTH:
         raise ParseError("command nesting is too deep")
     w = list(words)
+    out: list[Command] = []
     while w:
         head = w[0]
         if head in RESERVED or ASSIGN.match(head):
             w = w[1:]
+            if head == "time":  # `time -p` / `time --`: the flag is not the command
+                while w and w[0] in ("-p", "--"):
+                    w = w[1:]
         elif base(head) in WRAPPERS:
+            if base(head) == "script":  # `script -c CMD FILE` runs CMD
+                cmd_text = script_command(w[1:])
+                if cmd_text is not None:
+                    for cmd in split_commands(cmd_text, depth + 1):
+                        out += candidates(cmd.words, cmd.redirects, depth + 1)
             w = _strip_wrapper(base(head), w[1:])
         else:
             break
     if not w:
-        return [Command([], list(redirects or []))] if redirects else []
-    out: list[Command] = []
+        return out + ([Command([], list(redirects or []))] if redirects else [])
     name = base(w[0])
     if name in SHELLS:
         for k, tok in enumerate(w[1:], 1):

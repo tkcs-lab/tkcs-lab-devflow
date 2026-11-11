@@ -3,6 +3,7 @@ import pytest
 
 import hooks_helpers  # noqa: F401  (puts the hooks directory on sys.path)
 
+from hooks_helpers import bash, make_repo, run
 from _shell import DYN, ParseError, split_commands, walk
 
 
@@ -27,7 +28,7 @@ def words(command):
     ("echo '$(git tag -d x)'", [["echo", "$(git tag -d x)"]]),
     ("diff <(git tag) b", [["git", "tag"], ["diff", DYN, "b"]]),
     ("echo $((1+2))", [["1+2"], ["echo", DYN]]),
-    ("echo $'a\\nb' c", [["echo", DYN, "c"]]),
+    ("echo $'a\\nb' c", [["echo", "a\nb", "c"]]),
     ("echo \"it's\" 'say \"hi\"'", [["echo", "it's", 'say "hi"']]),
     ("x=1 y=2 cmd", [["x=1", "y=2", "cmd"]]),
 ])
@@ -93,3 +94,26 @@ def test_cd_is_tracked():
     seen = [(cwd, w) for cwd, w, _ in walk("cd a && cd b && git push; cd /x; git tag")]
     assert seen[2] == ("a/b", ["git", "push"])
     assert seen[4] == ("/x", ["git", "tag"])
+
+
+@pytest.mark.parametrize("command", [
+    "env -S 'git push -f origin feature'",
+    "time -p git push -f origin feature",
+    "flock /tmp/l git push -f origin feature",
+    "script -qc 'git push -f origin feature' /dev/null",
+])
+def test_wrapper_forms_denied(command, tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo")
+    assert run("no-force-push", bash(command, repo)).code == 2
+
+
+def test_ansi_c_quoting_is_decoded(tmp_path):
+    from _ansi import ansi_c_decode
+    assert ansi_c_decode(r"\x2d\x2dforce") == "--force"
+    assert ansi_c_decode(r"a\nb") == "a\nb"
+    assert ansi_c_decode(r"\q") == "\\q"
+    repo = make_repo(tmp_path / "r", "feature/demo")
+    for command in ["git push $'--force' origin feature", "git push origin $'+feature'",
+                    "bash -c $'git push -f origin feature'"]:
+        assert run("no-force-push", bash(command, repo)).code == 2, command
+    assert run("no-merge", bash("git push origin $'HEAD:main'", repo)).code == 2
