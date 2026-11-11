@@ -228,7 +228,7 @@ def run_guard(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: boo
     try:
         ctx = make_ctx(action, settings)
         try:
-            if ctx.disabled(name):
+            if name != "plan-gate" and ctx.disabled(name):  # plan-gate looks it up itself, after its cheap checks
                 return Decision("allow")
         except ProfileError as exc:
             if name != "dod-gate":
