@@ -1,0 +1,106 @@
+<title>Agents and Setup Checks</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --fg: #1b2230; --muted: #5a6577; --line: #d9dee6;
+    --accent: #1f5fbf; --accent-soft: #e4eefb; --ok: #1d7a46;
+    --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-head: "Space Grotesk", "Inter", system-ui, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161d; --surface: #1a202a; --fg: #e6eaf1; --muted: #99a3b4; --line: #2b3342;
+      --accent: #7fb0f5; --accent-soft: #1d2b42; --ok: #5cc98b; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161d; --surface: #1a202a; --fg: #e6eaf1; --muted: #99a3b4; --line: #2b3342;
+    --accent: #7fb0f5; --accent-soft: #1d2b42; --ok: #5cc98b; color-scheme: dark;
+  }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font-body); line-height: 1.55;
+    padding-block: 28px 56px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  main { max-width: 46rem; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+  h1, h2 { font-family: var(--font-head); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+  h1 { font-size: 1.7rem; }
+  h2 { font-size: 1.15rem; }
+  p { margin: 0; }
+  .lede { color: var(--muted); }
+  section.part { display: flex; flex-direction: column; gap: 14px; }
+  .part-label { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  article {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px;
+    display: flex; flex-direction: column; gap: 12px; min-width: 0;
+  }
+  .meta { color: var(--muted); font-size: 0.85rem; }
+  ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; counter-reset: step; }
+  li { display: flex; gap: 10px; align-items: flex-start; counter-increment: step; min-width: 0; }
+  li input { margin-top: 5px; flex: none; width: 16px; height: 16px; accent-color: var(--accent); }
+  li label { min-width: 0; overflow-wrap: anywhere; }
+  li label::before { content: counter(step) ". "; color: var(--muted); font-variant-numeric: tabular-nums; }
+  li input:checked + label { color: var(--muted); text-decoration: line-through; }
+  code { font-family: var(--font-mono); font-size: 0.88em; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+  a { color: var(--accent); }
+  a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .report { border-left: 3px solid var(--ok); padding-left: 12px; }
+  .empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 8px; padding: 14px 18px; color: var(--muted); }
+</style>
+
+<main>
+  <header>
+    <h1>Agents and Setup Checks</h1>
+    <p class="lede">Two checks only a person can do, after the pull request for issue #17 is merged and the plugin has synced. CI already checks the plugin format; these confirm it works in a real project.</p>
+  </header>
+
+  <section class="part" aria-labelledby="before">
+    <span class="part-label">Part 1</span>
+    <h2 id="before">Before implementation</h2>
+    <p class="empty">Nothing to do. The work needs no account, key or console setting.</p>
+  </section>
+
+  <section class="part" aria-labelledby="after">
+    <span class="part-label">Part 2</span>
+    <h2 id="after">After implementation</h2>
+
+    <article id="ma1">
+      <h3 style="margin:0;font-family:var(--font-head);font-size:1.05rem">The agents and /setup load in a real project</h3>
+      <p class="meta">About 10 minutes. Why: CI validates the files, but only a live session shows the agents are offered.</p>
+      <ol>
+        <li><input type="checkbox" id="s1"><label for="s1">Merge the pull request yourself (the toolkit never merges). Then open your Claude Project's plugin settings and refresh the <code>claude-toolkit</code> marketplace so <code>devflow</code> shows version <code>0.7.0</code>. Setup steps: <a href="https://github.com/tkcs-lab/claude-toolkit/blob/plan/agents-and-setup/docs/delivery.md" target="_blank" rel="noopener">docs/delivery.md</a>.</label></li>
+        <li><input type="checkbox" id="s2"><label for="s2">Start a new session in that Project and type <code>/agents</code>. You should see ten <code>devflow</code> agents: architect, code-reviewer, security-reviewer, test-architect, tech-writer, website-maintainer, ux-reviewer, debugger, dependency-auditor, refactorer.</label></li>
+        <li><input type="checkbox" id="s3"><label for="s3">Type <code>/</code> and check that <code>/devflow:setup</code> is in the command list next to <code>/devflow:dod</code>.</label></li>
+        <li><input type="checkbox" id="s4"><label for="s4">In the same session run <code>/devflow:dod</code> on a repository whose profile has no <code>agents</code> key. It must behave exactly as before, with no agent row.</label></li>
+      </ol>
+      <p class="report"><strong>Report back:</strong> a line such as <code>ma1: 10 agents listed, /devflow:setup present, /dod unchanged</code>, or which agent or command is missing.</p>
+    </article>
+
+    <article id="ma2">
+      <h3 style="margin:0;font-family:var(--font-head);font-size:1.05rem">/setup proposes sensible choices on two real repositories</h3>
+      <p class="meta">About 20 minutes. Why: the survey is heuristic, so only you can say whether the security posture and the blocking choices are right.</p>
+      <ol>
+        <li><input type="checkbox" id="s5"><label for="s5">In a session on a repository where security matters most (for example a privacy tool), run <code>/devflow:setup</code>. Answer its one batch of questions.</label></li>
+        <li><input type="checkbox" id="s6"><label for="s6">Open the pull request it creates on branch <code>chore/toolkit-profile</code>. Read the table of inferred values and the <em>Decisions for a human</em> section. Check that the security posture is <code>critical</code> and the security reviewer is required at every phase.</label></li>
+        <li><input type="checkbox" id="s7"><label for="s7">Repeat in a session on an iOS or iPadOS app repository. Check that the posture is <code>standard</code>, the UX reviewer is required only when view files change, and the <code>ipados</code> stack is listed with <code>swift</code>.</label></li>
+        <li><input type="checkbox" id="s8"><label for="s8">Close both pull requests, or merge them if the profiles are what you want. <code>/setup</code> never merges them.</label></li>
+      </ol>
+      <p class="report"><strong>Report back:</strong> one line per repository: <code>ma2 &lt;repo&gt;: posture right/wrong, blocking choices right/wrong, anything missing</code>.</p>
+    </article>
+  </section>
+</main>
+
+<script>
+  (function () {
+    var boxes = document.querySelectorAll('input[type="checkbox"]');
+    function read() { try { return JSON.parse(localStorage.getItem('agents-setup-steps') || '{}'); } catch (e) { return {}; } }
+    function write(v) { try { localStorage.setItem('agents-setup-steps', JSON.stringify(v)); } catch (e) {} }
+    var saved = read();
+    boxes.forEach(function (b) {
+      if (saved[b.id]) b.checked = true;
+      b.addEventListener('change', function () { var s = read(); s[b.id] = b.checked; write(s); });
+    });
+  })();
+</script>
