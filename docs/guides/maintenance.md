@@ -4,7 +4,7 @@ Four commands keep a repository up to date and tidy without you doing the work: 
 `/land` and `/docs tidy`. `/deps`, `/upstream` and `/docs tidy` run unattended from a scheduled task; `/land` is run by you. None
 of them ever merges, approves or enables auto-merge. Each writes a status record to the board (see
 below) when one exists. What the spike found about what a cloud session can and cannot do is in
-[design/maintenance-spike.md](../architecture/maintenance-spike.md).
+[maintenance-spike.md](../architecture/maintenance-spike.md).
 
 ## What each command does
 
@@ -113,9 +113,9 @@ when the check was unavailable): a count only, the paths are in the pull request
 is recorded, what is not and why it never blocks: [scope-drift.md](../architecture/scope-drift.md).
 
 Every command writes a record (D8): `/implement` a `run` record under the project slug, and `setup`, `review`,
-`make-plan`, `deps`, `upstream`, `land` and `docs` a command record under `<project>--<command>`. The project slug is
+`make-plan`, `deps`, `upstream`, `land`, `docs` and `migrate` a command record under `<project>--<command>`. The project slug is
 the repository name in lower case (`tld board project-slug <owner>/<repo>`). `attended` says whether you started the
-command (`/setup`, `/review`, `/make-plan`, `/implement`, `/land`, `/docs init`: `true`) or a schedule did (`/deps`,
+command (`/setup`, `/review`, `/make-plan`, `/implement`, `/land`, `/docs init`, `/migrate`: `true`) or a schedule did (`/deps`,
 `/upstream`, `/docs tidy`: `false`, with `orchestrator_session: null` when the session cannot read its own id). The
 final states are `done`, `failed` and `pr_open`. The rules are [playbooks/policies/status-board.md](../../playbooks/policies/status-board.md).
 
