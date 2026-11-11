@@ -3,6 +3,12 @@
 A plan → implement workflow for Claude Code on the web (claude.ai/code), for any repository in any
 language.
 
+- **`/setup`** (Sonnet) surveys the repository and creates or updates `.claude/toolkit.yaml`, including the `agents`
+  block, and delivers it as one pull request that it never merges. See [docs/setup.md](docs/setup.md).
+- **Agents.** Ten generic agents (architect, code-reviewer, security-reviewer, test-architect, tech-writer,
+  website-maintainer, ux-reviewer, debugger, dependency-auditor, refactorer) ship in `devflow`. The profile decides
+  which are mandatory at `/make-plan`, each `/implement` phase, the final review, `/review` and `/dod`, whether their
+  findings block, and how strict the security reviewer is. See [docs/agents.md](docs/agents.md).
 - **`/make-plan <what you want>`** (Opus) researches the repo, then writes either a self-contained
   single-session prompt (small scope) or a plan document with a YAML implementation manifest on a
   `plan/<slug>` branch (large scope), plus a step-by-step page for anything only a human can do. It
@@ -63,20 +69,21 @@ and do not cover sessions without the plugin. See [docs/hooks.md](docs/hooks.md)
 
 ## Use it in a project
 
-1. Copy [`templates/toolkit.yaml`](templates/toolkit.yaml) to `.claude/toolkit.yaml` and fill it in.
-   Reference: [docs/profile-reference.md](docs/profile-reference.md).
+1. Run `/setup` to create `.claude/toolkit.yaml` from what the repository shows (one pull request, never merged).
+   As the fallback, copy [`templates/toolkit.yaml`](templates/toolkit.yaml) to `.claude/toolkit.yaml` and fill it in by
+   hand. Reference: [docs/profile-reference.md](docs/profile-reference.md).
 2. Add the plugins in your Claude Project's settings (marketplace `andras-tkcs/claude-toolkit`), see
-   [docs/delivery.md](docs/delivery.md).
+   [docs/delivery.md](docs/delivery.md). `/setup` needs them, so add them before step 1 when you use it.
 3. Start a session and run `/make-plan <what you want>`.
 
 ## What is here
 
 | Path | |
 |---|---|
-| `plugins/devflow` | the eight commands, the `project-profile`, `pr-steward`, `status-board`, `repo-admin`, `git-ops`, `review-checklist`, `secure-code-review`, `test-review` and `docs-review` skills, the scripts in `scripts/` (manifest, profile and status-record validators, `review_decisions.py` with its page template, `build_board.py`, `board_stale.py`, `pick_release.py`, `upstream_sync.py`, `land_order.py`, `repo_admin.py`, `scope_check.py`), `schema/profile.schema.json`, `schema/status-record.schema.json`, `schema/admin-policy.schema.json`, `hooks/` (the guardrail hooks and `hooks.json`), `board/` (the status board page) and `templates/` (the `/land`, release and git-ops workflows, the starter admin policy and the git-ops allowlist example) |
+| `plugins/devflow` | the nine commands, the ten agents in `agents/`, the `project-profile`, `agent-dispatch`, `profile-setup`, `pr-steward`, `status-board`, `repo-admin`, `git-ops`, `review-checklist`, `secure-code-review`, `test-review` and `docs-review` skills, the scripts in `scripts/` (manifest, profile and status-record validators, `review_decisions.py` with its page template, `build_board.py`, `board_stale.py`, `pick_release.py`, `agents.py`, `profile_survey.py`, `survey_signals.py`, `survey_docs.py`, `survey_proposal.py`, `profile_patch.py`, `upstream_sync.py`, `land_order.py`, `repo_admin.py`, `scope_check.py`), `schema/profile.schema.json`, `schema/status-record.schema.json`, `schema/admin-policy.schema.json`, `hooks/` (the guardrail hooks and `hooks.json`), `board/` (the status board page) and `templates/` (the `/land`, release and git-ops workflows, the starter admin policy and the git-ops allowlist example) |
 | `plugins/stack-python`, `plugins/stack-go`, `plugins/stack-swift`, `plugins/stack-ipados` | stack skills the profile selects (`ipados` goes with `swift`) |
 | `templates/toolkit.yaml` | starter profile |
-| `docs/` | profile reference, delivery, design, [the guardrail hooks](docs/hooks.md), [the review flow](docs/review.md), [the maintenance commands and the board](docs/maintenance.md), [scope-drift monitoring in `/implement`](docs/scope-drift.md), [auditing and updating organisation and repository settings](docs/admin.md), [the central git-ops workflow](docs/git-ops.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |
+| `docs/` | profile reference, delivery, design, [the guardrail hooks](docs/hooks.md), [the review flow](docs/review.md), [the maintenance commands and the board](docs/maintenance.md), [scope-drift monitoring in `/implement`](docs/scope-drift.md), [auditing and updating organisation and repository settings](docs/admin.md), [the central git-ops workflow](docs/git-ops.md), [the agents](docs/agents.md), [`/setup`](docs/setup.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |
 | `tests/` | `python -m pytest tests -q` (Python 3.11+, PyYAML) |
 
 There is no server and nothing long-running: everything runs inside Claude Code sessions.

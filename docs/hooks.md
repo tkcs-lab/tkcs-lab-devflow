@@ -98,6 +98,15 @@ Patterns: one without a slash matches the file name at any depth (`*.lock`); one
 repository root (`.github/workflows/**`); `**` crosses directories, `*` and `?` do not; a trailing slash means a directory.
 Paths outside the repository are not this hook's business.
 
+**The `/setup` exemption.** `/setup` has to write `.claude/toolkit.yaml`. Before its first write it runs
+`python3 "<devflow root>/hooks/protect_paths.py" --allow-profile`, which writes the marker
+`protect-paths-profile.json` into `<git dir>/devflow/` (so it is per checkout and never committed). For two hours from
+that moment the hook lets the path `.claude/toolkit.yaml` (exactly) through and nothing else: `.env*`, lockfiles and
+workflow files stay denied. After its last write `/setup` runs `--end-allow`, which removes the marker; a marker that
+is forgotten lapses after the two-hour TTL. The deny message for the profile says it is changed by people or by
+`/setup`. This is a convention like the `dod-gate` marker below: any session that can run a command can write the
+marker. Branch protection and the pull request review stay the hard control.
+
 ### `dod-gate`
 
 Opt-in, off by default. When `hooks.dod_gate.enabled` is true, the Stop hook runs the profile's `verify.dod` commands

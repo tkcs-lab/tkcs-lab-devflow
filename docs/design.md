@@ -25,6 +25,8 @@ plugins/devflow/
   .claude-plugin/plugin.json
   commands/{make-plan,implement,dod,review}.md   # review: see docs/review.md
   commands/{board,deps,upstream,land}.md         # maintenance commands: see docs/maintenance.md
+  commands/setup.md                     # /setup: survey a repository, create or update the profile: see docs/setup.md
+  agents/<name>.md                      # the ten generic agents (architect ... refactorer): see docs/agents.md
   skills/project-profile/SKILL.md       # how every command reads, validates and quotes the profile
   skills/pr-steward/SKILL.md            # generic steward policy; table comes from ci.dispatchable
   skills/review-checklist/SKILL.md      # Nightshift, adapted (no run-ledger / R-AG rules)
@@ -32,10 +34,15 @@ plugins/devflow/
   skills/{test-review,docs-review}/SKILL.md   # checklists for /review's test and documentation dimensions
   skills/status-board/SKILL.md          # how a session writes its status record to the board
   skills/repo-admin/SKILL.md            # audit and update organisation and repository settings: see docs/admin.md
+  skills/{agent-dispatch,profile-setup}/SKILL.md   # dispatching the profile's agents; how /setup decides and asks
   scripts/validate_manifest.py          # CLI: validate_manifest.py <plan.md|manifest.yaml> [--profile P]
   scripts/validate_profile.py           # CLI: validate_profile.py [.claude/toolkit.yaml]
   scripts/review_decisions.{py,html}    # CLI: review_decisions.py <items.json> <out.html>, /review's decisions page
   scripts/{validate_status_record,build_board,board_stale,pick_release,upstream_sync,land_order,repo_admin,scope_check}.py
+  scripts/agents.py                     # CLI: agents.py required|verify, which agents a point requires and whether they reported
+  scripts/profile_survey.py             # CLI: profile_survey.py [ROOT], the survey and proposal behind /setup
+  scripts/{survey_signals,survey_docs,survey_proposal}.py   # modules of the survey
+  scripts/profile_patch.py              # CLI: profile_patch.py set-block|diff, text-level edits of the profile
   schema/profile.schema.json
   schema/status-record.schema.json
   schema/admin-policy.schema.json       # the policy repo_admin.py reads; its own file, referenced by the profile key admin.policy
@@ -43,6 +50,7 @@ plugins/devflow/
   templates/devflow-land.yml            # the workflow /land installs
   templates/devflow-release.yml         # the release (tag) workflow repo-admin installs
   templates/admin-policy.yaml           # starter policy
+  templates/toolkit.yaml                # copy of the starter profile, which /setup create copies
 plugins/stack-python/skills/stack-python/SKILL.md
 plugins/stack-swift/skills/stack-swift/SKILL.md
 plugins/stack-ipados/skills/stack-ipados/SKILL.md
@@ -305,3 +313,26 @@ with write access to other repositories contains only the workflow and its allow
 environment secret limited to the default branch (D7), and the workflow starts as a dry run and checks an
 allowlist and a set of guards. Rejected: a copy of the workflow in every repository, and for now a GitHub
 App token instead of a fine-grained one. Setup, use and guards are in [git-ops.md](git-ops.md).
+
+## 12. Agents and /setup
+
+Ten generic agents and the `/setup` command were added. [agents.md](agents.md) and [setup.md](setup.md) describe what
+they do; this section records why.
+
+- **The agents live in devflow, not in a new plugin.** They are wired into `/make-plan`, `/implement`, `/review` and
+  `/dod`, use the profile and the checklist skills, and must stay in step with those commands, so one plugin and one
+  version is simpler than a second plugin that depends on the first. Rejected: a separate `agents` plugin.
+- **Posture is profile-driven.** The agents contain nothing about a project. Whether the security reviewer is strict,
+  which agents are mandatory where and whether they block is the `agents` block of the profile. The schema carries no
+  defaults for it; `scripts/agents.py` applies them, so a profile without the block resolves exactly as before.
+- **A required agent that did not run fails visibly.** Every agent ends with one `AGENT-REPORT` line and
+  `agents.py verify` reads it, rather than trusting that the dispatching session remembered to run the agent.
+- **`/setup` patches the profile at text level.** `profile_patch.py` replaces or appends a block and keeps every other
+  byte. Round-tripping the file through a YAML library would drop the comments that make the starter profile readable.
+- **The survey proposes, a person decides.** The heuristics (security score, UI globs, test levels) can be wrong, so the
+  posture is always asked about, `blocking: true` is written only after confirmation, and the pull request lists the
+  evidence. `/setup` never merges.
+- **The `protect-paths` convention.** The profile is protected from hand edits. `/setup` has to write it, so it runs
+  `protect_paths.py --allow-profile`, which writes a marker with a two-hour lifetime inside the git directory (per
+  checkout) that lets exactly `.claude/toolkit.yaml` through. Like the `dod-gate` marker it is a convention, not a lock;
+  branch protection and the pull request review remain the hard control ([hooks.md](hooks.md#protect-paths)).

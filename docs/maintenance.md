@@ -102,6 +102,11 @@ A phase chip shows `drift <n>` when the phase changed `n` files outside its `tou
 when the check was unavailable): a count only, the paths are in the pull request's Scope section. What
 is recorded, what is not and why it never blocks: [scope-drift.md](scope-drift.md).
 
+The records are those of `/implement` runs and of the maintenance commands `deps`, `upstream`, `land` and `setup`.
+`/setup` ([setup.md](setup.md)) writes a `setup` record with the document id `<project>--setup`; unlike the
+scheduled commands its `orchestrator_session` is the real session id, and its items are `survey`, `confirm`, `write`,
+`verify` and `pr`. Alerts are push only.
+
 `/board prune` lists the records the board hides (no update for more than 7 days, or finished earlier;
 never one that needs you) and asks one question before it deletes them.
 
