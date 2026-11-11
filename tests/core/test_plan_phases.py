@@ -144,3 +144,113 @@ def test_phase_status_all_done_and_errors(plan, tmp_path):
     assert r.returncode == 1 and "no phase 'nope'" in r.stderr
     r = run("phase-status", str(plan), "--repo", str(repo), "--ref", "no-such-ref")
     assert r.returncode == 1 and "git log no-such-ref failed" in r.stderr
+
+
+# ---- phase-status with real merges: revert on red (C1) and durable gate approvals (C13) -----------------------
+def git(root, *args):
+    r = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args], cwd=root,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return r.stdout.strip()
+
+
+@pytest.fixture()
+def feature_repo(tmp_path):
+    root = tmp_path / "f"
+    root.mkdir()
+    git(root, "init", "-q", "-b", "main")
+    git(root, "commit", "-q", "--allow-empty", "-m", "init")
+    git(root, "checkout", "-q", "-b", "feature/demo")
+    return root
+
+
+def phase_commit(root, pid, name, text):
+    git(root, "checkout", "-q", "-B", f"feature/demo--{pid}", "feature/demo")
+    (root / name).write_text(text)
+    git(root, "add", name)
+    git(root, "commit", "-q", "-m", f"{pid} work\n\nPlan-Phase: demo/{pid}")
+    git(root, "checkout", "-q", "feature/demo")
+
+
+def merge_phase(root, pid, branch=None):
+    git(root, "merge", "-q", "--no-ff", branch or f"feature/demo--{pid}", "-m",
+        f"Merge demo {pid}: t\n\nPlan-Phase: demo/{pid}")
+
+
+def test_only_the_merge_on_the_feature_branch_counts_not_the_workers_tip_commit(plan, feature_repo):
+    phase_commit(feature_repo, "p1", "a.py", "1\n")
+    assert status(plan, feature_repo, "--ref", "feature/demo")["done"] == []
+    git(feature_repo, "merge", "-q", "--no-ff", "feature/demo--p1", "-m", "Merge without a trailer")
+    assert status(plan, feature_repo, "--ref", "feature/demo")["done"] == []  # the tip's trailer is a second parent
+    git(feature_repo, "reset", "-q", "--hard", "HEAD~1")
+    merge_phase(feature_repo, "p1")
+    assert status(plan, feature_repo, "--ref", "feature/demo")["done"] == ["p1"]
+
+
+def test_a_reverted_merge_is_not_done_and_a_revert_of_the_revert_makes_it_done_again(plan, feature_repo):
+    phase_commit(feature_repo, "p1", "a.py", "1\n")
+    merge_phase(feature_repo, "p1")
+    merge_sha = git(feature_repo, "rev-parse", "HEAD")
+    git(feature_repo, "revert", "--no-edit", "-m", "1", merge_sha)
+    s = status(plan, feature_repo, "--ref", "feature/demo")
+    assert s["done"] == [] and "p1" in s["ready"]
+    # The recovery the playbook names for a red merge that was already pushed: revert the revert, then merge the fix.
+    revert_sha = git(feature_repo, "rev-parse", "HEAD")
+    git(feature_repo, "revert", "--no-edit", revert_sha)
+    assert status(plan, feature_repo, "--ref", "feature/demo")["done"] == ["p1"]
+    git(feature_repo, "checkout", "-q", "feature/demo--p1")
+    (feature_repo / "a.py").write_text("1 fixed\n")
+    git(feature_repo, "commit", "-q", "-am", "p1 fix\n\nPlan-Phase: demo/p1")
+    git(feature_repo, "checkout", "-q", "feature/demo")
+    merge_phase(feature_repo, "p1")  # merges cleanly: no modify/delete conflict
+    assert (feature_repo / "a.py").read_text() == "1 fixed\n"
+    assert status(plan, feature_repo, "--ref", "feature/demo")["done"] == ["p1"]
+
+
+def test_re_merging_after_a_plain_revert_conflicts_which_is_why_the_playbook_resets_locally(plan, feature_repo):
+    phase_commit(feature_repo, "p1", "a.py", "1\n")
+    merge_phase(feature_repo, "p1")
+    git(feature_repo, "revert", "--no-edit", "-m", "1", "HEAD")
+    git(feature_repo, "checkout", "-q", "feature/demo--p1")
+    (feature_repo / "a.py").write_text("1 fixed\n")
+    git(feature_repo, "commit", "-q", "-am", "p1 fix")
+    git(feature_repo, "checkout", "-q", "feature/demo")
+    r = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "merge", "--no-ff",
+                        "feature/demo--p1", "-m", "again"], cwd=feature_repo, capture_output=True, text=True)
+    assert r.returncode != 0 and "CONFLICT" in r.stdout
+    git(feature_repo, "merge", "--abort")
+    # The playbook's way: a red merge that is not pushed yet is undone with reset, and the fix merges cleanly.
+    git(feature_repo, "reset", "-q", "--hard", "HEAD~1")
+    git(feature_repo, "reset", "-q", "--hard", "HEAD~1")
+    assert status(plan, feature_repo, "--ref", "feature/demo")["done"] == []
+    merge_phase(feature_repo, "p1")
+    assert (feature_repo / "a.py").read_text() == "1 fixed\n"
+    assert status(plan, feature_repo, "--ref", "feature/demo")["done"] == ["p1"]
+
+
+def test_a_revert_commit_with_a_plan_phase_trailer_does_not_count(plan, feature_repo):
+    phase_commit(feature_repo, "p1", "a.py", "1\n")
+    merge_phase(feature_repo, "p1")
+    sha = git(feature_repo, "rev-parse", "HEAD")
+    git(feature_repo, "revert", "--no-commit", "-m", "1", sha)
+    git(feature_repo, "commit", "-q", "-m", f"Revert p1\n\nThis reverts commit {sha[:12]}.\n\nPlan-Phase: demo/p1")
+    assert status(plan, feature_repo, "--ref", "feature/demo")["done"] == []
+
+
+def test_gate_approval_is_read_from_an_empty_commit_trailer_and_a_later_revision_is_gated_again(plan, feature_repo):
+    phase_commit(feature_repo, "p2", "b.py", "2\n")
+    merge_phase(feature_repo, "p2")
+    s = status(plan, feature_repo, "--ref", "feature/demo")
+    assert s["gated"] == ["p2"] and s["approved"] == [] and "p4" in s["waiting"]
+    git(feature_repo, "commit", "-q", "--allow-empty", "-m", "Approve demo p2\n\nPlan-Gate-Approved: demo/p2")
+    s = status(plan, feature_repo, "--ref", "feature/demo")
+    assert s["gated"] == [] and s["approved"] == ["p2"] and "p4" in s["ready"]
+    # An approval for another plan, or one a worker wrote on its phase branch, does not count.
+    git(feature_repo, "checkout", "-q", "-B", "feature/demo--p2-rev1", "feature/demo")
+    (feature_repo / "b.py").write_text("2 rev\n")
+    git(feature_repo, "commit", "-q", "-am", "rev\n\nPlan-Gate-Approved: demo/p2\nPlan-Gate-Approved: other/p2")
+    git(feature_repo, "checkout", "-q", "feature/demo")
+    merge_phase(feature_repo, "p2", "feature/demo--p2-rev1")
+    s = status(plan, feature_repo, "--ref", "feature/demo")
+    assert s["gated"] == ["p2"] and s["approved"] == []
+    assert status(plan, feature_repo, "--ref", "feature/demo", "--approved", "p2")["approved"] == ["p2"]

@@ -121,7 +121,7 @@ def test_ask_posts_and_prints_the_id(server, tmp_path):
 
 def test_ask_refuses_an_invalid_ask_before_posting(server):
     result = tld("ask", "-", env=env_for(base(server)), stdin=json.dumps(ask_doc(questions=[])))
-    assert result.returncode == 1 and "ask: 'questions'" in result.stdout
+    assert result.returncode == 1 and "ask: 'questions'" in result.stderr and result.stdout == ""  # C15
     assert server.store.list_asks() == []
 
 
@@ -185,7 +185,11 @@ def test_fallback_prints_the_comment_and_exits_5_without_a_board(tmp_path):
     assert "   Options: `plan` (plan (recommended)), `issue`, `drop`" in body
     assert "2. `go` (confirm, required): Run the commands?\n   Answer `yes` or `no`." in body
     assert "3. `notes` (text, optional)" in body
-    assert "```\nSEC-1: plan\ngo: yes\nnotes: <your answer on one line>\n```" in body
+    assert "-- example reply --\n\nSEC-1: plan\ngo: yes\nnotes: your answer on one line\n\n-- end of example --" in body
+    assert "```" not in body  # the example is plain lines: the parser skips fenced ones
+    reply = body.split("-- example reply --\n")[1].split("-- end of example --")[0]
+    assert inbox.answers_from_comments(ask_doc(), _comments(("the-owner", "admin", reply)), "agent-bot") == {
+        "SEC-1": "plan", "go": True, "notes": "your answer on one line"}  # a copied example parses
     assert "Context: https://example.com/review.md" in body
     assert "example/example-project#7" in result.stderr
 
@@ -223,7 +227,7 @@ def _comments(*items):
     return [{"author": a, "permission": p, "body": b} for a, p, b in items]
 
 
-def test_answers_from_issue_counts_only_owners_and_collaborators(tmp_path):
+def test_answers_from_issue_counts_only_the_owner_and_admins(tmp_path):
     ask_file = tmp_path / "ask.json"
     ask_file.write_text(json.dumps(ask_doc()))
     comments = _comments(
@@ -231,14 +235,46 @@ def test_answers_from_issue_counts_only_owners_and_collaborators(tmp_path):
         ("stranger", "read", "SEC-1: drop\ngo: no"),                        # not a collaborator
         ("drive-by", "none", "SEC-1: drop"),
         ("agent-bot", "write", "SEC-1: drop"),                              # the session's own login
-        ("the-owner", "admin", "Thanks!\nSEC-1: Issue\ngo: yes\n> notes: quoted, ignored"),
-        ("helper", "maintain", "notes: please link #12\nSEC-1: not-an-option"),
+        ("the-owner", "write", "Thanks!\nSEC-1: Issue\ngo: yes\n> notes: quoted, ignored"),
+        ("helper", "maintain", "notes: maintain does not count\nSEC-1: drop"),
+        ("writer", "write", "notes: write does not count"),
+        ("an-admin", "admin", "notes: please link #12\nSEC-1: not-an-option"),
     )
     path = tmp_path / "comments.json"
     path.write_text(json.dumps(comments))
-    result = tld("answers", "--from-issue", str(path), "--ask", str(ask_file), "--ignore-author", "agent-bot")
+    result = tld("answers", "--from-issue", str(path), "--ask", str(ask_file), "--self", "agent-bot",
+                 "--owner", "the-owner")
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {"SEC-1": "issue", "go": True, "notes": "please link #12"}
+
+
+def test_the_sessions_own_login_never_counts_even_as_owner_or_admin(tmp_path):
+    ask_file = tmp_path / "ask.json"
+    ask_file.write_text(json.dumps(ask_doc()))
+    path = tmp_path / "comments.json"
+    path.write_text(json.dumps(_comments(("Agent-Bot", "admin", "SEC-1: plan\ngo: yes"))))
+    base_args = ("answers", "--from-issue", str(path), "--ask", str(ask_file))
+    result = tld(*base_args, "--self", "agent-bot", "--owner", "agent-bot")
+    assert result.returncode == 3 and "SEC-1" in result.stderr
+    missing = tld(*base_args, "--owner", "the-owner")
+    assert missing.returncode == 2 and "--self LOGIN" in missing.stderr  # the own login is mandatory
+    assert tld(*base_args, "--ignore-author", "agent-bot", "--owner", "x").returncode == 3  # the old spelling
+
+
+def test_the_owner_defaults_to_the_profile_then_the_repository_owner(tmp_path):
+    ask_file = tmp_path / "ask.json"
+    ask_file.write_text(json.dumps(ask_doc()))
+    path = tmp_path / "comments.json"
+    path.write_text(json.dumps(_comments(("profile-owner", "write", "SEC-1: plan\ngo: yes"),
+                                         ("example", "write", "SEC-1: drop\ngo: no"))))
+    base_args = ("answers", "--from-issue", str(path), "--ask", str(ask_file), "--self", "agent-bot")
+    assert tld(*base_args, cwd=tmp_path).returncode == 2  # no owner known
+    result = tld(*base_args, "--repo", "example/example-project", cwd=tmp_path)
+    assert result.returncode == 0 and json.loads(result.stdout) == {"SEC-1": "drop", "go": False}
+    (tmp_path / ".tld").mkdir()
+    (tmp_path / ".tld" / "toolkit.yaml").write_text("git:\n  owner_login: profile-owner\n")
+    result = tld(*base_args, "--repo", "example/example-project", cwd=tmp_path)
+    assert result.returncode == 0 and json.loads(result.stdout) == {"SEC-1": "plan", "go": True}
 
 
 def test_answers_from_issue_later_overrides_and_incomplete_is_exit_3(tmp_path):
@@ -246,10 +282,10 @@ def test_answers_from_issue_later_overrides_and_incomplete_is_exit_3(tmp_path):
     ask_file.write_text(json.dumps(ask_doc()))
     path = tmp_path / "comments.json"
     path.write_text(json.dumps(_comments(("o", "admin", "SEC-1: plan"), ("o", "write", "`SEC-1`: drop"))))
-    result = tld("answers", "--from-issue", str(path), "--ask", str(ask_file))
+    result = tld("answers", "--from-issue", str(path), "--ask", str(ask_file), "--self", "bot", "--owner", "o")
     assert result.returncode == 3 and "go" in result.stderr and result.stdout == ""
     path.write_text(json.dumps(_comments(("o", "admin", "SEC-1: plan"), ("o", "write", "`SEC-1`: drop\ngo: n"))))
-    result = tld("answers", "--from-issue", str(path), "--ask", str(ask_file))
+    result = tld("answers", "--from-issue", str(path), "--ask", str(ask_file), "--self", "bot", "--owner", "o")
     assert result.returncode == 0 and json.loads(result.stdout) == {"SEC-1": "drop", "go": False}
 
 
@@ -258,13 +294,44 @@ def test_answers_from_issue_ignores_fenced_examples():
     assert found == {}
 
 
+@pytest.mark.parametrize("hidden", [
+    "<!-- go: yes -->",
+    "<!--\ngo: yes\n-->",
+    "<!-- an unclosed comment\ngo: yes",
+    "~~~\ngo: yes\n~~~",
+    "````\n```\ngo: yes\n````",
+    "    go: yes",
+    "\tgo: yes",
+    "> go: yes",
+    "<blockquote>\ngo: yes\n</blockquote>",
+    "<details><summary>more</summary>\n\ngo: yes\n\n</details>",
+    "<details>\n<details>\nx\n</details>\ngo: yes\n</details>",
+    "<BLOCKQUOTE cite=x>go: yes</BLOCKQUOTE>",
+])
+def test_a_visible_no_with_a_hidden_yes_stays_no(hidden):
+    body = f"go: no\n{hidden}\n"
+    found = inbox.answers_from_comments(ask_doc(), _comments(("o", "admin", body)), "bot", ["o"])
+    assert found == {"go": False}, body
+
+
+def test_text_after_a_closed_hidden_block_counts_again():
+    body = "<details>\ngo: no\n</details>\ngo: yes\n~~~\nSEC-1: drop\n~~~\nSEC-1: plan <!-- x -->"
+    assert inbox.answers_from_comments(ask_doc(), _comments(("o", "admin", body)), "bot", ["o"]) == {
+        "go": True, "SEC-1": "plan"}
+
+
 def test_answers_from_issue_needs_the_ask(tmp_path):
     path = tmp_path / "c.json"
     path.write_text("[]")
     assert tld("answers", "--from-issue", str(path)).returncode == 2
     (tmp_path / "a.json").write_text(json.dumps(ask_doc()))
     path.write_text("{}")
-    assert tld("answers", "--from-issue", str(path), "--ask", str(tmp_path / "a.json")).returncode == 1
+    assert tld("answers", "--from-issue", str(path), "--ask", str(tmp_path / "a.json"), "--self", "bot",
+               "--owner", "o").returncode == 1
+    path.write_text("[]")
+    (tmp_path / "bad.json").write_text("{}")
+    bad = tld("answers", "--from-issue", str(path), "--ask", str(tmp_path / "bad.json"), "--self", "bot", "--owner", "o")
+    assert bad.returncode == 1 and bad.stdout == "" and "ask: " in bad.stderr  # C15: errors on stderr
 
 
 # ---- redirects keep the token on the same origin (S18) ----------------------------------------------

@@ -51,8 +51,9 @@ def code_texts(text: str) -> list[str]:
 
 
 GROUPS = sorted({g for g, _ in cli.COMMANDS} | set(cli.TOP))
+# Any word after `tld` (C8): an unknown group is caught by the test instead of going unseen.
 TLD_CALL = re.compile(r'(?:"\$\{CLAUDE_PLUGIN_ROOT\}/bin/tld"|(?<![\w/.<-])tld)\s+(--help|--version|'
-                      + "|".join(GROUPS) + r')\b(?:\s+([a-z][a-z-]*))?(.*)')
+                      r'[a-z][a-z-]*)(?![\w:-])(?:\s+([a-z][a-z-]*))?(.*)')
 
 
 def strip_placeholders(text: str) -> str:
@@ -69,6 +70,9 @@ def tld_calls(path: Path) -> list[tuple[str, str, str, str]]:
     for code in code_texts(path.read_text()):
         for m in TLD_CALL.finditer(code):
             group, command, rest = m.group(1), m.group(2) or "", strip_placeholders(m.group(3))
+            if group not in GROUPS and group not in ("--help", "--version") and \
+                    not re.search(r"(?:^|[;&|(]|\bdo|\bthen)\s*$", code[:m.start()]):
+                continue  # prose that says "tld" mid-span (`... from the tld template`), not a call
             calls.append((rel(path), group, command, rest))
     return calls
 
@@ -98,6 +102,7 @@ def test_every_tld_call_parses_with_the_real_cli(call):
     if group in ("--help", "--version"):
         assert cli.main([group]) == 0
         return
+    assert group in GROUPS, f"{path}: 'tld {group}' is not a tld command group (groups: {', '.join(GROUPS)})"
     if group in cli.TOP:  # a one-word command: what follows it are its arguments
         code, text = help_text(group)
         assert code == 0, text
@@ -137,6 +142,11 @@ def defined_actions() -> set[str]:
     return names
 
 
+# A bare code span that looks like a runtime action (`check_in`, `stop_worker`, `github.pr_read`) must be one (C8).
+ACTION_LIKE = re.compile(r"^(github\.[a-z_]+|(?:start|read|message|stop|check|wait_for|run|ask|notify|show|"
+                         r"schedule|secrets)_[a-z_]+|identity)$")
+
+
 def used_actions(path: Path) -> set[str]:
     used = set()
     for code in code_texts(path.read_text()):
@@ -144,7 +154,19 @@ def used_actions(path: Path) -> set[str]:
         m = re.match(r"^([a-z_]+(?:\.[a-z_]+)?)\(", code)
         if m:
             used.add(m.group(1))
+        if ACTION_LIKE.match(code):
+            used.add(code)
     return used
+
+
+def test_the_action_checker_sees_bare_spans_and_unknown_groups():
+    """The checkers themselves: a bare unknown action span and an unknown `tld` group are found."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        f = Path(tmp) / "x.md"
+        f.write_text("Then `stop_workers` and `github.pr_merge` and `run_role`, then `tld plann branch-name`.\n")
+        assert used_actions(f) == {"stop_workers", "github.pr_merge", "run_role"}
+        assert [m.group(1) for c in code_texts(f.read_text()) for m in TLD_CALL.finditer(c)] == ["plann"]
 
 
 def test_runtime_defines_the_actions_of_the_plan():

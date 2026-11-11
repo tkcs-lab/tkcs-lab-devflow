@@ -32,7 +32,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld plan scope-check check\|disposition\|record\|section ...` | `tld.plan.scope` | scope-drift checks of `/implement` |
 | `tld plan check-url URL [--repo O/N] [--main B]` | `tld.plan.phases` | accept a plan URL only from this repository's main branch or a `plan/<slug>` branch (S14); prints owner, repo, ref, path |
 | `tld plan branch-name --plan-slug S \| --review-slug S \| --manifest PLAN [--phase ID [--rev N] \| --fix N]` | `tld.plan.phases` | the branch names of the playbooks (C12) |
-| `tld plan phase-status PLAN [--ref R] [--running ID]... [--approved ID]... [--repo DIR]` | `tld.plan.phases` | done (by `Plan-Phase` trailers), gated, ready, waiting phases and the ones to start, as JSON |
+| `tld plan phase-status PLAN [--ref R] [--running ID]... [--approved ID]... [--repo DIR]` | `tld.plan.phases` | done (by `Plan-Phase` trailers on the branch's own, unreverted commits), approved (`Plan-Gate-Approved` trailers or `--approved`), gated, ready, waiting phases and the ones to start, as JSON |
 | `tld roles required --profile P --at POINT [--changed F]` | `tld.roles.dispatch` | the roles required at a point, with their mode, as JSON |
 | `tld roles verify --required F --report F` | `tld.roles.dispatch` | check a report against `tld roles required` |
 | `tld dod exempt` | `tld.dod.gate` | mark this checkout's session exempt from the dod-gate hook |
@@ -44,7 +44,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld board client health\|list\|get\|set\|delete ...` | `tld.board.client` | status records on the board server |
 | `tld board ask FILE\|- [--fallback-issue O/R[#N]] [--mention LOGIN] [--profile P]` | `tld.board.inbox` | post an ask and print its id; exit 3 no board, 5 the fallback comment body is on stdout |
 | `tld board answers ID [--wait S] [--interval S]` | `tld.board.inbox` | print the answers JSON; exit 3 still open, 4 cancelled |
-| `tld board answers --from-issue COMMENTS.json --ask FILE [--ignore-author LOGIN]` | `tld.board.inbox` | the answers in the owner's or a collaborator's replies to a fallback comment; exit 3 incomplete |
+| `tld board answers --from-issue COMMENTS.json --ask FILE --self LOGIN [--owner LOGIN]... [--repo O/R] [--profile P]` | `tld.board.inbox` | the answers in the owner's (`--owner`, else `git.owner_login`, else the repository owner) or an admin's replies to a fallback comment, never `--self`'s (required); exit 3 incomplete, 2 no `--self` or no owner |
 | `tld board cancel ID` | `tld.board.inbox` | cancel an open ask |
 | `tld board validate-ask FILE` | `tld.board.ask` | validate an ask (`schema/ask.schema.json`) |
 | `tld board mcp-stdio` | `tld.board.mcp_stdio` | MCP stdio bridge to the board server (the `tld-board` MCP server) |
@@ -57,7 +57,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld ops upstream-sync plan\|prepare ...` | `tld.ops.upstream_sync` | sync a fork to an upstream release |
 | `tld ops repo-admin validate-policy\|whoami\|audit\|apply ...` | `tld.ops.repo_admin` | audit and update organisation and repository settings |
 | `tld ops docs-index check\|inventory\|move ...` | `tld.ops.docs_index` | the docs index rules and doc moves (`move` also rewrites the profile's paths; a dry run unless `--apply`) |
-| `tld migrate [ROOT] [--write]` | `tld.ops.migrate` | move a claude-toolkit (devflow) repository to tld: prints the plan, `--write` applies and stages it, then validates the profile and prints the owner's checklist ([migrating-from-claude-toolkit.md](../guides/migrating-from-claude-toolkit.md)) |
+| `tld migrate [ROOT] [--write]` | `tld.ops.migrate` | move a claude-toolkit (devflow) repository to tld: prints the plan, `--write` applies and stages it, then validates the profile and prints the owner's checklist; it never follows a symbolic link ([migrating-from-claude-toolkit.md](../guides/migrating-from-claude-toolkit.md)) |
 | `tld version show`, `tld --version` | `tld.cli` | print the running tld version |
 
 ## Migration from devflow

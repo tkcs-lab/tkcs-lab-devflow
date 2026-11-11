@@ -114,12 +114,36 @@ def defined_actions() -> set[str]:
     return names
 
 
+def mapped_actions(text: str) -> set[str]:
+    """The action names in the first cell of each runtime-map table row, one per code span (C8: whole cells,
+    so `run_role` is not mapped by a row for `run_role_x`)."""
+    names = set()
+    for line in text.splitlines():
+        if line.startswith("| `"):
+            for span in re.findall(r"`([^`]+)`", line.split("|")[1]):
+                m = re.fullmatch(r"([a-z_]+(?:\.[a-z_]+)?)(?:\(.*\))?", span.strip())
+                if m:
+                    names.add(m.group(1))
+    return names
+
+
 def test_runtime_map_maps_every_action():
-    text = RUNTIME_SKILL.read_text()
     actions = defined_actions()
     assert len(actions) > 25
-    missing = sorted(a for a in actions if f"`{a}" not in text)
+    missing = sorted(actions - mapped_actions(RUNTIME_SKILL.read_text()))
     assert missing == [], f"the runtime skill does not map: {missing}"
+
+
+def test_the_mapping_check_reads_whole_cells():
+    assert mapped_actions("| `run_role_x(a)` | t |\n| `a`, `b(c)` | t |\n| prose `run_role` | t |") == {"run_role_x", "a", "b"}
+
+
+def test_run_role_takes_a_level_and_review_passes_the_reviewer_level():
+    """C6: the optional level reaches the Agent tool's model parameter."""
+    assert "### run_role(role, mode, point, context[, level])" in (PLAYBOOKS / "runtime.md").read_text()
+    assert "`run_role(<role>, review, review, <context>, <the reviewer level>)`" in (PLAYBOOKS / "review.md").read_text()
+    row = next(ln for ln in RUNTIME_SKILL.read_text().splitlines() if ln.startswith("| `run_role("))
+    assert "`model` parameter as the level's alias" in row and "overrides the agent's front matter" in row
 
 
 # ---- agents ---------------------------------------------------------------------------------

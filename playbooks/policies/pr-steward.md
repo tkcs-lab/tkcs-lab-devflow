@@ -62,7 +62,7 @@ These are the branch kinds the playbooks use, and no others:
 | review | `review/<slug>` | review (`tld plan branch-name --review-slug <slug>`) |
 | feature | the manifest's `feature_branch`, following `git.branch_pattern` | implement |
 | phase | `<feature>--<phase id>`, `<feature>--<phase id>-rev<n>`, `<feature>--fix-<n>` | implement (`tld plan branch-name --manifest <plan> ...`) |
-| chore | `chore/<what>-<date>` (`chore/toolkit-profile`, `chore/deps-<ecosystem>-<yyyymmdd>`, ...) | setup, docs, deps, upstream, land |
+| chore | `chore/<what>` or `chore/<what>-<date>`: `chore/toolkit-profile` (setup), `chore/docs-init-<yyyymmdd>` and `chore/docs-tidy-<yyyymmdd>` (docs), `chore/deps-<ecosystem>-<yyyymmdd>` (deps), `chore/upstream-<new-with-hyphens>` (upstream), `chore/land-<yyyymmdd-hhmm>` and `chore/tld-land-workflow` (land), `chore/tld-migrate` (migrate) | setup, docs, deps, upstream, land, migrate |
 
 When the runtime refuses to push a branch name (a git proxy that allows only its own assigned branch), the
 playbook says what to do: create the branch with `github.branch_create` and push again, and if that is also

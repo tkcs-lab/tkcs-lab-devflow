@@ -149,7 +149,8 @@ reason), the `manual_before` items if any, then the prompt in one fenced code bl
 
 ### The manifest
 
-The implement playbook parses this block and nothing else, so it is exact:
+The implement playbook parses this block and nothing else, so it is exact; a key that is not shown here is an
+error in `tld plan validate-manifest`:
 
 ```yaml
 plan_slug: <slug>

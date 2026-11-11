@@ -27,9 +27,15 @@ exempt` once.
 ## 1. Collect and order
 
 1. `git fetch origin <main>`. With arguments take those numbers; without, every open, non-draft pull request
-   with base `<main>` whose head is in this repository (not a fork) and whose author is `git.bot_login`
-   (`github.pr_list`). If none are left, say so and stop.
-2. Build the JSON list of `{"number", "head", "base"}` (branch names) and run
+   whose head is in this repository (not a fork) and whose author is `git.bot_login` (`github.pr_list`), with
+   base `<main>` or **stacked**: its base is the head branch of another pull request collected here (repeat
+   until no more are added). A stacked pull request lands after its base, which `tld ops land-order` sees from
+   the branch names; one whose base is neither is left out and named in the report. If none are left, say so
+   and stop.
+2. **Fetch every head** you will merge, by its branch name: `git fetch origin` with every head branch name (they
+   are all in this repository), so `origin/<head>` is each pull request's current head. Never merge a head you
+   have not just fetched; when a pull request's reported head SHA differs from the fetched one, fetch again.
+3. Build the JSON list of `{"number", "head", "base"}` (branch names) and run
    `tld ops land-order - --max <land.max_prs> < list.json` (`--max` only when `land.max_prs` is set). The output
    is the order, one number per line. Exit 1 prints `land_order: <message>`: show it verbatim, set `needs_you`
    with that message and stop.
@@ -37,7 +43,7 @@ exempt` once.
 ## 2. Resolve conflicts before review
 
 1. With the stamp `<yyyymmdd-hhmm>`, create `chore/land-<yyyymmdd-hhmm>` from `origin/<main>` and merge the pull
-   request heads in order with `git merge --no-ff`.
+   request heads in order with `git merge --no-ff` (each the `origin/<head>` fetched in section 1).
 2. A conflict between the merged set and pull request `#<b>` (earlier pull request `#<a>`): resolve it only when
    it is mechanical (both sides added to one list, adjacent edits, lockfiles by `deps.lock_freshness` when the
    profile has it). Then apply the same resolution on `#<b>`'s own branch: merge into it the head of every earlier

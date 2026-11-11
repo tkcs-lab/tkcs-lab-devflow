@@ -6,6 +6,7 @@ fixture:
   builder: setup_repos
   params:
     repo: security_heavy
+    unconfirmed: true   # no board in the eval: --accept-proposals still writes blocking: false
 model: sonnet
 repeats: 3
 timeout_s: 900

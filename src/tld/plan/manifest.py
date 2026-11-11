@@ -19,6 +19,27 @@ import yaml
 HEADING = "## Implementation manifest"
 LEVELS = ("strong", "standard", "fast")
 WILDCARDS = "*?["
+TOP_KEYS = ("plan_slug", "feature_branch", "tracking_issue", "closes", "max_parallel", "manual_before",
+            "manual_after", "manual", "verify_after_merge", "screenshots_after_merge", "final_checks", "phases")
+PHASE_KEYS = ("id", "title", "depends_on", "complexity", "touches", "brief", "acceptance", "human_gate",
+              "worker_level", "worker_level_reason")
+HINTS = {  # legacy keys (claude-toolkit) and what replaced them
+    "worker_model": "use worker_level (strong, standard or fast); tld migrate rewrites it",
+    "worker_model_reason": "use worker_level_reason; tld migrate rewrites it",
+    "manual_steps_artifact": "manual steps now reach the owner as asks (manual_before / manual_after); remove it",
+    "manual_steps_source": "manual steps now reach the owner as asks (manual_before / manual_after); remove it",
+}
+
+
+def _unknown(keys, known, where: str) -> list[str]:
+    out = []
+    for key in keys:
+        if key in known:
+            continue
+        hint = HINTS.get(key) or ("manual steps now reach the owner as asks; remove it"
+                                  if str(key).startswith("manual_steps_") else f"known keys: {', '.join(known)}")
+        out.append(f"{where}unknown key '{key}': {hint}")
+    return out
 
 
 def extract_manifest(text: str) -> str:
@@ -128,6 +149,7 @@ def validate(manifest, profile: dict | None = None) -> tuple[list[str], list[str
     if not isinstance(manifest, dict):
         return ["the manifest must be a YAML mapping"], []
 
+    errors += _unknown(manifest, TOP_KEYS, "")
     for key in ("plan_slug", "feature_branch", "phases"):
         if not _nonempty(manifest.get(key)):
             errors.append(f"missing required key '{key}'")
@@ -191,6 +213,7 @@ def validate(manifest, profile: dict | None = None) -> tuple[list[str], list[str
         if pid in ids:
             errors.append(f"duplicate phase id '{pid}'")
         ids.append(pid)
+        errors += _unknown(ph, PHASE_KEYS, f"phase '{pid}': ")
         for field in ("title", "brief", "acceptance"):
             if not _nonempty(ph.get(field)):
                 errors.append(f"phase '{pid}' is missing '{field}'")

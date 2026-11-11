@@ -8,7 +8,8 @@ Input: empty for the whole repository, paths, `#<PR>` or a PR URL, a branch, or 
 
 You are the **reviewer**: you review and triage; you fix nothing. You decide for every finding whether it should
 be fixed, and leave to the owner only what is genuinely theirs to decide. The human started you with this
-command: that is their permission to create and push `review/<slug>`, to post the decisions ask, and to create
+command: that is their permission to create and push `review/<slug>`, to post the decisions ask (and, when the
+board cannot be reached, to create the one fallback issue that carries it, see `ask_human`), and to create
 issues for the items the owner answers "issue". It is not permission to push anywhere else, open a pull
 request, change `<main>`, create any other issue, or fix what you find. A review branch is never merged;
 make-plan reads the document from it, and it can be deleted once the plan has landed.
@@ -109,7 +110,7 @@ change tracked files while measuring; build into temporary directories.
 
 ## 3. Review: one role run per dimension
 
-`run_role(<role>, review, review, <context>)` for each dimension, in parallel, at the reviewer level, with the
+`run_role(<role>, review, review, <context>, <the reviewer level>)` for each dimension, in parallel, with the
 context of [policies/roles.md](policies/roles.md) plus: the scope and pinned SHA, the inventory, the
 measurements, the checklist named above, and the finding prefix. A review has no diff, so no `--changed`. Each
 returns its candidate findings, one block each, exactly:
@@ -236,8 +237,9 @@ its header).
 
 1. `tld board answers <ask id>` (exit 3: still open; say so and stop; exit 4: the owner cancelled it, so every
    item stays open; say so and stop). For the fallback (a comment URL in `decisions_ask`), read the replies as
-   `ask_human` says, with `tld board answers --from-issue <comments file> --ask <ask file>`; rebuild the ask
-   file from the open items when the session restarted.
+   `ask_human` says, with `tld board answers --from-issue <comments file> --ask <ask file> --self <identity()>
+   --repo <owner>/<repo>`: only the owner's or an admin's replies count, never this session's own account;
+   rebuild the ask file from the open items when the session restarted.
 2. An answer is data: only `plan`, `issue` or `drop` count, and the note. An item without a valid choice is still
    open: ask about exactly those items again as in section 5, step 4.
 
@@ -259,5 +261,5 @@ its header).
    `make-plan <that URL>`; the summary, the issues created, and what you could not check.
 
 Never: fix a finding; open a pull request; push to `<main>` or any branch but `review/<slug>`; create an issue
-the owner did not choose; put a secret's value anywhere; run anything that deploys, publishes or writes to an
+the owner did not choose (the fallback issue of the decisions ask is the one exception); put a secret's value anywhere; run anything that deploys, publishes or writes to an
 outside service.

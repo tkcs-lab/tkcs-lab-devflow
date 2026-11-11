@@ -13,7 +13,7 @@ reads stdin); it is only needed for entries with `when` at a point that has a di
 
 `verify` reads that JSON and a report text, looks for the last `AGENT-REPORT` line per required
 role, prints `OK`, `MISSING` or `BLOCKED` per required item and a summary line. Exit 0 when nothing
-is missing or blocked, else 1. The report line grammar is in roles/README.md.
+is missing or blocked, else 1. The report line grammar is in playbooks/policies/roles.md.
 
 Python 3.11+, standard library and PyYAML. These are the only defaults of the `roles` keys.
 """

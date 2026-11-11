@@ -141,7 +141,9 @@ EXPECTED = {
 }
 
 
-def build(dest: Path, repo: str = "security_heavy", with_profile: bool = False) -> dict:
+def build(dest: Path, repo: str = "security_heavy", with_profile: bool = False, unconfirmed: bool = False) -> dict:
+    """`unconfirmed`: the expectation of a run nobody could answer (setup --accept-proposals without a board):
+    every `blocking` is written as false."""
     if repo not in FILES:
         raise ValueError(f"unknown repo {repo!r}; expected one of {REPOS}")
     files = dict(FILES[repo])
@@ -149,10 +151,14 @@ def build(dest: Path, repo: str = "security_heavy", with_profile: bool = False) 
         files[".tld/toolkit.yaml"] = PROFILE
     init_repo(dest, files)
     docs = repo == "docs_website"
+    expected = {**EXPECTED[repo]}
+    if unconfirmed and expected["roles"].get("required"):
+        expected["roles"] = {**expected["roles"],
+                             "required": [{**e, "blocking": False} for e in expected["roles"]["required"]]}
     return {
         "main_branch": "main",
         "repo": repo,
-        **EXPECTED[repo],
+        **expected,
         "adr_dir": "docs/adr" if docs else None,
         "adr_index": "docs/adr/README.md" if docs else None,
         "changelog": {"file": "CHANGELOG.md", "section": "## [Unreleased]"} if docs else None,

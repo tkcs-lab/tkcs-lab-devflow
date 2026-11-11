@@ -15,11 +15,20 @@
 `feature_branch`, a phase branch `<feature>--<phase>`, a revision `<feature>--<phase>-rev<n>` or a fix
 branch `<feature>--fix-<n>`.
 
-`phase-status` reads the `Plan-Phase: <plan slug>/<id>` trailers in the history of REF (default `HEAD`)
-and prints JSON: `done` (phases with a trailer), `gated` (done phases with `human_gate: true` that are not
-`--approved`), `ready` (not done, not `--running`, every `depends_on` done and none of them gated),
-`waiting` (the rest), and `start` (the first `ready` phases that fit in `max_parallel` next to the running
-ones). Exit 0, or 1 with `plan: <message>` on stderr.
+`phase-status` reads the first-parent history of REF (default `HEAD`), the commits made on the feature
+branch itself, so a trailer a worker wrote on its phase branch counts only through the orchestrator's merge:
+
+- `Plan-Phase: <plan slug>/<id>` marks a phase done, unless that commit was reverted: a commit whose message
+  says `This reverts commit <sha>` undoes the commit it names (and a revert of that revert re-instates it).
+  A revert commit's own `Plan-Phase` trailer never counts.
+- `Plan-Gate-Approved: <plan slug>/<id>` (an empty commit the orchestrator makes after the human approved a
+  `human_gate` phase) approves that phase when it is newer than the phase's latest counted merge, so a
+  revision merged after the approval is gated again. `--approved ID` approves a phase as well.
+
+It prints JSON: `done`, `approved` (done gate phases approved by a trailer or `--approved`), `gated` (done
+phases with `human_gate: true` that are not approved), `ready` (not done, not `--running`, every
+`depends_on` done and none of them gated), `waiting` (the rest), and `start` (the first `ready` phases that
+fit in `max_parallel` next to the running ones). Exit 0, or 1 with `plan: <message>` on stderr.
 """
 from __future__ import annotations
 
@@ -121,22 +130,67 @@ def branch_name(args) -> str:
     return f"{feature}--{args.phase}"
 
 
-def trailers(ref: str, slug: str, cwd: str | None) -> set[str]:
+REVERTS = re.compile(r"This reverts commit ([0-9a-f]{7,40})", re.I)
+
+
+def history(ref: str, cwd: str | None) -> list[tuple[str, str]]:
+    """(sha, message) of each first-parent commit of REF, newest first."""
     try:
-        out = subprocess.run(["git", "log", "--format=%B", ref], capture_output=True, text=True, cwd=cwd, timeout=60)
+        out = subprocess.run(["git", "log", "--first-parent", "--format=%H%x00%B%x1e", ref], capture_output=True,
+                             text=True, cwd=cwd, timeout=60)
     except (OSError, subprocess.SubprocessError) as exc:
         raise PlanError(f"git log failed: {exc}") from None
     if out.returncode != 0:
         raise PlanError(f"git log {ref} failed: {out.stderr.strip()}")
-    rx = re.compile(r"^Plan-Phase:\s*" + re.escape(slug) + r"/(\S+)\s*$", re.M)
-    return set(rx.findall(out.stdout))
+    commits = []
+    for chunk in out.stdout.split("\x1e"):
+        sha, sep, body = chunk.strip("\n").partition("\x00")
+        if sep:
+            commits.append((sha, body))
+    return commits
+
+
+def trailers(ref: str, slug: str, cwd: str | None) -> tuple[set[str], set[str]]:
+    """The done phases and the phases whose gate approval is newer than their latest counted merge."""
+    commits = history(ref, cwd)
+    shas = [sha for sha, _ in commits]
+    reverters: dict[str, list[str]] = {}
+    for sha, body in commits:
+        for target in REVERTS.findall(body):
+            full = next((s for s in shas if s.startswith(target.lower())), None)
+            if full:
+                reverters.setdefault(full, []).append(sha)
+
+    memo: dict[str, bool] = {}
+
+    def active(sha: str, depth: int = 0) -> bool:
+        if sha not in memo:
+            memo[sha] = depth > 50 or not any(active(r, depth + 1) for r in reverters.get(sha, []))
+        return memo[sha]
+
+    phase_rx = re.compile(r"^Plan-Phase:\s*" + re.escape(slug) + r"/(\S+)\s*$", re.M)
+    gate_rx = re.compile(r"^Plan-Gate-Approved:\s*" + re.escape(slug) + r"/(\S+)\s*$", re.M)
+    merged_at: dict[str, int] = {}  # phase -> index of its newest counted merge (0 = newest commit)
+    approved_at: dict[str, int] = {}
+    for i, (sha, body) in enumerate(commits):
+        if not active(sha):
+            continue
+        for pid in gate_rx.findall(body):
+            approved_at.setdefault(pid, i)
+        if REVERTS.search(body):
+            continue
+        for pid in phase_rx.findall(body):
+            merged_at.setdefault(pid, i)
+    approved = {pid for pid, i in approved_at.items() if pid in merged_at and i < merged_at[pid]}
+    return set(merged_at), approved
 
 
 def phase_status(manifest: dict, done_ids: set[str], running: list[str], approved: list[str]) -> dict:
     phases = manifest["phases"]
     by_id = {ph["id"]: ph for ph in phases}
     done = [ph["id"] for ph in phases if ph["id"] in done_ids]
-    gated = [pid for pid in done if by_id[pid].get("human_gate") is True and pid not in approved]
+    gates = [pid for pid in done if by_id[pid].get("human_gate") is True]
+    gated = [pid for pid in gates if pid not in approved]
     ready, waiting = [], []
     for ph in phases:
         pid = ph["id"]
@@ -149,7 +203,8 @@ def phase_status(manifest: dict, done_ids: set[str], running: list[str], approve
             waiting.append(pid)
     room = max(0, int(manifest.get("max_parallel") or 2) - len(running))
     return {"plan_slug": manifest["plan_slug"], "feature_branch": manifest["feature_branch"],
-            "done": done, "gated": gated, "running": list(running), "ready": ready, "waiting": waiting,
+            "done": done, "approved": [pid for pid in gates if pid in approved], "gated": gated,
+            "running": list(running), "ready": ready, "waiting": waiting,
             "start": ready[:room], "all_done": len(done) == len(phases)}
 
 
@@ -170,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     bn.add_argument("--fix", type=int)
     ps = sub.add_parser("phase-status", help="which phases are done, gated, ready or waiting, as JSON")
     ps.add_argument("plan")
-    ps.add_argument("--ref", default="HEAD", help="the feature branch to read Plan-Phase trailers from")
+    ps.add_argument("--ref", default="HEAD", help="the feature branch to read Plan-Phase and Plan-Gate-Approved trailers from")
     ps.add_argument("--running", action="append", default=[], metavar="ID")
     ps.add_argument("--approved", action="append", default=[], metavar="ID", help="a human_gate phase the human approved")
     ps.add_argument("--repo", help="the checkout to run git in (default: the current directory)")
@@ -188,8 +243,9 @@ def main(argv: list[str] | None = None) -> int:
             for pid in [*args.running, *args.approved]:
                 if pid not in ids:
                     raise PlanError(f"no phase '{pid}' in the manifest")
-            done = trailers(args.ref, manifest["plan_slug"], args.repo) & ids
-            print(json.dumps(phase_status(manifest, done, args.running, args.approved), indent=2))
+            done, gate_ok = trailers(args.ref, manifest["plan_slug"], args.repo)
+            approved = sorted((gate_ok & ids) | set(args.approved))
+            print(json.dumps(phase_status(manifest, done & ids, args.running, approved), indent=2))
         return 0
     except PlanError as exc:
         print(f"plan: {exc}", file=sys.stderr)

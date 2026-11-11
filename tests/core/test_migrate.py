@@ -257,3 +257,105 @@ def test_cli_lists_migrate():
     assert "migrate" in r.stdout
     h = subprocess.run(tld_cmd("migrate", "--help"), capture_output=True, text=True)
     assert h.returncode == 0 and "--write" in h.stdout
+
+
+def test_a_legacy_profile_without_plan_dir_keeps_the_old_default_docs(tmp_path):
+    root = tmp_path / "pd"
+    (root / ".claude").mkdir(parents=True)
+    (root / ".claude" / "toolkit.yaml").write_text((LEGACY / "agents-toolkit.yaml").read_text())
+    (root / "docs").mkdir()
+    (root / "docs" / "x-plan.md").write_text("# Plan\n\n## Implementation manifest\n\n```yaml\nworker_model: opus\n```\n")
+    r = migrate(root, "--write")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "'docs.plan_dir: docs/' added" in r.stdout and "comments are lost" not in r.stdout
+    text = (root / ".tld" / "toolkit.yaml").read_text()
+    assert yaml.safe_load(text)["docs"]["plan_dir"] == "docs/" and "# Fixture:" in text
+    assert "worker_level: strong" in (root / "docs" / "x-plan.md").read_text()  # the plans there are migrated
+    assert "Nothing to migrate" in migrate(root).stdout  # and a second run adds nothing
+
+
+def test_plan_dir_is_added_when_the_profile_has_no_docs_section():
+    text = "git:\n  main_branch: main\n"
+    data = yaml.safe_load(text)
+    target, _ = mig.migrate_profile_data(data)
+    new, kept = mig.migrate_profile_text(text, data, target)
+    assert kept and yaml.safe_load(new)["docs"] == {"plan_dir": "docs/"}
+    tld_text = 'tld:\n  version: ">=1.0,<2"\ngit:\n  main_branch: main\n'  # a tld profile keeps tld's default
+    assert "docs" not in mig.migrate_profile_data(yaml.safe_load(tld_text))[0]
+
+
+def test_the_project_steward_file_is_rewritten(pf):
+    steward = pf / ".claude" / "skills" / "steward" / "SKILL.md"
+    steward.write_text("Run /devflow:dod and read .claude/toolkit.yaml.\n")
+    r = migrate(pf, "--write")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert ".claude/skills/steward/SKILL.md: devflow: -> tld: (1)" in r.stdout
+    assert steward.read_text() == "Run /tld:dod and read .tld/toolkit.yaml.\n"
+
+
+def test_a_steward_outside_the_repository_is_not_touched(tmp_path):
+    root = legacy_repo(tmp_path / "o", git_repo=False)
+    outside = tmp_path / "outside.md"
+    outside.write_text("/devflow:dod\n")
+    (root / ".claude" / "toolkit.yaml").write_text(
+        (root / ".claude" / "toolkit.yaml").read_text().replace(".claude/skills/steward/SKILL.md", "../outside.md"))
+    r = migrate(root, "--write")
+    assert "refused, left as it is: project_steward ../outside.md: outside the repository" in r.stdout
+    assert outside.read_text() == "/devflow:dod\n"
+
+
+def test_legacy_script_commands_are_left_alone_and_listed(tmp_path):
+    root = tmp_path / "ctk"
+    (root / ".claude").mkdir(parents=True)
+    profile = (LEGACY / "agents-toolkit.yaml").read_text().replace(
+        "verify:\n", "verify:\n  # keep\n", 1)
+    data = yaml.safe_load(profile)
+    data["verify"]["dod"] = ["python3 plugins/devflow/scripts/validate_profile.py .claude/toolkit.yaml",
+                             "tld profile validate .claude/toolkit.yaml"]
+    (root / ".claude" / "toolkit.yaml").write_text(yaml.safe_dump(data, sort_keys=False))
+    r = migrate(root, "--write")
+    dod = yaml.safe_load((root / ".tld" / "toolkit.yaml").read_text())["verify"]["dod"]
+    assert dod == ["python3 plugins/devflow/scripts/validate_profile.py .claude/toolkit.yaml",
+                   "tld profile validate .tld/toolkit.yaml"]
+    assert "profile commands that still run claude-toolkit scripts" in r.stdout
+    assert "verify.dod[0]: python3 plugins/devflow/scripts/validate_profile.py" in r.stdout
+
+
+def test_symbolic_links_are_refused_and_reported(tmp_path):
+    root = legacy_repo(tmp_path / "s", git_repo=False)
+    secret = tmp_path / "secret.md"
+    secret.write_text("/devflow:dod\n")
+    (root / "docs" / "linked.md").symlink_to(secret)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "y.md").write_text("/devflow:dod\n")
+    (root / ".github" / "linkdir").symlink_to(elsewhere, target_is_directory=True)
+    wf = root / ".github" / "workflows" / "devflow-git-ops.yml"
+    wf_target = tmp_path / "wf.yml"
+    wf_target.write_text(wf.read_text())
+    wf.unlink()
+    wf.symlink_to(wf_target)
+    r = migrate(root, "--write")
+    assert r.returncode == 0, r.stdout + r.stderr
+    for needle in ("refused, left as it is: docs/linked.md: docs/linked.md is a symbolic link",
+                   "refused, left as it is: .github/linkdir: .github/linkdir is a symbolic link",
+                   "refused, left as it is: .github/workflows/devflow-git-ops.yml: "):
+        assert needle in r.stdout, needle
+    assert secret.read_text() == "/devflow:dod\n" and (elsewhere / "y.md").read_text() == "/devflow:dod\n"
+    assert wf.is_symlink() and wf_target.exists() and not (root / ".github" / "workflows" / "tld-git-ops.yml").exists()
+
+
+@pytest.mark.parametrize("link", [".claude/toolkit.yaml", ".tld"])
+def test_a_linked_profile_or_tld_directory_is_an_error(tmp_path, link):
+    root = legacy_repo(tmp_path / "l", git_repo=False)
+    target = tmp_path / "t"
+    if link == ".tld":
+        target.mkdir()
+        (root / ".tld").symlink_to(target, target_is_directory=True)
+    else:
+        target.write_text((root / link).read_text())
+        (root / link).unlink()
+        (root / link).symlink_to(target)
+    r = migrate(root, "--write")
+    assert r.returncode == 1 and "is a symbolic link" in r.stderr and "never follows a symbolic link" in r.stderr
+    assert list(target.iterdir()) == [] if link == ".tld" else target.exists()

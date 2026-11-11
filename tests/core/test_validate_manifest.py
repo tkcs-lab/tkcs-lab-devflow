@@ -290,3 +290,23 @@ def test_type_checks(vm, path, value, message):
                                          (("phases", 0, "human_gate"), False), (("verify_after_merge",), [])])
 def test_type_checks_accept_the_right_types(vm, path, value):
     assert errors(mutated(_set(path, value)), vm) == []
+
+
+# ---- unknown keys (C3): a typo or a claude-toolkit key is an error, not silently ignored -----------------------
+@pytest.mark.parametrize("path, value, message", [
+    (("worker_model",), "opus", "unknown key 'worker_model': use worker_level"),
+    (("manual_steps_artifact",), "x.html", "unknown key 'manual_steps_artifact': manual steps now reach the owner as asks"),
+    (("manual_steps_page",), "x.html", "unknown key 'manual_steps_page': manual steps now reach the owner as asks"),
+    (("max_paralel",), 2, "unknown key 'max_paralel': known keys: plan_slug"),
+    (("phases", 0, "worker_model"), "opus", "phase 'p1-core': unknown key 'worker_model': use worker_level"),
+    (("phases", 0, "worker_model_reason"), "x", "phase 'p1-core': unknown key 'worker_model_reason': use worker_level_reason"),
+    (("phases", 1, "touch"), ["a"], "phase 'p2-api': unknown key 'touch': known keys: id, title"),
+])
+def test_unknown_keys_are_errors_with_a_hint(vm, path, value, message):
+    assert any(message in e for e in errors(mutated(_set(path, value)), vm)), errors(mutated(_set(path, value)), vm)
+
+
+def test_every_documented_key_is_known(vm):
+    m = mutated(lambda m: m.update(tracking_issue=3, closes=[4], screenshots_after_merge="make shots"))
+    m["phases"][0].update(human_gate=True, worker_level="strong", worker_level_reason="r")
+    assert errors(m, vm) == []

@@ -49,6 +49,16 @@ gets no more changes. Migrate a repository with `/tld:migrate` or `tld migrate`;
 - Roles run at most once per point and in review mode at the final review; `docs.plan_dir` defaults to
   `docs/plans/`; `tracking_issue` is optional everywhere; every playbook follows the untrusted-text policy and
   `/implement` runs only plans from `main` or a `plan/*` branch of the same repository.
+- `/implement` checks a merge before pushing it and undoes a red one locally; `tld plan phase-status` ignores a
+  reverted phase merge and reads human-gate approvals from `Plan-Gate-Approved` trailers, so a resumed run keeps
+  them. `tld plan validate-manifest` rejects unknown keys (with a hint for `worker_model` and `manual_steps_*`).
+- The issue fallback of an ask counts only the owner's and admins' replies, never the session's own login
+  (`tld board answers --from-issue` needs `--self`), and skips hidden or quoted text in them.
+- `tld migrate` writes `docs.plan_dir: docs/` for a profile that relied on the old default, rewrites the
+  `project_steward` file, leaves profile commands that run claude-toolkit scripts alone (and lists them), and
+  never follows a symbolic link.
+- `/setup --accept-proposals` without an answer writes every `blocking` as `false`; `/land` also lands stacked
+  pull requests and fetches every head before merging it.
 
 ### Removed
 

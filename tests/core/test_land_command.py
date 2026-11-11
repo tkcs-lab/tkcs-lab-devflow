@@ -67,3 +67,13 @@ def test_acceptance_example():
 def test_bad_input(text):
     r = subprocess.run([*SCRIPT_CMD, "-"], input=text, capture_output=True, text=True)
     assert r.returncode == 1 and r.stderr.startswith("land_order: ")
+
+
+def test_the_playbook_collects_stacked_pull_requests_and_fetches_every_head():
+    """C11: stacked pull requests (base = another collected head) are in scope, and each head is fetched first."""
+    from conftest import ROOT
+    text = " ".join((ROOT / "playbooks" / "land.md").read_text().split())
+    assert "with base `<main>` or **stacked**: its base is the head branch of another pull request collected here" in text
+    assert "**Fetch every head** you will merge, by its branch name: `git fetch origin` with every head branch name" in text
+    assert "Never merge a head you have not just fetched" in text
+    assert order([pr(5, base="b9"), pr(9), pr(2)]) == [2, 9, 5]  # what the collected stacked set lands as

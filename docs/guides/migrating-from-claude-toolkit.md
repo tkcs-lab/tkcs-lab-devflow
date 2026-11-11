@@ -17,6 +17,7 @@ minutes plus your review of one pull request.
 | `DEVFLOW_*` secrets and variables | `TLD_*` |
 | `.github/workflows/devflow-{land,release,git-ops}.yml` | `tld-{land,release,git-ops}.yml` (release only through the `tld-release` environment; git-ops cannot tag) |
 | no version pin | `tld.version: ">=1.0,<2"` in the profile |
+| `docs.plan_dir` unset meant `docs/` | `docs.plan_dir: docs/` is written explicitly (tld's own default is `docs/plans/`) |
 
 ## Per repository
 
@@ -45,14 +46,22 @@ minutes plus your review of one pull request.
      `tld ops repo-admin apply --policy <policy> --yes` for the rulesets `tld-main` and `tld-tags` and the
      environments ([admin.md](admin.md#rulesets-the-agent-account-and-the-environments)).
    - Leftovers it found: `.claude/admin-policy.yaml` (move it to `.tld/admin-policy.yaml` and update
-     `admin.policy`), the `.claude/devflow` script root, a `.claude/settings.json` that still names devflow.
-6. **Check:** a new session runs `/tld:dod` cleanly. `tld migrate .` now says `Nothing to migrate`.
+     `admin.policy`), the `.claude/devflow` script root, a `.claude/settings.json` that still names devflow, and
+     every profile command (for example a `verify.dod` entry) that still runs a script under `plugins/devflow/`
+     or `.claude/devflow/`: those are left unchanged, replace each with its `tld` command
+     ([cli.md](../reference/cli.md)).
+6. **Check:** once the leftover profile commands are replaced (step 5), a new session runs `/tld:dod` cleanly;
+   until then a `verify.dod` entry that runs a `plugins/devflow/` script fails. `tld migrate .` now says
+   `Nothing to migrate`.
 
 ## What `tld migrate` never touches
 
 Prose: only the exact texts `devflow:` (as a command or skill prefix), `.claude/toolkit.yaml` and `DEVFLOW_` are
-rewritten, in CLAUDE.md, AGENTS.md, README*, CONTRIBUTING*, `docs/**/*.md` and `.github/**/*.md`. It never
-overwrites an existing `.tld/toolkit.yaml` or `tld-*.yml`, never renames a secret, never changes a Claude
+rewritten, in CLAUDE.md, AGENTS.md, README*, CONTRIBUTING*, `docs/**/*.md`, `.github/**/*.md` and the
+`project_steward` file when it is inside the repository. A profile command that runs a claude-toolkit script keeps
+its old text, `.claude/toolkit.yaml` included, so the migrated `verify.dod` may still need your edit: the checklist
+lists each one. A symbolic link, or a file that resolves outside the repository, is never read or written: the
+plan reports it as refused. It never overwrites an existing `.tld/toolkit.yaml` or `tld-*.yml`, never renames a secret, never changes a Claude
 Project, a ruleset or an environment, and never commits or pushes by itself. Exit 1 means the migrated profile
 does not validate (for example a `docs.must_read` file is missing); the messages name the key.
 

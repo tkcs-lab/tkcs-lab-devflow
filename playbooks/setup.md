@@ -63,11 +63,13 @@ Turn the answers into `answers.json`, keyed like `tld profile patch set-block` r
 `{"roles": {"posture": {"security": "<answer>"}, "required": [{"role": "<role>", "blocking": <true|false>}]}}`
 (only what the human answered).
 
-When no ask can be posted or answered (no board and no tracking issue to fall back on): with
-`--accept-proposals` the proposals count as confirmed and are listed under `Decisions for a human` in the pull
-request. Without it every `blocking` is written as `false` (an answers file with `"blocking": false` for each),
-the posture is the proposal, and each such entry is listed as unconfirmed. A value the survey could not determine
-is left out and listed under `Not verified`.
+When no ask can be posted or answered (no board and no tracking issue to fall back on), with or without
+`--accept-proposals`: every `blocking` is written as `false` (an answers file with `"blocking": false` for each),
+because only the human confirms `blocking: true`. `--accept-proposals` accepts the rest of the proposal (the
+posture, the roles and their points) without asking, and lists every proposed `blocking: true` entry under
+`Decisions for a human` in the pull request as "proposed blocking, written as false: set it to true if you
+agree". Without it the posture is the proposal and each such entry is listed as unconfirmed. A value the survey
+could not determine is left out and listed under `Not verified`.
 
 ## 4. Write
 

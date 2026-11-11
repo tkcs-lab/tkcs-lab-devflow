@@ -82,13 +82,14 @@ See [docs/architecture/hooks.md](docs/architecture/hooks.md) and [SECURITY.md](S
 A small server you host ([docs/guides/board-server.md](docs/guides/board-server.md)) holds a status record of every
 run and the **asks**: questions, decisions and manual steps a playbook puts to you. You answer in the browser after
 logging in; a session cannot answer for you. Without a board, an ask becomes a comment on the tracking issue that
-mentions you, and only replies of the owner or a collaborator count.
+mentions you, and only replies by you (the repository owner or `git.owner_login`) or an admin count; the agent's own
+account never does.
 
 ## Repository
 
 | Path | |
 |---|---|
-| `src/tld/`, `bin/tld` | the core package and its launcher ([CLI reference](docs/reference/cli.md)); `schema/` and `templates/` hold the profile, manifest, record, ask and admin-policy formats and the starter files |
+| `src/tld/`, `bin/tld` | the core package and its launcher ([CLI reference](docs/reference/cli.md)); `schema/` holds the JSON schemas of the profile, the status record, the ask and the admin policy (the implementation manifest is checked in code by `tld plan validate-manifest`), and `templates/` the starter files |
 | `playbooks/`, `roles/`, `checklists/`, `stacks/` | the neutral procedures (with `runtime.md` and `policies/`), role cards, checklists and stack guides |
 | `adapters/claude/` | the Claude Code plugin: commands, agents, the runtime skill, hooks, `mcp.json` |
 | `.claude-plugin/` | the marketplace `tkcs-lab-devflow` and the plugin manifest (sourced from the repository root) |

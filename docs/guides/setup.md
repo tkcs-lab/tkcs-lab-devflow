@@ -50,9 +50,10 @@ The modules are `tld profile survey-signals`, `tld profile survey-docs` and `tld
 One ask with at most four questions: the security posture (the proposal is the recommended option), every proposed
 entry with `blocking: true`, and what the survey could not determine (no test command, no main branch). Nothing else.
 
-When no ask can be posted or answered: with `--accept-proposals` the proposals count as confirmed and are listed under
-`Decisions for a human` in the pull request; without it every `blocking` is written as `false`, the posture is the
-proposal, and each such entry is listed as unconfirmed. A value that could not be determined is left out and listed
+When no ask can be posted or answered, every `blocking` is written as `false`, with or without `--accept-proposals`:
+only the human confirms `blocking: true`. `--accept-proposals` takes the rest of the proposal as it is and lists
+each proposed `blocking: true` entry under `Decisions for a human` in the pull request (set it to `true` if you
+agree); without it the posture is the proposal and each such entry is listed as unconfirmed. A value that could not be determined is left out and listed
 under `Not verified`.
 
 ## The pull request

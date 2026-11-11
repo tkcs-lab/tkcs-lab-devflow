@@ -11,18 +11,24 @@ What it changes:
 - `.claude/toolkit.yaml` moves to `.tld/toolkit.yaml`; an existing `.tld/toolkit.yaml` is never overwritten.
 - The profile: `agents` becomes `roles` (each entry's `agent` becomes `role`), `models.*` values `opus`,
   `sonnet`, `haiku` become `strong`, `standard`, `fast`, `models.planner` and `models.orchestrator` go, the removed
-  sections `toolkit` and `status` go, `.claude/toolkit.yaml` in its values becomes `.tld/toolkit.yaml`, and
-  `tld.version: ">=1.0,<2"` is added. Comments are kept; when a text-level edit cannot be proven equal to the
-  intended data, the profile is rewritten from the data and its comments are lost (the plan says so).
+  sections `toolkit` and `status` go, `.claude/toolkit.yaml` in its values becomes `.tld/toolkit.yaml` (except
+  in a value that runs a legacy script under `plugins/devflow/` or `.claude/devflow/`: those are left as they are
+  and listed in the owner checklist), `tld.version: ">=1.0,<2"` is added, and a legacy profile without
+  `docs.plan_dir` gets `plan_dir: docs/` (the claude-toolkit default; tld's is `docs/plans/`). Comments are
+  kept; when a text-level edit cannot be proven equal to the intended data, the profile is rewritten from the
+  data and its comments are lost (the plan says so).
 - Implementation manifests in `<docs.plan_dir>/*-plan.md`: `worker_model` becomes `worker_level` (with the
   level), `worker_model_reason` becomes `worker_level_reason`, `manual_steps_artifact` / `manual_steps_source` go.
 - `.github/workflows/devflow-{land,release,git-ops}.yml` are replaced by the current `tld-*.yml` templates.
-- In CLAUDE.md, AGENTS.md, README*, CONTRIBUTING*, docs/**/*.md and .github/**/*.md exactly these texts:
+- In CLAUDE.md, AGENTS.md, README*, CONTRIBUTING*, docs/**/*.md, .github/**/*.md and the `project_steward` file
+  (when it is inside the repository) exactly these texts:
   `devflow:` (command and skill prefixes) becomes `tld:`, `.claude/toolkit.yaml` becomes `.tld/toolkit.yaml`
   and `DEVFLOW_` becomes `TLD_`.
 
-Running it on a migrated repository changes nothing. Exit 0: done, or nothing to do; 1: no profile, a conflict,
-or the migrated profile does not validate; 2: usage.
+Every file it reads or writes must resolve inside ROOT and must not be a symbolic link (nor sit under one):
+such a file is refused and reported, never followed. Running it on a migrated repository changes nothing.
+Exit 0: done, or nothing to do; 1: no profile, a conflict, a refused profile path, or the migrated profile does
+not validate; 2: usage.
 """
 from __future__ import annotations
 
@@ -51,6 +57,17 @@ TEXT_RULES = [  # (label, pattern, replacement): only these exact texts are rewr
     ("DEVFLOW_ -> TLD_", re.compile(r"(?<![\w])DEVFLOW_"), "TLD_"),
 ]
 TOP_KEY = re.compile(r"^([A-Za-z_][\w-]*)\s*:")
+LEGACY_SCRIPTS = re.compile(r"(?:^|[\s\"'=/])(?:\./)?(?:plugins/devflow|\.claude/devflow)/")
+LEGACY_PLAN_DIR = "docs/"  # claude-toolkit's default docs.plan_dir
+
+
+def _legacy_script(value: str) -> bool:
+    """A value that runs a claude-toolkit script: never rewritten, listed as a leftover instead."""
+    return bool(LEGACY_SCRIPTS.search(value))
+
+
+def _move_profile_path(value: str) -> str:
+    return value if _legacy_script(value) else value.replace(OLD_PROFILE, NEW_PROFILE)
 
 
 @dataclass
@@ -85,9 +102,20 @@ def _map_strings(value, fn):
     return fn(value) if isinstance(value, str) else value
 
 
-def migrate_profile_data(data: dict) -> tuple[dict, list[str]]:
-    """The profile as tld reads it, and one note per change."""
+def _is_legacy(data: dict) -> bool:
+    tld_block = data.get("tld")
+    return not (isinstance(tld_block, dict) and "version" in tld_block)
+
+
+def migrate_profile_data(data: dict, legacy: bool | None = None) -> tuple[dict, list[str]]:
+    """The profile as tld reads it, and one note per change. `legacy`: a claude-toolkit profile (default: it has
+    no `tld.version`), whose unset `docs.plan_dir` meant `docs/`."""
+    legacy = _is_legacy(data) if legacy is None else legacy
     out, notes = dict(data), []
+    docs = out.get("docs")
+    if legacy and (docs is None or isinstance(docs, dict)) and not (docs or {}).get("plan_dir"):
+        out["docs"] = {**(docs or {}), "plan_dir": LEGACY_PLAN_DIR}
+        notes.append(f"'docs.plan_dir: {LEGACY_PLAN_DIR}' added (the claude-toolkit default; tld's is docs/plans/)")
     for key in REMOVED_SECTIONS:
         if key in out:
             out.pop(key)
@@ -121,7 +149,7 @@ def migrate_profile_data(data: dict) -> tuple[dict, list[str]]:
     if not (isinstance(tld_block, dict) and "version" in tld_block):
         out = {"tld": {**(tld_block or {}), "version": VERSION_SPEC}, **{k: v for k, v in out.items() if k != "tld"}}
         notes.append(f"'tld.version: \"{VERSION_SPEC}\"' added")
-    moved = _map_strings(out, lambda s: s.replace(OLD_PROFILE, NEW_PROFILE))
+    moved = _map_strings(out, _move_profile_path)
     if moved != out:
         notes.append(f"'{OLD_PROFILE}' in values -> '{NEW_PROFILE}'")
     return moved, notes
@@ -142,9 +170,21 @@ def _blocks(lines: list[str]) -> list[tuple[str, int, int]]:
 def migrate_profile_text(text: str, data: dict, target: dict) -> tuple[str, bool]:
     """Edit the profile text so it loads as `target`, keeping comments. (text, comments kept)."""
     lines = text.splitlines(keepends=True)
-    for key, start, end in reversed(_blocks(lines)):
+    blocks = _blocks(lines)
+    add_plan_dir = (target.get("docs") or {}).get("plan_dir") == LEGACY_PLAN_DIR and \
+        not (isinstance(data.get("docs"), dict) and data["docs"].get("plan_dir"))
+    plan_dir_line = f"plan_dir: {LEGACY_PLAN_DIR}   # the claude-toolkit default (tld's is docs/plans/)\n"
+    if add_plan_dir and not any(k == "docs" for k, _, _ in blocks):
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
+        lines += ["docs:\n", "  " + plan_dir_line]
+        blocks = _blocks(lines)
+    for key, start, end in reversed(blocks):
         block = lines[start:end]
-        if key in REMOVED_SECTIONS:
+        if key == "docs" and add_plan_dir and re.match(r"^docs\s*:\s*(#.*)?$", block[0].rstrip("\n")):
+            child = next((m.group(1) for ln in block[1:] if (m := re.match(r"^(\s+)[^\s#]", ln))), "  ")
+            lines[start + 1:start + 1] = [child + plan_dir_line]
+        elif key in REMOVED_SECTIONS:
             del lines[start:end]
         elif key == "agents" and "roles" in data:
             del lines[start:end]
@@ -163,7 +203,7 @@ def migrate_profile_text(text: str, data: dict, target: dict) -> tuple[str, bool
                     and not kept[0].split(":", 1)[1].strip():
                 kept = []  # nothing left under models:
             lines[start:end] = kept
-    new = "".join(lines).replace(OLD_PROFILE, NEW_PROFILE)
+    new = "".join(_move_profile_path(ln) for ln in lines)
     tld_block = data.get("tld")
     if not (isinstance(tld_block, dict) and "version" in tld_block) and "tld" not in data:
         out = new.splitlines(keepends=True)
@@ -216,14 +256,56 @@ def _tracked(root: Path, rel: str) -> bool:
     return _git(root, "ls-files", "--error-unmatch", "--", rel).returncode == 0
 
 
-def text_files(root: Path) -> list[Path]:
+def unsafe(root: Path, rel: str) -> str | None:
+    """Why ROOT/REL must not be read or written (a symbolic link on the way, or outside ROOT), or None."""
+    if Path(rel).is_absolute() or ".." in Path(rel).parts:
+        return f"{rel}: outside the repository"
+    cur = root
+    for part in Path(rel).parts:
+        cur = cur / part
+        if cur.is_symlink():
+            return f"{rel}: {cur.relative_to(root).as_posix()} is a symbolic link"
+    if not (root / rel).resolve().is_relative_to(root.resolve()):
+        return f"{rel}: resolves outside the repository"
+    return None
+
+
+def text_files(root: Path, steward: str | None = None, refused: list[str] | None = None) -> list[Path]:
+    """The prose files the text rules apply to; a symbolic link or a path outside ROOT goes to `refused`."""
     found: set[Path] = set()
     for pattern in ("CLAUDE.md", "AGENTS.md", "README*", "CONTRIBUTING*"):
-        found |= {p for p in root.glob(pattern) if p.is_file()}
+        found |= {p for p in root.glob(pattern) if p.is_file() or p.is_symlink()}
     for base in ("docs", ".github"):
-        if (root / base).is_dir():
-            found |= {p for p in (root / base).rglob("*.md") if p.is_file()}
-    return sorted(p for p in found if not p.is_symlink() and ".git" not in p.relative_to(root).parts)
+        if (root / base).is_dir() and not (root / base).is_symlink():
+            found |= {p for p in (root / base).rglob("*")
+                      if (p.suffix == ".md" and (p.is_file() or p.is_symlink())) or (p.is_symlink() and p.is_dir())}
+        elif (root / base).is_symlink():
+            found.add(root / base)
+    if steward and not unsafe(root, steward) and (root / steward).is_file():
+        found.add(root / steward)
+    elif steward and unsafe(root, steward) and refused is not None:
+        refused.append(f"project_steward {unsafe(root, steward)}")
+    out = []
+    for p in sorted(found):
+        rel = p.relative_to(root).as_posix()
+        if ".git" in p.relative_to(root).parts:
+            continue
+        why = unsafe(root, rel)
+        if why:
+            if refused is not None:
+                refused.append(why)
+            continue
+        out.append(p)
+    return out
+
+
+def legacy_script_values(profile, path: str = "") -> list[str]:
+    """`key: value` of every profile string that runs a claude-toolkit script (C12)."""
+    if isinstance(profile, dict):
+        return [x for k, v in profile.items() for x in legacy_script_values(v, f"{path}.{k}" if path else str(k))]
+    if isinstance(profile, list):
+        return [x for i, v in enumerate(profile) for x in legacy_script_values(v, f"{path}[{i}]")]
+    return [f"{path}: {profile}"] if isinstance(profile, str) and _legacy_script(profile) else []
 
 
 def rewrite_text(text: str) -> tuple[str, list[str]]:
@@ -247,7 +329,14 @@ def _workflow(root: Path, name: str, profile: dict) -> str:
 
 
 def build_plan(root: Path) -> Plan:
+    root = root.resolve()
     plan = Plan(root=root, git=_git(root, "rev-parse", "--is-inside-work-tree").returncode == 0)
+    for rel in (OLD_PROFILE, NEW_PROFILE):
+        why = unsafe(root, rel)
+        if why and ((root / rel).exists() or (root / rel).is_symlink() or rel == NEW_PROFILE):
+            plan.errors.append(f"refused: {why}; tld migrate never follows a symbolic link")
+    if plan.errors:
+        return plan
     old, new = root / OLD_PROFILE, root / NEW_PROFILE
     if old.is_file() and new.is_file():
         plan.notes.append(f"both {OLD_PROFILE} and {NEW_PROFILE} exist: {NEW_PROFILE} is kept and migrated, "
@@ -272,7 +361,7 @@ def build_plan(root: Path) -> Plan:
     if not isinstance(data, dict):
         plan.errors.append(f"{source.relative_to(root)}: the profile must be a YAML mapping")
         return plan
-    target, notes = migrate_profile_data(data)
+    target, notes = migrate_profile_data(data, legacy=True if source == old else None)
     plan.profile = target
     plan.profile_text = text
     if notes:
@@ -282,9 +371,17 @@ def build_plan(root: Path) -> Plan:
         plan.profile_text = new_text
         plan.changes.append(Change("profile", NEW_PROFILE, "; ".join(notes), content=new_text))
 
-    plan_dir = root / str((target.get("docs") or {}).get("plan_dir") or "docs/").rstrip("/")
-    if plan_dir.is_dir():
+    refused: list[str] = []
+    plan_rel = str((target.get("docs") or {}).get("plan_dir") or LEGACY_PLAN_DIR).rstrip("/")
+    plan_dir = root / plan_rel
+    if unsafe(root, plan_rel):
+        refused.append(f"docs.plan_dir {unsafe(root, plan_rel)}")
+    elif plan_dir.is_dir():
         for doc in sorted(plan_dir.glob("*-plan.md")):
+            why = unsafe(root, doc.relative_to(root).as_posix())
+            if why:
+                refused.append(why)
+                continue
             body, n = migrate_manifest_text(doc.read_text())
             if n:
                 plan.changes.append(Change("manifest", doc.relative_to(root).as_posix(),
@@ -293,9 +390,13 @@ def build_plan(root: Path) -> Plan:
 
     for name in WORKFLOWS:
         legacy = f".github/workflows/devflow-{name}.yml"
-        if not (root / legacy).is_file():
-            continue
         dest = f".github/workflows/tld-{name}.yml"
+        if not ((root / legacy).is_file() or (root / legacy).is_symlink()):
+            continue
+        why = unsafe(root, legacy) or unsafe(root, dest)
+        if why:
+            refused.append(why)
+            continue
         if (root / dest).exists():
             plan.changes.append(Change("workflow", legacy, f"remove {legacy} ({dest} already exists, kept)",
                                        source=legacy, remove=True))
@@ -303,7 +404,8 @@ def build_plan(root: Path) -> Plan:
             plan.changes.append(Change("workflow", dest, f"{legacy} -> {dest} (the current tld template)",
                                        content=_workflow(root, name, target), source=legacy, remove=True))
 
-    for path in text_files(root):
+    steward = target.get("project_steward")
+    for path in text_files(root, steward if isinstance(steward, str) else None, refused):
         rel = path.relative_to(root).as_posix()
         try:
             original = path.read_text()
@@ -316,6 +418,8 @@ def build_plan(root: Path) -> Plan:
                 already.content, already.detail = body, already.detail + "; " + ", ".join(counts)
             else:
                 plan.changes.append(Change("text", rel, ", ".join(counts), content=body))
+    for why in dict.fromkeys(refused):
+        plan.notes.append(f"refused, left as it is: {why} (tld migrate never follows a symbolic link)")
     return plan
 
 
@@ -324,6 +428,11 @@ def build_plan(root: Path) -> Plan:
 
 def apply(plan: Plan) -> None:
     root, staged = plan.root, []
+    for c in plan.changes:
+        for rel in filter(None, (c.path, c.source)):
+            why = unsafe(root, rel)
+            if why:
+                raise RuntimeError(f"refused: {why}")
     for c in plan.changes:
         if c.kind == "move":
             (root / c.path).parent.mkdir(parents=True, exist_ok=True)
@@ -389,6 +498,10 @@ def checklist(plan: Plan) -> list[str]:
                        if not p.name.startswith("devflow-") and "DEVFLOW_" in p.read_text(errors="replace"))
         if named:
             leftovers.append("workflows that still read DEVFLOW_* secrets: " + ", ".join(named))
+    scripts = legacy_script_values(profile)
+    if scripts:
+        leftovers.append("profile commands that still run claude-toolkit scripts (left unchanged; replace each with "
+                         "its tld command, docs/reference/cli.md): " + " | ".join(scripts))
     if leftovers:
         items.append("Remove or update the claude-toolkit leftovers: " + "; ".join(leftovers) + ".")
     items.append("Review and merge the migration pull request (a session never merges it).")
@@ -424,7 +537,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"tld migrate: {e}", file=sys.stderr)
         return 1
     if args.write and plan.changes:
-        apply(plan)
+        try:
+            apply(plan)
+        except RuntimeError as exc:
+            print(f"tld migrate: {exc}", file=sys.stderr)
+            return 1
     print(render(plan, args.write))
     errors, warnings = validate_profile(plan)
     print()
