@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -54,3 +55,14 @@ def main_repo(tmp_path_factory):
 def fresh_repo(tmp_path):
     from hooks_helpers import make_repo
     return make_repo(tmp_path / "repo", "feature/demo")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_git_config():
+    """No global or system git config (signing, hooks, aliases) leaks into the repositories tests build."""
+    mp = pytest.MonkeyPatch()
+    mp.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    mp.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+    mp.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    yield
+    mp.undo()
