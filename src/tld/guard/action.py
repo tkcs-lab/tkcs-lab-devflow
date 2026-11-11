@@ -7,12 +7,13 @@ Decision back into whatever its runtime expects. Nothing here knows about a part
     Action(kind="write", project_dir="/w", cwd="/w", path="/w/.env", content=(("the new text", "X=1"),))
     Action(kind="github_op", project_dir="/w", cwd="/w", op="merge_pull_request", args={"pullNumber": 3})
     Action(kind="stop", project_dir="/w", cwd="/w", session_id="s1", continuing=True)
+    Action(kind="prompt", project_dir="/w", cwd="/w", session_id="s1", prompt="/tld:make-plan x", invoked="make-plan")
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-KINDS = ("shell", "write", "github_op", "stop")
+KINDS = ("shell", "write", "github_op", "stop", "prompt")
 VERDICTS = ("allow", "deny", "error")
 
 
@@ -26,8 +27,10 @@ class Action:
     content: tuple[tuple[str, str], ...] = ()       # write: (where, text) pieces that would be written
     op: str | None = None                           # github_op: operation name, e.g. merge_pull_request
     args: dict = field(default_factory=dict)        # github_op: its arguments
-    session_id: str | None = None                   # stop
+    session_id: str | None = None                   # the runtime's session id; set for every kind that has one
     continuing: bool = False                        # stop: the runtime is already continuing after a block
+    prompt: str | None = None                       # prompt: the text the user submitted
+    invoked: str | None = None                      # prompt: the tld command or skill the runtime found at the start of it
 
     def __post_init__(self):
         if self.kind not in KINDS:
@@ -47,14 +50,15 @@ class Decision:
     verdict: str                 # allow | deny | error (a non-blocking problem the user should see)
     reason: str = ""
     notice: str | None = None    # shown to the user when the action is allowed
+    context: str | None = None   # text the runtime adds to the agent's context (prompt events); never a block
 
     def __post_init__(self):
         if self.verdict not in VERDICTS:
             raise ValueError(f"unknown verdict {self.verdict!r}")
 
 
-def allow(notice: str | None = None) -> Decision:
-    return Decision("allow", "", notice)
+def allow(notice: str | None = None, context: str | None = None) -> Decision:
+    return Decision("allow", "", notice, context)
 
 
 def deny(reason: str) -> Decision:
