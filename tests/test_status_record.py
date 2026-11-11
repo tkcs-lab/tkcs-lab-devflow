@@ -45,6 +45,37 @@ def test_doc_id_for_maintenance():
     assert wrong.returncode == 1 and "--doc-id" in wrong.stdout
 
 
+def maintenance(*args, **changes):
+    rec = json.loads((RECORDS / "good-maintenance.json").read_text())
+    rec.update(changes)
+    return run("-", *args, stdin=json.dumps(rec))
+
+
+def setup_record(*args, **changes):
+    base = json.loads((RECORDS / "good-maintenance.json").read_text())["phases"][0]
+    items = [{**base, "id": step, "title": step, "branch": None, "pr": None, "state": "pending"}
+             for step in ("survey", "confirm", "write", "verify", "pr")]
+    return maintenance(*args, **{"command": "setup", "orchestrator_session": "session_01abc", "phases": items, **changes})
+
+
+def test_valid_setup_record_passes():
+    result = setup_record()
+    assert result.returncode == 0, result.stdout
+
+
+def test_setup_accepts_scheduled_but_deps_rejects_a_session_id():
+    assert setup_record(orchestrator_session="scheduled").returncode == 0
+    assert setup_record(orchestrator_session="").returncode == 1
+    bad = maintenance(orchestrator_session="session_01abc")
+    assert bad.returncode == 1 and "'orchestrator_session'" in bad.stdout
+
+
+def test_doc_id_for_setup():
+    assert setup_record("--doc-id", "claude-toolkit--setup").returncode == 0
+    wrong = setup_record("--doc-id", "claude-toolkit--deps")
+    assert wrong.returncode == 1 and "--doc-id" in wrong.stdout
+
+
 def test_doc_id_for_run():
     assert run(RECORDS / "good-run.json", "--doc-id", "claude-toolkit").returncode == 0
     assert run(RECORDS / "good-run.json", "--doc-id", "claude-toolkit--deps").returncode == 1
