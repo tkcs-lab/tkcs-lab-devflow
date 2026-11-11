@@ -44,6 +44,8 @@ from pathlib import Path
 
 import yaml
 
+from tld.net import SameHostRedirects, opener as net_opener
+
 HERE = Path(__file__).resolve().parent
 PLUGIN = HERE.parent
 SCHEMA = PLUGIN / "schema" / "admin-policy.schema.json"
@@ -105,17 +107,8 @@ def find_token() -> str | None:
     return None
 
 
-class _SameHostRedirects(urllib.request.HTTPRedirectHandler):
-    """urllib copies every request header to the redirect target. The token must not leave the host it was meant for."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        new = super().redirect_request(req, fp, code, msg, headers, newurl)
-        if new is not None and urllib.parse.urlsplit(newurl).netloc != urllib.parse.urlsplit(req.full_url).netloc:
-            new.remove_header("Authorization")
-        return new
-
-
-_OPENER = urllib.request.build_opener(_SameHostRedirects)
+_SameHostRedirects = SameHostRedirects  # the shared handler (tld.net); the name stays for callers
+_OPENER = net_opener()
 
 
 class Client:

@@ -6,7 +6,9 @@
 Reads TLD_BOARD_URL and TLD_BOARD_TOKEN (and TLD_BOARD_ALLOW_HTTP) from the environment.
 Prints one line of compact JSON on stdout (`health` prints `ok`). Exit codes: 0 success; 1 the server
 answered with an error status, a network error or a bad configuration; 2 usage error; 3 no board
-configured. Python 3.11+, stdlib only.
+configured. Redirects keep the Authorization header only on the same scheme, host and port (S18). The asks
+have their own commands: `tld board ask`, `tld board answers`, `tld board cancel` (tld.board.inbox).
+Python 3.11+, stdlib only.
 """
 from __future__ import annotations
 
@@ -20,7 +22,10 @@ import urllib.request
 from collections.abc import Mapping
 from typing import NamedTuple
 
+from tld.net import opener as _opener
+
 LOOPBACK = ("localhost", "127.0.0.1", "::1")
+OPENER = _opener()
 
 
 class ConfigError(Exception):
@@ -70,7 +75,7 @@ def call(config: Config, method: str, path: str, body: object | None = None, tim
     if auth:
         req.add_header("Authorization", f"Bearer {config.token}")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with OPENER.open(req, timeout=timeout) as resp:
             status, raw = resp.status, resp.read()
     except urllib.error.HTTPError as err:
         status, raw = err.code, err.read()
