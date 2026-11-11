@@ -44,6 +44,7 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
 - "the dispatch table" is `ci.dispatchable`, read through the `pr-steward` skill.
 - "the stack skills" are the `stack-<name>` skills for each name in `stacks`; load them now. They say
   how to write `acceptance` and `verify_after_merge` entries for that stack.
+- "the agent rules" are the profile's agents section, read through the `agent-dispatch` skill; load it now.
 
 **Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command writes a plan or a prompt, not code. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
 
@@ -91,6 +92,14 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
    reviewed in stages. A typical bug-fix issue or a contained feature is small. Otherwise it is
    **large**. If the user said which they want, do that. When in doubt between the two, prefer
    small: an orchestrated plan costs several sessions and a review round.
+5. **Agents.** Run `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at make_plan`.
+   For a large scope, dispatch the `architect` agent first (unless it is in `disabled`) with the ask, your research
+   notes and the must-read docs, and use its options when you write the Design section. Dispatch every agent in
+   `required`, each in review mode, as the `agent-dispatch` skill says. A blocking finding must be resolved in the
+   plan before you push; dispatch the same agent again afterwards, its new report line is the one that counts; a
+   non-blocking finding goes into the plan's Risks. Before the final reply run `agents.py verify` on the agents'
+   reports; exit 1 stops you until the missing agent has run or the finding is resolved. Name each agent that ran,
+   with its AGENT-REPORT line, under `Agents:` in the final reply.
 
 ## Small scope: a single-session prompt
 
@@ -99,6 +108,7 @@ Skip sections 1, 2, 4 and 5. The tracking issue (section 0 step 1) is created or
 the original `## Request` first) with the headings `## Request`, `## Goal`, `## What changes` (one
 bullet per step), `## Before you start`, `## After the last merge`, `## Risks`, in plain words with
 no YAML. Name the issue in the final reply.
+Step 5 of section 0 (Agents) still applies; the agents that ran are named in one line before the prompt.
 Section 3 still applies: manual steps go only at the very beginning
 and the very end of the prompt, and get the HTML artifact if there are any (publish it, but do not
 commit it; there is no branch).
