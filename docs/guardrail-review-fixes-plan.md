@@ -4,7 +4,7 @@
 
 Fix every item in "Findings to fix" of the review
 [`guardrails-scope-evals-2026-11-10-review.md`](https://github.com/tkcs-lab/claude-toolkit/blob/review/guardrails-scope-evals-2026-11-10/docs/guardrails-scope-evals-2026-11-10-review.md)
-(reviewed at commit `9e9e722`, status `ready-for-plan`), tracked in
+(reviewed at commit `9e9e722`, status `ready-for-plan`; `main` is now `c575f43`, see below), tracked in
 [#15](https://github.com/tkcs-lab/claude-toolkit/issues/15). After this plan:
 
 - the guardrail hooks (`no-merge`, `no-force-push`, `no-git-tag`, `protect-paths`, `secret-scan`,
@@ -27,8 +27,12 @@ git fetch origin review/guardrails-scope-evals-2026-11-10
 git show FETCH_HEAD:docs/guardrails-scope-evals-2026-11-10-review.md
 ```
 
-`main` is still at the reviewed commit `9e9e722`, so every `path:line` in the review holds today
-(re-checked when this plan was written). Lines move as phases land; always locate by symbol.
+`main` has moved since the review (now `c575f43`: the git-ops workflow and skill, the first committed eval baseline,
+eval grader fixes, plugin version 0.6.0). It changed **no hook, no `scope_check.py` and no test of them**, and in the
+eval harness only `graders.py` (`is_runnable`, `parse_findings`, `seeded_finding_found`) and `results.py` (`aggregate`
+records `models`); the findings were re-checked against that tree and all hold, except the `baselines/` half of
+DOC-13 (a baseline `evals/baselines/default.json` is now committed) which is dropped. Line numbers in the review and
+in this plan may be off; always locate by symbol or by `grep`.
 
 ## Current state
 
@@ -42,7 +46,7 @@ git show FETCH_HEAD:docs/guardrails-scope-evals-2026-11-10-review.md
 - Evals: `evals/harness/*.py` (about 1,900 lines), `evals/tasks/*/task.yaml` (7), `evals/schema/task.schema.json`,
   `evals/hook_cases.yaml`, `docs/evals.md`, tests `tests/test_evals_*.py`.
 - CI: `.github/workflows/test.yml` (floating `@v4` / `@v5` tags, unpinned npm package, `pytest>=8`, `PyYAML>=6`).
-- Gate: `verify.fast` and `verify.dod` run `pytest tests -q` (1502 tests, about 33 s). The project has no ADRs
+- Gate: `verify.fast` and `verify.dod` run `pytest tests -q` (about 1,500 tests, under a minute). The project has no ADRs
   and no changelog; the profile has no `docs.adr_dir` and no `docs.changelog`, so neither is part of this plan.
 - Of 27 mutations tried by the review, 15 survived the suite: many phases below exist to kill specific mutations.
 
@@ -156,7 +160,9 @@ list at the end of this section.
   - `gh api` POST to `repos/<o>/<r>/actions/workflows/<w>/dispatches` with the same `<w>` test;
   - MCP `actions_run_trigger` with `method == "run_workflow"` when `workflow_id` (string) has the basename
     `devflow-release.yml`, **or** is not a file name ending `.yml` / `.yaml` (an id cannot be checked offline, so it
-    fails closed; `/implement` dispatches by file name from `ci.dispatchable`);
+    fails closed; `/implement` dispatches by file name from `ci.dispatchable`, and the `git-ops` skill dispatches
+    `devflow-git-ops.yml` by file name — that dispatch **stays allowed**: the workflow runs in the central repository
+    behind a dry-run default, an allowlist and the `git-ops` environment, see `docs/git-ops.md`);
   - `gh release edit` carrying `--tag` (or `--tag=…`); `gh api` PATCH or DELETE on `repos/<o>/<r>/releases/<id>`.
 - `hooks.json`: a new `PreToolUse` entry, matcher `mcp__.*__actions_run_trigger`, command `no_git_tag.py`, timeout 20.
   `no_git_tag.evaluate` handles `ctx.tool.startswith("mcp__")` through a new `check_mcp`.
@@ -328,8 +334,8 @@ Edit exactly these (the code phases must not):
   longer than 15 s denies in the destructive hooks; a timeout elsewhere allows); secret-scan section (H12 timeout note,
   H13 new patterns, the allow mark must end the line); new section "Installing and checking" (DOC-6, text given in the
   review).
-- `README.md` (DOC-8 row, Guardrails paragraph for DOC-3/DOC-6, DOC-18 line 67), `docs/delivery.md` (DOC-3 step 3,
-  DOC-6 step 5, DOC-18 line 10), `docs/design.md` (DOC-9), `docs/profile-reference.md` (DOC-16, and the `hooks.disable`
+- `README.md` (DOC-8 row, Guardrails paragraph for DOC-3/DOC-6, DOC-18 on the marketplace line), `docs/delivery.md` (DOC-3 step 3,
+  DOC-6 step 5, DOC-18 marketplace line), `docs/design.md` (DOC-9; the docs list also names `git-ops.md`), `docs/profile-reference.md` (DOC-16, and the `hooks.disable`
   row: "read from the committed `<main>` profile"), `plugins/devflow/.claude-plugin/plugin.json` (`homepage`) and
   `templates/toolkit.yaml:4` (DOC-18: `tkcs-lab/claude-toolkit`).
 
@@ -537,7 +543,8 @@ phases:
          `gh workflow run devflow-release`, `gh api -X POST repos/o/r/actions/workflows/devflow-release.yml/dispatches -f ref=main`,
          `gh release edit v1 --tag v3`, `gh api -X PATCH repos/o/r/releases/1 -f tag_name=v2`, `gh api -X DELETE repos/o/r/releases/1`; MCP
          `mcp__github__actions_run_trigger` with `{"method":"run_workflow","workflow_id":"devflow-release.yml","ref":"main"}` and with a numeric
-         `workflow_id` → 2; allow controls code 0: `gh workflow run test.yml`, MCP `run_workflow` with `workflow_id` `test.yml`, `gh release view v1`).
+         `workflow_id` → 2; allow controls code 0: `gh workflow run test.yml`, `gh workflow run devflow-git-ops.yml -R org/central -f repo=org/x -f action=create-tag -f name=v1.0.0`,
+         MCP `run_workflow` with `workflow_id` `test.yml` and with `devflow-git-ops.yml`, `gh release view v1`).
          tests/test_hooks_config.py: add `mcp__github__actions_run_trigger` to the matcher test with `no_git_tag.py` True.
       2. `no_git_tag.py`: implement D4 (push config checks, `update-ref --stdin`, release dispatch/edit denials, `check_mcp`, `evaluate` for `mcp__` tools).
       3. `hooks.json`: add the `mcp__.*__actions_run_trigger` entry of D4.
@@ -824,7 +831,7 @@ phases:
       2. DOC-11: replace `names, or {name: ..., params}` in docs/evals.md with "names, or a mapping `{name: <grader>, <param>: <value>, …}` (parameters sit beside `name`, for example `{name: forbidden_ops_denied, ops: [tag]}`)".
       3. DOC-12: add `help=` text to every subparser and every flag in cli.py (`list`, `validate`, `aggregate`, `compare`, `baseline`, `run` and `--agent`, `--stub-dir`, `--out`, `--keep`, `--keep-proxy`, `--run-ceiling`);
          add a "Flags" list to docs/evals.md (`--keep`, `--out FILE`, `--agent stub --stub-dir DIR`, `--keep-proxy`) and change "The temp directory is deleted" to "deleted (unless `--keep`)".
-      4. DOC-13: "baselines/   created by `run.py baseline`; none committed yet"; replace "Three tasks of three runs cannot detect a small regression" with "A handful of tasks at three runs each cannot detect a small regression".
+      4. DOC-13: replace "Three tasks of three runs cannot detect a small regression" with "A handful of tasks at three runs each cannot detect a small regression". (The review's `baselines/ … none committed` half no longer applies: `evals/baselines/default.json` is committed and docs/evals.md already describes it; leave that text alone.)
       5. Corrections owed by phases p12-p15: docs/evals.md line about "The real repository is never touched" becomes a qualified sentence (the agent runs with an empty `HOME` and no proxy unless `--keep-proxy`; the network is otherwise not sandboxed;
          `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` is required); the scrubber paragraph says transcripts and results use the secret-scan patterns, are written mode 0600, and still deserve a read before sharing;
          the cost-ceiling paragraph says `--run-ceiling` must be positive and finite, a timed-out run is charged its full allowance, and the first ceiling hit stops the invocation with exit code 3.
@@ -889,7 +896,7 @@ phases:
       4. `SECURITY.md`: scope (the hooks, secret-scan, the scripts under plugins/devflow/scripts), how to report (GitHub private vulnerability reporting: Security tab, "Report a vulnerability"), what a report should contain,
          and the sentence that the hooks are a seat belt and not a security boundary with a link to docs/hooks.md (relative link). `CONTRIBUTING.md`: setup (`python3 -m venv .venv`, `pip install -r tests/requirements.txt`),
          `.venv/bin/python -m pytest tests -q`, run the evals (`python3 evals/run.py validate`, `run --dry-run`) before and after changing a command, the no-project-specific-words test (tests/test_no_project_words.py),
-         the plugin version bump rule (look in docs/maintenance.md for the existing rule and link to it; do not invent one), and how to add a hook case (`tests/test_hook_<name>.py` rows plus `evals/hook_cases.yaml` entries
+         the plugin versions (the five `plugins/*/.claude-plugin/plugin.json` files must agree, enforced by tests/test_structure.py::test_plugin_versions_agree; a plan's retirement phase bumps them together, because a Claude Project caches each plugin per version, see docs/delivery.md), and how to add a hook case (`tests/test_hook_<name>.py` rows plus `evals/hook_cases.yaml` entries
          `{name, tool, input, expect: deny|allow}`, using `@@GH_TOKEN@@` for token-shaped strings). Both files must pass tests/test_no_project_words.py and tests/test_structure.py.
     acceptance:
       - "grep -cE 'uses: [^@]+@[0-9a-f]{40}' .github/workflows/test.yml prints 2"
@@ -915,11 +922,11 @@ phases:
       writing each sentence, and write only what the code does. The review's DOC-3, DOC-6, DOC-8, DOC-9, DOC-16, DOC-18 "Fix" texts (in the review document) give the wording for those items.
       1. docs/hooks.md: apply the D14 edits in file order. Add the "Installing and checking" section (DOC-6). State in "Parsing" what is and is not unpacked after phases p1-p3 (read _shell.py and _gitgh.py).
       2. README.md: DOC-8 row for `evals/` and the `docs/evals.md` link in the docs row; DOC-3/DOC-6 sentence in "Guardrails" (every repository in a Project that enables the plugin needs at least `git.main_branch` in `.claude/toolkit.yaml`;
-         the hooks need `python3` 3.11+ and PyYAML); DOC-18 on line 67 (`tkcs-lab/claude-toolkit`).
-      3. docs/delivery.md: DOC-3 (step 3: add a minimal profile with `git.main_branch` to every repository), DOC-6 (step 5: hooks and the other commands, PyYAML), DOC-18 (line 10).
-      4. docs/design.md: DOC-9 exactly as its Fix text says. docs/profile-reference.md: DOC-16 sentence in the `protect_paths` row and "read from the committed `<main>` profile" in the `hooks.disable` row; keep tests/test_validate_profile.py and
+         the hooks need `python3` 3.11+ and PyYAML); DOC-18 on the line that names the marketplace (`andras-tkcs/claude-toolkit` → `tkcs-lab/claude-toolkit`; locate with grep).
+      3. docs/delivery.md: DOC-3 (step 3: add a minimal profile with `git.main_branch` to every repository), DOC-6 (step 5: hooks and the other commands, PyYAML), DOC-18 (the marketplace line in step 2).
+      4. docs/design.md: DOC-9 as its Fix text says, with `git-ops.md` also in the docs list (`docs/{profile-reference.md,delivery.md,design.md,hooks.md,evals.md,review.md,admin.md,git-ops.md,maintenance.md,scope-drift.md,migrating-privacyfence.md}`). docs/profile-reference.md: DOC-16 sentence in the `protect_paths` row and "read from the committed `<main>` profile" in the `hooks.disable` row; keep tests/test_validate_profile.py and
          tests/test_structure.py green (they grep this file for every profile key).
-      5. plugins/devflow/.claude-plugin/plugin.json `homepage` and templates/toolkit.yaml line 4: DOC-18.
+      5. plugins/devflow/.claude-plugin/plugin.json `homepage` and the `Reference:` comment in templates/toolkit.yaml: DOC-18.
       6. Run the acceptance commands, then the whole suite.
     acceptance:
       - "grep -n 'also denied' docs/hooks.md matches; grep -n 'git push origin x` is not' docs/hooks.md prints nothing; grep -n 'git.main_branch' docs/delivery.md matches (DOC-3)"
@@ -932,18 +939,25 @@ phases:
       - ".venv/bin/python -m pytest tests -q passes"
 
   - id: p20-retire
-    title: Delete the plan document and the manual-steps page
+    title: Delete the plan document and the manual-steps page; bump the plugin versions
     depends_on: [p19-docs]
     complexity: S
     touches:
       - docs/guardrail-review-fixes-plan.md
       - docs/guardrail-review-fixes-plan-manual-steps.html
+      - plugins/devflow/.claude-plugin/plugin.json
+      - plugins/stack-go/.claude-plugin/plugin.json
+      - plugins/stack-ipados/.claude-plugin/plugin.json
+      - plugins/stack-python/.claude-plugin/plugin.json
+      - plugins/stack-swift/.claude-plugin/plugin.json
     brief: |
       1. `git rm docs/guardrail-review-fixes-plan.md docs/guardrail-review-fixes-plan-manual-steps.html`.
       2. `grep -rn 'guardrail-review-fixes-plan' .` outside `.git` must print nothing; remove any link you find.
-      3. Run `.venv/bin/python -m pytest tests -q`.
+      3. Bump `"version"` from `0.6.0` to `0.6.1` in the five `plugins/*/.claude-plugin/plugin.json` files (the hooks changed behaviour, and Claude Projects cache a plugin per version). If a file does not say `0.6.0`, stop with status=blocked.
+      4. Run `.venv/bin/python -m pytest tests -q`.
     acceptance:
       - "test ! -e docs/guardrail-review-fixes-plan.md && test ! -e docs/guardrail-review-fixes-plan-manual-steps.html exits 0"
       - "grep -rn 'guardrail-review-fixes-plan' . --exclude-dir=.git prints nothing"
+      - "grep -h '\"version\"' plugins/*/.claude-plugin/plugin.json prints five lines, all 0.6.1"
       - ".venv/bin/python -m pytest tests -q passes"
 ```
