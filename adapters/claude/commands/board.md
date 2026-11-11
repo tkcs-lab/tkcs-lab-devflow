@@ -16,8 +16,8 @@ Use the `project-profile` skill only for its 'Find the toolkit' step; if it repo
 Skill names: the toolkit's skills carry a plugin prefix (`tld:project-profile`,
 `tld:pr-steward`, `tld:stack-python`). Use whichever form the skill list shows.
 
-The scripts named below (`tld board client`, `tld board stale`) sit next to the project-profile
-skill's scripts; call them from there.
+The toolkit commands named below (`tld board client`, `tld board stale`) run as
+`"${CLAUDE_PLUGIN_ROOT}/bin/tld" board client` and `"${CLAUDE_PLUGIN_ROOT}/bin/tld" board stale`.
 
 ## `/board` (no argument)
 

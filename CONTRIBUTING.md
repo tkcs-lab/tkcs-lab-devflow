@@ -13,7 +13,7 @@ python3 -m venv .venv
 .venv/bin/python -m pytest tests -q
 ```
 
-`tests/test_no_project_words.py` fails if a file contains a project-specific word; keep the text generic.
+`tests/core/test_no_project_words.py` fails if a file contains a project-specific word; keep the text generic.
 
 ## Evals
 

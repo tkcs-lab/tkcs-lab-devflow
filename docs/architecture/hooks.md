@@ -127,7 +127,7 @@ Paths outside the repository are not this hook's business.
 `"${CLAUDE_PLUGIN_ROOT}/bin/tld" guard allow-profile`, which writes the marker
 `protect-paths-profile.json` into `<git dir>/tld/` (so it is per checkout and never committed). For two hours from
 that moment the hook lets the path `.tld/toolkit.yaml` (exactly) through and nothing else: `.env*`, lockfiles and
-workflow files stay denied. After its last write `/setup` runs `--end-allow`, which removes the marker; a marker that
+workflow files stay denied. After its last write `/setup` runs `tld guard end-allow`, which removes the marker; a marker that
 is forgotten lapses after the two-hour TTL. The deny message for the profile says it is changed by people or by
 `/setup`. This is a convention like the `dod-gate` marker below: any session that can run a command can write the
 marker. Branch protection and the pull request review stay the hard control.
@@ -269,7 +269,7 @@ key, in every hook that reads it. `dod-gate` counts it as a failed attempt inste
 ## Compatibility with the commands
 
 The hooks must not break the commands. This table lists every git and gh operation the commands document and the
-verdict. `tests/test_hooks_compat.py` keeps it honest: it has one test per command, runs each documented operation through
+verdict. `tests/adapters/claude/test_hooks_compat.py` keeps it honest: it has one test per command, runs each documented operation through
 the Bash hooks, fails when a command file stops containing the phrase that documents the operation, and sweeps every
 `git ...` / `gh ...` code span in the commands and skills through the hooks as well.
 

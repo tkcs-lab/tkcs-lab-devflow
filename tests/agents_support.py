@@ -1,4 +1,4 @@
-"""Shared checks for the agent files in plugins/devflow/agents (design D1)."""
+"""Shared checks for the agent files in adapters/claude/agents (design D1)."""
 import re
 from pathlib import Path
 

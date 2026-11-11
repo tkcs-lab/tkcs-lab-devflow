@@ -4,3 +4,5 @@ __pycache__/
 .venv/
 evals/results/
 evals/transcripts/
+build/
+*.egg-info/

@@ -11,15 +11,18 @@ import subprocess
 import sys
 from pathlib import Path
 
-from conftest import DEVFLOW
+from conftest import CLAUDE
 
-HOOKS = DEVFLOW / "hooks"
-sys.path.insert(0, str(HOOKS))
+from tld.guard import _common
 
-import _common  # noqa: E402
-
+HOOKS = CLAUDE / "hooks"  # the Claude Code hook entry scripts (thin shims over the core modules)
+# hook name -> entry script stem in adapters/claude/hooks/
 MODULES = {"no-merge": "no_merge", "no-force-push": "no_force_push", "no-git-tag": "no_git_tag",
            "secret-scan": "secret_scan", "protect-paths": "protect_paths", "dod-gate": "dod_gate"}
+# hook name -> core module that holds its policy
+CORE = {"no-merge": "tld.guard.no_merge", "no-force-push": "tld.guard.no_force_push",
+        "no-git-tag": "tld.guard.no_git_tag", "secret-scan": "tld.guard.secret_scan",
+        "protect-paths": "tld.guard.protect_paths", "dod-gate": "tld.dod.gate"}
 FAIL_CLOSED = {"no-merge": True, "no-force-push": True, "no-git-tag": True, "secret-scan": False,
                "protect-paths": False, "dod-gate": False}
 BASH_GUARDS = ("no-merge", "no-force-push", "no-git-tag", "protect-paths")
@@ -37,8 +40,8 @@ def make_repo(path, branch, profile=PROFILE):
     path.mkdir(parents=True, exist_ok=True)
     git(path, "init", "-q", "-b", "main")
     if profile is not None:
-        (path / ".claude").mkdir(exist_ok=True)
-        (path / ".claude" / "toolkit.yaml").write_text(profile)
+        (path / ".tld").mkdir(exist_ok=True)
+        (path / ".tld" / "toolkit.yaml").write_text(profile)
     (path / "README.md").write_text("demo\n")
     git(path, "add", "-A")
     git(path, "commit", "-q", "-m", "init")
@@ -49,7 +52,7 @@ def make_repo(path, branch, profile=PROFILE):
 
 
 def module(name):
-    return importlib.import_module(MODULES[name])
+    return importlib.import_module(CORE[name])
 
 
 def event(tool, cwd, **tool_input):

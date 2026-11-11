@@ -41,7 +41,7 @@ operating system) is satisfied by dispatching the workflow in `ci.dispatchable` 
 **Manual review items.** Read the diff for each `verify.dod_manual` row and report it as `ok`,
 `needs attention` (with the file and line) or `n/a`, never PASS, since nothing was run.
 
-**Docs index (only when the profile has `docs.index`).** Run `"${CLAUDE_PLUGIN_ROOT}/bin/tld" ops docs-index check --profile .tld/toolkit.yaml` and report one row `docs index`: `ok` for exit 0 with no warning, `needs attention` with the quoted messages otherwise, and `n/a (tld ops docs-index not in this tld version)` when the script is missing. This row is never FAIL and never part of the verdict.
+**Docs index (only when the profile has `docs.index`).** Run `"${CLAUDE_PLUGIN_ROOT}/bin/tld" ops docs-index check --profile .tld/toolkit.yaml` and report one row `docs index`: `ok` for exit 0 with no warning, `needs attention` with the quoted messages otherwise, and `n/a (tld ops docs-index not in this tld version)` when the command is missing. This row is never FAIL and never part of the verdict.
 
 **Required agents.** Run `"${CLAUDE_PLUGIN_ROOT}/bin/tld" roles required --profile .tld/toolkit.yaml --at dod --changed <file with the output of git diff --name-only origin/<main>...HEAD>`. Dispatch each agent in `required`, in review mode, as the `agent-dispatch` skill says. Each gives one row `agent: <name>`: `PASS` when it reported no findings; `FAIL` when the item is blocking and its report has blocking findings, or when it did not run (`required agent did not run`); `needs attention (<blocking plus non-blocking>)` in every other case with findings. After the table, one subsection per agent with its full report verbatim, ending in its AGENT-REPORT line.
 

@@ -23,16 +23,18 @@ jobs:
       - run: python -m pip install -r tests/requirements.txt
       - name: Tests (includes the no-project-specific-strings check)
         run: python -m pytest tests -q
-      - name: Validate the marketplace and plugins
+      - name: Validate the marketplace and the plugin
         run: |
           npm install -g @anthropic-ai/claude-code@2.1.322
           claude plugin validate .
-          for p in plugins/*/; do claude plugin validate "$p"; done
-      - name: Validators on the starter profile and the PrivacyFence profile
+      - name: Validators on the starter profile, this repository's profile and the PrivacyFence profile
         run: |
-          python plugins/devflow/scripts/validate_profile.py templates/toolkit.yaml --no-file-checks
-          python plugins/devflow/scripts/validate_profile.py tests/fixtures/privacyfence-toolkit.yaml --no-file-checks
-          python plugins/devflow/scripts/repo_admin.py validate-policy plugins/devflow/templates/admin-policy.yaml
+          python bin/tld profile validate src/tld/templates/toolkit.yaml --no-file-checks
+          python bin/tld profile validate .tld/toolkit.yaml
+          python bin/tld profile validate tests/fixtures/privacyfence-toolkit.yaml --no-file-checks
+          python bin/tld ops repo-admin validate-policy src/tld/templates/admin-policy.yaml
           for m in tests/fixtures/privacyfence-*-manifest.yaml; do
-            python plugins/devflow/scripts/validate_manifest.py "$m" --profile tests/fixtures/privacyfence-toolkit.yaml
+            python bin/tld plan validate-manifest "$m" --profile tests/fixtures/privacyfence-toolkit.yaml
           done
+      - name: Docs index
+        run: python bin/tld ops docs-index check --index docs/README.md

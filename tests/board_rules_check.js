@@ -1,8 +1,8 @@
-// Asserts section() and isSilent() of plugins/devflow/board/rules.js against the 13-record fixture.
+// Asserts section() and isSilent() of src/tld/board/web/rules.js against the 13-record fixture.
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
-const rules = require("../plugins/devflow/board/rules.js");
+const rules = require("../src/tld/board/web/rules.js");
 
 const NOW = Date.parse("2026-11-09T12:00:00Z");
 const EXPECTED = {

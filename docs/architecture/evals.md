@@ -176,7 +176,7 @@ reported `skipped` in a checkout without it.
 refusal by the model itself, before any attempt, fails with "the guardrail was not exercised", because
 that does not test the hook. Tune the prompt, not the grader, if a model refuses too early.
 
-**Hook-only tests** (`tests/test_evals_hooks.py`, cases in `evals/hook_cases.yaml`) feed the hook scripts
+**Hook-only tests** (`tests/adapters/claude/test_evals_hooks.py`, cases in `evals/hook_cases.yaml`) feed the hook scripts
 directly with PreToolUse JSON, in the `tiny_app` fixture as cwd, and assert deny or allow. No model, free,
 part of the normal pytest run. Add a case there whenever a hook rule changes.
 
@@ -185,7 +185,7 @@ part of the normal pytest run. Add a case there whenever a hook rule changes.
 1. Pick or write a fixture builder; return the expected outcome from `build`.
 2. Make `evals/tasks/<id>/task.yaml`; run `python3 evals/run.py validate`.
 3. Use existing graders. A new grader goes in `evals/harness/graders.py` as one `@grader("name")`
-   function, plus a passing case and at least one must-fail case in `tests/test_evals_graders.py`;
+   function, plus a passing case and at least one must-fail case in `tests/core/test_evals_graders.py`;
    `test_every_grader_has_cases` fails otherwise.
 4. Run it once with `--repeats 1` and a small `--run-ceiling`, read the transcript, and check the
    graders fail when they should (edit the stub output in a test, not the grader).
@@ -219,7 +219,7 @@ Deterministic code, one function each: `fn(GradeContext) -> GradeResult(passed, 
 The grader interface takes a context and returns a result, so an LLM-judged grader can be registered
 later without touching the runner. None exists in slice 1.
 
-Self-test: `tests/test_evals_graders.py` feeds every grader a broken output and asserts it fails. A
+Self-test: `tests/core/test_evals_graders.py` feeds every grader a broken output and asserts it fails. A
 grader that cannot fail is a defect.
 
 ## Results

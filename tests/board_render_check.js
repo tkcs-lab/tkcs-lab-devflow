@@ -73,7 +73,7 @@ async function check(browser, file, scheme) {
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "board-"));
   const file = path.join(dir, "board.html");
-  execFileSync("python3", [path.join(ROOT, "plugins/devflow/scripts/build_board.py"), "--title", "Devflow Board",
+  execFileSync("python3", [path.join(ROOT, "bin/tld"), "board", "build", "--title", "tld Board",
     "--out", file, "--fixture", FIXTURE, "--now", NOW], { stdio: "pipe" });
   const browser = await chromium.launch();
   try {
