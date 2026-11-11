@@ -195,3 +195,13 @@ def test_allow_plan_help_writes_no_marker(fresh_repo):
     r = tld(fresh_repo, "allow-plan", "--help")
     assert r.returncode == 0 and r.stdout.strip()
     assert not (fresh_repo / ".git" / "tld" / PLAN).exists()
+
+
+def test_implement_playbook_tells_workers_to_open_the_plan_marker():
+    from conftest import ROOT
+
+    text = (ROOT / "playbooks" / "implement.md").read_text()
+    assert text.count("tld guard allow-plan") >= 2
+    start = text.index("> You are the final reviewer")
+    end = text.index("at least one blocking finding.", start)
+    assert "allow-plan" not in text[start:end]
