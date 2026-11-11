@@ -385,6 +385,33 @@ def test_move_fails_when_destination_exists(tmp_path):
     assert "move: 'docs/b.md' already exists" in r.stderr
 
 
+def test_move_fails_when_destination_is_a_dangling_symlink(tmp_path):
+    move_repo(tmp_path, {"docs/a.md": "# A\n", "README.md": "docs/a.md\n"})
+    os.symlink("nowhere.md", tmp_path / "docs/dangling.md")
+    r = mv(tmp_path, "docs/a.md", "docs/dangling.md", "--apply")
+    assert r.returncode == 1
+    assert "move: 'docs/dangling.md' already exists" in r.stderr
+    assert os.readlink(tmp_path / "docs/dangling.md") == "nowhere.md"
+    assert read(tmp_path, "docs/a.md") == "# A\n"
+    assert read(tmp_path, "README.md") == "docs/a.md\n"
+
+
+def test_move_does_not_fall_back_to_rename_when_git_mv_fails(tmp_path, monkeypatch):
+    move_repo(tmp_path, {"docs/a.md": "# A\n", "README.md": "docs/a.md\n"})
+    real = subprocess.run(["which", "git"], capture_output=True, text=True).stdout.strip()
+    fake = tmp_path.parent / (tmp_path.name + "-bin")
+    fake.mkdir()
+    (fake / "git").write_text(f'#!/bin/sh\ncase "$*" in *" mv "*) echo boom >&2; exit 1;; esac\nexec {real} "$@"\n')
+    (fake / "git").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake}{os.pathsep}{os.environ['PATH']}")
+    r = mv(tmp_path, "docs/a.md", "docs/new/a.md", "--apply")
+    assert r.returncode == 1
+    assert "move: git mv failed: boom" in r.stderr
+    assert read(tmp_path, "docs/a.md") == "# A\n"
+    assert read(tmp_path, "README.md") == "docs/a.md\n"
+    assert not (tmp_path / "docs/new").exists()
+
+
 def test_move_fails_when_source_is_not_a_file(tmp_path):
     move_repo(tmp_path, {"docs/a.md": "# A\n"})
     r = mv(tmp_path, "docs/missing.md", "docs/b.md")
