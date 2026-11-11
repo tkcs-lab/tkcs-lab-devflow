@@ -24,7 +24,7 @@ def test_security_heavy(tmp_path):
     build(tmp_path, "security_heavy")
     out = ps.survey(tmp_path)
     e = out["evidence"]
-    assert out["proposal"] is None
+    assert out["proposal"]["profile"]["stacks"] is not None
     assert [s["name"] for s in e["stacks"]] == ["python"]
     [wf] = e["ci"]["workflows"]
     assert wf["triggers"] == ["push", "pull_request"]
@@ -134,4 +134,4 @@ def test_cli(tmp_path):
     assert proc.returncode == 0
     out = json.loads(proc.stdout)
     assert set(out) == {"root", "evidence", "proposal"}
-    assert out["proposal"] is None
+    assert out["proposal"]["profile"]["stacks"] is not None
