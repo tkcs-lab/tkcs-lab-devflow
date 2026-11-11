@@ -6,7 +6,7 @@ Usage: profile_survey.py [ROOT]
 Prints `survey(ROOT)` (default `.`) as JSON, 2-space indented: `root`, `evidence` and `proposal`.
 `evidence` holds the stacks, other stacks, CI workflows and dispatchable workflows, the commands that
 verify a change (CI run steps, Makefile targets, package scripts), git facts, and the results of
-survey_docs.scan and survey_signals.scan. `proposal` is null here.
+survey_docs.scan and survey_signals.scan. `proposal` is survey_proposal.build(evidence).
 
 Read-only: runs `git` with argument lists and reads files; writes nothing.
 Exit 0 ok; 1 ROOT is not a directory (`profile_survey: <message>`).
@@ -24,6 +24,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import survey_docs  # noqa: E402
+import survey_proposal  # noqa: E402
 import survey_signals  # noqa: E402
 
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "vendor", "build", "dist", "Pods", ".build",
@@ -245,19 +246,16 @@ def survey(root: Path) -> dict:
     root = Path(root)
     stacks, other = _stacks(root)
     ci = _ci(root)
-    return {
-        "root": str(root),
-        "evidence": {
-            "stacks": stacks,
-            "other_stacks": other,
-            "ci": ci,
-            "verify_evidence": _verify_evidence(root, ci),
-            "git": _git_facts(root),
-            "docs": survey_docs.scan(root),
-            "signals": survey_signals.scan(root),
-        },
-        "proposal": None,
+    evidence = {
+        "stacks": stacks,
+        "other_stacks": other,
+        "ci": ci,
+        "verify_evidence": _verify_evidence(root, ci),
+        "git": _git_facts(root),
+        "docs": survey_docs.scan(root),
+        "signals": survey_signals.scan(root),
     }
+    return {"root": str(root), "evidence": evidence, "proposal": survey_proposal.build(evidence)}
 
 
 def main(argv: list[str] | None = None) -> int:
