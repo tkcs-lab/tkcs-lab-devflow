@@ -41,6 +41,8 @@ operating system) is satisfied by dispatching the workflow in `ci.dispatchable` 
 **Manual review items.** Read the diff for each `verify.dod_manual` row and report it as `ok`,
 `needs attention` (with the file and line) or `n/a`, never PASS, since nothing was run.
 
+**Docs index (only when the profile has `docs.index`).** Run `python3 <devflow root>/scripts/docs_index.py check --profile .claude/toolkit.yaml` and report one row `docs index`: `ok` for exit 0 with no warning, `needs attention` with the quoted messages otherwise, and `n/a (docs_index.py not in this devflow version)` when the script is missing. This row is never FAIL and never part of the verdict.
+
 **Required agents.** Run `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at dod --changed <file with the output of git diff --name-only origin/<main>...HEAD>`. Dispatch each agent in `required`, in review mode, as the `agent-dispatch` skill says. Each gives one row `agent: <name>`: `PASS` when it reported no findings; `FAIL` when the item is blocking and its report has blocking findings, or when it did not run (`required agent did not run`); `needs attention (<blocking plus non-blocking>)` in every other case with findings. After the table, one subsection per agent with its full report verbatim, ending in its AGENT-REPORT line.
 
 **Report** one row per check: the command (or the manual item), PASS/FAIL/`n/a` (`ok`/`needs

@@ -43,6 +43,7 @@ deploys pages. Say which signal you found.
    where it gets in the way of understanding, and give the rewrite, not just the complaint.
 7. **Staleness**: references to removed features, old names, old screenshots, TODOs in published
    docs, dates and "coming soon" that have passed.
+8. **Docs index (only when the profile has `docs.index`)**: run `python3 <devflow root>/scripts/docs_index.py check --profile .claude/toolkit.yaml`. Every error is a blocking finding (a doc the change adds, moves or deletes without its row, a broken link, a `CLAUDE.md` over 60 lines); a warning is non-blocking. In `edit` mode repair the rows (see the `docs-keeper` skill, Maintain), never the body of a doc.
 
 ## Website checks, when there is one
 
