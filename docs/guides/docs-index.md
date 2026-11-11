@@ -58,7 +58,7 @@ Reference: [profile-reference.md](../reference/profile-reference.md).
 
 ## Moving a doc
 
-`bin/tld ops docs-index move SRC DST` is a dry run: it lists every reference it
+`launcher/tld ops docs-index move SRC DST` is a dry run: it lists every reference it
 would rewrite and every mention it cannot resolve. Add `--apply` to do the git move and the rewrites.
 It rewrites markdown links, root path mentions and quoted path expressions in `.py` files, and skips
 fixtures, the profile and plan files. Fix each `unresolved:` line by hand.

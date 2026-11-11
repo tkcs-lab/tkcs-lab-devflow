@@ -9,7 +9,7 @@ from conftest import CLAUDE, BIN
 def test_mcp_json_declares_the_bridge():
     server = json.loads((CLAUDE / "mcp.json").read_text())["mcpServers"]["tld-board"]
     assert server["command"] == "python3"
-    assert server["args"] == ["${CLAUDE_PLUGIN_ROOT}/bin/tld", "board", "mcp-stdio"]
+    assert server["args"] == ["${CLAUDE_PLUGIN_ROOT}/launcher/tld", "board", "mcp-stdio"]
     assert BIN.is_file()
     assert set(server["env"]) == {"TLD_BOARD_URL", "TLD_BOARD_TOKEN"}
 

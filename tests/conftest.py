@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 TLD = SRC / "tld"                      # the core package
 CLAUDE = ROOT / "adapters" / "claude"  # the Claude Code adapter (commands, skills, agents, hooks, mcp.json)
-BIN = ROOT / "bin" / "tld"             # the launcher; runs without installing the package
+BIN = ROOT / "launcher" / "tld"             # the launcher; runs without installing the package
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 for _p in (str(SRC), str(ROOT)):  # the tld package, and the evals/ package (the eval harness)

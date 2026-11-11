@@ -26,7 +26,7 @@ Inputs: [the review of claude-toolkit at 4c14071](../reviews/claude-toolkit-revi
 
 ```
 pyproject.toml                    # package "tld", console script "tld"; stdlib + PyYAML
-bin/tld                           # launcher that works without installing (puts src/ on sys.path)
+launcher/tld                           # launcher that works without installing (puts src/ on sys.path)
 src/tld/
   cli.py                          # tld <group> <command>
   profile/                        # load, validate, patch, survey, version check; default .tld/toolkit.yaml
@@ -58,7 +58,7 @@ AGENTS.md                         # neutral entry for agents; CLAUDE.md is a two
 ```
 
 The plugin's source is the repository root, so `${CLAUDE_PLUGIN_ROOT}` holds `src/`, `playbooks/` and the rest. Commands
-call `"${CLAUDE_PLUGIN_ROOT}/bin/tld"`. They no longer search the plugin cache for a script root.
+call `"${CLAUDE_PLUGIN_ROOT}/launcher/tld"`. They no longer search the plugin cache for a script root.
 
 ## 3. Guardrails (D1)
 

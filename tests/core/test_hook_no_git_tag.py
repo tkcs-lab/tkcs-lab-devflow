@@ -52,7 +52,7 @@ ALLOWED = [
     # mentions
     "echo 'git tag v2'", "git commit -m 'docs: never git tag from a session'", "grep -rn 'git tag' docs",
     "git commit -m \"$(cat <<'EOF'\nnote: do not git tag or git push --tags\nEOF\n)\"", "ls",
-    "bin/tld ops upstream-sync plan --upstream-url https://github.com/o/r.git --version-file v.txt --pattern '^v'",
+    "launcher/tld ops upstream-sync plan --upstream-url https://github.com/o/r.git --version-file v.txt --pattern '^v'",
 ]
 
 

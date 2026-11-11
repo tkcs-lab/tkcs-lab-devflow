@@ -8,7 +8,7 @@ were rejected. The decisions D1 to D14 it cites are recorded in
 ## 1. Two halves
 
 - **The core** knows nothing about an agent runtime. It is the Python package `tld` with one command line
-  (`src/tld/`, `bin/tld`, [cli.md](../reference/cli.md)) and plain-text content: playbooks, roles, checklists,
+  (`src/tld/`, `launcher/tld`, [cli.md](../reference/cli.md)) and plain-text content: playbooks, roles, checklists,
   stacks and policies. It is neutral about Claude, not about GitHub (D4): issues, pull requests, workflows,
   rulesets and environments are GitHub's.
 - **The adapter** maps the core to one runtime. The only one is Claude Code, `adapters/claude/`: commands,
@@ -16,7 +16,7 @@ were rejected. The decisions D1 to D14 it cites are recorded in
   not change the core.
 
 The plugin is sourced from the repository root (`.claude-plugin/marketplace.json`, `source: "./"`), so
-`${CLAUDE_PLUGIN_ROOT}` holds the whole core and a command calls `"${CLAUDE_PLUGIN_ROOT}/bin/tld"` directly.
+`${CLAUDE_PLUGIN_ROOT}` holds the whole core and a command calls `"${CLAUDE_PLUGIN_ROOT}/launcher/tld"` directly.
 `tests/core/test_contracts.py` keeps the two halves honest: every `tld` call in a playbook or command parses with the
 real CLI, every runtime action a playbook uses is defined, every role, checklist, stack and policy it names exists,
 and no runtime tool or model name appears in the core content.
