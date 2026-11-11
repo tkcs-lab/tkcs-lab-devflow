@@ -200,6 +200,15 @@
         "policy": {"type": "string", "minLength": 1, "description": "Path of the repo-admin policy file (schema/admin-policy.schema.json), relative to the repo root."}
       }
     },
+    "git_ops": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo"],
+      "properties": {
+        "repo": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "description": "owner/name of the central repository that holds the devflow-git-ops workflow."},
+        "workflow": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+\\.ya?ml$", "description": "File name of the workflow in that repository. Default devflow-git-ops.yml (applied by the git-ops skill, not by the schema)."}
+      }
+    },
     "hooks": {
       "type": "object",
       "additionalProperties": false,

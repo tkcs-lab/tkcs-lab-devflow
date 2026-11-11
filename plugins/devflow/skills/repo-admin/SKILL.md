@@ -68,6 +68,7 @@ A release is the maintainer's decision, so this skill installs the workflow and 
 on the main branch. The default is a dry run that shows the tag and the notes; unticking `dry_run` makes the tag
 (`<tag_prefix><version>`, an annotated tag on the head of the main branch) and the GitHub release. Never dispatch it
 from a session and never push a tag (see `pr-steward`). The workflow's branch check is not a control; tell the user that a tag ruleset is what restricts who can release.
+Tagging a named commit from a session is a different route, the `git-ops` skill; releases stay with this workflow and the maintainer.
 
 ## Never
 

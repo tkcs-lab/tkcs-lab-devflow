@@ -53,6 +53,8 @@ Rules:
 | `upstream.version_file` | **yes** (in `upstream`) | File in the fork that records the synced tag |
 | `land.max_prs` | no | Integer 1..50: most pull requests one `/land` run orders. `/land` works without the `land` section |
 | `admin.policy` | **yes** (in `admin`) | Path, relative to the repo root, of the policy file the `repo-admin` skill audits and applies (see [admin.md](admin.md)). The file must exist. The skill needs the `admin` section and stops with a missing-key message when it is absent |
+| `git_ops.repo` | **yes** (in `git_ops`) | Owner/name of the central repository that holds the `devflow-git-ops` workflow. The `git-ops` skill needs the section and stops with a missing-key message when it is absent; see [git-ops.md](git-ops.md) |
+| `git_ops.workflow` | no | File name of the workflow in that repository. Default `devflow-git-ops.yml` |
 | `hooks.disable` | no (default none) | Names of guardrail hooks to switch off in this repository: any of `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths`, `dod-gate`. The escape hatch; see [hooks.md](hooks.md) |
 | `hooks.protect_paths` | no | Globs of repo-relative paths `protect-paths` refuses to edit. Default `.claude/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`, `go.sum`, `.github/workflows/**`. A list here replaces the default. A pattern without a slash matches the file name at any depth; `**` crosses directories |
 | `hooks.protect_paths_allow` | no | Globs exempt from `protect_paths`, on top of the built-in exceptions (`.env.example`, `.env.sample`, `.env.template`, `.env.dist`, the workflow files `/land` and `repo-admin` install) |
