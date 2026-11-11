@@ -61,6 +61,13 @@ GENERIC = [
     "API_KEY = '{v}'", "api_key: {v}", "export GITHUB_TOKEN={v}", "client_secret: \"{v}\"", "apiKey: '{v}',",
     "\"secret_token\": \"{v}\"", "SECRET_KEY={v}", "deploy-token = {v}", "my.service.key={v}", "AuthToken := \"{v}\"",
 ]
+# (template, value) rows for D9: passwords, URL credentials, bearer tokens, `#` in a quoted value.
+GENERIC_D9 = [
+    ("DB_PASSWORD=\"{v}\"", rand(16)),
+    ("postgres://user:{v}@db.example.org/app", "s3cretpw"),
+    ("Authorization: Bearer {v}", "eyJ" + rand(12) + ".eyJ" + rand(12) + "." + rand(16)),
+    ("SECRET_KEY=\"{v}\"", rand(11) + "#" + rand(12)),
+]
 
 
 @pytest.mark.parametrize("template", GENERIC)
@@ -75,6 +82,34 @@ def test_generic_assignments_are_denied(feature_repo, template):
         assert "high-entropy-assignment" in r.stderr
         assert value not in r.stderr and value[:10] not in r.stderr
     assert "edit 2" in r.stderr
+
+
+@pytest.mark.parametrize("template,value", GENERIC_D9)
+def test_password_url_bearer_and_hash_values_are_denied(feature_repo, template, value):
+    line = template.format(v=value)
+    r = run(HOOK, event("Write", feature_repo, file_path=str(feature_repo / "a.txt"), content=f"a\n{line}\n"))
+    assert r.code == 2, line
+    assert "line 2" in r.stderr and value not in r.stderr
+
+
+def test_long_line_is_scanned_quickly(feature_repo):
+    import time
+    key = f' API_KEY = "{rand(32)}"'
+    t = time.monotonic()
+    r = run(HOOK, event("Write", feature_repo, file_path=str(feature_repo / "a.txt"), content="a" * 200_000 + key))
+    assert r.code == 2 and time.monotonic() - t < 1
+    t = time.monotonic()
+    r = run(HOOK, event("Write", feature_repo, file_path=str(feature_repo / "a.txt"), content="a" * 20_000))
+    assert r.code == 0 and time.monotonic() - t < 1
+
+
+def test_allow_mark_must_end_the_line(feature_repo):
+    secret = "ghp_" + rand(36)
+    mid = f"t = '{secret}'  # secret-scan:allow and then more"
+    r = run(HOOK, event("Write", feature_repo, file_path="a", content=mid))
+    assert r.code == 2
+    end = f"t = '{secret}'  # secret-scan:allow  "
+    assert run(HOOK, event("Write", feature_repo, file_path="a", content=end)).code == 0
 
 
 def test_notebook_cells_are_scanned(feature_repo):
@@ -93,6 +128,7 @@ ALLOWED = [
     "key = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1'", "API_KEY = 'example-" + rand(30) + "'",
     "# a long line of ordinary prose " + "words " * 40, "",
     "token = '" + "ghp_" + rand(36) + "'  # secret-scan:allow",
+    'url = "https://user:${PASSWORD}@host/x"', 'password = "changeme-placeholder-value"', "Authorization: Bearer ${TOKEN}",
 ]
 
 

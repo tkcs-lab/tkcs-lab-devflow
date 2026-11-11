@@ -35,11 +35,19 @@ SPECIFIC = [
     ("pypi-token", "a PyPI token", re.compile(r"\bpypi-AgEIcHlwaS5vcmc[A-Za-z0-9_\-]{50,}")),
     ("sendgrid-key", "a SendGrid key", re.compile(r"\bSG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}\b")),
     ("azure-storage-key", "an Azure storage account key", re.compile(r"AccountKey=[A-Za-z0-9+/]{60,}={0,2}")),
+    ("url-credentials", "credentials in a URL",
+     re.compile(r"\b[a-z][a-z0-9+.\-]*://[^\s/:@$<>{}%]+:[^\s/@$<>{}%]{3,}@[^\s/]+")),
+    ("bearer-token", "a bearer token", re.compile(r"\bBearer\s+[A-Za-z0-9._\-]{20,}")),
+    ("jwt", "a JSON web token", re.compile(r"\beyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}")),
 ]
-ASSIGNMENT = re.compile(r"""([A-Za-z_][A-Za-z0-9_.\-]*)["']?\s*(?::=|[:=])\s*["']?([A-Za-z0-9+/=_\-.~]{20,})""")
+ASSIGNMENT = re.compile(
+    r"""(?<![A-Za-z0-9_.\-])([A-Za-z_][A-Za-z0-9_.\-]{0,63})["']?\s*(?::=|[:=])\s*"""
+    r"""(?:(["'])([^"'\s]{12,})\2|([A-Za-z0-9+/=_\-.~]{12,}))""")
 PLACEHOLDERS = ("example", "placeholder", "changeme", "change_me", "your", "xxxx", "dummy", "sample",
                 "redacted", "replace", "insert", "todo", "fake", "notasecret")
-SUFFIXES = ("key", "token", "secret")
+SUFFIXES = ("key", "token", "secret", "password", "passwd", "pwd", "credential", "credentials", "auth")
+PASSWORD_SUFFIXES = ("password", "passwd", "pwd")
+MAX_LINE_FOR_ASSIGNMENT = 1_000_000
 MIN_ENTROPY = 3.5
 
 
@@ -61,6 +69,12 @@ def secret_like_name(name: str) -> bool:
     return False
 
 
+def password_literal(value: str) -> bool:
+    low = value.lower()
+    return (len(value) >= 12 and any(c.isdigit() for c in value) and any(c.isalpha() for c in value)
+            and not any(p in low for p in PLACEHOLDERS) and entropy(value) >= 3.0)
+
+
 def high_entropy_literal(value: str) -> bool:
     low = value.lower()
     return (len(value) >= 20 and any(c.isdigit() for c in value) and any(c.isalpha() for c in value)
@@ -71,15 +85,21 @@ def scan_text(text: str) -> list[tuple[int, str, str]]:
     """(line number, pattern name, description) for every credential-looking line."""
     hits: list[tuple[int, str, str]] = []
     for n, line in enumerate(text.splitlines(), 1):
-        if ALLOW_MARK in line:
+        if line.rstrip().endswith(ALLOW_MARK):
             continue
         for name, desc, rx in SPECIFIC:
-            if rx.search(line):
+            m = rx.search(line)
+            if m and not (name == "bearer-token" and any(p in m.group(0).lower() for p in PLACEHOLDERS)):
                 hits.append((n, name, desc))
                 break
         else:
+            if len(line) > MAX_LINE_FOR_ASSIGNMENT:
+                continue
             for m in ASSIGNMENT.finditer(line):
-                if secret_like_name(m.group(1)) and high_entropy_literal(m.group(2)):
+                value = m.group(3) or m.group(4)
+                is_password = m.group(1).lower().endswith(PASSWORD_SUFFIXES)
+                if secret_like_name(m.group(1)) and (password_literal(value) if is_password
+                                                     else high_entropy_literal(value)):
                     hits.append((n, "high-entropy-assignment",
                                  f"a high-entropy value assigned to `{m.group(1)}`"))
                     break
