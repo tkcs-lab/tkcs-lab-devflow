@@ -1,7 +1,7 @@
 # .claude/toolkit.yaml — the project profile read by the devflow commands (/review, /make-plan, /implement, /dod).
 # Every command checks this file first and stops, naming the key, if a required key is missing.
 # An optional key you leave out means "this project does not use that".
-# Reference: docs/profile-reference.md in https://github.com/andras-tkcs/claude-toolkit
+# Reference: docs/profile-reference.md in https://github.com/tkcs-lab/claude-toolkit
 
 project:
   name: My Project       # optional; used in prose. Default: the repository name
@@ -16,6 +16,10 @@ docs:
   # changelog:                                    # optional. Leave out if the project keeps no changelog
   #   file: CHANGELOG.md
   #   section: "## [Unreleased]"
+  # website:                                     # optional. Leave out if the project has no website
+  #   dir: site                                   # directory relative to the repo root, "." for the root
+  #   build: "npm run build"                      # command run from dir
+  #   links: "npm run check-links"                # optional, command run from dir
 
 git:
   main_branch: main            # REQUIRED
@@ -90,6 +94,20 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 
 # land:                  # optional: /land works without it
 #   max_prs: 10            # 1..50
+
+# agents:                # optional. Which agents are mandatory and how they run (docs/profile-reference.md).
+#                        # Without this section every agent is available and none is mandatory.
+#   posture:
+#     security: critical  # critical | standard | low; default standard
+#   disable: [dependency-auditor]     # agents that are never dispatched
+#   required:            # {agent, at: [make_plan, implement_phase, implement_final, review, dod], blocking?, when?}
+#     - {agent: security-reviewer, at: [implement_phase, implement_final], blocking: true}
+#     - {agent: ux-reviewer, at: [implement_final], when: ["app/views/**"], blocking: false}
+#     - {agent: test-architect, at: [make_plan]}
+#     - {agent: tech-writer, at: [dod, review]}
+#     - {agent: website-maintainer, at: [dod], when: ["site/**", "docs/**"]}   # needs docs.website
+#   extra_context:       # lines added to every agent prompt
+#     - "Every outbound request must pass the approval gate."
 
 # hooks:                 # optional: settings of the guardrail hooks the devflow plugin ships (docs/hooks.md).
 #                        # The values below are the defaults; with no `hooks` section all hooks but dod-gate are on.

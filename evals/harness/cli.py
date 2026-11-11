@@ -4,12 +4,14 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
+import os
 import sys
 from pathlib import Path
 
 from . import graders as graders_mod
 from .agents import ClaudeCodeAgent, StubAgent, CHECKED_AGAINST
-from .common import BASELINES_DIR, RESULTS_DIR, TRANSCRIPTS_DIR
+from .common import BASELINES_DIR, PLUGIN, RESULTS_DIR, TRANSCRIPTS_DIR
 from .compare import compare
 from .results import aggregate, append_results, format_table, read_results, summary
 from .runner import Budget, run_tasks, unmet_requirements
@@ -40,6 +42,26 @@ def cmd_validate(args) -> int:
     return 0
 
 
+def command_frontmatter_model(task) -> str | None:
+    """The `model:` key in the front matter of the plugin command the task runs, or None."""
+    words = (task.command or "").split(maxsplit=1)
+    if not words:
+        return None
+    cmd = words[0].rsplit(":", 1)[-1].lstrip("/")
+    path = PLUGIN / "commands" / f"{cmd}.md"
+    if not cmd or not path.is_file():
+        return None
+    lines = path.read_text().splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if line.startswith("model:"):
+            return line.split(":", 1)[1].strip().strip("\"'") or None
+    return None
+
+
 def print_plan(tasks, repeats, run_ceiling, model) -> None:
     total = 0.0
     print(f"Dry run: no model is called. Headless flags checked against Claude Code {CHECKED_AGAINST}.")
@@ -48,12 +70,17 @@ def print_plan(tasks, repeats, run_ceiling, model) -> None:
         unmet = unmet_requirements(t)
         worst = 0.0 if unmet else n * t.cost_ceiling_usd
         total += worst
-        print(f"  {t.id:<24} {n} run(s)  model={model or t.model or 'default'}  per-run ceiling ${t.cost_ceiling_usd:g}  "
+        pinned = command_frontmatter_model(t)
+        shown = f"{pinned} (command frontmatter)" if pinned else (model or t.model or "default")
+        print(f"  {t.id:<24} {n} run(s)  model={shown}  per-run ceiling ${t.cost_ceiling_usd:g}  "
               f"worst case ${worst:g}" + (f"  SKIPPED (needs {', '.join(unmet)})" if unmet else ""))
     print(f"Worst case if every run hit its ceiling: ${total:g}. Run ceiling (hard stop): ${run_ceiling:g}.")
 
 
 def cmd_run(args) -> int:
+    if not (math.isfinite(args.run_ceiling) and args.run_ceiling > 0):
+        print("evals: run ceiling must be a positive finite number", file=sys.stderr)
+        return 2
     try:
         tasks = _tasks(args)
     except ValueError as exc:
@@ -71,7 +98,11 @@ def cmd_run(args) -> int:
             return 1
         agent = StubAgent.from_dir(Path(args.stub_dir))
     else:
-        agent = ClaudeCodeAgent()
+        if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")):
+            print("evals: set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN; the agent runs with an empty HOME "
+                  "and cannot use a stored login.", file=sys.stderr)
+            return 2
+        agent = ClaudeCodeAgent(keep_proxy=args.keep_proxy)
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = Path(args.out) if args.out else RESULTS_DIR / f"{stamp}.jsonl"
     budget = Budget(args.run_ceiling)
@@ -120,33 +151,35 @@ def cmd_compare(args) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="evals/run.py", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name, fn in (("list", cmd_list), ("validate", cmd_validate)):
-        p = sub.add_parser(name)
-        p.add_argument("--task", action="append")
+    for name, fn, text in (("list", cmd_list, "list the tasks, their repeats and ceilings"),
+                           ("validate", cmd_validate, "check every task.yaml against the schema")):
+        p = sub.add_parser(name, help=text)
+        p.add_argument("--task", action="append", help="task id (repeatable); default all")
         p.set_defaults(fn=fn)
     p = sub.add_parser("run", help="run tasks (calls the model unless --dry-run or --agent stub)")
     p.add_argument("--task", action="append", help="task id (repeatable); default all")
     p.add_argument("--repeats", type=int, help="override each task's repeats")
-    p.add_argument("--model")
+    p.add_argument("--model", help="passed as --model; ignored when the command's frontmatter sets model:")
     p.add_argument("--plugin-ref", help="git ref of the plugin to test, or 'worktree' (default: the task's, HEAD)")
-    p.add_argument("--run-ceiling", type=float, default=DEFAULT_RUN_CEILING, help="total USD ceiling for this invocation")
-    p.add_argument("--dry-run", action="store_true")
-    p.add_argument("--agent", choices=["claude", "stub"], default="claude")
-    p.add_argument("--stub-dir")
-    p.add_argument("--out")
+    p.add_argument("--run-ceiling", type=float, default=DEFAULT_RUN_CEILING, help="total USD ceiling for this invocation; positive and finite (default 3)")
+    p.add_argument("--dry-run", action="store_true", help="print what would run and the worst-case cost; call no model")
+    p.add_argument("--agent", choices=["claude", "stub"], default="claude", help="claude (default, calls the model) or stub (canned replies, needs --stub-dir)")
+    p.add_argument("--stub-dir", help="directory of canned agent outputs for --agent stub")
+    p.add_argument("--out", help="results file (default evals/results/<timestamp>.jsonl)")
+    p.add_argument("--keep-proxy", action="store_true", help="pass the proxy and CA variables through to the agent")
     p.add_argument("--keep", action="store_true", help="keep the temp directory of each run")
     p.set_defaults(fn=cmd_run)
-    p = sub.add_parser("aggregate")
-    p.add_argument("results")
+    p = sub.add_parser("aggregate", help="print the pass rate per task of a results file")
+    p.add_argument("results", help="a results .jsonl file")
     p.set_defaults(fn=cmd_aggregate)
     p = sub.add_parser("baseline", help="write a small summary of a results file as a baseline")
-    p.add_argument("results")
-    p.add_argument("--name", default="default")
-    p.add_argument("--out")
+    p.add_argument("results", help="a results .jsonl file")
+    p.add_argument("--name", default="default", help="baseline name (default: default)")
+    p.add_argument("--out", help="output file (default evals/baselines/<name>.json)")
     p.set_defaults(fn=cmd_baseline)
-    p = sub.add_parser("compare")
-    p.add_argument("results")
-    p.add_argument("--baseline", required=True)
+    p = sub.add_parser("compare", help="compare a results file with a baseline; exit 1 on a regression")
+    p.add_argument("results", help="a results .jsonl file")
+    p.add_argument("--baseline", required=True, help="baseline JSON written by the baseline command")
     p.add_argument("--threshold", type=float, default=1.0, help="flag a drop of more than this many repeats (default 1)")
     p.set_defaults(fn=cmd_compare)
     args = ap.parse_args(argv)

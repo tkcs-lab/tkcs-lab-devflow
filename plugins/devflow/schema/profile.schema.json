@@ -49,6 +49,17 @@
             "file": {"type": "string", "minLength": 1},
             "section": {"type": "string", "minLength": 1, "description": "Heading user-visible changes go under, for example '## [Unreleased]'."}
           }
+        },
+        "website": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dir", "build"],
+          "description": "The project's website. Present means the website-maintainer agent can run.",
+          "properties": {
+            "dir": {"type": "string", "minLength": 1, "description": "Directory relative to the repo root; . for the root."},
+            "build": {"type": "string", "minLength": 1, "description": "Command run from dir."},
+            "links": {"type": "string", "minLength": 1, "description": "Link-check command run from dir."}
+          }
         }
       }
     },
@@ -233,6 +244,40 @@
             "max_attempts": {"type": "integer", "minimum": 1, "maximum": 10, "x-hook-default": 3, "description": "Failed attempts after which the gate lets the session stop and says why."}
           }
         }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Which agents are mandatory and how they run. Defaults are applied by scripts/agents.py, not by the schema.",
+      "properties": {
+        "posture": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "security": {"enum": ["critical", "standard", "low"], "description": "Missing means standard."}
+          }
+        },
+        "disable": {
+          "type": "array",
+          "items": {"enum": ["architect", "code-reviewer", "security-reviewer", "test-architect", "ux-reviewer", "dependency-auditor", "tech-writer", "website-maintainer", "debugger", "refactorer"]},
+          "description": "Agents that are never dispatched. Missing means none."
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["agent", "at"],
+            "properties": {
+              "agent": {"enum": ["architect", "code-reviewer", "security-reviewer", "test-architect", "ux-reviewer", "dependency-auditor", "tech-writer", "website-maintainer", "debugger", "refactorer"]},
+              "at": {"type": "array", "minItems": 1, "items": {"enum": ["make_plan", "implement_phase", "implement_final", "review", "dod"]}},
+              "blocking": {"type": "boolean", "description": "Missing means false."},
+              "when": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}, "description": "Globs matched against the changed files."}
+            }
+          }
+        },
+        "extra_context": {"$ref": "#/$defs/stringList", "description": "Lines added to every agent prompt."}
       }
     },
     "project_steward": {"type": "string", "minLength": 1, "description": "Path to a project skill with policy that fits no other key."}

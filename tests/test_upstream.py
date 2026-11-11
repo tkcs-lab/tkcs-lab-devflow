@@ -12,7 +12,9 @@ from conftest import DEVFLOW, ROOT
 SYNC = DEVFLOW / "scripts" / "upstream_sync.py"
 COMMAND = DEVFLOW / "commands" / "upstream.md"
 SEMVER = r"^v[0-9]+\.[0-9]+\.[0-9]+$"
-ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com",
+# Built at import time, before conftest's session fixture runs, so it isolates git config itself.
+ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+           GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com",
            GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.com")
 
 

@@ -6,10 +6,13 @@ import re
 
 import _common
 from _common import Ctx
-from _gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs
-from _shell import ParseError
 
 NAME = "no-force-push"
+try:
+    from _gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs
+    from _shell import ParseError
+except Exception as exc:  # noqa: BLE001 - a destructive hook that cannot load denies
+    _common.exit_import_error(NAME, exc)
 INSTEAD = ("Push normally (`git push -u origin <branch>`). If the push is rejected because the remote branch "
            "moved, `git fetch`, merge `origin/<branch>` into yours (a merge commit, never a rebase) and push "
            "again. Branches are deleted by the owner, not by a session.")
@@ -22,6 +25,9 @@ def deny(what: str) -> str:
 
 def check_push(it: Item) -> str | None:
     push = parse_push(it.git.args)
+    if push.dynamic_option:
+        return deny("an argument that is only known at run time sits where a push option could be, so it cannot "
+                    "be checked for --force")
     if push.force:
         return deny("a force push rewrites remote history (--force, -f, --force-with-lease, --force-if-includes)")
     if push.delete:

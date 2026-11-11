@@ -23,12 +23,21 @@ def load_cases(path: Path = CASES) -> list[dict]:
     return yaml.safe_load(path.read_text())["cases"]
 
 
+def matcher_matches(matcher: str | None, tool: str) -> bool:
+    """Claude Code's matcher rule (2.1.322): a plain `A|B` list of names compares each name for equality;
+    anything else is an unanchored regex search; an empty matcher or `*` matches every tool."""
+    if not matcher or matcher == "*":
+        return True
+    if re.fullmatch(r"[a-zA-Z0-9_|]+", matcher):
+        return tool in matcher.split("|")
+    return re.search(matcher, tool) is not None
+
+
 def pretooluse_hooks(hooks_json: Path, tool_name: str) -> list[dict]:
     data = json.loads(hooks_json.read_text())
     out = []
     for group in data.get("hooks", {}).get("PreToolUse", []):
-        matcher = group.get("matcher", "")
-        if not matcher or re.fullmatch(matcher, tool_name):
+        if matcher_matches(group.get("matcher", ""), tool_name):
             out += [h for h in group.get("hooks", []) if h.get("type", "command") == "command"]
     return out
 

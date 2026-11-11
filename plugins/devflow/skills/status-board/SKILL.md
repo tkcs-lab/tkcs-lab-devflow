@@ -61,3 +61,11 @@ repository-relative paths, and counts. The board page shows only the count.
 All of it is best effort. Alerts do not depend on a board: they go out even when no board URL is set. `<project>` is the record's `project`; `<reason>` is `needs_you_reason`.
 
 Before the first rename, read the session's current title with `get_session` and keep it in memory; that is the title to rename back to.
+
+## /setup records
+
+`/setup` writes a maintenance record: `kind: maintenance`, `command: setup`, document id
+`<project>--setup`. Unlike `deps`, `upstream` and `land`, its `orchestrator_session` is the real
+session id (a non-empty string), not the literal `scheduled`. The phase items are the five steps
+`survey`, `confirm`, `write`, `verify` and `pr`, using the item states the other maintenance records
+use. Alerts follow the maintenance rule: push only, never a rename.

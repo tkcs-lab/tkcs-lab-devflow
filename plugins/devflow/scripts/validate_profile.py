@@ -18,6 +18,8 @@ import yaml
 
 SCHEMA = Path(__file__).resolve().parent.parent / "schema" / "profile.schema.json"
 DEFAULT_PROFILE = ".claude/toolkit.yaml"
+REVIEW_AGENTS = ("security-reviewer", "dependency-auditor", "test-architect", "tech-writer", "website-maintainer")
+DIFF_POINTS = ("implement_phase", "implement_final", "dod")
 HELP = "see docs/profile-reference.md in the claude-toolkit repo"
 
 _TYPES = {
@@ -151,6 +153,21 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
         )
     if "ipados" in stacks and "swift" not in stacks:
         warnings.append("stack 'ipados' builds on 'swift': list both (stacks: [swift, ipados])")
+    agents = profile.get("agents", {})
+    disabled = agents.get("disable", [])
+    for i, entry in enumerate(agents.get("required", [])):
+        name, points = entry["agent"], entry["at"]
+        where = f"agents.required[{i}]"
+        if name in disabled:
+            errors.append(f"'{where}': '{name}' is listed in 'agents.disable'")
+        if name == "website-maintainer" and "website" not in docs:
+            errors.append(f"'{where}': 'website-maintainer' needs 'docs.website'")
+        if "when" in entry and not any(pt in DIFF_POINTS for pt in points):
+            errors.append(f"'{where}.when': needs a diff, but 'at' has no point with a diff "
+                          "(only 'make_plan' and 'review' have none)")
+        if "review" in points and name not in REVIEW_AGENTS:
+            errors.append(f"'{where}': '{name}' cannot run at 'review' (it has no review dimension; "
+                          f"allowed: {', '.join(REVIEW_AGENTS)})")
     if root_dir is not None:
         paths = list(docs.get("must_read", []))
         if profile.get("project_steward"):

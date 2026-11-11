@@ -62,6 +62,7 @@ def test_triggers_and_settings(doc):
     assert doc["concurrency"] == {"group": "devflow-release", "cancel-in-progress": False}
     assert doc["permissions"] == {"contents": "write", "checks": "read", "statuses": "read"}
     job = doc["jobs"]["release"]
+    assert job["environment"] == "release", "every run waits for the reviewers of the release environment"
     assert job["if"] == "github.ref == 'refs/heads/__MAIN_BRANCH__'"
     assert [s["name"] for s in job["steps"]] == [
         "Decide the tag", "Check that the commit is green", "Show the release notes", "Publish the tag and the release"]
