@@ -58,7 +58,7 @@
     "schema": {"const": 1, "description": "Schema version."},
     "kind": {"enum": ["run", "maintenance"], "description": "'run' is an /implement orchestration; 'maintenance' is a scheduled command."},
     "command": {
-      "enum": [null, "deps", "upstream", "land", "setup"],
+      "enum": [null, "deps", "upstream", "land", "setup", "docs"],
       "description": "null when kind is 'run', else the scheduled command."
     },
     "project": {"type": "string", "pattern": "^[a-z0-9-]+$", "description": "Project slug; never contains a double hyphen."},
@@ -66,7 +66,7 @@
     "plan_slug": {"type": ["string", "null"], "description": "null for maintenance."},
     "plan_url": {"type": ["string", "null"], "description": "null for maintenance."},
     "feature_branch": {"type": ["string", "null"], "description": "null for maintenance."},
-    "orchestrator_session": {"type": "string", "minLength": 1, "description": "Session id; the literal 'scheduled' for the maintenance commands deps, upstream and land; the real session id for setup."},
+    "orchestrator_session": {"type": "string", "minLength": 1, "description": "Session id; the literal 'scheduled' for the maintenance commands deps, upstream, land and docs; the real session id for setup."},
     "status": {"enum": ["starting", "running", "waiting_user", "reviewing", "pr_open", "done", "failed"]},
     "needs_you": {"type": "boolean"},
     "needs_you_reason": {"type": "string", "maxLength": 140, "description": "One line starting with the verb the owner must do; empty when needs_you is false."},
