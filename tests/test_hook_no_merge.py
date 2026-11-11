@@ -292,3 +292,55 @@ def test_gh_routes_to_main_denied(feature_repo, command):
 ])
 def test_gh_routes_allowed(feature_repo, command):
     assert run(HOOK, bash(command, feature_repo)).code == 0, command
+
+
+# ---- fail closed: a failed lookup, a slow hook, an import crash (SEC-H14) ------------------------
+def test_failed_branch_lookup_denies(feature_repo, monkeypatch):
+    import _gitcfg
+
+    def broken(*args, **kwargs):
+        raise _gitcfg.GitLookupError("git timed out")
+    monkeypatch.setattr(_gitcfg, "_run_git", broken)
+    r = run(HOOK, bash("git push", feature_repo))
+    assert r.code == 2 and "GitLookupError" in r.stderr
+    monkeypatch.undo()
+    git(feature_repo, "checkout", "-q", "--detach")
+    assert run(HOOK, bash("git push origin feature", feature_repo)).code == 0
+
+
+def test_hook_budget_denies(monkeypatch):
+    import json
+    import time
+
+    import _common
+    monkeypatch.setattr(_common, "HOOK_BUDGET_SECONDS", 1)
+
+    def slow(ctx):
+        try:
+            time.sleep(3)
+        except OSError:  # must not swallow the alarm
+            pass
+        return None
+    payload = json.dumps({"cwd": "/", "tool_name": "Bash", "tool_input": {"command": "true"}})
+    start = time.monotonic()
+    r = _common.execute("no-merge", slow, True, payload)
+    assert r.code == 2 and "took longer than" in r.stderr and time.monotonic() - start < 2.5
+    r = _common.execute("secret-scan", slow, False, payload)
+    assert r.code == 0 and time.monotonic() - start >= 3
+
+
+@pytest.mark.parametrize("script", ["no_merge.py", "no_force_push.py", "no_git_tag.py"])
+def test_import_crash_exits_2(tmp_path, script):
+    import json
+    import shutil
+    import subprocess
+    import sys
+
+    from hooks_helpers import HOOKS
+    copy = tmp_path / "hooks"
+    shutil.copytree(HOOKS, copy, ignore=shutil.ignore_patterns("__pycache__"))
+    (copy / "_gitgh.py").write_text('raise RuntimeError("boom")\n')
+    event_json = json.dumps(bash("git status", tmp_path))
+    r = subprocess.run([sys.executable, str(copy / script)], input=event_json, capture_output=True, text=True,
+                       timeout=30)
+    assert r.returncode == 2 and "internal error while loading" in r.stderr

@@ -113,3 +113,27 @@ def test_dynamic_word_in_push_option_position_denied(feature_repo):
     assert "only known at run time" in r.stderr
     r = run(HOOK, bash("git push origin $(git branch --show-current)", feature_repo))
     assert (r.code, r.stderr) == (0, "")
+
+
+def test_slow_git_config_still_denies(tmp_path):
+    """SEC-H14: a config include that blocks (a FIFO) must not turn a lookup timeout into an allow."""
+    import os
+    import time
+
+    fifo = tmp_path / "blocker"
+    os.mkfifo(fifo)
+    try:
+        feature = make_repo(tmp_path / "feat", "feature/demo")
+        with open(feature / ".git" / "config", "a") as f:
+            f.write(f"[alias]\n\tpf = push -f\n[include]\n\tpath = {fifo}\n")
+        start = time.monotonic()
+        r = run_script(HOOK, bash("git pf origin feature", feature))
+        assert r.returncode == 2 and time.monotonic() - start < 12, r.stderr
+        on_main = make_repo(tmp_path / "main", "main")
+        with open(on_main / ".git" / "config", "a") as f:
+            f.write(f"[include]\n\tpath = {fifo}\n")
+        start = time.monotonic()
+        r = run_script("no-merge", bash("git push", on_main))
+        assert r.returncode == 2 and time.monotonic() - start < 12, r.stderr
+    finally:
+        fifo.unlink()

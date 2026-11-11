@@ -95,7 +95,7 @@ def expand_alias(git: Git, ctx_dir: str, known: set[str]) -> list[list[str]] | N
         if item.startswith(f"alias.{git.sub}="):
             value = item.split("=", 1)[1]
     if value is None:
-        value = _run_git(ctx_dir, git.repo_opts, "config", "--get", f"alias.{git.sub}")
+        value = _run_git(ctx_dir, git.repo_opts, "config", "--no-includes", "--get", f"alias.{git.sub}")
     if not value:
         return None
     if value.startswith("!"):
