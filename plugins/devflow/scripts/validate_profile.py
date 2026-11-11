@@ -168,8 +168,15 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
         if "review" in points and name not in REVIEW_AGENTS:
             errors.append(f"'{where}': '{name}' cannot run at 'review' (it has no review dimension; "
                           f"allowed: {', '.join(REVIEW_AGENTS)})")
+    if docs.get("index") and len(docs.get("must_read", [])) > 3:
+        warnings.append(
+            f"'docs.must_read' lists {len(docs['must_read'])} files while 'docs.index' is set: "
+            "keep only what every task needs, the index routes the rest"
+        )
     if root_dir is not None:
         paths = list(docs.get("must_read", []))
+        if docs.get("index"):
+            paths.append(docs["index"])
         if profile.get("project_steward"):
             paths.append(profile["project_steward"])
         if profile.get("admin", {}).get("policy"):

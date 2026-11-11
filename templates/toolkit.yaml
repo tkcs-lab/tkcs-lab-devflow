@@ -10,6 +10,7 @@ docs:
   must_read:             # REQUIRED (may be []). Planner, workers and the final reviewer read these first.
     - README.md
   plan_dir: docs/        # optional, default docs/. Plan documents are <plan_dir>/<slug>-plan.md
+  # index: docs/README.md   # optional. The entry-level docs index: sessions read it first, then only matching rows. /docs init builds it
   # adr_dir: docs/adr    # optional. Set it and the commands use ADRs; leave it out and they never mention them
   # adr_index: docs/adr/README.md
   # adr_bar: CONTRIBUTING.md#decisions-and-adrs   # where "this needs an ADR" is defined

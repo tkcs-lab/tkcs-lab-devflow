@@ -26,6 +26,7 @@ Rules:
 | `project.name` | no | Name used in prose; default is the repository name |
 | `docs.must_read` | **yes** (may be `[]`) | Files the planner reads first, every worker brief names, and the final reviewer reads |
 | `docs.plan_dir` | no (default `docs`) | Plan documents are `<plan_dir>/<slug>-plan.md`, with `<slug>-plan-manual-steps.html` beside it |
+| `docs.index` | no | The entry-level docs index: the one file sessions read first, then only the rows that match the task. `/docs init` builds it, `/docs` checks it. With it, `docs.must_read` should shrink to what every task needs |
 | `docs.adr_dir` | no | If set, the project uses ADRs and the commands plan, write and check them |
 | `docs.adr_index` | no (needs `adr_dir`) | File that must list every new ADR |
 | `docs.adr_bar` | no (needs `adr_dir`) | Where the criteria for needing an ADR are written (`path` or `path#anchor`) |

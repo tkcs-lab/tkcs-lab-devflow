@@ -13,7 +13,8 @@ rules follow from that:
 1. **Never guess a value.** If a key you need is missing, say which key and stop. Do not fall back
    to what a similar project does, and do not infer a command from the repository layout.
 2. **A missing optional key means "not used here".** No `docs.adr_dir` means no ADRs: leave out
-   every ADR step and never mention them. No `docs.changelog` means no changelog step. No
+   every ADR step and never mention them. No `docs.index` means no docs index: read `docs.must_read` as before and leave out every index step.
+   No `docs.changelog` means no changelog step. No
    `ci.dispatchable` means nothing can be dispatched.
 
 ## Loading the profile
@@ -55,6 +56,7 @@ rules follow from that:
 |---|---|
 | `docs.must_read` | Read first by the planner; named in every worker brief and in the final review |
 | `docs.plan_dir` | Plan document `<plan_dir>/<slug>-plan.md` and its manual-steps HTML |
+| `docs.index` | The entry-level docs index: the planner reads it first and then only matching rows; workers get Read first lists; /docs and docs_index.py use it |
 | `docs.adr_dir`, `adr_index`, `adr_bar` | ADR steps, only when `adr_dir` is set |
 | `docs.changelog.file`, `.section` | The changelog line a user-visible change adds |
 | `git.main_branch` | Base for plan branches, merges and the PR |
