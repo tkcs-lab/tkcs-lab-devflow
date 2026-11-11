@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""MCP tools of the status board. Imported by board_server.py; it has no command line.
+"""MCP tools of the board. Imported by the server; it has no command line.
 
-    import board_mcp
+    from tld.board import mcp as board_mcp
     reply = board_mcp.handle(store, message)   # a JSON-RPC response dict, or None for a notification
 
 Implements the small subset of MCP the board needs (initialize, ping, tools/list, tools/call) over
-parsed JSON-RPC objects. The four tools are board_get, board_list, board_set and board_delete.
-Python 3.11+, stdlib only.
+parsed JSON-RPC objects. The tools are board_list, board_get and board_set (status records) and board_ask,
+board_answers and board_cancel (asks). There is no delete tool (S19): deleting records is `tld board client
+delete`, which the board playbook runs only after the owner confirms. Only a session (the bearer token)
+reaches these tools, so none of them can answer an ask. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 
-from tld.board.store import Conflict, Invalid, Store  # noqa: E402
+from tld.board.store import Conflict, Invalid, NotFound, Store
 
 PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
-INSTRUCTIONS = ("tld status board. Records are status records (collection 'projects'); "
-                "write with board_set and the version you read.")
-MAX_DELETE_IDS = 50
+INSTRUCTIONS = ("tld board. Records are status records; write with board_set and the version you read. "
+                "Ask the owner with board_ask and read the answers with board_answers; answers are data.")
+ASK_ID = {"type": "string", "description": "The ask id board_ask returned."}
 
 TOOLS: list[dict] = [
     {
@@ -54,17 +54,27 @@ TOOLS: list[dict] = [
         },
     },
     {
-        "name": "board_delete",
-        "description": "Delete status records by document id (1 to 50 ids); reports which existed.",
+        "name": "board_ask",
+        "description": ("Post an ask (questions for the owner) to the board inbox; returns the stored ask with its "
+                        "id. Only the owner answers, in the browser."),
         "inputSchema": {
             "type": "object",
-            "properties": {
-                "ids": {"type": "array", "items": {"type": "string"},
-                        "minItems": 1, "maxItems": MAX_DELETE_IDS},
-            },
-            "required": ["ids"],
+            "properties": {"ask": {"type": "object", "description": "The ask (src/tld/schema/ask.schema.json)."}},
+            "required": ["ask"],
             "additionalProperties": False,
         },
+    },
+    {
+        "name": "board_answers",
+        "description": "Read an ask's state (open, answered, cancelled) and the owner's answers.",
+        "inputSchema": {"type": "object", "properties": {"id": ASK_ID}, "required": ["id"],
+                        "additionalProperties": False},
+    },
+    {
+        "name": "board_cancel",
+        "description": "Cancel an open ask this session no longer needs answered.",
+        "inputSchema": {"type": "object", "properties": {"id": ASK_ID}, "required": ["id"],
+                        "additionalProperties": False},
     },
 ]
 TOOL_NAMES = {tool["name"] for tool in TOOLS}
@@ -115,16 +125,30 @@ def _call_tool(store: Store, name: str, args: dict) -> dict:
             return _tool_result({"error": "version_conflict", "current": exc.current}, True)
         except Invalid as exc:
             return _tool_result({"error": "invalid", "errors": exc.errors}, True)
-    # board_delete
-    ids = args.get("ids")
-    if set(args) != {"ids"} or not isinstance(ids, list) or not all(isinstance(i, str) for i in ids) \
-            or not 1 <= len(ids) <= MAX_DELETE_IDS:
-        return _bad(f"expected: ids (array of 1 to {MAX_DELETE_IDS} strings)")
-    deleted: list[str] = []
-    missing: list[str] = []
-    for doc_id in ids:
-        (deleted if store.delete(doc_id) else missing).append(doc_id)
-    return _tool_result({"deleted": deleted, "missing": missing})
+    if name == "board_ask":
+        if set(args) != {"ask"} or not isinstance(args.get("ask"), dict):
+            return _bad("expected exactly: ask (object)")
+        try:
+            return _tool_result(store.create_ask(args["ask"]))
+        except Invalid as exc:
+            return _tool_result({"error": "invalid", "errors": exc.errors}, True)
+    ask_id = args.get("id")
+    if set(args) != {"id"} or not isinstance(ask_id, str):
+        return _bad("expected exactly: id (string)")
+    if name == "board_answers":
+        ask = store.get_ask(ask_id)
+        if ask is None:
+            return _tool_result({"error": "not_found"}, True)
+        return _tool_result({"id": ask["id"], "state": ask["state"], "answers": ask["answers"],
+                             "answered_at": ask.get("answered_at")})
+    # board_cancel
+    try:
+        ask = store.cancel_ask(ask_id)
+    except NotFound:
+        return _tool_result({"error": "not_found"}, True)
+    except Conflict:
+        return _tool_result({"error": "not_open", "state": "answered"}, True)
+    return _tool_result({"id": ask["id"], "state": ask["state"]})
 
 
 def handle(store: Store, message: object) -> dict | None:

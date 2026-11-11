@@ -46,6 +46,7 @@ Rules:
 | `git.merge_style` | no | `merge-commit` or `squash`; only quoted to workers and the steward |
 | `git.codeowners` | no (needs `git.bot_login`) | GitHub logins of the code owners (at least one). `/implement` requests their review on the pull request it opens and sets `needs_you` (`Review PR #<n>`); it never approves or merges |
 | `git.bot_login` | no | Login of the second GitHub user the agent acts as. `/implement` checks `identity()` at the start and stops when the login differs. Must not be listed in `git.codeowners` |
+| `git.owner_login` | no | GitHub login of the owner. When the board cannot be reached, `tld board ask --fallback-issue` mentions it in the issue comment that carries the questions (default: the repository owner). See [board-server.md](../guides/board-server.md) |
 | `verify.fast` | **yes** | Commands run after every merge by `/implement` and by the final reviewer. Seconds to a minute |
 | `verify.dod` | **yes** | The blocking definition-of-done gate `/dod` runs, in order |
 | `verify.dod_conditional` | no | `{when: [globs], do: text}`: checked against the diff by `/dod` |

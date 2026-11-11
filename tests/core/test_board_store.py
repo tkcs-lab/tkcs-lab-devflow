@@ -5,9 +5,10 @@ import threading
 
 import pytest
 
+from board_helpers import ask_doc
 from conftest import FIXTURES
 
-from tld.board.store import MAX_RECORD, Conflict, Invalid, Store  # noqa: E402
+from tld.board.store import MAX_RECORD, Conflict, Invalid, NotFound, Store
 
 
 def record(doc_id="f-running-ok"):
@@ -105,3 +106,71 @@ def test_store_two_threads_cannot_both_create(store):
     for t in threads:
         t.join()
     assert results.count("ok") == 1 and results.count("conflict") == 7
+
+
+# ---- schema migration and asks ---------------------------------------------------------------------
+
+def test_an_old_database_is_migrated_and_keeps_its_records(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.sqlite3"
+    db = sqlite3.connect(path)  # the first board: one table, user_version 0
+    db.execute("CREATE TABLE records(id TEXT PRIMARY KEY, version INTEGER NOT NULL, data TEXT NOT NULL)")
+    db.execute("INSERT INTO records VALUES (?, ?, ?)", ("f-running-ok", 7, json.dumps(record())))
+    db.commit()
+    db.close()
+    store = Store(str(path))
+    assert store.schema_version() == 2
+    assert store.get("f-running-ok") == {"id": "f-running-ok", "version": 7, "data": record()}
+    ask = store.create_ask(ask_doc())
+    reopened = Store(str(path))  # idempotent on a migrated database
+    assert reopened.get_ask(ask["id"]) == ask and reopened.count() == 1
+
+
+def test_a_newer_database_is_refused(tmp_path):
+    import sqlite3
+    path = tmp_path / "new.sqlite3"
+    db = sqlite3.connect(path)
+    db.execute("PRAGMA user_version = 99")
+    db.commit()
+    db.close()
+    with pytest.raises(RuntimeError, match="schema 99"):
+        Store(str(path))
+
+
+def test_asks_are_listed_open_first(tmp_path):
+    times = iter(f"2026-11-09T12:00:0{n}Z" for n in range(10))
+    store = Store(str(tmp_path / "a.sqlite3"), clock=lambda: next(times))
+    a = store.create_ask(ask_doc())
+    b = store.create_ask(ask_doc())
+    c = store.create_ask(ask_doc())
+    store.answer_ask(a["id"], {"SEC-1": "plan", "go": True})
+    assert [x["id"] for x in store.list_asks()] == [b["id"], c["id"], a["id"]]
+    assert [x["id"] for x in store.list_asks("answered")] == [a["id"]]
+    assert store.get_ask(a["id"])["answered_at"] == "2026-11-09T12:00:03Z"
+
+
+def test_answers_are_validated_and_normalised(tmp_path):
+    store = Store(str(tmp_path / "a.sqlite3"))
+    ask = store.create_ask(ask_doc())
+    for bad in ({"go": True}, {"SEC-1": "PLAN!", "go": True}, {"SEC-1": "plan", "go": "yes"},
+                {"SEC-1": "plan", "go": True, "ghost": 1}, {"SEC-1": "plan", "go": True, "notes": 5}, []):
+        with pytest.raises(Invalid):
+            store.answer_ask(ask["id"], bad)
+    done = store.answer_ask(ask["id"], {"SEC-1": "Plan", "go": False, "notes": "  "})
+    assert done["answers"] == {"SEC-1": "plan", "go": False}  # option case normalised, empty text dropped
+    with pytest.raises(Conflict):
+        store.answer_ask(ask["id"], {"SEC-1": "plan", "go": True})
+    with pytest.raises(NotFound):
+        store.answer_ask("a-ffffffffffffffff", {})
+
+
+def test_open_asks_are_capped(tmp_path, monkeypatch):
+    from tld.board import store as store_mod
+    monkeypatch.setattr(store_mod, "MAX_OPEN_ASKS", 2)
+    store = Store(str(tmp_path / "a.sqlite3"))
+    first = store.create_ask(ask_doc())
+    store.create_ask(ask_doc())
+    with pytest.raises(Invalid, match="open asks"):
+        store.create_ask(ask_doc())
+    store.cancel_ask(first["id"])
+    store.create_ask(ask_doc())

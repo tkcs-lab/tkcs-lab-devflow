@@ -193,6 +193,11 @@
           },
           "description": "GitHub logins of the code owners; /implement requests their review on the pull request it opens."
         },
+        "owner_login": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$",
+          "description": "GitHub login of the owner: the board fallback (an issue comment when the board cannot be reached) mentions it. Default: the repository owner."
+        },
         "bot_login": {
           "type": "string",
           "minLength": 1,

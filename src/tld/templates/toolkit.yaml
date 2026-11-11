@@ -30,6 +30,7 @@ git:
   branch_pattern: "<type>/<kebab-case>"   # REQUIRED. Quoted into worker prompts
   # branch_types: [feature, fix, chore]   # optional. /implement checks the manifest's feature_branch against it
   # merge_style: merge-commit             # optional: merge-commit | squash
+  # owner_login: my-login                # optional: the owner the board fallback (an issue comment) mentions; default the repository owner
   # bot_login: my-agent                   # optional: the second GitHub user the agent acts as; identity() must return it
   # codeowners: [my-login]                # optional (needs bot_login): logins whose review /implement requests
 

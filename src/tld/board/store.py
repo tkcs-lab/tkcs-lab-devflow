@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
-"""SQLite storage for the status board records. Imported by board_server.py; it has no command line.
+"""SQLite storage for the board: status records and asks. Imported by the server; it has no command line.
 
-    from board_store import Store, Conflict, Invalid
+    from tld.board.store import Store, Conflict, Invalid
 
-One table, `records(id, version, data)`. `Store.set` validates the record with
-validate_status_record.py and enforces optimistic concurrency with `if_version`.
-Python 3.11+, stdlib only.
+Two tables. `records(id, version, data)`: `Store.set` validates a status record (tld.board.record) and
+enforces optimistic concurrency with `if_version`. `asks(id, state, created_at, data)`: `Store.create_ask`
+validates an ask (tld.board.ask) and assigns its id; `answer_ask` and `cancel_ask` move an open ask to its
+final state. The schema version is SQLite's `user_version`; opening an older database adds what is missing
+and keeps every record. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
 
 import json
 import re
+import secrets
 import sqlite3
-import sys
 import threading
-from pathlib import Path
+from datetime import datetime, timezone
 
-from tld.board import record as validate_status_record  # noqa: E402
+from tld.board import ask as ask_model
+from tld.board import record as validate_status_record
 
 MAX_RECORD = 262144
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")
+SCHEMA_VERSION = 2
+MAX_OPEN_ASKS = 200
 
 
 class Conflict(Exception):
@@ -38,16 +43,43 @@ class Invalid(Exception):
         self.errors = errors
 
 
+class NotFound(Exception):
+    pass
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 class Store:
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, clock=utc_now) -> None:
         self._lock = threading.Lock()
+        self._clock = clock
         self._db = sqlite3.connect(path, check_same_thread=False)
         with self._lock:
             self._db.execute("PRAGMA journal_mode=WAL")
-            self._db.execute(
-                "CREATE TABLE IF NOT EXISTS records("
-                "id TEXT PRIMARY KEY, version INTEGER NOT NULL, data TEXT NOT NULL)")
-            self._db.commit()
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """Bring an empty or older database to SCHEMA_VERSION; every step is idempotent."""
+        version = self._db.execute("PRAGMA user_version").fetchone()[0]
+        if version > SCHEMA_VERSION:
+            raise RuntimeError(f"the database has schema {version}; this board knows {SCHEMA_VERSION}")
+        # 1: the status records (a database of the first board has this table and user_version 0).
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS records("
+            "id TEXT PRIMARY KEY, version INTEGER NOT NULL, data TEXT NOT NULL)")
+        # 2: the asks.
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS asks("
+            "id TEXT PRIMARY KEY, state TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL)")
+        self._db.execute("CREATE INDEX IF NOT EXISTS asks_state ON asks(state, created_at)")
+        self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        self._db.commit()
+
+    def schema_version(self) -> int:
+        with self._lock:
+            return self._db.execute("PRAGMA user_version").fetchone()[0]
 
     @staticmethod
     def _row(row: tuple) -> dict:
@@ -101,3 +133,82 @@ class Store:
     def count(self) -> int:
         with self._lock:
             return self._db.execute("SELECT COUNT(*) FROM records").fetchone()[0]
+
+    # -- asks -----------------------------------------------------------------------------------
+
+    def _get_ask(self, ask_id: str) -> dict | None:
+        row = self._db.execute("SELECT data FROM asks WHERE id = ?", (ask_id,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def _put_ask(self, ask: dict) -> None:
+        self._db.execute("UPDATE asks SET state = ?, data = ? WHERE id = ?",
+                         (ask["state"], json.dumps(ask, ensure_ascii=False, separators=(",", ":")), ask["id"]))
+        self._db.commit()
+
+    def create_ask(self, data: object) -> dict:
+        """Store a new ask; returns it with its id, state 'open', empty answers and created_at."""
+        errors = ask_model.validate_new(data)
+        if errors:
+            raise Invalid(errors)
+        assert isinstance(data, dict)
+        ask = {k: v for k, v in data.items() if k not in ("state", "answers") and v is not None}
+        ask.update(id="a-" + secrets.token_hex(8), state="open", answers={}, created_at=self._clock(),
+                   answered_at=None)
+        ask.setdefault("context_url", None)
+        ask.setdefault("fallback_issue", None)
+        with self._lock:
+            open_count = self._db.execute("SELECT COUNT(*) FROM asks WHERE state = 'open'").fetchone()[0]
+            if open_count >= MAX_OPEN_ASKS:
+                raise Invalid([f"the board already holds {MAX_OPEN_ASKS} open asks; cancel some first"])
+            self._db.execute("INSERT INTO asks(id, state, created_at, data) VALUES (?, ?, ?, ?)",
+                             (ask["id"], ask["state"], ask["created_at"],
+                              json.dumps(ask, ensure_ascii=False, separators=(",", ":"))))
+            self._db.commit()
+        return ask
+
+    def get_ask(self, ask_id: str) -> dict | None:
+        if not isinstance(ask_id, str) or not ask_model.ID_RE.match(ask_id):
+            return None
+        with self._lock:
+            return self._get_ask(ask_id)
+
+    def list_asks(self, state: str | None = None, limit: int = 200) -> list[dict]:
+        """Asks, open ones first (oldest first), then the others (newest first)."""
+        query = "SELECT data FROM asks"
+        params: tuple = ()
+        if state is not None:
+            query += " WHERE state = ?"
+            params = (state,)
+        query += (" ORDER BY CASE state WHEN 'open' THEN 0 ELSE 1 END,"
+                  " CASE state WHEN 'open' THEN created_at END ASC, created_at DESC LIMIT ?")
+        with self._lock:
+            rows = self._db.execute(query, (*params, limit)).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
+    def answer_ask(self, ask_id: str, answers: object) -> dict:
+        """Record the owner's answers. Raises NotFound, Conflict (not open) or Invalid."""
+        with self._lock:
+            ask = self._get_ask(ask_id) if ask_model.ID_RE.match(ask_id or "") else None
+            if ask is None:
+                raise NotFound(ask_id)
+            if ask["state"] != "open":
+                raise Conflict(ask)
+            clean, errors = ask_model.validate_answers(ask, answers)
+            if errors:
+                raise Invalid(errors)
+            ask.update(state="answered", answers=clean, answered_at=self._clock())
+            self._put_ask(ask)
+            return ask
+
+    def cancel_ask(self, ask_id: str) -> dict:
+        """Cancel an open ask; cancelling a cancelled one is a no-op. Raises NotFound or Conflict (answered)."""
+        with self._lock:
+            ask = self._get_ask(ask_id) if ask_model.ID_RE.match(ask_id or "") else None
+            if ask is None:
+                raise NotFound(ask_id)
+            if ask["state"] == "answered":
+                raise Conflict(ask)
+            if ask["state"] == "open":
+                ask["state"] = "cancelled"
+                self._put_ask(ask)
+            return ask

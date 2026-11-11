@@ -26,6 +26,26 @@ FORBIDDEN = re.compile(
     r"qa_fixture|andras|bandit|mypy", re.I)
 
 
+# Read before the autouse fixture below removes every TLD_* variable from the tests' environment.
+REQUIRE_BROWSER = os.environ.get("TLD_REQUIRE_BROWSER") == "1"
+
+
+def need_browser() -> None:
+    """Skip a browser test when node or Playwright is missing; fail instead when TLD_REQUIRE_BROWSER=1 (CI)."""
+    import shutil
+    import subprocess
+    reason = None
+    if shutil.which("node") is None:
+        reason = "node is not installed"
+    elif subprocess.run(["node", "-e", "require('playwright')"], capture_output=True, text=True).returncode != 0:
+        reason = "playwright cannot be required"
+    if reason is None:
+        return
+    if REQUIRE_BROWSER:
+        pytest.fail(f"TLD_REQUIRE_BROWSER=1 but {reason}")
+    pytest.skip(reason)
+
+
 def frontmatter(path):
     """The YAML front matter of a command, skill or agent file."""
     text = path.read_text()

@@ -65,14 +65,45 @@ details > summary::-webkit-details-marker { display: none; }
 a { color: var(--run); }
 .empty, .notice { color: var(--muted); padding: 6px 0; }
 .notice.bad { color: var(--need); }
+.top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.row.ask { border-left: 6px solid var(--need); cursor: pointer; }
+.row.ask.answered, .row.ask.cancelled { border-left-color: var(--line); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 0 0 10px; }
+.q { margin: 0 0 14px; }
+.q-text { white-space: pre-wrap; margin: 0 0 6px; }
+.q-id { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+.opt { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; }
+.opt input { margin-top: 3px; }
+textarea, input[type=password] { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+textarea { min-height: 70px; resize: vertical; }
+button { font: inherit; border-radius: 6px; padding: 6px 14px; border: 1px solid var(--run); background: var(--run); color: #fff; cursor: pointer; }
+button.quiet { background: transparent; color: var(--run); }
+button:disabled { opacity: .6; cursor: default; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.answer { font-weight: 600; white-space: pre-wrap; }
+.hidden-view { display: none; }
+h2.ask-title { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 10px 0 4px; }
+label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 13px; }
 </style>
 </head>
 <body>
 <header>
-  <h1 id="title"></h1>
+  <div class="top">
+    <h1 id="title"></h1>
+    <button type="button" class="quiet hidden-view" id="logout">Log out</button>
+  </div>
   <div class="sub" id="updated"></div>
   <div class="counts" id="counts"></div>
 </header>
+<section id="login" class="card hidden-view" aria-label="Log in">
+  <form id="login-form" autocomplete="on">
+    <label class="field" for="passphrase">Owner passphrase</label>
+    <input type="password" id="passphrase" name="passphrase" autocomplete="current-password" required minlength="16">
+    <div class="actions"><button type="submit" id="login-button">Log in</button></div>
+    <div class="notice" id="login-status"></div>
+  </form>
+</section>
+<section id="askview" class="hidden-view" aria-label="Ask"></section>
 <main id="main"><div class="notice" id="status">Loading…</div></main>
 <script>
 /*TLD:RULES*/
@@ -82,6 +113,8 @@ a { color: var(--run); }
   "use strict";
   var FIXTURE = /*TLD:FIXTURE*/null;
   var FIXED_NOW = /*TLD:NOW*/null;
+  var SESSION_URL = /*TLD:SESSION_URL*/null;
+  var SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
   var MIN = 60000;
   var STATE_GLYPH = { pending: "○", running: "▶", merged: "✓", done: "✓", failed: "✕", gate: "◆" };
 
@@ -120,14 +153,18 @@ a { color: var(--run); }
     return text ? "waiting " + text.replace(" ago", "") : "";
   }
 
-  function sessionLink(rec) {
-    var id = rec.orchestrator_session;
-    if (typeof id !== "string" || id.indexOf("session_") !== 0) return null;
-    return link("https://claude.ai/code/" + encodeURIComponent(id), "session");
+  // A session link exists only when the server was given TLD_BOARD_SESSION_URL (the runtime's session base).
+  function sessionHref(id) {
+    if (typeof SESSION_URL !== "string" || typeof id !== "string" || !SESSION_ID.test(id)) return null;
+    return SESSION_URL + encodeURIComponent(id);
   }
-  function itemWord(rec) { return rec.kind === "maintenance" ? "Items" : "Phases"; }
+  function sessionLink(rec) {
+    var href = sessionHref(rec.orchestrator_session);
+    return href ? link(href, "session") : null;
+  }
+  function itemWord(rec) { return rec.kind === "command" ? "Items" : "Phases"; }
   function tagOf(rec) {
-    return rec.kind === "maintenance" ? span(rec.command, "tag") : span(rec.plan_slug || "", "tag");
+    return rec.kind === "command" ? span(rec.command, "tag") : span(rec.plan_slug || "", "tag");
   }
 
   function chip(phase) {
@@ -193,7 +230,7 @@ a { color: var(--run); }
         item.appendChild(el("div", "meta", bits.join(" · ")));
         var extra = el("div", "links");
         add(extra, p.branch ? span(p.branch) : null,
-          p.session ? link("https://claude.ai/code/" + encodeURIComponent(p.session), "session") : null,
+          sessionHref(p.session) ? link(sessionHref(p.session), "session") : null,
           p.pr ? link("https://github.com/" + rec.repo + "/pull/" + p.pr, "PR #" + p.pr) : null);
         if (extra.childNodes.length) item.appendChild(extra);
         stage.appendChild(item);
@@ -277,7 +314,29 @@ a { color: var(--run); }
     return function (a, b) { return Date.parse(b.data[field]) - Date.parse(a.data[field]); };
   }
 
-  function render(entries) {
+  // -- asks ---------------------------------------------------------------------------------------
+
+  function askRow(ask, now) {
+    var box = el("div", "row ask " + ask.state);
+    box.setAttribute("data-ask", ask.id);
+    box.setAttribute("role", "link");
+    box.tabIndex = 0;
+    var head = el("div", "head");
+    var badge = ask.state === "open" ? span("? asks you", "badge failed") : span(ask.state, "badge");
+    add(head, el("span", "name", ask.project), span(ask.questions.length + (ask.questions.length === 1 ? " question" : " questions"), "tag"), badge);
+    box.appendChild(head);
+    box.appendChild(el("div", "reason", ask.title));
+    box.appendChild(span(ask.state === "open" ? waited(ask.created_at, now) : "answered " + ago(ask.answered_at, now)));
+    function open() { location.hash = "ask=" + encodeURIComponent(ask.id); }
+    box.addEventListener("click", open);
+    box.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+    return box;
+  }
+
+  function render(entries, asks) {
+    asks = asks || [];
+    var openAsks = asks.filter(function (a) { return a.state === "open"; });
+    var closedAsks = asks.filter(function (a) { return a.state !== "open"; });
     var now = nowMs();
     var groups = { needs_you: [], pr_open: [], running: [], done: [], hidden: [] };
     entries.forEach(function (e) { groups[section(e.data, now)].push(e); });
@@ -293,15 +352,16 @@ a { color: var(--run); }
     document.getElementById("updated").textContent = newest ? "Newest update " + ago(new Date(newest).toISOString(), now) : "No records yet";
     var counts = document.getElementById("counts");
     counts.textContent = "";
-    [["⚑ needs you", groups.needs_you], ["▶ running", groups.running], ["⇄ PR open", groups.pr_open], ["✓ done", groups.done]]
+    [["? asks", openAsks], ["⚑ needs you", groups.needs_you], ["▶ running", groups.running], ["⇄ PR open", groups.pr_open], ["✓ done", groups.done]]
       .forEach(function (c) { counts.appendChild(el("span", "count", c[0] + " " + c[1].length)); });
 
     var main = document.getElementById("main");
     main.textContent = "";
 
     var need = sect("needs_you", "Needs you", null);
+    openAsks.forEach(function (a) { need.appendChild(askRow(a, now)); });
     if (groups.needs_you.length) groups.needs_you.forEach(function (e) { need.appendChild(needsRow(e, now)); });
-    else need.appendChild(el("div", "empty", "Nothing needs you"));
+    else if (!openAsks.length) need.appendChild(el("div", "empty", "Nothing needs you"));
     main.appendChild(need);
 
     if (groups.pr_open.length) {
@@ -324,6 +384,14 @@ a { color: var(--run); }
     groups.hidden.sort(newestFirst("updated_at")).forEach(function (e) { hidden.appendChild(hiddenRow(e, now)); });
     done.appendChild(hidden);
     main.appendChild(done);
+
+    if (closedAsks.length) {
+      var answered = el("details", "card");
+      answered.setAttribute("data-section", "answered");
+      answered.appendChild(el("summary", null, "Answered and cancelled asks: " + closedAsks.length));
+      closedAsks.forEach(function (a) { answered.appendChild(askRow(a, now)); });
+      main.appendChild(answered);
+    }
   }
 
   function fail(text) {
@@ -335,6 +403,9 @@ a { color: var(--run); }
 
   function validEntries(list) {
     return list.filter(function (e) { return e && e.data && typeof e.data === "object" && Array.isArray(e.data.phases); });
+  }
+  function validAsks(list) {
+    return list.filter(function (a) { return a && typeof a.id === "string" && Array.isArray(a.questions); });
   }
 
   function pollMs() {
@@ -348,7 +419,7 @@ a { color: var(--run); }
     Array.prototype.forEach.call(document.querySelectorAll("details[open]"), function (d) {
       var key = d.getAttribute("data-project");
       if (key) keys.push("p:" + key);
-      else if (d.getAttribute("data-section") === "hidden") keys.push("hidden");
+      else if (d.getAttribute("data-section")) keys.push("s:" + d.getAttribute("data-section"));
     });
     return keys;
   }
@@ -356,39 +427,265 @@ a { color: var(--run); }
   function restoreOpen(keys) {
     Array.prototype.forEach.call(document.querySelectorAll("details"), function (d) {
       var key = d.getAttribute("data-project");
-      var id = key ? "p:" + key : (d.getAttribute("data-section") === "hidden" ? "hidden" : null);
+      var id = key ? "p:" + key : (d.getAttribute("data-section") ? "s:" + d.getAttribute("data-section") : null);
       if (id !== null && keys.indexOf(id) !== -1) d.open = true;
     });
   }
 
+  // -- talking to the server ----------------------------------------------------------------------
+
+  var csrf = null;
   var lastText = null;
   var lastRender = 0;
+  var lastAsks = [];
+  var timer = null;
+
+  function Unauthorized() { this.message = "unauthorized"; }
+
+  function api(method, path, body) {
+    var opts = { method: method, cache: "no-store", credentials: "same-origin", headers: {} };
+    if (body !== undefined) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
+    if (method !== "GET" && csrf) opts.headers["X-CSRF-Token"] = csrf;
+    return fetch(path, opts).then(function (resp) {
+      return resp.text().then(function (text) {
+        var data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+        if (resp.status === 401 && path !== "login") throw new Unauthorized();
+        return { status: resp.status, data: data };
+      });
+    });
+  }
+
+  function show(id, visible) {
+    var node = document.getElementById(id);
+    node.className = node.className.replace(/\s*hidden-view/g, "") + (visible ? "" : " hidden-view");
+  }
+
+  function showLogin(message) {
+    csrf = null;
+    if (timer !== null) { clearInterval(timer); timer = null; }
+    show("login", true);
+    show("logout", false);
+    show("askview", false);
+    show("main", false);
+    document.getElementById("counts").textContent = "";
+    document.getElementById("updated").textContent = "";
+    document.getElementById("login-status").textContent = message || "";
+    document.getElementById("passphrase").focus();
+  }
 
   function load() {
-    return fetch("api/records", { cache: "no-store", credentials: "same-origin" }).then(function (resp) {
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
-      return resp.json();
-    }).then(function (body) {
-      var records = body && Array.isArray(body.records) ? body.records : [];
-      var text = JSON.stringify(records);
+    return Promise.all([api("GET", "api/records"), api("GET", "api/asks")]).then(function (res) {
+      if (res[0].status !== 200 || res[1].status !== 200) throw new Error("HTTP " + res[0].status + "/" + res[1].status);
+      var records = res[0].data && Array.isArray(res[0].data.records) ? res[0].data.records : [];
+      var asks = res[1].data && Array.isArray(res[1].data.asks) ? validAsks(res[1].data.asks) : [];
+      lastAsks = asks;
+      var text = JSON.stringify([records, asks]);
       var t = Date.now();
       if (text !== lastText || t - lastRender >= 60000 || document.getElementById("status")) {
         var keys = openKeys();
-        render(validEntries(records));
+        render(validEntries(records), asks);
         restoreOpen(keys);
         lastText = text;
         lastRender = t;
       }
     }).catch(function (err) {
+      if (err instanceof Unauthorized) { showLogin("Your session ended. Log in again."); return; }
       fail("Cannot reach the board server (" + (err && err.message ? err.message : err) + "). What is shown may be out of date.");
     });
   }
 
+  // -- the ask view -------------------------------------------------------------------------------
+
+  function answerText(q, value) {
+    if (q.kind === "confirm") return value === true ? "yes" : value === false ? "no" : "";
+    if (q.kind === "choice") {
+      var opt = (q.options || []).filter(function (o) { return o.value === value; })[0];
+      return opt ? (opt.label || opt.value) : String(value);
+    }
+    return String(value);
+  }
+
+  function control(q, n) {
+    var wrap = el("div", "controls");
+    var name = "q" + n;
+    function radio(value, labelText) {
+      var row = el("label", "opt");
+      var input = el("input");
+      input.type = "radio";
+      input.name = name;
+      input.value = value;
+      if (q.required !== false) input.required = true;
+      add(row, input, el("span", null, labelText));
+      wrap.appendChild(row);
+    }
+    if (q.kind === "choice") (q.options || []).forEach(function (o) { radio(o.value, o.label || o.value); });
+    else if (q.kind === "confirm") { radio("yes", "Yes"); radio("no", "No"); }
+    else {
+      var area = el("textarea");
+      area.name = name;
+      area.maxLength = 4000;
+      if (q.required !== false) area.required = true;
+      area.setAttribute("aria-label", q.id);
+      wrap.appendChild(area);
+    }
+    return wrap;
+  }
+
+  function readAnswers(form, ask) {
+    var answers = {};
+    ask.questions.forEach(function (q, n) {
+      var name = "q" + n;
+      if (q.kind === "text") {
+        var v = form.elements[name].value;
+        if (v.trim()) answers[q.id] = v;
+        return;
+      }
+      var picked = form.querySelector('input[name="' + name + '"]:checked');
+      if (!picked) return;
+      answers[q.id] = q.kind === "confirm" ? picked.value === "yes" : picked.value;
+    });
+    return answers;
+  }
+
+  function renderAsk(ask) {
+    var view = document.getElementById("askview");
+    view.textContent = "";
+    var card = el("div", "card");
+    card.setAttribute("data-ask-view", ask.id);
+    var back = el("a", null, "← Inbox");
+    back.href = "#";
+    card.appendChild(back);
+    card.appendChild(el("h2", "ask-title", ask.title));
+    var meta = [ask.project, "asked " + ago(ask.created_at, nowMs()), "by " + ask.created_by];
+    card.appendChild(el("div", "meta", meta.join(" · ")));
+    var links = el("div", "links");
+    add(links, link(ask.context_url, "context"), sessionHref(ask.created_by) ? link(sessionHref(ask.created_by), "session") : null);
+    if (links.childNodes.length) card.appendChild(links);
+    var status = el("div", "notice");
+    status.id = "ask-status";
+    if (ask.state !== "open") {
+      card.appendChild(el("div", "meta", ask.state === "answered" ? "Answered " + ago(ask.answered_at, nowMs()) + "." : "Cancelled."));
+      ask.questions.forEach(function (q) {
+        var block = el("div", "q");
+        add(block, el("div", "q-id", q.id), el("div", "q-text", q.text));
+        var has = Object.prototype.hasOwnProperty.call(ask.answers || {}, q.id);
+        block.appendChild(el("div", "answer", has ? answerText(q, ask.answers[q.id]) : "(no answer)"));
+        card.appendChild(block);
+      });
+      view.appendChild(card);
+      return;
+    }
+    var form = el("form");
+    form.id = "ask-form";
+    ask.questions.forEach(function (q, n) {
+      var block = el("fieldset", "q card");
+      block.setAttribute("data-question", q.id);
+      var legend = el("legend", "q-id", q.id + (q.required === false ? " (optional)" : ""));
+      add(block, legend, el("div", "q-text", q.text), control(q, n));
+      form.appendChild(block);
+    });
+    var actions = el("div", "actions");
+    var submit = el("button", null, "Send answers");
+    submit.type = "submit";
+    submit.id = "ask-submit";
+    var cancel = el("button", "quiet", "Cancel this ask");
+    cancel.type = "button";
+    cancel.id = "ask-cancel";
+    add(actions, submit, cancel);
+    form.appendChild(actions);
+    form.appendChild(status);
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      submit.disabled = true;
+      status.className = "notice";
+      status.textContent = "Sending…";
+      api("POST", "api/asks/" + encodeURIComponent(ask.id) + "/answer", { answers: readAnswers(form, ask) }).then(function (r) {
+        submit.disabled = false;
+        if (r.status === 200 && r.data) { renderAsk(r.data); load(); return; }
+        status.className = "notice bad";
+        var errs = r.data && Array.isArray(r.data.errors) ? r.data.errors.join("; ") : (r.data && r.data.error) || ("HTTP " + r.status);
+        status.textContent = "Not sent: " + errs;
+      }).catch(function (err) {
+        submit.disabled = false;
+        if (err instanceof Unauthorized) { showLogin("Your session ended. Log in again."); return; }
+        status.className = "notice bad";
+        status.textContent = "Not sent: the board cannot be reached.";
+      });
+    });
+    cancel.addEventListener("click", function () {
+      api("POST", "api/asks/" + encodeURIComponent(ask.id) + "/cancel").then(function (r) {
+        if (r.status === 200 && r.data) { renderAsk(r.data); load(); }
+        else { status.className = "notice bad"; status.textContent = "Not cancelled: HTTP " + r.status; }
+      }).catch(function (err) { if (err instanceof Unauthorized) showLogin("Your session ended. Log in again."); });
+    });
+    card.appendChild(form);
+    view.appendChild(card);
+  }
+
+  function route() {
+    var m = /^#ask=([A-Za-z0-9-]+)$/.exec(location.hash);
+    if (!m) {
+      show("askview", false);
+      show("main", true);
+      return;
+    }
+    show("main", false);
+    show("askview", true);
+    var view = document.getElementById("askview");
+    view.textContent = "";
+    view.appendChild(el("div", "notice", "Loading…"));
+    api("GET", "api/asks/" + encodeURIComponent(m[1])).then(function (r) {
+      if (r.status === 200 && r.data) renderAsk(r.data);
+      else { view.textContent = ""; view.appendChild(el("div", "notice bad", "No such ask.")); }
+    }).catch(function (err) {
+      if (err instanceof Unauthorized) showLogin("Your session ended. Log in again.");
+    });
+  }
+
+  function startInbox() {
+    show("login", false);
+    show("logout", true);
+    route();
+    load();
+    if (timer === null) timer = setInterval(load, pollMs());
+  }
+
   function start() {
     document.getElementById("title").textContent = document.title;
-    if (FIXTURE !== null) { render(validEntries(FIXTURE)); return; }
-    load();
-    setInterval(load, pollMs());
+    if (FIXTURE !== null) {
+      show("main", true);
+      render(validEntries(FIXTURE), []);
+      return;
+    }
+    window.addEventListener("hashchange", function () { if (csrf) route(); });
+    document.getElementById("login-form").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var input = document.getElementById("passphrase");
+      var button = document.getElementById("login-button");
+      button.disabled = true;
+      api("POST", "login", { passphrase: input.value }).then(function (r) {
+        button.disabled = false;
+        input.value = "";
+        if (r.status === 200 && r.data && r.data.csrf) { csrf = r.data.csrf; startInbox(); return; }
+        var msg = r.status === 429 ? "Too many attempts. Wait " + ((r.data && r.data.retry_after) || "a few") + " seconds." :
+          r.status === 401 ? "Wrong passphrase." : "Login failed (HTTP " + r.status + ").";
+        document.getElementById("login-status").textContent = msg;
+      }).catch(function () {
+        button.disabled = false;
+        document.getElementById("login-status").textContent = "The board cannot be reached.";
+      });
+    });
+    document.getElementById("logout").addEventListener("click", function () {
+      api("POST", "logout").then(function () { showLogin("Logged out."); }, function () { showLogin(""); });
+    });
+    api("GET", "api/session").then(function (r) {
+      if (r.status === 200 && r.data && r.data.owner && r.data.csrf) { csrf = r.data.csrf; startInbox(); }
+      else showLogin("");
+    }).catch(function () { fail("Cannot reach the board server."); });
   }
   start();
 })();

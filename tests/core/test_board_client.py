@@ -25,7 +25,7 @@ def record(doc_id="f-running-ok"):
 
 @pytest.fixture
 def server(tmp_path):
-    srv = board_server.make_server(Store(str(tmp_path / "b.sqlite3")), board_server.Tokens(WRITE, "r" * 24),
+    srv = board_server.make_server(Store(str(tmp_path / "b.sqlite3")), board_server.Tokens(WRITE),
                                    "T", "127.0.0.1", 0)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()

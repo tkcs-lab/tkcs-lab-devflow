@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from conftest import ROOT, TLD, CLAUDE, FIXTURES, tld_cmd
+from conftest import ROOT, TLD, CLAUDE, FIXTURES, need_browser, tld_cmd
 
 BUILD = TLD / "board" / "build.py"
 BUILD_CMD = tld_cmd("board", "build")
@@ -51,17 +51,31 @@ def test_build_rejects_a_bad_fixture(tmp_path):
     assert result.stderr.startswith("build_board: ")
 
 
-def test_page_has_no_write_calls():
+def test_page_builds_the_dom_from_text_only():
     page = (TLD / "board" / "web" / "board.html").read_text()
-    for call in (".set(", ".update(", ".delete(", "<button"):
+    for call in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function"):
         assert call not in page
+    # The page writes nothing but answers, cancels and the login: no record write path.
+    assert 'api("PUT"' not in page and '"DELETE"' not in page
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_build_injects_the_session_url(tmp_path):
+    result, out = build(tmp_path, "--session-url", "https://sessions.example.org/s/")
+    assert result.returncode == 0, result.stderr
+    assert 'var SESSION_URL = "https://sessions.example.org/s/";' in out.read_text()
+    result, out = build(tmp_path)
+    assert "var SESSION_URL = /*TLD:SESSION_URL*/null;" in out.read_text()
+    result, _ = build(tmp_path, "--session-url", "http://insecure.example.org/")
+    assert result.returncode == 1
+
+
+def test_page_has_no_hard_coded_session_host():
+    page = (TLD / "board" / "web" / "board.html").read_text()
+    assert "claude.ai" not in page
+
+
 def test_render_check():
-    probe = subprocess.run(["node", "-e", "require('playwright')"], capture_output=True, text=True)
-    if probe.returncode != 0:
-        pytest.skip("playwright cannot be required")
+    need_browser()
     result = subprocess.run(["node", str(ROOT / "tests" / "board_render_check.js")], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.strip() == "OK"

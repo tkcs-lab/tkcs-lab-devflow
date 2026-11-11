@@ -22,7 +22,7 @@ CONFIG = board_client.Config("http://127.0.0.1:1", WRITE)
 
 @pytest.fixture
 def server(tmp_path):
-    srv = board_server.make_server(Store(str(tmp_path / "b.sqlite3")), board_server.Tokens(WRITE, "r" * 24),
+    srv = board_server.make_server(Store(str(tmp_path / "b.sqlite3")), board_server.Tokens(WRITE),
                                    "T", "127.0.0.1", 0)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
@@ -131,7 +131,7 @@ def test_end_to_end_with_the_real_server(server):
     replies = [json.loads(line) for line in proc.stdout.splitlines()]
     assert [r["id"] for r in replies] == [1, 2, 3]
     assert replies[0]["result"]["serverInfo"]["name"] == "tld-board"
-    assert {t["name"] for t in replies[1]["result"]["tools"]} == {"board_get", "board_list", "board_set", "board_delete"}
+    assert {t["name"] for t in replies[1]["result"]["tools"]} == {"board_get", "board_list", "board_set", "board_ask", "board_answers", "board_cancel"}
     assert replies[2]["result"]["isError"] is False
     assert json.loads(replies[2]["result"]["content"][0]["text"]) == {"id": "f-running-ok", "version": 1}
     assert server.store.get("f-running-ok")["version"] == 1

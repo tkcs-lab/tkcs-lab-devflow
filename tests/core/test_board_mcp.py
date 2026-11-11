@@ -9,6 +9,7 @@ import urllib.request
 
 import pytest
 
+from board_helpers import ask_doc
 from conftest import TLD, FIXTURES, tld_cmd
 
 from tld.board import mcp as board_mcp  # noqa: E402
@@ -16,7 +17,6 @@ from tld.board import server as board_server  # noqa: E402
 from tld.board.store import Store  # noqa: E402
 
 WRITE = "w" * 24
-READ = "r" * 24
 SCRIPT = TLD / "board" / "server.py"
 SCRIPT_CMD = tld_cmd("board", "server")
 
@@ -33,7 +33,7 @@ def store(tmp_path):
 
 @pytest.fixture
 def server(tmp_path):
-    srv = board_server.make_server(Store(str(tmp_path / "b.sqlite3")), board_server.Tokens(WRITE, READ),
+    srv = board_server.make_server(Store(str(tmp_path / "b.sqlite3")), board_server.Tokens(WRITE),
                                    "T", "127.0.0.1", 0)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
@@ -87,9 +87,10 @@ def test_initialize_falls_back_to_the_newest(store):
     assert reply["result"]["protocolVersion"] == board_mcp.PROTOCOLS[0]
 
 
-def test_tools_list_has_the_four_tools(store):
+def test_tools_list_has_the_record_and_ask_tools_and_no_delete(store):
     tools = board_mcp.handle(store, rpc("tools/list"))["result"]["tools"]
-    assert sorted(t["name"] for t in tools) == ["board_delete", "board_get", "board_list", "board_set"]
+    assert sorted(t["name"] for t in tools) == ["board_answers", "board_ask", "board_cancel", "board_get",
+                                                "board_list", "board_set"]
     for t in tools:
         assert t["inputSchema"]["type"] == "object"
         assert t["inputSchema"]["additionalProperties"] is False
@@ -131,17 +132,45 @@ def test_board_set_first_write_conflicts_when_the_record_exists(store):
     assert is_error and payload["error"] == "version_conflict" and payload["current"]["version"] == 1
 
 
-def test_board_delete_reports_deleted_and_missing(store):
+def test_board_delete_is_not_a_tool(store):
+    """S19: deleting records is the board playbook's CLI step after the owner confirms, never an MCP tool."""
     tool(store, "board_set", {"id": "f-running-ok", "data": record()})
-    payload, is_error = tool(store, "board_delete", {"ids": ["f-running-ok", "ghost"]})
-    assert (payload, is_error) == ({"deleted": ["f-running-ok"], "missing": ["ghost"]}, False)
+    reply = board_mcp.handle(store, rpc("tools/call", {"name": "board_delete", "arguments": {"ids": ["f-running-ok"]}}))
+    assert reply["error"]["code"] == -32602
+    assert store.get("f-running-ok") is not None
 
 
-def test_board_delete_rejects_more_than_50_ids(store):
-    payload, is_error = tool(store, "board_delete", {"ids": [f"a{i}" for i in range(51)]})
+def test_board_ask_answers_cancel(store):
+    ask, is_error = tool(store, "board_ask", {"ask": ask_doc()})
+    assert not is_error and ask["state"] == "open" and ask["id"].startswith("a-")
+    payload, is_error = tool(store, "board_answers", {"id": ask["id"]})
+    assert (payload["state"], payload["answers"], is_error) == ("open", {}, False)
+    store.answer_ask(ask["id"], {"SEC-1": "drop", "go": True})
+    payload, _ = tool(store, "board_answers", {"id": ask["id"]})
+    assert payload["state"] == "answered" and payload["answers"] == {"SEC-1": "drop", "go": True}
+    payload, is_error = tool(store, "board_cancel", {"id": ask["id"]})
+    assert is_error and payload["error"] == "not_open"
+    other, _ = tool(store, "board_ask", {"ask": ask_doc()})
+    payload, is_error = tool(store, "board_cancel", {"id": other["id"]})
+    assert (payload, is_error) == ({"id": other["id"], "state": "cancelled"}, False)
+
+
+def test_board_ask_tools_reject_bad_arguments(store):
+    payload, is_error = tool(store, "board_ask", {"ask": ask_doc(questions=[])})
+    assert is_error and payload["error"] == "invalid"
+    payload, is_error = tool(store, "board_ask", {"ask": ask_doc(), "extra": 1})
     assert is_error and payload["error"] == "bad_arguments"
-    payload, is_error = tool(store, "board_delete", {"ids": []})
+    payload, is_error = tool(store, "board_answers", {"id": "a-ffffffffffffffff"})
+    assert (payload, is_error) == ({"error": "not_found"}, True)
+    payload, is_error = tool(store, "board_cancel", {"id": 5})
     assert is_error and payload["error"] == "bad_arguments"
+
+
+def test_no_mcp_tool_answers_an_ask(store):
+    names = {t["name"] for t in board_mcp.TOOLS}
+    assert not any("answer" in n and n != "board_answers" for n in names)
+    for t in board_mcp.TOOLS:
+        assert "answers" not in t["inputSchema"]["properties"]
 
 
 def test_unknown_tool_is_32602(store):
@@ -177,7 +206,9 @@ def test_non_json_is_32700(server):
 
 def test_mcp_requires_the_write_token(server):
     assert post(server, rpc("ping"), token=None)[0] == 401
-    assert post(server, rpc("ping"), token=READ)[0] == 403
+    cookie, csrf = login_cookie(server)
+    status, _, _ = post(server, rpc("ping"), token=None, headers={"Cookie": cookie, "X-CSRF-Token": csrf})
+    assert status in (401, 403)
     assert post(server, rpc("ping"), token="x" * 24)[0] == 401
 
 
@@ -196,7 +227,6 @@ def test_origin_header_is_refused_unless_allowed(server):
 
 def test_script_run_reports_a_conflict(tmp_path):
     env = {**os.environ, "TLD_BOARD_TOKEN": WRITE}
-    env.pop("TLD_BOARD_READ_TOKEN", None)
     proc = subprocess.Popen(
         [*SCRIPT_CMD, "--port", "0", "--db", str(tmp_path / "s.sqlite3")],
         env=env, stderr=subprocess.PIPE, text=True)
@@ -221,3 +251,8 @@ def test_script_run_reports_a_conflict(tmp_path):
         proc.terminate()
         proc.wait(10)
         proc.stderr.close()
+
+
+def login_cookie(server):
+    """No owner UI on this server: any cookie is ignored, so the cookie alone is unauthenticated."""
+    return "tld_owner=1.2.3", "x"
