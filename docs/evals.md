@@ -261,7 +261,7 @@ case, then re-run, rather than editing the baseline.
 ## Cost
 
 - `--dry-run` shows the per-task worst case before you spend anything.
-- `--run-ceiling` must be positive and finite. A run that times out is charged its full allowance.
+- `--run-ceiling` must be positive and finite. A run that times out or is killed is charged its full allowance.
   The first ceiling hit stops the invocation with exit code 3.
 - Each run gets `--max-budget-usd` = min(task ceiling, what is left of `--run-ceiling`); the CLI stops
   itself at that line, the result is recorded `aborted: cost_ceiling`, and the invocation stops with
