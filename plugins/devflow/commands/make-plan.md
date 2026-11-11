@@ -41,6 +41,7 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
 - "ADR parts" (the ADRs section, the ADR step, the ADR `final_checks` item) apply only when the
   profile has `docs.adr_dir`; without it, leave them out and never mention ADRs.
 - "changelog parts" apply only when the profile has `docs.changelog`.
+- "index parts" apply only when the profile has `docs.index` (the docs index); without it leave them out. With an index, load the `docs-keeper` skill now and follow its "Reading protocol".
 - "the dispatch table" is `ci.dispatchable`, read through the `pr-steward` skill.
 - "the stack skills" are the `stack-<name>` skills for each name in `stacks`; load them now. They say
   how to write `acceptance` and `verify_after_merge` entries for that stack.
@@ -79,9 +80,8 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
    - The Goal links the review document; every finding id appears in the acceptance of the phase
      (or the step of a single-session prompt) that fixes it, and its **Acceptance** line is the
      starting point for that acceptance item.
-2. Read the must-read docs, the `pr-steward` skill, the profile's `project_steward` file if it has
-   one, the ADR index (`docs.adr_index`) and every ADR if the profile has ADRs, and every
-   reference doc and source module the change touches. Use `Explore` subagents for broad sweeps; read the files that matter
+2. Read the must-read docs, the `pr-steward` skill and the profile's `project_steward` file if it has
+   one. Index parts: then open the docs index (`docs.index`) and read only the rows that match the change, and, if the profile has ADRs, the ADR index (`docs.adr_index`) and only the ADRs whose one-line decision touches the change; read no other doc. Without `docs.index`: read the ADR index and every ADR if the profile has ADRs, and every reference doc the change touches. In both cases read every source module the change touches. Use `Explore` subagents for broad sweeps; read the files that matter
    yourself. The plan's quality depends on this step: a Sonnet worker executes what the plan says
    and does not rediscover what it leaves out.
 3. If a decision is genuinely the user's (scope, product behaviour, a trade-off with no default in
@@ -94,7 +94,7 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
    small: an orchestrated plan costs several sessions and a review round.
 5. **Agents.** Run `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at make_plan`.
    For a large scope, dispatch the `architect` agent first (unless it is in `disabled`) with the ask, your research
-   notes and the must-read docs, and use its options when you write the Design section. Dispatch every agent in
+   notes and the must-read docs (index parts: and the paths of the docs you read through the index), and use its options when you write the Design section. Dispatch every agent in
    `required`, each in review mode, as the `agent-dispatch` skill says. A blocking finding must be resolved in the
    plan before you push; dispatch the same agent again afterwards, its new report line is the one that counts; a
    non-blocking finding goes into the plan's Risks. Before the final reply run `agents.py verify` on the agents'
@@ -120,11 +120,11 @@ the PR in one go. It holds, in this order:
    are done before changing anything", with the artifact link.
 2. **Goal**: the issue link and what changes for the user.
 3. **Context**: what the code does today, with `path:line` references, and the ADRs and docs that
-   constrain the change.
+   constrain the change, and the docs the index routes to (index parts).
 4. **Design**: every decision already made, as in a plan's Design section (names, signatures,
    strings, schema), and what you rejected where it is not obvious.
 5. **Steps**: numbered and prescriptive, naming files, symbols and the tests to extend, ending
-   with docs, the changelog line (under `docs.changelog.section`) if the change is user-visible, and
+   with docs, the changelog line (under `docs.changelog.section`) if the change is user-visible, the docs-index rows the change needs (index parts), and
    an ADR if the change meets the bar in `docs.adr_bar` (with its number and one-line decision).
 6. **Acceptance**: each item a named test, a grep or a command.
 7. **Stop conditions**: what the session should see if this prompt is wrong, and that it should
@@ -207,6 +207,7 @@ final_checks:                           # checked before the PR opens
   - <plan_dir>/<slug>-plan.md and <plan_dir>/<slug>-plan-manual-steps.html are deleted and nothing links to them
   - <each ADR from the ADRs section exists, is Accepted, and is in docs.adr_index>   # ADR parts only
   - <the changelog has entries under docs.changelog.section and no version heading>   # changelog parts only
+  - <`python3 <devflow root>/scripts/docs_index.py check --profile .claude/toolkit.yaml` exits 0>   # index parts only
 phases:
   - id: p1-<kebab>
     title: <one line>
@@ -227,6 +228,8 @@ ADRs (ADR parts), updates the reference docs, deletes the plan document and `man
 the changelog entry if earlier phases did not (changelog parts only), and does only the parts of
 that list that apply to this project (ADR parts, reference docs).
 
+Index parts: the retirement phase also updates the docs index: one row per doc the plan added, moved or deleted (the plan document and the manual-steps page are never indexed), the ADR-index rows, and the `CLAUDE.md` lines a change made untrue; it then runs `docs_index.py check --profile .claude/toolkit.yaml` until it exits 0. No other phase edits the index or `CLAUDE.md`, so two phases of one wave never share them; a phase that adds, moves or deletes a doc reports it as a `docs-changed:` line and you list the expected rows in the retirement phase's brief.
+
 ### Sizing for Sonnet
 
 `/implement` runs every phase in a Sonnet session. You are the Opus in this pipeline: do the
@@ -241,6 +244,7 @@ judgement here so the worker only has to execute. Every phase must pass all of t
 - **Numbered steps naming files and symbols**, in the order to do them, ending with tests, docs and
   the changelog line. Name the existing test files to extend and the pattern commit to copy (by
   SHA) when there is one.
+- **A `Read first:` line (index parts).** A brief's first line is `Read first: <paths>`: the exact docs from the index the phase needs, as paths. A worker opens those and opens the index only when they are not enough.
 - **Acceptance is mechanical**: a named test, a grep, or a command and its expected output. "Works
   well" is not acceptance.
 - **`touches` is honest and disjoint within a wave**: two phases that can run at the same time
@@ -321,7 +325,7 @@ Start one `Plan` subagent (`model: "opus"`, fresh context) and give it the plan 
 this command file's path. Ask it to report, as a numbered list with severities, anything that:
 fails "Sizing for Sonnet"; leaves a decision open in a brief; lets two phases in one wave share a
 path in `touches`; puts a manual step in the middle or calls something manual that the dispatch
-table can dispatch; contradicts a must-read doc, an accepted ADR or the code as it is; or would make
+table can dispatch; contradicts a must-read doc, an accepted ADR or the code as it is; leaves the retirement phase without the index rows for the docs the plan adds, or gives a brief no `Read first:` line (index parts); or would make
 the manifest fail `/implement`'s validation (`validate_manifest.py`, below). Fix everything it finds that you agree with. When you disagree, say why in your
 final reply.
 
@@ -361,6 +365,7 @@ rejects.
    - A table of phases: id, title, complexity, depends_on, and any `worker_model: opus` with its
      reason.
    - What the reviewer flagged that you did not change, and why.
+   - Without `docs.index`: the line `No docs index: run /docs init to build one (it cuts the tokens every session reads).`
 
 Never: implement a phase; open a pull request; push to `<main>` or to any branch but `plan/<slug>`
 (or your session branch as the fallback above); put a secret in the plan or the artifact.
