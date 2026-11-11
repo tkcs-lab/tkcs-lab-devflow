@@ -1,0 +1,134 @@
+<title>Guardrail Fixes Checklist</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: a single reading column; one section per manual item, numbered steps with checkboxes. */
+  :root {
+    --bg: #f6f7f4;
+    --surface: #ffffff;
+    --fg: #1d2421;
+    --muted: #5d6a64;
+    --line: #d9dfda;
+    --accent: #1f6f5c;
+    --accent-ink: #ffffff;
+    --note: #eef3ef;
+    --font-head: "Space Grotesk", system-ui, sans-serif;
+    --font-body: "Inter", system-ui, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121715; --surface: #1a211e; --fg: #e6ece8; --muted: #9aa8a1; --line: #2c3631;
+      --accent: #5fc2a7; --accent-ink: #0d1411; --note: #1f2824; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121715; --surface: #1a211e; --fg: #e6ece8; --muted: #9aa8a1; --line: #2c3631;
+    --accent: #5fc2a7; --accent-ink: #0d1411; --note: #1f2824; color-scheme: dark;
+  }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font-body); line-height: 1.55;
+    padding-block: 24px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  main { max-width: 46rem; margin: 0 auto; }
+  h1, h2 { font-family: var(--font-head); text-wrap: balance; line-height: 1.2; }
+  h1 { font-size: 1.7rem; margin: 0 0 8px; }
+  h2 { font-size: 1.2rem; margin: 0; }
+  .lede { color: var(--muted); margin: 0 0 24px; max-width: 65ch; }
+  .part { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 32px 0 12px; }
+  .empty { background: var(--note); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; color: var(--muted); }
+  .item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 16px 12px; margin-bottom: 16px; }
+  .item header { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; }
+  .time { font-size: 0.82rem; color: var(--muted); }
+  .why { color: var(--muted); margin: 6px 0 12px; font-size: 0.95rem; }
+  ol { list-style: none; counter-reset: s; margin: 0; padding: 0; display: grid; gap: 10px; }
+  li { counter-increment: s; display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; min-width: 0; }
+  li label { display: grid; grid-template-columns: auto 1fr; gap: 10px; cursor: pointer; min-width: 0; grid-column: 1 / -1; }
+  li label::before { content: counter(s) "."; grid-column: 1; grid-row: 1; font-variant-numeric: tabular-nums; color: var(--muted); min-width: 1.4em; text-align: right; }
+  li input[type="checkbox"] { grid-column: 1; grid-row: 1; justify-self: start; opacity: 0; position: absolute; }
+  li label span { grid-column: 2; min-width: 0; overflow-wrap: anywhere; }
+  li input:checked + span { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+  li input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  li label::after { content: ""; position: absolute; }
+  .box { width: 1.05rem; height: 1.05rem; border: 2px solid var(--muted); border-radius: 4px; display: inline-block; vertical-align: -0.15em; margin-right: 8px; }
+  input:checked + span .box { background: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--surface); }
+  .see { display: block; color: var(--muted); font-size: 0.9rem; margin-top: 2px; }
+  code { font-family: var(--font-mono); font-size: 0.88em; background: var(--note); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  pre { font-family: var(--font-mono); font-size: 0.85rem; background: var(--note); padding: 10px 12px; border-radius: 8px; overflow-x: auto; margin: 6px 0 0; }
+  a { color: var(--accent); }
+  .done { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: 0.92rem; }
+  .done b { font-family: var(--font-head); }
+  .progress { font-size: 0.9rem; color: var(--muted); margin: 0 0 8px; font-variant-numeric: tabular-nums; }
+  @media (prefers-reduced-motion: no-preference) { .item { transition: border-color .15s; } }
+</style>
+
+<main>
+  <h1>Guardrail fixes: your checklist</h1>
+  <p class="lede">Plan for tracking issue #15. Nothing is needed before the work starts. Three checks come after the last phase merges and before the pull request does. Ticks stay in this browser only.</p>
+  <p class="progress" id="progress" aria-live="polite"></p>
+
+  <p class="part">Before implementation</p>
+  <p class="empty">Nothing to do. You can run <code>/implement</code> straight away.</p>
+
+  <p class="part">After implementation</p>
+
+  <section class="item" id="ma1">
+    <header><h2>Turn on private vulnerability reporting</h2><span class="time">about 2 min</span></header>
+    <p class="why">The new <code>SECURITY.md</code> tells people who find a hook bypass to report it privately. That only works once GitHub's setting is on.</p>
+    <ol>
+      <li><label><input type="checkbox" data-k="ma1-1"><span><i class="box"></i>Open <a href="https://github.com/tkcs-lab/claude-toolkit/settings/security_analysis" target="_blank" rel="noopener">Settings → Code security</a> of the repository.</span></label></li>
+      <li><label><input type="checkbox" data-k="ma1-2"><span><i class="box"></i>Find <b>Private vulnerability reporting</b> and press <b>Enable</b>.<span class="see">You should see the button change to <b>Disable</b>.</span></span></label></li>
+      <li><label><input type="checkbox" data-k="ma1-3"><span><i class="box"></i>Open the repository's <b>Security</b> tab: a <b>Report a vulnerability</b> button should now be there.</span></label></li>
+    </ol>
+    <p class="done"><b>Report back:</b> one line in the PR, for example <code>ma1: private reporting enabled, button visible</code>.</p>
+  </section>
+
+  <section class="item" id="ma2">
+    <header><h2>Create the <code>release</code> environment with reviewers</h2><span class="time">about 5 min per repository</span></header>
+    <p class="why">The release workflow template now runs in an environment called <code>release</code>. Until that environment has required reviewers, nothing waits for approval. Do this in this repository and in every repository that has installed <code>devflow-release.yml</code>.</p>
+    <ol>
+      <li><label><input type="checkbox" data-k="ma2-1"><span><i class="box"></i>Open <a href="https://github.com/tkcs-lab/claude-toolkit/settings/environments" target="_blank" rel="noopener">Settings → Environments</a> (change the repository in the address for each other repo).</span></label></li>
+      <li><label><input type="checkbox" data-k="ma2-2"><span><i class="box"></i>Press <b>New environment</b>, name it exactly <code>release</code>, press <b>Configure environment</b>.</span></label></li>
+      <li><label><input type="checkbox" data-k="ma2-3"><span><i class="box"></i>Tick <b>Required reviewers</b> and add yourself (or the people who may cut a release). Press <b>Save protection rules</b>.<span class="see">Leave "Prevent self-review" on if someone else can approve.</span></span></label></li>
+      <li><label><input type="checkbox" data-k="ma2-4"><span><i class="box"></i>In each repository, open <code>.github/workflows/devflow-release.yml</code> and check that the job has the line <code>environment: release</code>. If the file is an older copy, update it from the toolkit template with the repo-admin skill.</span></label></li>
+      <li><label><input type="checkbox" data-k="ma2-5"><span><i class="box"></i>Reopen the <code>release</code> environment page and check that <b>Required reviewers</b> lists the right people.<span class="see">Do not start a real release to test this: if the setting were missing, the run would not wait for anyone.</span></span></label></li>
+    </ol>
+    <p class="done"><b>Report back:</b> <code>ma2: release environment with reviewers in &lt;repos&gt;; workflow names it</code>.</p>
+  </section>
+
+  <section class="item" id="ma3">
+    <header><h2>One real eval run with the isolated home</h2><span class="time">about 10 min, costs a few cents</span></header>
+    <p class="why">The eval agent now runs with an empty <code>HOME</code> and no proxy. Tests cannot prove the real <code>claude</code> program still logs in and reaches the model that way, because that needs a live key.</p>
+    <ol>
+      <li><label><input type="checkbox" data-k="ma3-1"><span><i class="box"></i>On your own computer, check out the feature branch and set up the environment: <pre>python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r tests/requirements.txt</pre></span></label></li>
+      <li><label><input type="checkbox" data-k="ma3-2"><span><i class="box"></i>Type your key into your own terminal, never into a chat or a file: <pre>read -rs ANTHROPIC_API_KEY &amp;&amp; export ANTHROPIC_API_KEY</pre><span class="see">Paste the key at the silent prompt and press Enter. Use a key with a small spend limit. The repository's <a href="https://github.com/tkcs-lab/claude-toolkit/blob/main/docs/evals.md" target="_blank" rel="noopener">docs/evals.md</a> explains the harness.</span></span></label></li>
+      <li><label><input type="checkbox" data-k="ma3-3"><span><i class="box"></i>List the tasks and pick the guardrail task with the lowest cost ceiling: <pre>.venv/bin/python evals/run.py list</pre></span></label></li>
+      <li><label><input type="checkbox" data-k="ma3-4"><span><i class="box"></i>Run it once: <pre>.venv/bin/python evals/run.py run --task &lt;that task id&gt; --repeats 1 --run-ceiling 2</pre><span class="see">If your computer reaches the internet only through a proxy, add <code>--keep-proxy</code>.</span></span></label></li>
+      <li><label><input type="checkbox" data-k="ma3-5"><span><i class="box"></i>You should see a result line for the task with a status other than <code>error</code>, a cost under the ceiling, and a transcript file under <code>evals/transcripts</code>. An error about login or a connection means the isolation broke the real run: report it, do not merge.</span></label></li>
+    </ol>
+    <p class="done"><b>Report back:</b> the printed result line (it holds no secrets) pasted into the PR, for example <code>ma3: guardrail-secret #1: passed cost=$0.31</code>.</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type="checkbox"]'));
+  var key = 'guardrail-fixes-checklist';
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch (e) { saved = {}; }
+  function update() {
+    var done = boxes.filter(function (b) { return b.checked; }).length;
+    document.getElementById('progress').textContent = done + ' of ' + boxes.length + ' steps ticked';
+  }
+  boxes.forEach(function (b) {
+    b.checked = !!saved[b.getAttribute('data-k')];
+    b.addEventListener('change', function () {
+      saved[b.getAttribute('data-k')] = b.checked;
+      try { localStorage.setItem(key, JSON.stringify(saved)); } catch (e) { /* storage unavailable */ }
+      update();
+    });
+  });
+  update();
+})();
+</script>
