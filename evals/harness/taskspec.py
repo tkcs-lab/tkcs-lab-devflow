@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -59,8 +60,9 @@ def validate_task_data(data, graders_known: set[str] | None = None) -> list[str]
         errors.append("give 'command' or 'prompt', not both")
     if "cost_ceiling_usd" in data and not (isinstance(data["cost_ceiling_usd"], (int, float))
                                           and not isinstance(data["cost_ceiling_usd"], bool)
+                                          and math.isfinite(data["cost_ceiling_usd"])
                                           and data["cost_ceiling_usd"] > 0):
-        errors.append("cost_ceiling_usd must be a positive number")
+        errors.append("cost_ceiling_usd must be a positive finite number")
     if graders_known is not None:
         for g in data["graders"]:
             name = g if isinstance(g, str) else g["name"]

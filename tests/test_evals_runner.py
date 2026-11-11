@@ -86,8 +86,52 @@ def test_run_ceiling_aborts_cleanly_and_stops_further_runs():
 def test_agent_that_overspends_the_run_ceiling_is_aborted():
     agent = StubAgent(plan_entry(cost=0.6))
     outs = run_tasks([task()], agent, Budget(1.0), repeats=5)
-    assert [o.record["status"] for o in outs] == ["ok", "aborted", "aborted"]
+    assert [o.record["status"] for o in outs] == ["ok", "aborted"]
     assert outs[1].record["reason"] == "cost_ceiling" and len(agent.calls) == 2
+
+
+def test_budget_abort_stops_the_invocation():
+    agent = StubAgent({"aborted": "cost_ceiling", "cost_usd": 0.6})
+    outs = run_tasks([task()], agent, Budget(50), repeats=3)
+    assert len(agent.calls) == 1 and len(outs) == 1
+    assert outs[0].record["reason"] == "cost_ceiling"
+
+
+def test_exit_code_3_on_cost_ceiling(tmp_path, capsys):
+    from evals.harness import cli
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    (stubs / "make-plan-large.json").write_text(json.dumps({"aborted": "cost_ceiling", "cost_usd": 0.6}))
+    argv = ["run", "--agent", "stub", "--stub-dir", str(stubs), "--task", "make-plan-large", "--out", str(tmp_path / "r.jsonl")]
+    assert cli.main(argv) == 3
+    assert "stopped by the cost ceiling" in capsys.readouterr().err
+
+
+def test_timeout_charges_full_allowance():
+    agent = StubAgent({"aborted": "timeout", "cost_usd": 0})
+    budget = Budget(5)
+    r = run_once(task(), 1, agent, budget).record
+    assert r["status"] == "aborted" and r["reason"] == "timeout"
+    assert budget.spent == pytest.approx(agent.calls[0].max_budget_usd) and budget.spent > 0
+
+
+def test_tiny_remaining_allowance_aborts_before_the_run():
+    agent = StubAgent(plan_entry())
+    r = run_once(task(), 1, agent, Budget(0.005)).record
+    assert r["status"] == "aborted" and r["reason"].startswith("run cost ceiling") and not agent.calls
+
+
+def test_aggregate_does_not_count_skipped_runs():
+    recs = [{"task": "t", "status": "skipped", "reason": "requires: x", "passed": None, "graders": []}]
+    agg = aggregate(recs)["t"]
+    assert agg["runs"] == 0 and agg["skipped"] == 1 and agg["pass_rate"] is None
+
+
+@pytest.mark.parametrize("bad", ["nan", "inf", "0", "-1"])
+def test_cli_rejects_a_bad_run_ceiling(bad, capsys):
+    from evals.harness import cli
+    assert cli.main(["run", "--run-ceiling", bad, "--dry-run"]) == 2
+    assert "run ceiling must be a positive finite number" in capsys.readouterr().err
 
 
 def test_per_run_allowance_is_the_smaller_of_task_and_remaining():

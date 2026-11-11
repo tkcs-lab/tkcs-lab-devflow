@@ -190,9 +190,14 @@ class StubAgent:
         c = self._entry(req)
         wd = req.workdir
         for rel in c.get("delete_files", []):
+            if not (wd / rel).resolve().is_relative_to(wd.resolve()):
+                raise AgentError(f"stub file path escapes the workdir: {rel}")
             (wd / rel).unlink(missing_ok=True)
+        root = wd.resolve()
         for rel, text in c.get("files", {}).items():
             p = wd / rel
+            if not p.resolve().is_relative_to(root):
+                raise AgentError(f"stub file path escapes the workdir: {rel}")
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(text)
         if c.get("branch"):
