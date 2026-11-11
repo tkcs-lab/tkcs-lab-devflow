@@ -51,7 +51,7 @@ Run unattended (no user to ask), do only the audit and stop with the report; nev
 
 - **Can:** organisation settings, repository settings, security features, Actions permissions, a first branch
   protection, the rulesets `tld-main` (default branch) and `tld-tags` (tags), the agent account's role (lowered to
-  write) and the environment `tld-agent`, labels (create, update, rename, delete), unused secrets and variables, webhooks, deploy keys,
+  write), the environments `tld-agent` and `tld-release`, labels (create, update, rename, delete), unused secrets and variables, webhooks, deploy keys,
   merged branches, fine-grained tokens, forbidden paths (for example `.archon`), workflow files.
 - **Reports only (`lint`, required files):** actions not pinned to a commit, workflows without `permissions`, `pull_request_target`, missing `SECURITY.md`/`CODEOWNERS`/`LICENSE`.
 - **Cannot, and says so as `warn` or `info`:** uninstall a GitHub App (the report links the settings page; GitHub has
@@ -72,7 +72,8 @@ write and `"${CLAUDE_PLUGIN_ROOT}/bin/tld" guard end-allow` right after the comm
 on the main branch. The default is a dry run that shows the tag and the notes; unticking `dry_run` makes the tag
 (`<tag_prefix><version>`, an annotated tag on the head of the main branch) and the GitHub release. Never dispatch it
 from a session and never push a tag (see `pr-steward`). The workflow's branch check is not a control; tell the user that the
-`tld-tags` ruleset (`rulesets.tags` in the policy) is what restricts who can tag. This workflow is the only route to a tag:
+`tld-tags` ruleset (`rulesets.tags`: only the admin role may tag) and the `tld-release` environment (`release`: default
+branch only, the owner as reviewer, holding the owner token `TLD_RELEASE_TOKEN`) are what restrict who can tag. This workflow is the only route to a tag:
 the `git-ops` skill deletes branches and makes no tags.
 
 ## Never

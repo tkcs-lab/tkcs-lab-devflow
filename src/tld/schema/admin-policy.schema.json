@@ -151,7 +151,7 @@
             "admin_bypass": { "type": "boolean", "description": "Let the repository admin role bypass it, through a pull request only. Default false: no bypass actor." }
           }
         },
-        "tags": { "type": "boolean", "description": "The ruleset tld-tags on every tag: creation, update and deletion are blocked for everyone but GitHub Actions (the release workflow)." }
+        "tags": { "type": "boolean", "description": "The ruleset tld-tags on every tag: creation, update and deletion are blocked for everyone but the repository admin role; no workflow token may tag. The release workflow tags with TLD_RELEASE_TOKEN from the environment of the release section." }
       }
     },
     "agent": {
@@ -162,6 +162,16 @@
       "properties": {
         "agent_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$", "description": "GitHub login of the agent account. A role above write (maintain, admin) is lowered to write; a role below write is reported." },
         "branch_policy": { "enum": ["default_branch", "protected_branches"], "description": "Which branches may use the environment tld-agent. Default default_branch (a custom policy naming only the default branch)." }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer_login"],
+      "description": "The environment the release workflow runs in: only the default branch may use it, the owner is its one required reviewer, and it holds TLD_RELEASE_TOKEN (an owner token).",
+      "properties": {
+        "reviewer_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$", "description": "GitHub login of the owner, the one required reviewer of every release run." },
+        "environment": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "description": "Name of the environment. Default tld-release; the release workflow template is rendered with it." }
       }
     },
     "secrets": {

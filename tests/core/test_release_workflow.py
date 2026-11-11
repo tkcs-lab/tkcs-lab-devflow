@@ -60,9 +60,9 @@ def test_triggers_and_settings(doc):
     assert inputs["prerelease"]["default"] is False and inputs["skip_checks"]["default"] is False
     assert inputs["bump"]["options"] == ["patch", "minor", "major"] and inputs["bump"]["default"] == "patch"
     assert doc["concurrency"] == {"group": "tld-release", "cancel-in-progress": False}
-    assert doc["permissions"] == {"contents": "write", "checks": "read", "statuses": "read"}
+    assert doc["permissions"] == {"contents": "read", "checks": "read", "statuses": "read"}, "GITHUB_TOKEN never tags"
     job = doc["jobs"]["release"]
-    assert job["environment"] == "release", "every run waits for the reviewers of the release environment"
+    assert job["environment"] == "__RELEASE_ENVIRONMENT__", "every run waits for the owner, the environment's reviewer"
     assert job["if"] == "github.ref == 'refs/heads/__MAIN_BRANCH__'"
     assert [s["name"] for s in job["steps"]] == [
         "Decide the tag", "Check that the commit is green", "Show the release notes", "Publish the tag and the release"]
@@ -77,12 +77,15 @@ def test_no_third_party_action_and_no_expression_in_scripts(doc):
 
 
 def test_only_known_placeholders():
-    assert set(re.findall(r"__([A-Z_]+)__", TEMPLATE.read_text())) == {"MAIN_BRANCH", "TAG_PREFIX"}
+    assert set(re.findall(r"__([A-Z_]+)__", TEMPLATE.read_text())) == {"MAIN_BRANCH", "TAG_PREFIX", "RELEASE_ENVIRONMENT"}
 
 
-def test_tokens_fall_back_to_the_default(doc):
-    for s in doc["jobs"]["release"]["steps"]:
-        assert s["env"]["GH_TOKEN"] == "${{ secrets.TLD_RELEASE_TOKEN || github.token }}"
+def test_reads_use_the_workflow_token_and_writes_the_release_token(doc):
+    tokens = {s["name"]: s["env"]["GH_TOKEN"] for s in doc["jobs"]["release"]["steps"]}
+    assert tokens == {"Decide the tag": "${{ github.token }}", "Check that the commit is green": "${{ github.token }}",
+                      "Show the release notes": "${{ secrets.TLD_RELEASE_TOKEN }}",
+                      "Publish the tag and the release": "${{ secrets.TLD_RELEASE_TOKEN }}"}
+    assert "|| github.token" not in TEMPLATE.read_text(), "no fallback: the workflow token cannot tag"
 
 
 def test_scripts_have_valid_syntax(doc, tmp_path):
@@ -98,9 +101,11 @@ def test_no_forbidden_words():
 
 @pytest.mark.parametrize("prefix", ["v", "", "release-"])
 def test_renders_to_valid_yaml(ra, prefix):
-    text = ra.render_template(TEMPLATE.read_text(), {"main_branch": "trunk", "tag_prefix": prefix})
+    text = ra.render_template(TEMPLATE.read_text(), {"main_branch": "trunk", "tag_prefix": prefix,
+                                                      "release_environment": "tld-release"})
     rendered = yaml.safe_load(text)
     assert rendered["jobs"]["release"]["if"] == "github.ref == 'refs/heads/trunk'"
+    assert rendered["jobs"]["release"]["environment"] == "tld-release"
     assert rendered["jobs"]["release"]["steps"][0]["env"]["PREFIX"] == prefix
 
 
@@ -240,3 +245,10 @@ def test_publish_tells_how_to_finish_when_the_release_fails(doc, tmp_path):
     p, calls = publish(doc, tmp_path, fail=True)
     assert p.returncode == 1
     assert "tag v1.2.3 was created but the release was not" in p.stdout and "gh release create v1.2.3" in p.stdout
+
+
+def test_notes_step_stops_without_the_release_token(doc, tmp_path):
+    env, *_ = stub_env(tmp_path, SHA="abc", TAG="v1.2.3")
+    env["GH_TOKEN"] = ""
+    p = run_step(doc, "Show the release notes", env, tmp_path)
+    assert p.returncode == 1 and "::error::secret TLD_RELEASE_TOKEN is not set in the release environment" in p.stdout

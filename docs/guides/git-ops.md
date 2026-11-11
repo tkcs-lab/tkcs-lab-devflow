@@ -7,7 +7,7 @@ fine-grained token that only that repository's `git-ops` environment holds. The 
 profile key `git_ops.repo` names the central repository.
 
 It does not touch tags. Tags have one route: the release workflow `tld-release` in the repository itself, which
-the owner runs by hand; the `tld-tags` ruleset lets only GitHub Actions create one (see [admin.md](admin.md)).
+the owner runs by hand and approves; the `tld-tags` ruleset lets only the admin role create one (see [admin.md](admin.md)).
 
 ## How it works
 

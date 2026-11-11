@@ -2,6 +2,9 @@ name: tld-release
 
 # Cuts a release: an annotated tag on the head of __MAIN_BRANCH__ and a GitHub release with generated notes.
 # Run it by hand (Actions, tld-release, Run workflow). It starts as a dry run.
+# The tag is made with TLD_RELEASE_TOKEN, an owner token that is a secret of the environment
+# __RELEASE_ENVIRONMENT__: only __MAIN_BRANCH__ may use it and the owner approves every run. The workflow's own
+# GITHUB_TOKEN only reads; the tag ruleset tld-tags lets no workflow token create a tag.
 
 on:
   workflow_dispatch:
@@ -38,7 +41,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
   checks: read
   statuses: read
 
@@ -46,15 +49,13 @@ jobs:
   release:
     name: tld-release
     runs-on: ubuntu-latest
-    environment: release
+    environment: __RELEASE_ENVIRONMENT__
     if: github.ref == 'refs/heads/__MAIN_BRANCH__'
     steps:
       - name: Decide the tag
         id: tag
         env:
-          # TLD_RELEASE_TOKEN is optional. Tags and releases made with the default token do not start
-          # other workflows; set the secret (a token that may write contents) when a workflow must run on the tag.
-          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PREFIX: "__TAG_PREFIX__"
           VERSION: ${{ inputs.version }}
@@ -96,7 +97,7 @@ jobs:
       - name: Check that the commit is green
         if: inputs.skip_checks == false
         env:
-          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
           SELF: tld-release
@@ -121,12 +122,16 @@ jobs:
 
       - name: Show the release notes
         env:
-          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::secret TLD_RELEASE_TOKEN is not set in the release environment"
+            exit 1
+          fi
           {
             echo "## Notes for $TAG"
             gh api -X POST "repos/$REPO/releases/generate-notes" -f tag_name="$TAG" -f target_commitish="$SHA" --jq .body
@@ -135,7 +140,7 @@ jobs:
       - name: Publish the tag and the release
         if: inputs.dry_run == false
         env:
-          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
           TAG: ${{ steps.tag.outputs.tag }}

@@ -104,7 +104,7 @@ or `run_workflow` with a numeric `workflow_id` — is denied too, since it canno
 run. `git push origin tags/v1`, a `refs/tags/` source and a bare name that is a local tag are tag pushes and denied (S9).
 Other workflows, such as those in `ci.dispatchable`, stay allowed. Reading stays allowed: `git tag -l`, `--list`, `-n`,
 `--contains`, `--points-at`, `--merged`, `-v`, `git describe`, `git fetch --tags`, `git ls-remote --tags`, `gh release list`.
-The release workflow runs in CI in the `release` environment and is not affected. **Real git-ops runs (S12).** A git-ops dispatch (`tld-git-ops.yml` or `git_ops.workflow`; `gh workflow run`, `gh api`
+The release workflow runs in CI in the `tld-release` environment and is not affected. **Real git-ops runs (S12).** A git-ops dispatch (`tld-git-ops.yml` or `git_ops.workflow`; `gh workflow run`, `gh api`
 dispatches, MCP `run_workflow`) with `dry_run` false, or with inputs it cannot read, is denied unless
 `tld guard allow-git-ops` was run in the last 10 minutes; the `git-ops` skill runs it after the user's yes.
 

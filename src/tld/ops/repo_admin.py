@@ -53,7 +53,7 @@ DOCS_HELP = "see docs/guides/admin.md in the tkcs-lab-devflow repo"
 
 # Built-in workflow templates: policy name -> (file, default parameters).
 BUILTIN_TEMPLATES = {
-    "release": ("tld-release.yml", {"tag_prefix": "v"}),
+    "release": ("tld-release.yml", {"tag_prefix": "v", "release_environment": "tld-release"}),
     "land": ("tld-land.yml", {}),
 }
 KNOWN_DOT_DIRS = (".github", ".claude", ".tld", ".devcontainer", ".vscode", ".husky", ".config", ".changeset", ".githooks")
@@ -752,9 +752,9 @@ def check_protection(ctx: Ctx) -> list[Finding]:
 # with the write role and no more, and the agent token in an environment only the default branch can use.
 
 MAIN_RULESET, TAG_RULESET = "tld-main", "tld-tags"
-ACTIONS_APP_ID = 15368     # the GitHub Actions app: a workflow's GITHUB_TOKEN acts as this integration
 ADMIN_ROLE_ID = 5          # the repository role 'admin' as a ruleset bypass actor
 AGENT_ENV, AGENT_SECRET = "tld-agent", "TLD_AGENT_TOKEN"
+RELEASE_ENV, RELEASE_SECRET = "tld-release", "TLD_RELEASE_TOKEN"
 ROLE_ABOVE_WRITE = ("admin", "maintain")
 ROLE_BELOW_WRITE = ("triage", "read", "none")
 
@@ -780,7 +780,9 @@ def ruleset_bodies(cfg: dict) -> list[dict]:
                     "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}}, "rules": rules})
     if cfg.get("tags"):
         out.append({"name": TAG_RULESET, "target": "tag", "enforcement": "active",
-                    "bypass_actors": [{"actor_id": ACTIONS_APP_ID, "actor_type": "Integration", "bypass_mode": "always"}],
+                    # Only the admin role: no workflow's GITHUB_TOKEN can tag. The release workflow tags with
+                    # TLD_RELEASE_TOKEN, an owner token kept in the reviewed environment tld-release.
+                    "bypass_actors": [{"actor_id": ADMIN_ROLE_ID, "actor_type": "RepositoryRole", "bypass_mode": "always"}],
                     "conditions": {"ref_name": {"include": ["~ALL"], "exclude": []}},
                     "rules": [{"type": "creation"}, {"type": "update", "parameters": {"update_allows_fetch_and_merge": False}},
                               {"type": "deletion"}]})
@@ -865,6 +867,92 @@ def _part(check: str, fn: str, out: list, fn_part) -> None:
         out.append(failure(check, fn, exc))
 
 
+def environment_findings(ctx: Ctx, check: str, fn: str, repo: dict, name: str, mode: str = "default_branch",
+                         reviewers: list[dict] | None = None) -> tuple[list[Finding], bool]:
+    """(findings, the environment exists) for an environment whose deployment branches are only the default branch
+    (mode default_branch) or the protected branches, and, when `reviewers` is given, exactly those required reviewers
+    ([{"type": "User", "id": n}])."""
+    env_path = f"/repos/{fn}/environments/{name}"
+    custom = mode == "default_branch"
+    want = {"protected_branches": not custom, "custom_branch_policies": custom}
+    default = ctx.repo(repo)["default_branch"]
+    out = []
+    try:
+        env = ctx.c.get(env_path)
+    except ApiError as exc:
+        if exc.status != 404:
+            raise
+        env = None
+    have = (env or {}).get("deployment_branch_policy")
+    have_reviewers = sorted((r.get("type"), (r.get("reviewer") or {}).get("id"))
+                            for rule in (env or {}).get("protection_rules") or [] if rule.get("type") == "required_reviewers"
+                            for r in rule.get("reviewers") or [])
+    reviewers_differ = reviewers is not None and have_reviewers != sorted((r["type"], r["id"]) for r in reviewers)
+    if env is None or not isinstance(have, dict) or any(bool(have.get(k)) != v for k, v in want.items()) or reviewers_differ:
+        if env is None:
+            what = "is missing"
+        elif not isinstance(have, dict):
+            what = "lets every branch deploy"
+        elif any(bool(have.get(k)) != v for k, v in want.items()):
+            what = "has another deployment branch policy"
+        else:
+            what = "has other required reviewers (" + (", ".join(f"{t} {i}" for t, i in have_reviewers) or "none") + ")"
+        body = {"deployment_branch_policy": want, **({"reviewers": reviewers} if reviewers is not None else {})}
+        out.append(Finding(check, fn, f"environment:{name}", f"environment {name} {what}; policy wants "
+                           + ("only the default branch" if custom else "protected branches only")
+                           + (" and the owner as the one required reviewer" if reviewers is not None else ""), "fix",
+                           api("PUT", env_path, body)))
+    if custom:
+        policies = []
+        if isinstance(have, dict) and have.get("custom_branch_policies"):
+            policies = ctx.c.paginate(f"{env_path}/deployment-branch-policies", key="branch_policies")
+        if not any(p.get("name") == default and p.get("type", "branch") == "branch" for p in policies):
+            out.append(Finding(check, fn, f"environment:{name}:branch:{default}", f"environment {name} does "
+                               f"not allow the default branch {default}", "fix",
+                               api("POST", f"{env_path}/deployment-branch-policies", {"name": default, "type": "branch"})))
+        for pol in policies:
+            if pol.get("name") == default and pol.get("type", "branch") == "branch":
+                continue
+            out.append(Finding(check, fn, f"environment:{name}:extra:{pol.get('type', 'branch')}:{pol.get('name')}",
+                               f"environment {name} also allows the {pol.get('type', 'branch')} pattern "
+                               f"'{pol.get('name')}'; policy wants only {default}", "fix",
+                               api("DELETE", f"{env_path}/deployment-branch-policies/{pol['id']}")))
+    return out, env is not None
+
+
+def secret_findings(ctx: Ctx, check: str, fn: str, env_name: str, secret: str, env_exists: bool, needed_by: str) -> list[Finding]:
+    """A secret that should live only in an environment: reported when it is a repository or organisation secret too,
+    or missing from the environment. Only names are read; a value never is."""
+    out = []
+    set_it = f"gh secret set {secret} --env {env_name} --repo {fn}"
+    for label, where, path in (("repository", "a repository secret", f"/repos/{fn}/actions/secrets"),
+                               ("organisation", "an organisation secret shared with the repository",
+                                f"/repos/{fn}/actions/organization-secrets")):
+        if any(s["name"].upper() == secret for s in ctx.c.paginate(path, key="secrets")):
+            out.append(Finding(check, fn, f"secret:{label}", f"{secret} is {where}: every "
+                               f"workflow on every branch can read it; it belongs in the environment {env_name}", "warn",
+                               manual=f"`{set_it}` (the value is never readable), then delete the other secret"))
+    names = set()
+    if env_exists:
+        names = {s["name"].upper() for s in ctx.c.paginate(f"/repos/{fn}/environments/{env_name}/secrets", key="secrets")}
+    if secret not in names:
+        out.append(Finding(check, fn, "secret:environment", f"{secret} is not set in the environment {env_name} "
+                           f"({needed_by} needs it)", "info", manual=f"`{set_it}`"))
+    return out
+
+
+def _env_and_secret(ctx: Ctx, check: str, fn: str, repo: dict, out: list, env_name: str, secret: str, needed_by: str,
+                    mode: str = "default_branch", reviewers=None) -> None:
+    exists = [False]
+
+    def env_part():
+        found, exists[0] = environment_findings(ctx, check, fn, repo, env_name, mode, reviewers)
+        return found
+
+    _part(check, fn, out, env_part)
+    _part(check, fn, out, lambda: secret_findings(ctx, check, fn, env_name, secret, exists[0], needed_by))
+
+
 def check_agent(ctx: Ctx) -> list[Finding]:
     cfg = ctx.p.get("agent")
     if not cfg:
@@ -889,73 +977,34 @@ def check_agent(ctx: Ctx) -> list[Finding]:
                             manual=f"invite {login} with the write role at https://github.com/{fn}/settings/access")]
         return []
 
-    def environment(fn, repo):
-        env_path = f"/repos/{fn}/environments/{AGENT_ENV}"
-        custom = mode == "default_branch"
-        want = {"protected_branches": not custom, "custom_branch_policies": custom}
-        default = ctx.repo(repo)["default_branch"]
-        out = []
-        try:
-            env = ctx.c.get(env_path)
-        except ApiError as exc:
-            if exc.status != 404:
-                raise
-            env = None
-        have = (env or {}).get("deployment_branch_policy")
-        if env is None or not isinstance(have, dict) or any(bool(have.get(k)) != v for k, v in want.items()):
-            what = "is missing" if env is None else ("lets every branch deploy" if not isinstance(have, dict)
-                                                     else "has another deployment branch policy")
-            out.append(Finding("agent", fn, f"environment:{AGENT_ENV}", f"environment {AGENT_ENV} {what}; policy wants "
-                               + ("only the default branch" if custom else "protected branches only"), "fix",
-                               api("PUT", env_path, {"deployment_branch_policy": want})))
-        if custom:
-            policies = []
-            if isinstance(have, dict) and have.get("custom_branch_policies"):
-                policies = ctx.c.paginate(f"{env_path}/deployment-branch-policies", key="branch_policies")
-            if not any(p.get("name") == default and p.get("type", "branch") == "branch" for p in policies):
-                out.append(Finding("agent", fn, f"environment:{AGENT_ENV}:branch:{default}", f"environment {AGENT_ENV} does "
-                                   f"not allow the default branch {default}", "fix",
-                                   api("POST", f"{env_path}/deployment-branch-policies", {"name": default, "type": "branch"})))
-            for p in policies:
-                if p.get("name") == default and p.get("type", "branch") == "branch":
-                    continue
-                out.append(Finding("agent", fn, f"environment:{AGENT_ENV}:extra:{p.get('type', 'branch')}:{p.get('name')}",
-                                   f"environment {AGENT_ENV} also allows the {p.get('type', 'branch')} pattern "
-                                   f"'{p.get('name')}'; policy wants only {default}", "fix",
-                                   api("DELETE", f"{env_path}/deployment-branch-policies/{p['id']}")))
-        return out, env is not None
-
-    def secret(fn, env_exists):
-        out = []
-        set_it = f"gh secret set {AGENT_SECRET} --env {AGENT_ENV} --repo {fn}"
-        for label, where, path in (("repository", "a repository secret", f"/repos/{fn}/actions/secrets"),
-                                   ("organisation", "an organisation secret shared with the repository",
-                                    f"/repos/{fn}/actions/organization-secrets")):
-            if any(s["name"].upper() == AGENT_SECRET for s in ctx.c.paginate(path, key="secrets")):
-                out.append(Finding("agent", fn, f"secret:{label}", f"{AGENT_SECRET} is {where}: every "
-                                   f"workflow on every branch can read it; it belongs in the environment {AGENT_ENV}", "warn",
-                                   manual=f"`{set_it}` (the value is never readable), then delete the other secret"))
-        names = set()
-        if env_exists:
-            names = {s["name"].upper() for s in ctx.c.paginate(f"/repos/{fn}/environments/{AGENT_ENV}/secrets", key="secrets")}
-        if AGENT_SECRET not in names:
-            out.append(Finding("agent", fn, "secret:environment", f"{AGENT_SECRET} is not set in the environment {AGENT_ENV} "
-                               "(the land workflow needs it)", "info", manual=f"`{set_it}`"))
-        return out
-
     def one(repo):
-        fn, out, exists = repo["full_name"], [], [False]
+        fn, out = repo["full_name"], []
         _part("agent", fn, out, lambda: role(fn))
-
-        def env_part():
-            found, exists[0] = environment(fn, repo)
-            return found
-
-        _part("agent", fn, out, env_part)
-        _part("agent", fn, out, lambda: secret(fn, exists[0]))
+        _env_and_secret(ctx, "agent", fn, repo, out, AGENT_ENV, AGENT_SECRET, "the land workflow", mode)
         return out
 
     return per_repo(ctx, "agent", one)
+
+
+def check_release(ctx: Ctx) -> list[Finding]:
+    """The environment the release workflow runs in: only the default branch, the owner as the one required reviewer,
+    and TLD_RELEASE_TOKEN as its secret. With the tag ruleset (no workflow bypass) that token is the only way to a tag."""
+    cfg = ctx.p.get("release")
+    if not cfg:
+        return []
+    login, env_name = cfg["reviewer_login"], cfg.get("environment", RELEASE_ENV)
+    try:
+        user_id = ctx.memo(("user", login), lambda: ctx.c.get(f"/users/{_q(login)}")["id"])
+    except ApiError as exc:
+        return [failure("release", ctx.org, exc)]
+
+    def one(repo):
+        fn, out = repo["full_name"], []
+        _env_and_secret(ctx, "release", fn, repo, out, env_name, RELEASE_SECRET, "the release workflow",
+                        reviewers=[{"type": "User", "id": user_id}])
+        return out
+
+    return per_repo(ctx, "release", one)
 
 
 # --------------------------------------------------------------------------- secrets and variables
@@ -1331,6 +1380,8 @@ def check_files(ctx: Ctx) -> list[Finding]:
             if wf.get("repos") and not any(fnmatch.fnmatchcase(repo["name"], g) for g in wf["repos"]):
                 continue
             text, default_dest, defaults = workflow_source(ctx.p, wf)
+            if wf.get("template") == "release" and (ctx.p.get("release") or {}).get("environment"):
+                defaults["release_environment"] = ctx.p["release"]["environment"]  # the one the release check manages
             dest = wf.get("dest", default_dest)
             entry = next((e for e in blobs if e["path"] == dest), None)
             if wf.get("remove"):
@@ -1425,7 +1476,7 @@ def check_lint(ctx: Ctx) -> list[Finding]:
 CHECKS = {
     "org": check_org, "members": check_members, "apps": check_apps, "tokens": check_tokens,
     "repo": check_repo, "security": check_security, "actions": check_actions, "protection": check_protection,
-    "rulesets": check_rulesets, "agent": check_agent,
+    "rulesets": check_rulesets, "agent": check_agent, "release": check_release,
     "secrets": check_secrets, "variables": check_variables, "labels": check_labels,
     "webhooks": check_webhooks, "keys": check_keys, "branches": check_branches, "files": check_files,
     "lint": check_lint,

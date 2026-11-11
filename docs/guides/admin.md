@@ -88,6 +88,7 @@ must see every repository.
 | `protection` | The branch of `branch_protection` has a rule or ruleset. Stands down for the default branch while `rulesets.default_branch` is set | adds a missing one; reports a weaker existing one |
 | `rulesets` | The rulesets `tld-main` (`rulesets.default_branch`) and `tld-tags` (`rulesets.tags`) exist and match, rule for rule, with the same bypass actors | creates a missing one, puts back a changed one (a ruleset of another name is left alone) |
 | `agent` | The role of `agent.agent_login`; the environment `tld-agent` and its deployment branches (`agent.branch_policy`); where `TLD_AGENT_TOKEN` lives | lowers a role above write to write; creates or narrows the environment. A role below write, and a token outside the environment, are reported |
+| `release` | The environment `tld-release` (`release.environment`): default branch only, `release.reviewer_login` as its one required reviewer; where `TLD_RELEASE_TOKEN` lives | creates or corrects the environment; a token outside it is reported |
 | `secrets` | Actions and Dependabot secrets that no workflow names; `secrets.required` names a repository lacks | deletes unused ones when `secrets.delete_unused` (irreversible); a missing one is reported with the `gh secret set` command |
 | `variables` | The same for Actions variables | deletes when `variables.delete_unused` |
 | `labels` | `labels.sync` against each repository: create, update colour or description, rename an alias; labels outside it | create and update yes; delete when `labels.delete_unused` (only labels on no issue or pull request) or `labels.delete_unlisted` (irreversible) |
@@ -139,8 +140,10 @@ Every key is optional except `org`. The schema is the exact source of truth.
 | `branch_protection.require_pull_request`, `branch_protection.approvals`, `branch_protection.require_status_checks`, `branch_protection.strict` | Defaults true, 1, none, false |
 | `branch_protection.enforce_admins`, `branch_protection.linear_history`, `branch_protection.allow_force_pushes`, `branch_protection.allow_deletions` | Defaults false |
 | `rulesets.default_branch.required_status_checks`, `rulesets.default_branch.admin_bypass` | Checks that must pass (none: no checks rule); `admin_bypass: true` lets the admin role bypass `tld-main` through a pull request. Default false |
-| `rulesets.tags` | true: the tag ruleset `tld-tags` |
+| `rulesets.tags` | true: the tag ruleset `tld-tags` (only the admin role may tag) |
 | `agent.agent_login` | **Required in `agent`.** The account sessions push as |
+| `release.reviewer_login` | **Required in `release`.** The owner: the one required reviewer of the release environment |
+| `release.environment` | Name of the release environment; default `tld-release` |
 | `agent.branch_policy` | `default_branch` (default) or `protected_branches`: which branches may use the environment `tld-agent` |
 | `secrets.required`, `secrets.keep`, `secrets.delete_unused`, `secrets.kinds` | `kinds`: `actions`, `dependabot`; default both |
 | `variables.required`, `variables.keep`, `variables.delete_unused` | |
@@ -160,7 +163,7 @@ case keys). `main_branch` is the repository's default branch unless `params` set
 letters, digits and `. _ / -`, so they cannot break out of the YAML or the shell; a repository whose default branch has other characters gets an `error` finding and no file. A file that already matches its
 rendered template is left alone; one that differs is updated, so editing the template and running `apply` rolls the change out.
 
-## Rulesets, the agent account and its environment
+## Rulesets, the agent account and the environments
 
 Rulesets are the control; the hooks in a session are a seatbelt. A hook stops an agent that makes a mistake, but
 an agent that runs `python -c` or has been manipulated can get past it. GitHub cannot be talked out of a ruleset.
@@ -174,14 +177,14 @@ requests and the owner approves them.
   default branch, force-push it, delete it or merge without the owner's approval, and an approval goes stale with
   the next push.
 - **`tld-tags`** on every tag (`~ALL`; `refs/tags/*` would miss names with a slash): `creation`, `update`,
-  `deletion`. The one bypass actor is the GitHub Actions app (`Integration` 15368, `always`), so a tag comes only
-  from a workflow, which in the toolkit is `tld-release`. Caveat: the bypass is for every workflow whose
-  `GITHUB_TOKEN` may write contents, not only the release workflow. That is why `tld-release` is the only template
-  with `contents: write`, why the hooks keep sessions from writing workflow files, and why
-  `actions.default_workflow_permissions: read` belongs in the policy. A workflow file the agent pushes on a branch
-  of its own can still ask for `contents: write`; the owner sees it in the pull request but it has run by then. If
-  that matters, take the Actions bypass out by hand and let the release workflow use `TLD_RELEASE_TOKEN` (an owner
-  token) with an admin bypass instead.
+  `deletion`. The one bypass actor is the admin role (`RepositoryRole` 5, `always`): the owner. No workflow is a
+  bypass actor, so no workflow's `GITHUB_TOKEN` can tag, whatever permissions it asks for.
+- **The environment `tld-release`** (`release` in the policy) is where `tld-release` runs and where the owner token
+  `TLD_RELEASE_TOKEN` lives, the token the workflow tags with. Only the default branch may use it, and the owner is
+  its one required reviewer (`reviewers: [{type: User, id: <owner id>}]`, the id from `GET /users/{login}`). So a
+  workflow the agent pushes on a branch of its own cannot reach the token (the branch policy), a run from the
+  default branch waits for the owner (the reviewer), and its `GITHUB_TOKEN` cannot tag (no bypass). A
+  `TLD_RELEASE_TOKEN` that is a repository or organisation secret is reported, like the agent token.
 - **The agent's role** is at most `write`. `apply` lowers `admin` or `maintain` to `write` (`push` in the API). A
   role that comes from a team or the organisation's base permission stays where it is; the next audit shows it.
 - **The environment `tld-agent`** holds `TLD_AGENT_TOKEN` as an environment secret. Its deployment branches are a
@@ -197,25 +200,30 @@ What only the owner can do:
    Secrets read). Never the agent's token: it must not be able to change the rules that bind it.
 2. Set `TLD_AGENT_TOKEN` in the environment: `gh secret set TLD_AGENT_TOKEN --env tld-agent --repo <owner>/<repo>`,
    then delete the repository secret of that name if the audit reports one.
-3. Rulesets on private repositories need a paid plan; without one the check reports `unavailable`.
+3. Create a fine-grained token of the owner (Contents read and write on the repositories) and set it:
+   `gh secret set TLD_RELEASE_TOKEN --env tld-release --repo <owner>/<repo>`. It expires; renew it.
+4. Rulesets, and required reviewers on environments, need a paid plan on private repositories; without one the check reports `unavailable`.
 
 ## The release workflow
 
-`template: release` installs `.github/workflows/tld-release.yml`. Parameter: `tag_prefix` (default `v`).
+`template: release` installs `.github/workflows/tld-release.yml`. Parameters: `tag_prefix` (default `v`) and
+`release_environment` (default `release.environment`, else `tld-release`).
 
-- The owner runs it by hand: Actions, `tld-release`, Run workflow, on the main branch. It has no other trigger. The branch check is a convenience, not a control. What stops anyone else from tagging is the `tld-tags` ruleset above.
+- The owner runs it by hand: Actions, `tld-release`, Run workflow, on the main branch, and approves the run in the
+  environment. It has no other trigger. What stops anyone else from tagging is the `tld-tags` ruleset and the
+  environment above, not the workflow's branch check.
 - Inputs: `version` (for example `1.4.0`; empty bumps the newest `<tag_prefix>x.y.z` tag by `bump`: `patch`, `minor`, `major`),
   `prerelease`, `skip_checks`, and `dry_run`, which is ticked by default. A dry run shows the tag and the generated notes in the run summary.
 - Unticked, it checks that every check run on the head commit succeeded (and the commit status is neither failing nor pending), creates an
   annotated tag on that commit and a GitHub release with generated notes. It stops if the tag exists.
-- Tags and releases made with the default workflow token do not start other workflows. If one must run on the tag
-  (a build, a publish), add the secret `TLD_RELEASE_TOKEN`, a token that may write contents; the workflow uses it
-  when it is set. It is separate from `TLD_AGENT_TOKEN` so the release does not run as the agent.
+- Its `GITHUB_TOKEN` only reads (`contents: read`); the notes, the tag and the release are made with
+  `TLD_RELEASE_TOKEN`, and the run stops when that secret is missing. A tag made with it starts other workflows (a
+  build, a publish). It is separate from `TLD_AGENT_TOKEN` so the release never runs as the agent.
 - It uses no third-party action and passes inputs to the shell only through environment variables.
 
 ## Not covered
 
 Rulesets other than `tld-main` and `tld-tags`, the organisation's Actions allow list, environments other than
-`tld-agent` and the values of any secret, Codespaces secrets, OAuth
+`tld-agent` and `tld-release`, and the values of any secret, Codespaces secrets, OAuth
 authorisations, classic personal access tokens (in a SAML organisation `GET /orgs/{org}/credential-authorizations` lists them), and people (adding or removing members). The report says so where it
 matters (`info`). Scheduling an audit (a weekly workflow that opens an issue) is left to you.

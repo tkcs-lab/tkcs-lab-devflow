@@ -26,8 +26,8 @@ class State:
         self.files = {".archon/a.yml": "x\n", ".archon/deep/b.yml": "y\n", "README.md": "# app\n"}
         self.rulesets = {}  # id -> ruleset, as the rulesets API keeps them
         self.role = "admin"  # the agent account's role
-        self.environment = None  # the tld-agent environment, once created
-        self.branch_policies = []
+        self.environments = {}  # name -> environment, as GET answers it, once created
+        self.branch_policies = {}  # environment name -> its deployment branch policies
         self.repo_secrets = ["TLD_AGENT_TOKEN"]
 
 
@@ -112,19 +112,29 @@ def make_handler(state):
             if m == "PUT" and p == "/repos/acme/app/collaborators/bot":
                 state.role = {"push": "write"}[body["permission"]]
                 return self.reply(204)
-            env = "/repos/acme/app/environments/tld-agent"
-            if p == env and m == "GET" and state.environment is not None:
-                return self.reply(200, state.environment)
-            if p == env and m == "PUT":
-                state.environment = {"name": "tld-agent", **body}
-                return self.reply(200, state.environment)
-            if p == env + "/deployment-branch-policies" and state.environment is not None:
-                if m == "POST":
-                    state.branch_policies.append({"id": len(state.branch_policies) + 1, **body})
-                    return self.reply(200, state.branch_policies[-1])
-                return self.reply(200, {"total_count": len(state.branch_policies), "branch_policies": state.branch_policies})
-            if m == "GET" and p == env + "/secrets" and state.environment is not None:
-                return self.reply(200, {"total_count": 0, "secrets": []})
+            me = re.fullmatch(r"/repos/acme/app/environments/([^/]+)(/.*)?", p)
+            if me:
+                name, rest = me.group(1), me.group(2) or ""
+                if rest == "" and m == "PUT":
+                    env = {"name": name, "deployment_branch_policy": body["deployment_branch_policy"], "protection_rules": []}
+                    if "reviewers" in body:  # GET answers the reviewers inside a protection rule, with the user's details
+                        env["protection_rules"].append({"type": "required_reviewers", "reviewers": [
+                            {"type": r["type"], "reviewer": {"id": r["id"], "login": "owner"}} for r in body["reviewers"]]})
+                    state.environments[name] = env
+                    return self.reply(200, env)
+                if name in state.environments:
+                    if rest == "" and m == "GET":
+                        return self.reply(200, state.environments[name])
+                    policies = state.branch_policies.setdefault(name, [])
+                    if rest == "/deployment-branch-policies" and m == "POST":
+                        policies.append({"id": len(policies) + 1, **body})
+                        return self.reply(200, policies[-1])
+                    if rest == "/deployment-branch-policies":
+                        return self.reply(200, {"total_count": len(policies), "branch_policies": policies})
+                    if rest == "/secrets" and m == "GET":
+                        return self.reply(200, {"total_count": 0, "secrets": []})
+            if m == "GET" and p == "/users/owner":
+                return self.reply(200, {"login": "owner", "id": 42})
             if m == "GET" and p == "/repos/acme/app/actions/secrets":
                 return self.reply(200, {"total_count": 1, "secrets": [{"name": n} for n in state.repo_secrets]})
             if m == "GET" and p == "/repos/acme/app/actions/organization-secrets":
@@ -245,7 +255,7 @@ def test_unreachable_server_is_a_clean_error(tmp_path):
 # --------------------------------------------------------------------------- rulesets, the agent role, the environment
 
 GUARD_POLICY = {"org": "acme", "rulesets": {"default_branch": {"required_status_checks": ["test"]}, "tags": True},
-                "agent": {"agent_login": "bot"}}
+                "agent": {"agent_login": "bot"}, "release": {"reviewer_login": "owner"}}
 
 
 def guard_run(url, tmp_path, *argv):
@@ -273,10 +283,15 @@ def test_rulesets_role_and_environment_dry_run_create_and_no_drift(server, tmp_p
     assert p.returncode == 0, p.stdout + p.stderr
     assert writes(state) == [("POST", "/repos/acme/app/rulesets"), ("POST", "/repos/acme/app/rulesets"),
                              ("PUT", "/repos/acme/app/collaborators/bot"), ("PUT", "/repos/acme/app/environments/tld-agent"),
-                             ("POST", "/repos/acme/app/environments/tld-agent/deployment-branch-policies")]
+                             ("POST", "/repos/acme/app/environments/tld-agent/deployment-branch-policies"),
+                             ("PUT", "/repos/acme/app/environments/tld-release"),
+                             ("POST", "/repos/acme/app/environments/tld-release/deployment-branch-policies")]
     tags = next(r for r in state.rulesets.values() if r["name"] == "tld-tags")
-    assert tags["bypass_actors"] == [{"actor_id": 15368, "actor_type": "Integration", "bypass_mode": "always"}]
-    assert state.role == "write" and state.branch_policies[0]["name"] == "main"
+    assert tags["bypass_actors"] == [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
+    assert state.role == "write" and state.branch_policies["tld-agent"][0]["name"] == "main"
+    release_put = next(b for m, pth, b, _ in state.requests if m == "PUT" and pth.endswith("/environments/tld-release"))
+    assert release_put["reviewers"] == [{"type": "User", "id": 42}], "the owner approves every release run"
+    assert state.branch_policies["tld-release"][0]["name"] == "main"
     state.requests.clear()
     p = guard_run(url, tmp_path, "audit", "--format", "json")
     left = {f["message"] for f in json.loads(p.stdout)["findings"] if f["severity"] == "fix"}

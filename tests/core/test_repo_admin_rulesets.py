@@ -73,7 +73,8 @@ def test_tag_ruleset_shape(ra):
     tags = bodies(ra)["tld-tags"]
     assert tags["target"] == "tag" and tags["conditions"]["ref_name"]["include"] == ["~ALL"]
     assert [r["type"] for r in tags["rules"]] == ["creation", "update", "deletion"]
-    assert tags["bypass_actors"] == [{"actor_id": 15368, "actor_type": "Integration", "bypass_mode": "always"}]
+    assert tags["bypass_actors"] == [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
+    assert not any(a["actor_type"] == "Integration" for a in tags["bypass_actors"]), "no workflow token may tag"
     assert set(bodies(ra, {"tags": True})) == {"tld-tags"} and ra.ruleset_bodies({"tags": False}) == []
 
 
@@ -135,13 +136,14 @@ def test_other_required_checks_are_drift(ra):
     assert [f.message for f in ra.check_rulesets(ctx)] == ["ruleset tld-main: rule required_status_checks has other parameters"]
 
 
-def test_a_tag_ruleset_that_lets_everyone_tag_is_drift(ra):
+def test_a_tag_ruleset_that_lets_workflows_tag_is_drift(ra):
     def edit(name, have):
         if name == "tld-tags":
-            have["bypass_actors"] = [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
+            have["bypass_actors"].append({"actor_id": 15368, "actor_type": "Integration", "bypass_mode": "always"})
     ctx, _ = world(ra, {"rulesets": RULESETS}, routes=served(ra, edit=edit))
     found = ra.check_rulesets(ctx)
     assert [f.subject for f in found] == ["tld-tags"] and "Integration 15368 (always)" in found[0].message
+    assert found[0].action.body["bypass_actors"] == [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}]
     assert found[0].action.path == f"{RS}/2"
 
 
@@ -294,3 +296,84 @@ def test_policy_rules_for_the_new_sections(ra):
     assert any("agent.branch_policy" in e for e in ra.validate_policy({"org": "a", "agent": {**AGENT, "branch_policy": "all"}}))
     assert any("rulesets.default_branch.bypass" in e for e in ra.validate_policy({"org": "a", "rulesets": {"default_branch": {"bypass": 1}}}))
     assert any("rulesets.tags" in e for e in ra.validate_policy({"org": "a", "rulesets": {"tags": "yes"}}))
+
+
+# --------------------------------------------------------------------------- the release environment
+
+RENV = "/repos/acme/app/environments/tld-release"
+RELEASE = {"reviewer_login": "owner"}
+
+
+def release_routes(env=None, policies=MAIN_ONLY, repo_secrets=(), env_secrets=("TLD_RELEASE_TOKEN",)):
+    routes = {("GET", "/users/owner"): {"login": "owner", "id": 42},
+              ("GET", "/repos/acme/app/actions/secrets"): {"secrets": [{"name": n} for n in repo_secrets]},
+              ("GET", "/repos/acme/app/actions/organization-secrets"): {"secrets": []}}
+    if env is not None:
+        routes[("GET", RENV)] = env
+        routes[("GET", f"{RENV}/deployment-branch-policies")] = {"branch_policies": list(policies)}
+        routes[("GET", f"{RENV}/secrets")] = {"secrets": [{"name": n} for n in env_secrets]}
+    return routes
+
+
+def release_env(*reviewer_ids):
+    rules = [{"type": "branch_policy"}]
+    if reviewer_ids:
+        rules.append({"type": "required_reviewers", "prevent_self_review": False,
+                      "reviewers": [{"type": "User", "reviewer": {"id": i, "login": f"u{i}"}} for i in reviewer_ids]})
+    return {"name": "tld-release", "protection_rules": rules,
+            "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True}}
+
+
+def test_release_environment_in_line_is_no_drift(ra):
+    ctx, fake = world(ra, {"release": RELEASE}, routes=release_routes(env=release_env(42)))
+    assert ra.check_release(ctx) == [] and fake.writes == []
+
+
+def test_a_missing_release_environment_is_created_with_the_owner_as_reviewer(ra):
+    ctx, _ = world(ra, {"release": RELEASE}, routes=release_routes())
+    found = ra.check_release(ctx)
+    assert base.sev(found) == [("environment:tld-release", "fix"), ("environment:tld-release:branch:main", "fix"),
+                               ("secret:environment", "info")]
+    put = found[0].action
+    assert (put.method, put.path) == ("PUT", RENV)
+    assert put.body == {"deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True},
+                        "reviewers": [{"type": "User", "id": 42}]}
+
+
+@pytest.mark.parametrize("ids", [(), (7,), (42, 7)])
+def test_other_release_reviewers_are_drift(ra, ids):
+    ctx, _ = world(ra, {"release": RELEASE}, routes=release_routes(env=release_env(*ids)))
+    found = ra.check_release(ctx)
+    assert base.sev(found) == [("environment:tld-release", "fix")] and "other required reviewers" in found[0].message
+    assert found[0].action.body["reviewers"] == [{"type": "User", "id": 42}]
+
+
+def test_the_release_token_outside_its_environment_is_reported(ra):
+    ctx, _ = world(ra, {"release": RELEASE}, routes=release_routes(env=release_env(42), repo_secrets=["TLD_RELEASE_TOKEN"]))
+    found = ra.check_release(ctx)
+    assert base.sev(found) == [("secret:repository", "warn")]
+    assert "gh secret set TLD_RELEASE_TOKEN --env tld-release --repo acme/app" in found[0].manual
+
+
+def test_an_unknown_reviewer_login_is_one_finding(ra):
+    routes = {("GET", "/users/owner"): base.ApiErr(404, "Not Found", "GET", "/users/owner")}
+    ctx, _ = world(ra, {"release": RELEASE}, routes=routes)
+    assert [f.severity for f in ra.check_release(ctx)] == ["unavailable"]
+
+
+def test_a_named_release_environment_is_managed_and_rendered(ra):
+    policy = {"release": {**RELEASE, "environment": "ship"}, "workflows": [{"template": "release"}]}
+    routes = {k: v for k, v in release_routes().items()}
+    ctx, _ = world(ra, policy, routes=routes)
+    assert {f.action.path for f in ra.check_release(ctx) if f.action} >= {"/repos/acme/app/environments/ship"}
+    change = ra.check_files(ctx)[0].action.changes[0]
+    assert "environment: ship" in change["content"] and "__RELEASE_ENVIRONMENT__" not in change["content"]
+
+
+def test_release_dry_run_and_apply(ra):
+    ctx, fake = world(ra, {"release": RELEASE}, routes=release_routes())
+    found = ra.run_checks(ctx, ["release"])
+    ra.apply_findings(ctx, found, yes=False, allow_delete=False, out=lambda line: None)
+    assert fake.writes == []
+    assert ra.apply_findings(ctx, found, yes=True, allow_delete=False, out=lambda line: None) == 0
+    assert [(m, p) for m, p, _ in fake.writes] == [("PUT", RENV), ("POST", f"{RENV}/deployment-branch-policies")]

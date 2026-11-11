@@ -60,11 +60,15 @@ rulesets:                          # the server-side control; the hooks in the s
   default_branch:                  # ruleset tld-main: pull request, 1 approval, no force push, no deletion
     required_status_checks: []     # e.g. ["test"]
     admin_bypass: false            # true: the admin role may bypass it, through a pull request only
-  tags: true                       # ruleset tld-tags: only GitHub Actions (the release workflow) creates, moves or deletes tags
+  tags: true                       # ruleset tld-tags: only the admin role creates, moves or deletes tags (no workflow token)
 
 agent:
   agent_login: your-agent-account  # REQUIRED in this section: the account sessions push as; at most the write role
   branch_policy: default_branch    # environment tld-agent (holds TLD_AGENT_TOKEN): default_branch | protected_branches
+
+release:                           # the environment tld-release: default branch only, the owner approves each run
+  reviewer_login: your-owner-account   # REQUIRED in this section; TLD_RELEASE_TOKEN (an owner token) is its secret
+  environment: tld-release
 
 secrets:
   required: []                     # e.g. ["SOME_TOKEN"]: a repository without it, own or from the organisation, is reported
