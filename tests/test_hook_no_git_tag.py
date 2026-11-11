@@ -1,7 +1,7 @@
 """no-git-tag: no creating, moving, deleting or pushing tags; reading stays allowed."""
 import pytest
 
-from hooks_helpers import bash, git, make_repo, run, run_script
+from hooks_helpers import bash, event, git, make_repo, run, run_script
 
 HOOK = "no-git-tag"
 
@@ -104,3 +104,68 @@ def test_script_contract(feature_repo):
     ok = run_script(HOOK, bash("git tag -l", feature_repo))
     assert (ok.returncode, ok.stdout, ok.stderr) == (0, "", "")
     assert run_script(HOOK, {}, project=feature_repo, stdin="").returncode == 2, "fail closed"
+
+
+@pytest.mark.parametrize("command", [
+    "git -c push.followTags=true push origin feature",
+    "git -c PUSH.FOLLOWTAGS=true push origin feature",
+    "git -c remote.origin.push='refs/tags/*:refs/tags/*' push origin",
+    "echo 'create refs/tags/v7 HEAD' | git update-ref --stdin",
+])
+def test_config_driven_tag_pushes_and_update_ref_stdin_denied(feature_repo, command):
+    assert run(HOOK, bash(command, feature_repo)).code == 2, command
+
+
+def test_config_driven_tag_pushes_from_repository_config(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo")
+    assert run(HOOK, bash("git push origin feature", repo)).code == 0
+    git(repo, "config", "remote.origin.push", "refs/tags/*:refs/tags/*")
+    assert run(HOOK, bash("git push origin", repo)).code == 2
+    git(repo, "config", "--unset-all", "remote.origin.push")
+    git(repo, "config", "push.followTags", "true")
+    assert run(HOOK, bash("git push origin feature", repo)).code == 2
+
+
+def test_plain_push_allowed(feature_repo):
+    assert run(HOOK, bash("git push origin feature", feature_repo)).code == 0
+
+
+RELEASE_DENIED = [
+    "gh workflow run devflow-release.yml -f dry_run=false -f version=9.9.9", "gh workflow run devflow-release",
+    "gh workflow run .github/workflows/devflow-release.yml",
+    "gh api -X POST repos/o/r/actions/workflows/devflow-release.yml/dispatches -f ref=main",
+    "gh release edit v1 --tag v3", "gh release edit v1 --tag=v3",
+    "gh api -X PATCH repos/o/r/releases/1 -f tag_name=v2", "gh api -X DELETE repos/o/r/releases/1",
+]
+RELEASE_ALLOWED = [
+    "gh workflow run test.yml",
+    "gh workflow run devflow-git-ops.yml -R org/central -f repo=org/x -f action=create-tag -f name=v1.0.0",
+    "gh release view v1", "gh release edit v1 --notes hi",
+]
+
+
+@pytest.mark.parametrize("command", RELEASE_DENIED)
+def test_release_dispatch_denied_bash(feature_repo, command):
+    assert run(HOOK, bash(command, feature_repo)).code == 2, command
+
+
+@pytest.mark.parametrize("command", RELEASE_ALLOWED)
+def test_release_dispatch_allowed_bash(feature_repo, command):
+    assert run(HOOK, bash(command, feature_repo)).code == 0, command
+
+
+def _mcp(feature_repo, **inp):
+    return run(HOOK, event("mcp__github__actions_run_trigger", feature_repo, **inp)).code
+
+
+def test_release_dispatch_denied(feature_repo):
+    for command in RELEASE_DENIED:
+        assert run(HOOK, bash(command, feature_repo)).code == 2, command
+    assert _mcp(feature_repo, method="run_workflow", workflow_id="devflow-release.yml", ref="main") == 2
+    assert _mcp(feature_repo, method="run_workflow", workflow_id=123456, ref="main") == 2
+    assert _mcp(feature_repo, method="run_workflow", workflow_id="123456", ref="main") == 2
+    for command in RELEASE_ALLOWED:
+        assert run(HOOK, bash(command, feature_repo)).code == 0, command
+    assert _mcp(feature_repo, method="run_workflow", workflow_id="test.yml", ref="main") == 0
+    assert _mcp(feature_repo, method="run_workflow", workflow_id="devflow-git-ops.yml", ref="main") == 0
+    assert _mcp(feature_repo, method="cancel_workflow_run", run_id=5) == 0

@@ -6,10 +6,12 @@ The release workflow runs in CI and is not affected.
 """
 from __future__ import annotations
 
+import os
 import re
 
 import _common
 from _common import Ctx
+from _gitcfg import _truthy, git_config_value, git_config_values
 from _gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs, ref_exists, short_ref
 from _shell import ParseError, is_dynamic
 
@@ -84,8 +86,43 @@ def check_tag(args: list[str]) -> str | None:
     return None
 
 
+RELEASE_WORKFLOW = "devflow-release.yml"
+REL_EDIT = re.compile(r"^repos/[^/]+/[^/]+/releases/[^/]+$")
+DISPATCH = re.compile(r"^repos/[^/]+/[^/]+/actions/workflows/([^/]+)/dispatches$")
+PUSH_KEY = re.compile(r"^remote\.[^=]*\.(push|mirror)$", re.I)
+
+
+def is_release_workflow(name: str) -> bool:
+    base = os.path.basename(name.strip())
+    return base in (RELEASE_WORKFLOW, "devflow-release")
+
+
+def check_push_config(it: Item, push) -> str | None:
+    d, opts, ov = it.dir, it.git.repo_opts, it.git.config
+    for item in ov:
+        key = item.partition("=")[0]
+        if key.lower() == "push.followtags" and _truthy(item.partition("=")[2]) or PUSH_KEY.match(key):
+            return deny(f"the `-c {key}` setting pushes tags")
+    if _truthy(git_config_value(d, opts, ov, "push.followTags")):
+        return deny("`push.followTags` is true, so this push also pushes tags")
+    cur = None
+    remote = push.repo
+    if not remote:
+        from _gitcfg import current_branch
+        cur = current_branch(d, opts)
+        remote = (git_config_value(d, opts, ov, f"branch.{cur}.pushRemote") if cur else None) or \
+            git_config_value(d, opts, ov, "remote.pushDefault") or \
+            (git_config_value(d, opts, ov, f"branch.{cur}.remote") if cur else None) or "origin"
+    if any("refs/tags/" in v for v in git_config_values(d, opts, ov, f"remote.{remote}.push")):
+        return deny(f"`remote.{remote}.push` names refs/tags/, so this push pushes tags")
+    return None
+
+
 def check_push(it: Item) -> str | None:
     push = parse_push(it.git.args)
+    msg = check_push_config(it, push)
+    if msg:
+        return msg
     if push.tags:
         return deny("`git push --tags` / `--follow-tags` pushes tags")
     specs = parse_refspecs(push.refspecs)
@@ -104,12 +141,21 @@ def check_push(it: Item) -> str | None:
 
 def check_gh(it: Item) -> str | None:
     path = gh_path(it.words)
+    if path[:2] == ["workflow", "run"] and len(path) > 2 and is_release_workflow(path[2]):
+        return deny("this dispatches the release workflow")
+    if path[:2] == ["release", "edit"] and any(w == "--tag" or w.startswith("--tag=") for w in it.words):
+        return deny("`gh release edit --tag` moves a release to another tag")
     if path[:2] in (["release", "create"], ["release", "delete"]):
         return deny(f"`gh {path[0]} {path[1]}` creates or deletes a tag")
     if path[:1] == ["api"]:
         api = parse_gh_api(it.words)
+        ep = api.endpoint
+        m = DISPATCH.match(ep)
+        if api.method != "GET" and m and is_release_workflow(m.group(1)):
+            return deny("this dispatches the release workflow")
+        if api.method in ("PATCH", "PUT", "DELETE") and REL_EDIT.match(ep):
+            return deny("this `gh api` call edits or deletes a release, which moves or removes its tag")
         if api.method != "GET":
-            ep = api.endpoint
             if TAG_REF.match(ep) or re.match(r"^repos/[^/]+/[^/]+/git/tags$", ep) or \
                     re.match(r"^repos/[^/]+/[^/]+/releases$", ep) or \
                     (re.match(r"^repos/[^/]+/[^/]+/git/refs$", ep) and api.fields.get("ref", "").startswith("refs/tags/")):
@@ -117,7 +163,22 @@ def check_gh(it: Item) -> str | None:
     return None
 
 
+def check_mcp(ctx: Ctx) -> str | None:
+    if ctx.tool.rsplit("__", 1)[-1] != "actions_run_trigger":
+        return None
+    args = ctx.tool_input
+    if str(args.get("method", "")) != "run_workflow":
+        return None
+    wid = args.get("workflow_id")
+    if isinstance(wid, str) and wid.lower().endswith((".yml", ".yaml")):
+        return deny("this dispatches the release workflow") if is_release_workflow(wid) else None
+    return deny("`run_workflow` with a workflow id (not a file name) cannot be checked, and may be the release "
+                "workflow; dispatch by file name")
+
+
 def evaluate(ctx: Ctx) -> str | None:
+    if ctx.tool.startswith("mcp__"):
+        return check_mcp(ctx)
     if ctx.tool != "Bash" or not isinstance(ctx.tool_input.get("command"), str):
         return None
     try:
@@ -133,6 +194,8 @@ def evaluate(ctx: Ctx) -> str | None:
                 msg = check_tag(it.git.args)
             elif sub == "push":
                 msg = check_push(it)
+            elif sub == "update-ref" and "--stdin" in it.git.args:
+                msg = deny("`git update-ref --stdin` can create tags through input that cannot be read")
             elif sub == "update-ref" and any("refs/tags/" in a for a in it.git.args):
                 msg = deny("`git update-ref` on refs/tags/ changes a tag")
         elif it.kind == "gh":
