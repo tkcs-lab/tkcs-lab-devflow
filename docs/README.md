@@ -7,7 +7,7 @@ Plans (`<slug>-plan.md`) are transient and not listed; a finished plan's decisio
 
 - [architecture/design.md](architecture/design.md) - design record: layout, decisions, what was probed and rejected; read before changing the architecture.
 - [architecture/hooks.md](architecture/hooks.md) - the guardrail hooks, their configuration and the commands' compatibility; read when changing a hook.
-- [architecture/agents.md](architecture/agents.md) - the ten generic agents, the profile's agents block and the points they run at; read when changing an agent or the agents block.
+- [architecture/roles.md](architecture/roles.md) - the ten roles, the profile's roles block, the points and modes they run at; read when changing a role or the roles block.
 - [architecture/scope-drift.md](architecture/scope-drift.md) - scope-drift monitoring at each /implement merge; read when changing tld plan scope-check.
 - [architecture/evals.md](architecture/evals.md) - the eval harness in evals/, tasks, graders, baselines; read when measuring a change to a command, skill or hook.
 - [architecture/maintenance-spike.md](architecture/maintenance-spike.md) - what a cloud session can and cannot do; read before changing how the maintenance commands push or comment.
@@ -24,6 +24,11 @@ Plans (`<slug>-plan.md`) are transient and not listed; a finished plan's decisio
 - [guides/admin.md](guides/admin.md) - repo-admin: auditing organisation and repository settings, the rulesets and the agent account; read when changing it.
 - [guides/git-ops.md](guides/git-ops.md) - the central git-ops workflow for branch deletion; read when changing it.
 - [migrating-privacyfence.md](migrating-privacyfence.md) - how the first project moved onto the toolkit (pinned: linked from outside this repo); read when migrating another project.
+
+## Core content
+
+- [../playbooks/runtime.md](../playbooks/runtime.md) - the runtime actions the playbooks name (workers, roles, asks, GitHub) and the ask format; read when writing a playbook step or mapping one to a runtime.
+- [../playbooks/policies/untrusted-text.md](../playbooks/policies/untrusted-text.md) - whose text can be an ask or an instruction; read when a playbook reads issues, comments or files.
 
 ## Reference
 

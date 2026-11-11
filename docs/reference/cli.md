@@ -12,19 +12,28 @@ How to run it:
 - In the Claude Code plugin: `"${CLAUDE_PLUGIN_ROOT}/bin/tld" ...` (the plugin is sourced from the repository
   root). The hooks run `adapters/claude/hooks/<name>.py`, thin shims over the same modules.
 
+The playbooks call these commands as `tld ...`; `tests/core/test_contracts.py` checks that every call in
+`playbooks/` and `adapters/` names a command below with flags its `--help` lists. `tld <group> <command> --help` never
+runs the command, also for the commands without their own argument parser (`dod exempt`, `guard allow-*`, the survey
+modules). `tld --version` prints the running version, the one a profile's `tld.version` is checked against.
+
 ## Commands
 
 | Command | Module | What it does |
 |---|---|---|
 | `tld profile validate [PROFILE] [--resolved] [--no-file-checks] [--root DIR]` | `tld.profile.validate` | validate a profile (default `.tld/toolkit.yaml`) against `schema/profile.schema.json` |
-| `tld profile patch set-block\|diff ...` | `tld.profile.patch` | text-level edits of the profile for `/setup` |
+| `tld profile patch set-block PROFILE roles\|docs.website PROPOSAL [--answers F] [--write [--yes]]` | `tld.profile.patch` | merge the survey's proposal with the human's answers into one block; prints the diff, writes a changed block only with `--yes` (exit 4 otherwise), a block neither has is a no-op |
+| `tld profile patch diff PROFILE PROPOSAL [--root DIR]` | `tld.profile.patch` | new, changed, same and stale keys of a proposal |
 | `tld profile survey [ROOT]` | `tld.profile.survey` | the survey and proposal behind `/setup` |
 | `tld profile survey-docs [ROOT]` | `tld.profile.survey_docs` | the docs part of the survey |
 | `tld profile survey-signals [ROOT]` | `tld.profile.survey_signals` | the signals part of the survey |
 | `tld profile survey-proposal SIGNALS.json` | `tld.profile.survey_proposal` | turn survey signals into a proposal |
 | `tld plan validate-manifest PLAN [--profile P]` | `tld.plan.manifest` | validate a plan's implementation manifest |
 | `tld plan scope-check check\|disposition\|record\|section ...` | `tld.plan.scope` | scope-drift checks of `/implement` |
-| `tld roles required --profile P --at POINT [--changed F]` | `tld.roles.dispatch` | the agents required at a point, as JSON |
+| `tld plan check-url URL [--repo O/N] [--main B]` | `tld.plan.phases` | accept a plan URL only from this repository's main branch or a `plan/<slug>` branch (S14); prints owner, repo, ref, path |
+| `tld plan branch-name --plan-slug S \| --review-slug S \| --manifest PLAN [--phase ID [--rev N] \| --fix N]` | `tld.plan.phases` | the branch names of the playbooks (C12) |
+| `tld plan phase-status PLAN [--ref R] [--running ID]... [--approved ID]... [--repo DIR]` | `tld.plan.phases` | done (by `Plan-Phase` trailers), gated, ready, waiting phases and the ones to start, as JSON |
+| `tld roles required --profile P --at POINT [--changed F]` | `tld.roles.dispatch` | the roles required at a point, with their mode, as JSON |
 | `tld roles verify --required F --report F` | `tld.roles.dispatch` | check a report against `tld roles required` |
 | `tld dod exempt` | `tld.dod.gate` | mark this checkout's session exempt from the dod-gate hook |
 | `tld guard allow-profile` | `tld.guard.protect_paths` | let the session edit the profile for the next 2 hours |
@@ -37,12 +46,14 @@ How to run it:
 | `tld board stale [FILE] [--now T]` | `tld.board.stale` | print the ids of hidden status records |
 | `tld board build --title T --out F ...` | `tld.board.build` | build the self-contained board page |
 | `tld board validate-record FILE [--doc-id ID]` | `tld.board.record` | validate a status record |
+| `tld board project-slug OWNER/NAME` | `tld.board.record` | the project slug of a repository, the only `project` a record may have |
 | `tld ops land-order [FILE] [--max N]` | `tld.ops.land_order` | order the open pull requests for `/land` |
 | `tld ops pick-release --pattern RE ...` | `tld.ops.pick_release` | pick the newest eligible release tag |
 | `tld ops upstream-sync plan\|prepare ...` | `tld.ops.upstream_sync` | sync a fork to an upstream release |
 | `tld ops repo-admin validate-policy\|whoami\|audit\|apply ...` | `tld.ops.repo_admin` | audit and update organisation and repository settings |
-| `tld ops docs-index check\|inventory\|move ...` | `tld.ops.docs_index` | the docs index rules and doc moves |
-| `tld review decisions ITEMS.json OUT.html` | `tld.review.decisions` | build `/review`'s decisions page (temporary, until the board inbox replaces it) |
+| `tld ops docs-index check\|inventory\|move ...` | `tld.ops.docs_index` | the docs index rules and doc moves (`move` also rewrites the profile's paths; a dry run unless `--apply`) |
+| `tld version show`, `tld --version` | `tld.cli` | print the running tld version |
+| `tld review decisions ITEMS.json OUT.html` | `tld.review.decisions` | the former decisions page; no playbook calls it any more (the board's asks replace it) |
 
 ## Migration from devflow
 

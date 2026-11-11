@@ -1,14 +1,14 @@
 # The review flow: `/review` → decisions → `/make-plan`
 
-`/review` is a deep review of a repository, part of one, or a pull request. It covers three
-dimensions and decides, finding by finding, what should be fixed. Its output is a review document
-that `/make-plan` turns into a plan.
+`/review` is a deep review of a repository, part of one, or a pull request (the procedure is
+[playbooks/review.md](../../playbooks/review.md)). Its dimensions are roles, and it decides, finding by finding, what
+should be fixed. Its output is a review document that `/make-plan` turns into a plan.
 
 ```
 /review [scope]  ──►  review/<slug> branch: <plan_dir>/<slug>-review.md
                        │
-                       ├─ open items? ──► decisions page (add to plan | create issue | drop)
-                       │                    └─ you tell the session you are done
+                       ├─ open items? ──► one ask on the board (plan | issue | drop per item)
+                       │                    └─ your answers wake the session
                        │                         └─ review updated, issues created
                        ▼
 /make-plan <review URL>  ──►  plan/<slug>  ──►  /implement
@@ -22,20 +22,23 @@ that `/make-plan` turns into a plan.
 | paths or globs | those paths, with whatever they call where it matters |
 | `#<n>` or a PR URL | the PR's diff, in the context of the files it touches |
 | a branch name | the branch's diff against `<main>` |
-| `apply <review URL>` | no review: reads the decisions from the page and applies them (for a new session) |
+| `apply <review URL>` | no review: reads the answers of the decisions ask and applies them (for a new session) |
 
-It needs the project profile (`.tld/toolkit.yaml`), like every tld command. It runs on Opus
-and starts Opus subagents for the dimensions and for verification, so a whole-repository review of a
+It needs the project profile (`.tld/toolkit.yaml`), like every tld command. It runs at the `strong` level
+and runs its roles and verifiers at `models.reviewer` (default `strong`), so a whole-repository review of a
 large codebase takes a while and a fair number of tokens.
 
 ## What it checks
 
-| Dimension | Id | Skill | In short |
-|---|---|---|---|
-| Security | `SEC-n` | `secure-code-review` | threat model, every entry point traced, CI and automation, secrets across the git history, dependencies, defaults, security docs |
-| Tests | `TST-n` | `test-review` | suites per level (unit, integration, e2e) and whether CI runs them, measured or estimated coverage, a behaviour-to-test map, tests that cannot fail, disabled and flaky tests |
-| Documentation | `DOC-n` | `docs-review` | accuracy and validity against the code (commands run, links checked), completeness, consistency, clarity, readability, staleness |
-| Website | `WEB-n` | `docs-review` | only when the repository holds one: builds, navigation, drift from the repository docs, basics a visitor relies on, its security config |
+Each dimension is one role with its checklist (C11), so a finding has exactly one id:
+
+| Dimension | Id | Role | Checklist | In short |
+|---|---|---|---|---|
+| Security | `SEC-n` | `security-reviewer` | `checklists/security.md` | threat model, every entry point traced, CI and automation, secrets across the git history, defaults, security docs |
+| Dependencies | `DEP-n` | `dependency-auditor` | `checklists/security.md` (supply chain) | only when the profile requires the role at `review`: advisories, pins, new dependencies |
+| Tests | `TST-n` | `test-architect` | `checklists/test.md` | suites per level (unit, integration, e2e) and whether CI runs them, measured or estimated coverage, a behaviour-to-test map, tests that cannot fail, disabled and flaky tests |
+| Documentation | `DOC-n` | `tech-writer` | `checklists/docs.md` | accuracy and validity against the code (commands run, links checked), completeness, consistency, clarity, readability, staleness |
+| Website | `WEB-n` | `website-maintainer` | `checklists/docs.md` | only when the repository holds one: builds, navigation, drift from the repository docs, basics a visitor relies on, its security config |
 
 It runs the project's gate (`verify.dod`) and the other suites it finds, reads coverage reports
 the gate produces, and never adds tooling to the repository. It never deploys, publishes, or writes
@@ -59,28 +62,24 @@ Each kept finding then gets one decision:
   investments the project has not committed to (such as an e2e harness where there is none), risks
   you may knowingly accept, findings only you can confirm.
 
-## The decisions page
+## The decisions ask
 
-When there are open items, the review publishes a page with one row per item: severity, where, why,
-the recommendation, three choices (**Add to plan**, **Create issue**, **Drop**) and an optional note.
-Choices are saved as you make them. Press **Finish** when all are decided, then tell the review
-session you are done. It then:
+When there are open items, the review posts one ask to the status board: one question per item (its title and
+summary, the recommendation first, the choices **plan**, **issue** and **drop**) and a notes field. You answer in the
+board's page after logging in; the answers wake the session. It then:
 
-- moves "add to plan" items into "Findings to fix" (your note goes with them);
+- moves "plan" items into "Findings to fix" (your note goes with them);
 - moves "drop" items into "Not doing";
-- creates an issue for each "create issue" item, or links an open issue that already covers it;
-- marks the page as applied and shows the issue links on it;
+- creates an issue for each "issue" item, or links an open issue that already covers it;
 - sets the review's status to `ready-for-plan` and gives you the `/make-plan` line.
 
-If the page cannot save (for example, you opened it somewhere the store is not available), it keeps
-your choices in the browser and offers **Copy as text** to paste into the session. If the session
-cannot publish pages at all, it asks the same questions in chat. If the session has ended, run
-`/review apply <review URL>` in a new one.
+When the board cannot be reached, the questions go to the tracking issue as a comment that mentions you, and only a
+reply by an owner or collaborator counts. If the session has ended, run `/review apply <review URL>` in a new one.
 
 ## The review document
 
 `<plan_dir>/<slug>-review.md` on `review/<slug>`, with a YAML header (`review_slug`, `repository`,
-`commit`, `scope`, `status`, `decisions_artifact`) and these sections: Summary, What was reviewed,
+`commit`, `scope`, `status`, `decisions_ask`) and these sections: Summary, What was reviewed,
 Findings to fix (with Suggested grouping), Issues created, Not doing, Open decisions, Rejected on
 verification. Each finding has where, evidence, why, fix, an acceptance check, cost, confidence and
 who decided it.

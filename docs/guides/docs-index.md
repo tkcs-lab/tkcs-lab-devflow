@@ -37,8 +37,8 @@ For decisions read the ADR index and only the ADRs whose one-line decision touch
 - `/make-plan` reads the index and writes a `Read first:` line in each phase brief.
 - `/implement` workers read only their `Read first:` list; the retirement phase updates the index
   (one row per doc added, moved or deleted) and the `CLAUDE.md` lines a change made untrue.
-- `/dod` reports a `docs index` row (never blocking).
-- The `tech-writer` agent checks the index through `docs-review` when the profile requires that agent.
+- `/dod` reports a `docs index` row; an index error fails it (C3).
+- The `tech-writer` role reports index errors through `checklists/docs.md` when the profile requires it; it never fixes the index (only the retirement phase, `/docs init` and `/docs tidy` edit it).
 - `/docs tidy` repairs drift: missing rows, repointable links, rows for deleted docs.
 
 ## /docs

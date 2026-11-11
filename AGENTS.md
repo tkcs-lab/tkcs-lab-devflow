@@ -8,7 +8,8 @@ fact comes from the project profile `.tld/toolkit.yaml`.
 
 - `src/tld/` - the core package (profile, plan, roles, dod, guard, board, ops, schema, templates)
 - `bin/tld` - the CLI launcher (`tld <group> <command>`, see [docs/reference/cli.md](docs/reference/cli.md))
-- `adapters/claude/` - commands, agents, skills (with the `stack-*` skills), hook entries, `mcp.json`
+- `playbooks/` (with `runtime.md`, `policies/`), `roles/`, `checklists/`, `stacks/` - the neutral procedures and content
+- `adapters/claude/` - thin commands and agents, the `runtime` skill (runtime map, levels), hook entries, `mcp.json`
 - `.claude-plugin/` - the marketplace and the one plugin `tld`, sourced from the repository root
 - `tests/core/`, `tests/adapters/claude/` - pytest; `evals/` - eval harness; `deploy/` - board image
 - `.tld/toolkit.yaml` - this repository's own profile; `docs/` - all documentation
@@ -27,6 +28,7 @@ docs for context. If you add, move or delete a doc, update its row in the same c
 
 ## Rules
 
-- No project-specific words in `src/`, `bin/`, `adapters/` or `.claude-plugin/` (`tests/core/test_no_project_words.py`).
-- A behaviour a command file promises is covered by a test that greps the string or runs the script.
+- No project-specific words in `src/`, `bin/`, `adapters/`, `.claude-plugin/` or the core content (`tests/core/test_no_project_words.py`).
+- No runtime tool or model name in `playbooks/`, `roles/`, `checklists/`, `stacks/`; those live in the adapter.
+- Every `tld` call, runtime action, role, checklist and policy a playbook names must exist (`tests/core/test_contracts.py`).
 - Keep this file and CLAUDE.md under 60 lines: detail belongs in `docs/`.

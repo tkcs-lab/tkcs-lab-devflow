@@ -1,7 +1,7 @@
 # `/setup`
 
-`/setup` surveys a repository and creates or updates `.tld/toolkit.yaml`, including the `agents` block
-([agents.md](../architecture/agents.md)). It delivers the result as one pull request that it never merges. Reference for the file:
+`/setup` surveys a repository and creates or updates `.tld/toolkit.yaml`, including the `roles` block, following [playbooks/setup.md](../../playbooks/setup.md)
+([roles.md](../architecture/roles.md)). It delivers the result as one pull request that it never merges. Reference for the file:
 [profile-reference.md](../reference/profile-reference.md).
 
 ## Modes
@@ -18,15 +18,15 @@
 
 1. **Survey.** `tld profile survey` prints JSON: stacks, CI workflows, verify evidence, git facts, docs and the
    signals below, plus a proposal.
-2. **Decide.** The `profile-setup` skill turns the evidence into a table `key | proposed value | evidence`.
+2. **Decide.** The playbook turns the evidence into a table `key | proposed value | evidence`.
    `verify.fast` is the command that runs the unit tests; `verify.dod` is the de-duplicated commands the CI workflows
    run on `pull_request` or `push`, without deploy or publish steps.
-3. **Ask.** One question call, at most four questions.
+3. **Ask.** One ask on the status board, at most four questions; the answers go into an answers file.
 4. **Write.** Create: copy the starter and edit it. Update: `tld profile patch diff` shows new, changed and stale keys,
-   then `tld profile patch set-block` replaces the `agents` and `docs.website` blocks.
+   then `tld profile patch set-block` merges the proposal with the answers file into the `roles` and `docs.website` blocks (C1). A block that already exists and differs is shown as a diff and written only after you confirm it; a survey without a website changes nothing.
 5. **Check.** The profile is validated with file checks and each `verify.fast` command runs once.
 6. **Deliver.** Branch `chore/toolkit-profile` from the main branch, one commit with only `.tld/toolkit.yaml`, one
-   pull request. It follows `pr-steward` afterwards and never merges. Without GitHub access it stops after the commit and
+   pull request. It follows the pr-steward policy afterwards and never merges. Without GitHub access it stops after the commit and
    says what remains.
 
 ## What the survey looks at
@@ -47,10 +47,10 @@ The modules are `tld profile survey-signals`, `tld profile survey-docs` and `tld
 
 ## What is asked
 
-One call with at most four questions: the security posture (the proposal is the recommended option), every proposed
+One ask with at most four questions: the security posture (the proposal is the recommended option), every proposed
 entry with `blocking: true`, and what the survey could not determine (no test command, no main branch). Nothing else.
 
-When questions cannot be asked: with `--accept-proposals` the proposals count as confirmed and are listed under
+When no ask can be posted or answered: with `--accept-proposals` the proposals count as confirmed and are listed under
 `Decisions for a human` in the pull request; without it every `blocking` is written as `false`, the posture is the
 proposal, and each such entry is listed as unconfirmed. A value that could not be determined is left out and listed
 under `Not verified`.
@@ -65,18 +65,22 @@ entry) and `Not verified`.
 
 ```
 bin/tld profile patch diff .tld/toolkit.yaml survey.json
-bin/tld profile patch set-block .tld/toolkit.yaml agents survey.json --write
+bin/tld profile patch set-block .tld/toolkit.yaml roles survey.json --answers answers.json --write [--yes]
 ```
 
 `diff` prints JSON with `new`, `changed`, `same` and `stale` keys; stale means a path the profile names no longer exists,
-or an `agents.required[].when` glob matches no file. `set-block` replaces the `agents` block (or `docs.website` under
-`docs`) or appends it, and leaves comments, blank lines and neighbouring blocks untouched. It writes to stdout unless
-`--write` is given, and applying the same value twice gives the same text.
+or a `roles.required[].when` glob matches no file. `set-block` merges the answers (`{"roles": {...}}`: mappings key by
+key, `required` items by `role`, `{"role": R, "drop": true}` removes one) over the proposal, then replaces the `roles`
+block (or `docs.website` under `docs`) or appends it, and leaves comments, blank lines and neighbouring blocks
+untouched. Without `--write` it prints the unified diff. With `--write` it writes a new block at once, but a block that
+already exists with another value only with `--yes` (exit 4 and the diff otherwise), so a hand-tuned block is never
+overwritten silently. Neither proposal nor answers having the key is a no-op (exit 0). Applying the same value twice
+gives the same text.
 
 ## The guardrail exemption
 
-The `protect-paths` hook normally denies every edit of `.tld/toolkit.yaml`. `/setup` runs `protect_paths.py
---allow-profile` before its first write and `--end-allow` after the last, also on failure. Details and limits:
+The `protect-paths` hook normally denies every edit of `.tld/toolkit.yaml`. `/setup` runs `tld guard
+allow-profile` before its first write and `tld guard end-allow` after the last, also on failure. Details and limits:
 [hooks.md](../architecture/hooks.md#protect-paths).
 
 ## What is never written

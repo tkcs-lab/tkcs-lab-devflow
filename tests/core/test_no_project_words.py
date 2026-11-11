@@ -1,20 +1,20 @@
 """The generic product must not carry any one project's words."""
 from conftest import ROOT, FORBIDDEN
 
-# The stack-python skill names its tools on purpose; docs/ and tests/ use PrivacyFence as the worked example.
-CHECKED = ["src", "bin", "adapters", ".claude-plugin"]
-OPTIONAL = ["playbooks"]  # checked once it exists
-EXEMPT = ["adapters/claude/skills/stack-python"]
-SUFFIXES = {".md", ".py", ".sh", ".json", ".yaml", ".yml", ".txt", ""}
+# The python stack guide names its tools on purpose; docs/ and tests/ use the first project as the worked example.
+CHECKED = ["src", "bin", "adapters", ".claude-plugin", "playbooks", "roles", "checklists", "stacks"]
+OPTIONAL: list[str] = []  # directories checked only when they exist
+EXEMPT = ["stacks/python.md"]
+SUFFIXES = {".md", ".py", ".sh", ".json", ".yaml", ".yml", ".txt", ".html", ".js", ".toml", ""}
 
 
 def test_no_project_specific_strings():
     hits = []
-    for rel in CHECKED + [d for d in OPTIONAL if (ROOT / d).is_dir()]:
+    for rel in [d for d in CHECKED if (ROOT / d).is_dir()]:
         for path in sorted((ROOT / rel).rglob("*")):
             if not path.is_file() or path.suffix not in SUFFIXES or "__pycache__" in path.parts:
                 continue
-            if any(path.relative_to(ROOT).as_posix().startswith(e + "/") for e in EXEMPT):
+            if path.relative_to(ROOT).as_posix() in EXEMPT:
                 continue
             for n, line in enumerate(path.read_text().splitlines(), 1):
                 if FORBIDDEN.search(line):
@@ -24,8 +24,22 @@ def test_no_project_specific_strings():
 
 def test_checked_paths_exist():
     for rel in CHECKED:
-        assert (ROOT / rel).is_dir(), rel
+        assert rel in OPTIONAL or (ROOT / rel).is_dir(), rel
+
+
+def test_the_word_list_catches_the_known_words():
+    for word in ("PrivacyFence", "the approval gate", "Gemini", "Google AI Studio", "feature/org-mode-mobile",
+                 "src/privacyfence", "a connector"):
+        assert FORBIDDEN.search(word), word
 
 
 def test_install_directory_is_gone():
     assert not (ROOT / "install").exists()
+
+
+def test_the_spike_record_names_no_login_trigger_or_session():
+    """C14: docs/architecture/maintenance-spike.md keeps placeholders for logins, task and session ids."""
+    import re
+    text = (ROOT / "docs" / "architecture" / "maintenance-spike.md").read_text()
+    for pattern in (r"\btrig_[A-Za-z0-9]{8,}", r"\b(session|cse)_[A-Za-z0-9]{8,}", r"andras", r"comments/\d{6,}"):
+        assert not re.search(pattern, text), pattern

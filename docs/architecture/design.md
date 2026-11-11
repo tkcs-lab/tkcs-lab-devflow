@@ -19,50 +19,46 @@ Nightshift's runtime is not used. From it I take: the marketplace shape, the `re
 
 ## 2. Layout
 
+Since WP4 of the migration plan the procedures are neutral: a **core** of playbooks, roles, checklists and stacks,
+and a thin Claude adapter that only maps runtime actions to Claude tools.
+
 ```
 .claude-plugin/marketplace.json         # name: tkcs-lab-devflow; one plugin, tld, with source "./"
 .claude-plugin/plugin.json              # component paths point into adapters/claude/
 pyproject.toml                          # package "tld", console script "tld"
 bin/tld                                 # the CLI launcher (puts src/ on sys.path): see docs/reference/cli.md
 src/tld/
-  cli.py                                # tld <group> <command>
-  profile/{validate,patch,survey,survey_docs,survey_signals,survey_proposal}.py   # the profile and /setup's survey
-  plan/{manifest,scope}.py              # manifest validation, scope-drift checks
-  roles/dispatch.py                     # tld roles required|verify, which agents a point requires and whether they reported
+  cli.py                                # tld <group> <command>, tld --version
+  profile/{validate,version,patch,survey,survey_docs,survey_signals,survey_proposal}.py   # the profile, tld.version, setup's survey
+  plan/{manifest,scope,phases}.py       # manifest validation, scope drift, check-url / branch-name / phase-status
+  roles/dispatch.py                     # tld roles required|verify: which roles a point requires, in which mode, and whether they reported
   dod/gate.py                           # the dod-gate hook policy
   guard/                                # the guardrail hook policies and their shell, git and gh parsing: see docs/architecture/hooks.md
   board/{store,server,client,mcp,mcp_stdio,stale,build,record}.py, board/web/{board.html,rules.js}   # the status board
   ops/{land_order,pick_release,upstream_sync,repo_admin,docs_index}.py
-  review/decisions.{py,html}            # tld review decisions <items.json> <out.html>, /review's decisions page
+  review/decisions.{py,html}            # the former decisions page; no playbook uses it (the board's asks replace it)
   schema/{profile,status-record,admin-policy}.schema.json
   templates/{toolkit.yaml,tld-land.yml,tld-release.yml,tld-git-ops.yml,admin-policy.yaml,git-ops-allowlist.json}
+playbooks/
+  {setup,review,make-plan,implement,dod,land,deps,upstream,docs,board}.md   # one neutral procedure per command
+  {git-ops,repo-admin}.md               # the two procedures run on request (no command)
+  runtime.md                            # the runtime actions the playbooks name: start_worker, check_in, run_role, ask_human, github.* ...
+  policies/{profile,untrusted-text,pr-steward,status-board,roles,docs}.md   # rules several playbooks share; each rule lives in one file
+roles/<role>.md                         # the ten role cards (architect ... refactorer): see docs/architecture/roles.md
+checklists/{review,security,test,docs}.md   # what a review checks; used by the roles
+stacks/{python,go,swift,ipados}.md      # the stack guides the profile's `stacks` selects
 adapters/claude/
-  commands/{make-plan,implement,dod,review}.md   # review: see docs/guides/review.md
-  commands/{board,deps,upstream,land}.md         # maintenance commands: see docs/guides/maintenance.md
-  commands/docs.md                      # /docs [check | init | tidy]: the docs index, see docs/guides/docs-index.md
-  commands/setup.md                     # /setup: survey a repository, create or update the profile: see docs/guides/setup.md
-  agents/<name>.md                      # the ten generic agents (architect ... refactorer): see docs/architecture/agents.md
-  skills/project-profile/SKILL.md       # how every command reads, validates and quotes the profile
-  skills/pr-steward/SKILL.md            # generic steward policy; table comes from ci.dispatchable
-  skills/review-checklist/SKILL.md      # Nightshift, adapted (no run-ledger / R-AG rules)
-  skills/secure-code-review/SKILL.md    # Nightshift, adapted; whole-repository section for /review
-  skills/{test-review,docs-review}/SKILL.md   # checklists for /review's test and documentation dimensions
-  skills/status-board/SKILL.md          # how a session writes its status record to the board
-  skills/repo-admin/SKILL.md            # audit and update organisation and repository settings: see docs/guides/admin.md
-  skills/docs-keeper/SKILL.md           # the docs structure, reading protocol and the init, maintain and tidy procedures
-  skills/{agent-dispatch,profile-setup}/SKILL.md   # dispatching the profile's agents; how /setup decides and asks
-  skills/stack-{python,swift,ipados,go}/SKILL.md   # the stack skills the profile's `stacks` selects
+  commands/<cmd>.md                     # front matter + "follow playbooks/<cmd>.md, map runtime actions with tld:runtime"
+  agents/<role>.md                      # front matter (tools, the model of the role's level) + "apply roles/<role>.md"
+  skills/runtime/SKILL.md               # the runtime map: every runtime action -> Claude tools; the level -> model table
+  skills/{git-ops,repo-admin}/SKILL.md  # pointers to the playbooks, loadable on request
   hooks/hooks.json, hooks/*.py          # the hook entries: thin shims over src/tld/guard and src/tld/dod
   mcp.json                              # declares the tld board mcp-stdio bridge (the tld-board MCP server)
 deploy/board/Dockerfile                 # image of the board server
 evals/                                  # eval harness (not shipped): see docs/architecture/evals.md
-docs/architecture/{design.md,hooks.md,evals.md,scope-drift.md,agents.md}
-docs/architecture/maintenance-spike.md  # record of the spike behind the maintenance commands
-docs/reference/{profile-reference.md,cli.md}
-docs/{guides/{delivery,board-server,review,admin,git-ops,maintenance,setup}.md,migrating-privacyfence.md}
-tests/core, tests/adapters/claude       # pytest; fixtures from real PrivacyFence plans
+docs/                                   # see docs/README.md
+tests/core, tests/adapters/claude       # pytest; contract tests in tests/core/test_contracts.py and tests/adapters/claude/test_structure.py
 .tld/toolkit.yaml                       # this repository's own profile
-.github/workflows/test.yml
 ```
 
 I did not add `test-strategy` and `adr` as skills: `test-strategy` is Nightshift-run-specific
@@ -220,6 +216,9 @@ manifests on `plan/atlassian-user-names` (7 phases) and `plan/plugin-framework`.
 
 ## 5. Commands: how they change
 
+(The history of the first port. Since WP4 the procedures below live in `playbooks/`, the profile is read as
+`playbooks/policies/profile.md` says, and the commands are wrappers.)
+
 * **make-plan**: same sections and wording. Section 0.2 reads `docs.must_read` + the stack skills +
   `project_steward`. ADR bullets conditional on `docs.adr_dir`. Plan path from `docs.plan_dir`. The
   "can the steward table dispatch it?" check reads `ci.dispatchable`. The manifest example uses
@@ -242,6 +241,8 @@ manifests on `plan/atlassian-user-names` (7 phases) and `plan/plugin-framework`.
   so the same command text works under both delivery routes.
 
 ## 6. Stack skills
+
+(Since WP4 these are the stack guides `stacks/<name>.md`, read by the playbooks from the profile's `stacks` (D14).)
 
 `stack-python`: venv at `.venv`, never the system `pip`; install `-e .[dev,test]` if extras exist; tool
 conventions; how to write `acceptance` (named test node ids, `grep`, command + expected output) and
@@ -348,10 +349,10 @@ Rejected:
 Breaking change: the profile key `status.board_url` is removed; a profile that still has `status:` fails
 validation with `unknown key 'status'`. This breaking change shipped in 0.7.0.
 
-## 13. Agents and /setup
+## 13. Roles and /setup
 
-Ten generic agents and the `/setup` command were added. [agents.md](agents.md) and [setup.md](../guides/setup.md) describe what
-they do; this section records why.
+Ten generic agents (now **roles**: role cards in `roles/`, wrapped by the Claude agents) and the `/setup` command were
+added. [roles.md](roles.md) and [setup.md](../guides/setup.md) describe what they do; this section records why.
 
 - **The agents live in tld, not in a new plugin.** They are wired into `/make-plan`, `/implement`, `/review` and
   `/dod`, use the profile and the checklist skills, and must stay in step with those commands, so one plugin and one

@@ -102,7 +102,7 @@ work.
 ## The board
 
 The board is the self-hosted server described in [board-server.md](board-server.md): it stores the
-status record of every project (`/implement` runs and the three maintenance commands) and serves a page
+status record of every command run (C7) and serves a page
 that shows them. Set two variables in every environment that should write to it: `TLD_BOARD_URL`
 (not a secret) and `TLD_BOARD_TOKEN` (a secret you type into the environment settings). Without
 them the commands skip every board step. `/board` checks the connection and reports how many records
@@ -112,10 +112,12 @@ A phase chip shows `drift <n>` when the phase changed `n` files outside its `tou
 when the check was unavailable): a count only, the paths are in the pull request's Scope section. What
 is recorded, what is not and why it never blocks: [scope-drift.md](../architecture/scope-drift.md).
 
-The records are those of `/implement` runs and of the maintenance commands `deps`, `upstream`, `land`, `setup` and `docs`.
-`/setup` ([setup.md](setup.md)) writes a `setup` record with the document id `<project>--setup`; unlike the
-scheduled commands its `orchestrator_session` is the real session id, and its items are `survey`, `confirm`, `write`,
-`verify` and `pr`. Alerts are push only.
+Every command writes a record (D8): `/implement` a `run` record under the project slug, and `setup`, `review`,
+`make-plan`, `deps`, `upstream`, `land` and `docs` a command record under `<project>--<command>`. The project slug is
+the repository name in lower case (`tld board project-slug <owner>/<repo>`). `attended` says whether you started the
+command (`/setup`, `/review`, `/make-plan`, `/implement`, `/land`, `/docs init`: `true`) or a schedule did (`/deps`,
+`/upstream`, `/docs tidy`: `false`, with `orchestrator_session: null` when the session cannot read its own id). The
+final states are `done`, `failed` and `pr_open`. The rules are [playbooks/policies/status-board.md](../../playbooks/policies/status-board.md).
 
 `/board prune` lists the records the board hides (no update for more than 7 days, or finished earlier;
 never one that needs you) and asks one question before it deletes them.

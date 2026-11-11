@@ -113,7 +113,7 @@ Every refusal is final; the workflow does not try another way.
 Whoever has write access can run the workflow. A change to the workflow or the allowlist goes through a pull
 request into `main`. With a second GitHub user and a Code Owners rule, GitHub enforces that review. With one
 GitHub user only, protection of the central repository's `main` is policy, not enforcement: it rests on the rule
-that a session never merges or approves its own pull request (see the `pr-steward` skill).
+that a session never merges or approves its own pull request (see `playbooks/policies/pr-steward.md`).
 
 ## Limits
 

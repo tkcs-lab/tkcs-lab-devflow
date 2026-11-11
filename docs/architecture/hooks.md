@@ -106,7 +106,7 @@ Other workflows, such as those in `ci.dispatchable`, stay allowed. Reading stays
 `--contains`, `--points-at`, `--merged`, `-v`, `git describe`, `git fetch --tags`, `git ls-remote --tags`, `gh release list`.
 The release workflow runs in CI in the `tld-release` environment and is not affected. **Real git-ops runs (S12).** A git-ops dispatch (`tld-git-ops.yml` or `git_ops.workflow`; `gh workflow run`, `gh api`
 dispatches, MCP `run_workflow`) with `dry_run` false, or with inputs it cannot read, is denied unless
-`tld guard allow-git-ops` was run in the last 10 minutes; the `git-ops` skill runs it after the user's yes.
+`tld guard allow-git-ops` was run in the last 10 minutes; the git-ops playbook runs it after the user's yes.
 
 ### `secret-scan`
 
@@ -326,10 +326,10 @@ key, in every hook that reads it. `dod-gate` counts it as a failed attempt inste
 
 ## Compatibility with the commands
 
-The hooks must not break the commands. This table lists every git and gh operation the commands document and the
+The hooks must not break the commands. This table lists every git and gh operation the playbooks document and the
 verdict. `tests/adapters/claude/test_hooks_compat.py` keeps it honest: it has one test per command, runs each documented operation through
-the Bash hooks, fails when a command file stops containing the phrase that documents the operation, and sweeps every
-`git ...` / `gh ...` code span in the commands and skills through the hooks as well.
+the Bash hooks, fails when a playbook stops containing the phrase that documents the operation, and sweeps every
+`git ...` / `gh ...` code span in `playbooks/` through the hooks as well.
 
 | Command | Operations it performs | Verdict |
 |---|---|---|

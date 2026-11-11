@@ -14,10 +14,18 @@ python3 -m venv .venv
 ```
 
 `tests/core/test_no_project_words.py` fails if a file contains a project-specific word; keep the text generic.
+`tests/core/test_contracts.py` checks the playbooks against the code: every `tld` call parses with the real CLI,
+every runtime action is defined in `playbooks/runtime.md`, every role, checklist, stack and policy they name exists,
+and no runtime tool or model name appears in the core content. `tests/adapters/claude/test_structure.py` checks the
+Claude wrappers and that the `runtime` skill maps every action. A procedure change goes into the playbook, with a test
+that runs the code it relies on; there are no sentence-level grep tests.
+
+The version is in three places that must agree: `pyproject.toml`, `src/tld/__init__.py` (`__version__`, which
+`tld.version` in a profile is checked against) and `.claude-plugin/plugin.json`.
 
 ## Evals
 
-Before and after changing a command, run:
+Before and after changing a playbook or command, run:
 
 ```
 python3 evals/run.py validate
