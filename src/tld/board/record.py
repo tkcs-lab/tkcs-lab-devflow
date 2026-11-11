@@ -36,13 +36,13 @@ SCOPE_PATH_MAX_LEN = 300
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 PR_FIELDS = ("number", "url", "state", "ci", "awaiting")
 
-KINDS = ("run", "maintenance")
+KINDS = ("run", "command")
 COMMANDS = ("deps", "upstream", "land", "setup", "docs", "review", "make-plan")
 FINAL = ("done", "failed", "pr_open")
 STATUSES = ("starting", "running", "waiting_user", "reviewing", "pr_open", "done", "failed")
 ITEM_STATES = {
     "run": ("pending", "running", "merged", "failed", "gate"),
-    "maintenance": ("pending", "running", "done", "failed", "gate"),
+    "command": ("pending", "running", "done", "failed", "gate"),
 }
 PR_ENUMS = {"state": ("open", "merged", "closed"), "ci": ("pending", "success", "failure"), "awaiting": ("ci", "codeowner", "none")}
 NO_TIMER = ("waiting_user", "pr_open", "done", "failed")
@@ -84,7 +84,7 @@ def _count(value) -> bool:
 def _check_scope(scope, where: str, kind, errors: list[str]) -> None:
     """The optional per-phase scope-drift field: counts and paths only."""
     where = f"{where} field 'scope'"
-    if kind == "maintenance":
+    if kind == "command":
         errors.append(f"{where} is only allowed in a run record")
         return
     if not isinstance(scope, dict):
@@ -165,13 +165,13 @@ def _check_item(item, n: int, kind, errors: list[str]) -> None:
         errors.append(f"{where} field 'pr' must be a positive integer or null")
     if "scope" in item:
         _check_scope(item["scope"], where, kind, errors)
-    if kind == "maintenance":
+    if kind == "command":
         if item.get("depends_on") not in ([], None):
-            errors.append(f"{where} field 'depends_on' must be empty for a maintenance record")
+            errors.append(f"{where} field 'depends_on' must be empty for a command record")
         if item.get("complexity") is not None:
-            errors.append(f"{where} field 'complexity' must be null for a maintenance record")
+            errors.append(f"{where} field 'complexity' must be null for a command record")
         if item.get("session") is not None:
-            errors.append(f"{where} field 'session' must be null for a maintenance record")
+            errors.append(f"{where} field 'session' must be null for a command record")
 
 
 def validate(rec, doc_id: str | None = None) -> list[str]:
@@ -190,17 +190,17 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
     if "schema" in rec and not (_is_int(rec["schema"]) and rec["schema"] == 1):
         errors.append("'schema' must be 1")
 
-    # Rule 2: kind, command, project, repo, document id, maintenance constraints.
+    # Rule 2: kind, command, project, repo, document id, command-record constraints.
     kind = rec.get("kind")
     command = rec.get("command")
     if "kind" in rec and kind not in KINDS:
-        errors.append("'kind' must be 'run' or 'maintenance'")
+        errors.append("'kind' must be 'run' or 'command'")
         kind = None
     if "command" in rec:
         if kind == "run" and command is not None:
             errors.append("'command' must be null when 'kind' is 'run'")
-        elif kind == "maintenance" and command not in COMMANDS:
-            errors.append(f"'command' must be one of {', '.join(COMMANDS)} when 'kind' is 'maintenance'")
+        elif kind == "command" and command not in COMMANDS:
+            errors.append(f"'command' must be one of {', '.join(COMMANDS)} when 'kind' is 'command'")
         elif kind is None and command is not None and command not in COMMANDS:
             errors.append(f"'command' must be null or one of {', '.join(COMMANDS)}")
     project = rec.get("project")
@@ -215,16 +215,16 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
         if project != project_slug(rec["repo"]):
             errors.append(f"'project' must be '{project_slug(rec['repo'])}', the slug of the repository name")
     if doc_id is not None and isinstance(project, str):
-        if kind == "maintenance" and command in COMMANDS:
+        if kind == "command" and command in COMMANDS:
             expected = f"{project}--{command}"
         else:
             expected = project
         if doc_id != expected:
             errors.append(f"'--doc-id' is '{doc_id}' but the document id of this record is '{expected}'")
-    if kind == "maintenance":
+    if kind == "command":
         for key in ("plan_slug", "plan_url", "feature_branch", "next_check_at"):
             if key in rec and rec[key] is not None:
-                errors.append(f"'{key}' must be null for a maintenance record")
+                errors.append(f"'{key}' must be null for a command record")
     elif kind == "run":
         for key in ("plan_slug", "plan_url", "feature_branch"):
             if key in rec and not _nonempty_str(rec[key]):
@@ -272,8 +272,8 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
             for key, allowed in PR_ENUMS.items():
                 if pr.get(key) is not None and pr[key] not in allowed:
                     errors.append(f"'pr.{key}' must be null or one of {', '.join(allowed)}")
-            if kind == "maintenance" and any(pr.get(key) is not None for key in PR_FIELDS):
-                errors.append("'pr' must have all fields null for a maintenance record (the items carry the pull requests)")
+            if kind == "command" and any(pr.get(key) is not None for key in PR_FIELDS):
+                errors.append("'pr' must have all fields null for a command record (the items carry the pull requests)")
 
     # Rule 4: needs_you pairing.
     needs = rec.get("needs_you")

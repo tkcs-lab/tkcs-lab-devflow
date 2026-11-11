@@ -19,7 +19,7 @@ a `failed` record with `needs_you` when a board exists.
 - **Time budget.** Note the start time. Before each update group, start no new one once more than 80% of
   `deps.time_budget_minutes` has passed: mark the unstarted groups `pending` and set `needs_you` with
   `Run deps again: time budget used`.
-- **Status record** ([policies/status-board.md](policies/status-board.md)): `kind: maintenance`,
+- **Status record** ([policies/status-board.md](policies/status-board.md)): `kind: command`,
   `command: deps`, document id `<project>--deps`, `attended: false`, items the update groups.
 
 ## 1. Pre-check

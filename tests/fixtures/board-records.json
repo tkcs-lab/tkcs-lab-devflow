@@ -552,7 +552,7 @@
     "id": "f-maint-deps--deps",
     "data": {
       "schema": 1,
-      "kind": "maintenance",
+      "kind": "command",
       "command": "deps",
       "project": "f-maint-deps",
       "repo": "example-org/f-maint-deps",

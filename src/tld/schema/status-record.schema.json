@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "tld status record",
-  "description": "One database document per project and command (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an implement orchestration, keyed by the project slug; a command record (kind 'maintenance') belongs to every other command (setup, review, make-plan, deps, upstream, land, docs) and is keyed '<project>--<command>'. The project slug is derived from the repository name (tld board project-slug). 'attended' says whether a person started the command and can answer; the final states are done, failed and pr_open. Schema version 1 gained the optional phase field 'scope' without a bump. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, the project slug) are checked by src/tld/board/record.py. No secrets, file contents or commit messages belong in a record.",
+  "description": "One database document per project and command (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an implement orchestration, keyed by the project slug; a command record (kind 'command') belongs to every other command (setup, review, make-plan, deps, upstream, land, docs) and is keyed '<project>--<command>'. The project slug is derived from the repository name (tld board project-slug). 'attended' says whether a person started the command and can answer; the final states are done, failed and pr_open. Schema version 1 gained the optional phase field 'scope' without a bump. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, the project slug) are checked by src/tld/board/record.py. No secrets, file contents or commit messages belong in a record.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -87,7 +87,7 @@
             "failed",
             "gate"
           ],
-          "description": "run: pending, running, merged, failed, gate. maintenance: pending, running, done, failed, gate."
+          "description": "run: pending, running, merged, failed, gate. command: pending, running, done, failed, gate."
         },
         "session": {
           "type": [
@@ -193,9 +193,9 @@
     "kind": {
       "enum": [
         "run",
-        "maintenance"
+        "command"
       ],
-      "description": "'run' is an implement orchestration; 'maintenance' is the record of any other command."
+      "description": "'run' is an implement orchestration; 'command' is the record of any other command (setup, review, make-plan, deps, upstream, land, docs)."
     },
     "command": {
       "enum": [
@@ -225,21 +225,21 @@
         "string",
         "null"
       ],
-      "description": "null for maintenance."
+      "description": "null for a command record."
     },
     "plan_url": {
       "type": [
         "string",
         "null"
       ],
-      "description": "null for maintenance."
+      "description": "null for a command record."
     },
     "feature_branch": {
       "type": [
         "string",
         "null"
       ],
-      "description": "null for maintenance."
+      "description": "null for a command record."
     },
     "orchestrator_session": {
       "type": [
@@ -281,7 +281,7 @@
       "items": {
         "$ref": "#/$defs/item"
       },
-      "description": "Phases of a run, work items of a maintenance record."
+      "description": "Phases of a run, work items of a command record."
     },
     "pr": {
       "type": "object",

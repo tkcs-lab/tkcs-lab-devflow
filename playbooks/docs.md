@@ -20,7 +20,7 @@ warning in a table (kind, file, message), change nothing, and end with a one-lin
 
 ## init
 
-Attended. Status record: `kind: maintenance`, `command: docs`, `attended: true`, items `inventory`, `move`,
+Attended. Status record: `kind: command`, `command: docs`, `attended: true`, items `inventory`, `move`,
 `index`, `profile`, `pr`. Right after the profile is loaded run `tld guard allow-profile` (the moves rewrite the
 profile's paths, C4), and `tld guard end-allow` after step 10, also when a step failed. This playbook is not
 exempt from the dod gate.
@@ -61,7 +61,7 @@ Unattended, meant to run on a schedule with nobody watching.
 
 - **Never ask the human.** Every doubt becomes a judgement item.
 - **No merging.** Never merge, approve, enable auto-merge or force-push; never comment a bot command.
-- **Status record**: `kind: maintenance`, `command: docs`, `attended: false`, items `index-rows`, `adr-index`,
+- **Status record**: `kind: command`, `command: docs`, `attended: false`, items `index-rows`, `adr-index`,
   `links`.
 
 1. Write the first record (`starting`). Without `docs.index` write `failed` with the reason `Run docs init` and

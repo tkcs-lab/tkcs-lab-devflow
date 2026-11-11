@@ -16,7 +16,7 @@ def run(*args, stdin=None):
     return subprocess.run([*SCRIPT_CMD, *map(str, args)], input=stdin, capture_output=True, text=True)
 
 
-@pytest.mark.parametrize("name", ["good-run", "good-run-scope", "good-maintenance", "good-maintenance-docs"])
+@pytest.mark.parametrize("name", ["good-run", "good-run-scope", "good-command", "good-command-docs"])
 def test_good_fixture_passes(name):
     result = run(RECORDS / f"{name}.json")
     assert result.returncode == 0, result.stdout
@@ -29,7 +29,7 @@ def test_good_fixture_passes(name):
     ("bad-missing-updated-at", "'updated_at'"),
     ("bad-done-no-finished", "'finished_at'"),
     ("bad-running-with-finished", "'finished_at'"),
-    ("bad-maintenance-with-timer", "'next_check_at'"),
+    ("bad-command-with-timer", "'next_check_at'"),
     ("bad-kind-command-mismatch", "'command'"),
 ])
 def test_bad_fixture_fails(name, needle):
@@ -40,29 +40,29 @@ def test_bad_fixture_fails(name, needle):
     assert any(needle in line for line in lines), result.stdout
 
 
-def test_doc_id_for_maintenance():
-    assert run(RECORDS / "good-maintenance.json", "--doc-id", "tkcs-lab-devflow--deps").returncode == 0
-    wrong = run(RECORDS / "good-maintenance.json", "--doc-id", "tkcs-lab-devflow")
+def test_doc_id_for_a_command_record():
+    assert run(RECORDS / "good-command.json", "--doc-id", "tkcs-lab-devflow--deps").returncode == 0
+    wrong = run(RECORDS / "good-command.json", "--doc-id", "tkcs-lab-devflow")
     assert wrong.returncode == 1 and "--doc-id" in wrong.stdout
 
 
 def test_doc_id_for_docs():
-    assert run(RECORDS / "good-maintenance-docs.json", "--doc-id", "tkcs-lab-devflow--docs").returncode == 0
-    wrong = run(RECORDS / "good-maintenance-docs.json", "--doc-id", "tkcs-lab-devflow--deps")
+    assert run(RECORDS / "good-command-docs.json", "--doc-id", "tkcs-lab-devflow--docs").returncode == 0
+    wrong = run(RECORDS / "good-command-docs.json", "--doc-id", "tkcs-lab-devflow--deps")
     assert wrong.returncode == 1 and "--doc-id" in wrong.stdout
 
 
-def maintenance(*args, **changes):
-    rec = json.loads((RECORDS / "good-maintenance.json").read_text())
+def command_record(*args, **changes):
+    rec = json.loads((RECORDS / "good-command.json").read_text())
     rec.update(changes)
     return run("-", *args, stdin=json.dumps(rec))
 
 
 def setup_record(*args, **changes):
-    base = json.loads((RECORDS / "good-maintenance.json").read_text())["phases"][0]
+    base = json.loads((RECORDS / "good-command.json").read_text())["phases"][0]
     items = [{**base, "id": step, "title": step, "branch": None, "pr": None, "state": "pending"}
              for step in ("survey", "confirm", "write", "verify", "pr")]
-    return maintenance(*args, **{"command": "setup", "orchestrator_session": "session_01abc", "attended": True,
+    return command_record(*args, **{"command": "setup", "orchestrator_session": "session_01abc", "attended": True,
                                  "phases": items, **changes})
 
 
@@ -76,11 +76,11 @@ def test_attended_replaces_the_scheduled_literal():
     bad = setup_record(orchestrator_session="scheduled")
     assert bad.returncode == 1 and "'attended: false' marks an unattended run" in bad.stdout
     assert setup_record(orchestrator_session="").returncode == 1
-    assert maintenance(orchestrator_session="session_01abc").returncode == 0  # unattended, but it knows its id
+    assert command_record(orchestrator_session="session_01abc").returncode == 0  # unattended, but it knows its id
     no_id = setup_record(orchestrator_session=None)
     assert no_id.returncode == 1 and "must be the session id when 'attended' is true" in no_id.stdout
-    assert maintenance(attended="no").returncode == 1
-    missing = json.loads((RECORDS / "good-maintenance.json").read_text())
+    assert command_record(attended="no").returncode == 1
+    missing = json.loads((RECORDS / "good-command.json").read_text())
     missing.pop("attended")
     assert "'attended' is required" in run("-", stdin=json.dumps(missing)).stdout
 
@@ -92,8 +92,8 @@ def test_review_and_make_plan_write_records(command):
 
 
 def test_project_slug_comes_from_the_repository_name():
-    assert maintenance(repo="someone/Tkcs_Lab.Devflow").returncode == 0
-    wrong = maintenance(project="other")
+    assert command_record(repo="someone/Tkcs_Lab.Devflow").returncode == 0
+    wrong = command_record(project="other")
     assert wrong.returncode == 1 and "'project' must be 'tkcs-lab-devflow'" in wrong.stdout
     out = subprocess.run(tld_cmd("board", "project-slug", "Org/My__Repo.js"), capture_output=True, text=True)
     assert out.returncode == 0 and out.stdout == "my-repo-js\n"
@@ -103,9 +103,9 @@ def test_project_slug_comes_from_the_repository_name():
 
 def test_pr_open_is_a_final_state():
     """C7: done, failed and pr_open are final; only they may carry finished_at."""
-    assert maintenance(finished_at="2026-11-09T05:00:00Z").returncode == 0  # status pr_open
-    assert maintenance(finished_at=None).returncode == 0
-    assert maintenance(status="running", finished_at="2026-11-09T05:00:00Z").returncode == 1
+    assert command_record(finished_at="2026-11-09T05:00:00Z").returncode == 0  # status pr_open
+    assert command_record(finished_at=None).returncode == 0
+    assert command_record(status="running", finished_at="2026-11-09T05:00:00Z").returncode == 1
 
 
 def test_doc_id_for_setup():
@@ -169,7 +169,7 @@ OK_SCOPE = {"check": "ok", "in_scope": 5, "out_of_scope_count": 2, "collision_co
 
 
 def with_scope(scope, kind="run"):
-    rec = json.loads((RECORDS / ("good-run.json" if kind == "run" else "good-maintenance.json")).read_text())
+    rec = json.loads((RECORDS / ("good-run.json" if kind == "run" else "good-command.json")).read_text())
     rec["phases"][0]["scope"] = scope
     return run("-", stdin=json.dumps(rec))
 
@@ -221,8 +221,8 @@ def test_unavailable_scope_must_be_empty():
     assert result.returncode == 1 and "unavailable" in result.stdout
 
 
-def test_scope_is_not_for_maintenance_records():
-    result = with_scope(OK_SCOPE, kind="maintenance")
+def test_scope_is_not_for_command_records():
+    result = with_scope(OK_SCOPE, kind="command")
     assert result.returncode == 1 and "only allowed in a run record" in result.stdout
 
 
@@ -241,3 +241,9 @@ def test_scope_schema_matches_validator():
     assert "scope" in schema["$defs"]["item"]["properties"] and "scope" not in schema["$defs"]["item"]["required"]
     assert schema["properties"]["schema"]["const"] == 1  # additive change: no version bump
     assert set(scope["properties"]["disposition"]["enum"]) == set(module.SCOPE_DISPOSITIONS) | {None}
+
+
+def test_the_old_kind_maintenance_is_refused():
+    """The record kind for every command but implement is `command`; nothing reads the old name."""
+    result = command_record(kind="maintenance")
+    assert result.returncode == 1 and "'kind' must be 'run' or 'command'" in result.stdout

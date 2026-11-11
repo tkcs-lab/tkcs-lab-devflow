@@ -27,7 +27,7 @@ and stop; never invent a key.
 
 ## Status record
 
-`kind: maintenance`, `command: setup`, document id `<project>--setup`, `attended: true`, `orchestrator_session`
+`kind: command`, `command: setup`, document id `<project>--setup`, `attended: true`, `orchestrator_session`
 this session's id, items `survey`, `confirm`, `write`, `verify`, `pr`.
 
 ## 1. Survey
