@@ -74,6 +74,7 @@ class Ctx:
     profile_problem: str | None = None
     settings: Settings = field(default_factory=Settings)
     notice: str | None = None  # shown to the user when the guard allows
+    context: str | None = None  # added to the agent's context when the guard allows (prompt events)
     disable_error: ProfileError | None = None  # dod-gate only: a malformed hooks.disable, re-raised by its evaluate
     _trusted: trust.Trusted | None = None
 
@@ -246,7 +247,7 @@ def run_guard(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: boo
         _disarm_budget(armed)
     if message:
         return Decision("deny", prefix + message)
-    return Decision("allow", "", prefix + ctx.notice if ctx.notice else None)
+    return Decision("allow", "", prefix + ctx.notice if ctx.notice else None, ctx.context)
 
 
 def problem(name: str, fail_closed: bool, text: str) -> Decision:
