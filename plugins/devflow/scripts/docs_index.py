@@ -456,7 +456,7 @@ def run_move(args) -> int:
     if not (root / src).is_file():
         print(f"move: '{args.src}' is not a file", file=sys.stderr)
         return 1
-    if (root / dst).exists():
+    if os.path.lexists(root / dst):
         print(f"move: '{args.dst}' already exists", file=sys.stderr)
         return 1
     exists = lambda p: (root / p).is_file()  # noqa: E731
@@ -475,14 +475,31 @@ def run_move(args) -> int:
                if not args.apply else None)
 
     if args.apply:
-        for f, new_text in plans.items():
-            (root / f).write_text(new_text)
+        made = []
+        missing = (root / dst).parent
+        while not missing.exists() and missing != root:
+            made.append(missing)
+            missing = missing.parent
         (root / dst).parent.mkdir(parents=True, exist_ok=True)
-        moved = False
+        error = None
         if is_tracked(root, src):
-            moved = subprocess.run(["git", "-C", str(root), "mv", "--", src, dst], capture_output=True).returncode == 0
-        if not moved:
+            proc = subprocess.run(["git", "-C", str(root), "mv", "--", src, dst], capture_output=True, text=True)
+            if proc.returncode != 0:
+                error = f"git mv failed: {(proc.stderr or proc.stdout).strip()}"
+        elif os.path.lexists(root / dst):
+            error = f"'{args.dst}' already exists"
+        else:
             os.rename(root / src, root / dst)
+        if error:
+            for d in made:
+                try:
+                    d.rmdir()
+                except OSError:
+                    pass
+            print(f"move: {error}", file=sys.stderr)
+            return 1
+        for f, new_text in plans.items():
+            (root / (dst if f == src else f)).write_text(new_text)
         parent = (root / src).parent
         while parent != root and parent.is_dir() and not any(parent.iterdir()):
             parent.rmdir()
