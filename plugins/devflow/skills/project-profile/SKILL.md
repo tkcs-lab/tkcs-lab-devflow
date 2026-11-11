@@ -30,7 +30,7 @@ rules follow from that:
    ```
 
    No output means the toolkit is not installed in this session. Stop and tell the user: the
-   project needs the devflow plugin in its Claude Project (see `docs/delivery.md` in the
+   project needs the devflow plugin in its Claude Project (see `docs/guides/delivery.md` in the
    claude-toolkit repo).
 
 2. **Validate and resolve it**, from the repo root:

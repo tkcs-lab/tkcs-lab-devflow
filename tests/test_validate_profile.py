@@ -221,7 +221,7 @@ def test_toolkit_section_is_rejected_with_a_migration_message(vp):
     p = copy.deepcopy(MINIMAL)
     p["toolkit"] = {"ref": "v1"}
     assert errs(vp, p) == [
-        "'toolkit' was removed: the toolkit is delivered only as plugins (docs/delivery.md); "
+        "'toolkit' was removed: the toolkit is delivered only as plugins (docs/guides/delivery.md); "
         "delete the 'toolkit' section"
     ]
 

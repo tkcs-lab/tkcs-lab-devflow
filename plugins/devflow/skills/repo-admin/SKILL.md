@@ -7,7 +7,7 @@ description: Audit and update a GitHub organisation and its repositories against
 
 `scripts/repo_admin.py` compares the organisation with a **policy file** (what it should look like)
 and either reports the differences (`audit`) or removes them (`apply`). This skill is how a session
-drives it with the user. The reference for the policy is `docs/admin.md` in the claude-toolkit repo and
+drives it with the user. The reference for the policy is `docs/guides/admin.md` in the claude-toolkit repo and
 `schema/admin-policy.schema.json`; a starter is `templates/admin-policy.yaml`.
 
 ## Before anything

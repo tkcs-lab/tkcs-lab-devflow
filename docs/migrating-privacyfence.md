@@ -9,7 +9,7 @@ same steps. That ADR links here, so keep this page.
 
 ## Delivery: Claude Project plugins
 
-PrivacyFence uses [the plugin route of `delivery.md`](delivery.md#claude-project-plugins). The
+PrivacyFence uses [the plugin route of `delivery.md`](guides/delivery.md#claude-project-plugins). The
 `devflow` and `stack-python` plugins are enabled in the Claude Project. The toolkit has no hook and no version
 pin. ADR 0132 rejected the hook route because the
 maintainer uses the toolkit in several projects: enabling the plugins once in the Project serves all

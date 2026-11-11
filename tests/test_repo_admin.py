@@ -187,7 +187,7 @@ def test_unsafe_params_are_refused(ra, value):
 
 def test_every_policy_key_is_documented():
     schema = json.loads((DEVFLOW / "schema" / "admin-policy.schema.json").read_text())
-    reference = (ROOT / "docs" / "admin.md").read_text()
+    reference = (ROOT / "docs" / "guides" / "admin.md").read_text()
 
     def walk(node, prefix):
         for key, sub in node.get("properties", {}).items():
@@ -195,13 +195,13 @@ def test_every_policy_key_is_documented():
             if sub.get("type") == "object" and sub.get("properties"):
                 walk(sub, dotted + ".")  # a section is documented through its keys
             else:
-                assert f"`{dotted}`" in reference, f"{dotted} is not in docs/admin.md"
+                assert f"`{dotted}`" in reference, f"{dotted} is not in docs/guides/admin.md"
 
     walk(schema, "")
 
 
 def test_every_check_is_documented(ra):
-    reference = (ROOT / "docs" / "admin.md").read_text()
+    reference = (ROOT / "docs" / "guides" / "admin.md").read_text()
     for name in ra.CHECKS:
         assert f"| `{name}` |" in reference, name
 

@@ -4,7 +4,7 @@ devflow ships ten generic agents in `plugins/devflow/agents/`. They are the same
 is the profile: the `agents` block of `.claude/toolkit.yaml` says which of them are **mandatory** at which point of
 the workflow, whether a finding from them **blocks**, and how strict the security reviewer is. A required agent that
 did not run fails visibly. Key reference: [profile-reference.md](../reference/profile-reference.md). To have the block written for
-you, run `/setup` ([setup.md](../setup.md)).
+you, run `/setup` ([setup.md](../guides/setup.md)).
 
 ## The roster
 

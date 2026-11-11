@@ -54,7 +54,7 @@ def test_board_command_names_its_keys():
     text = (DEVFLOW / "commands" / "board.md").read_text()
     for needle in (
         "board_client.py health", "board_stale.py", "board_delete", "board_list",
-        "DEVFLOW_BOARD_URL", "DEVFLOW_BOARD_TOKEN", "docs/board-server.md",
+        "DEVFLOW_BOARD_URL", "DEVFLOW_BOARD_TOKEN", "docs/guides/board-server.md",
     ):
         assert needle in text
 

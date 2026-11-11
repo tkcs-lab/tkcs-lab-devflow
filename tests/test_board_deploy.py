@@ -1,4 +1,4 @@
-"""The Dockerfile and docs/board-server.md match what the server needs and what the design promises."""
+"""The Dockerfile and docs/guides/board-server.md match what the server needs and what the design promises."""
 from __future__ import annotations
 
 import ast
@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DEVFLOW = ROOT / "plugins" / "devflow"
 SCRIPTS = DEVFLOW / "scripts"
 DOCKERFILE = DEVFLOW / "board" / "Dockerfile"
-DOC = ROOT / "docs" / "board-server.md"
+DOC = ROOT / "docs" / "guides" / "board-server.md"
 
 sys.path.insert(0, str(SCRIPTS))
 import validate_status_record  # noqa: E402

@@ -1,7 +1,7 @@
 # Starter policy for scripts/repo_admin.py (the repo-admin skill). Copy it next to your profile, for
 # example to .claude/admin-policy.yaml, set `admin.policy` in .claude/toolkit.yaml, and edit.
 # A section you leave out is not managed. Everything irreversible is off here; turn it on once an
-# audit shows only what you expect. Reference: docs/admin.md in https://github.com/tkcs-lab/claude-toolkit
+# audit shows only what you expect. Reference: docs/guides/admin.md in https://github.com/tkcs-lab/claude-toolkit
 
 org: your-org                      # REQUIRED: the GitHub organisation
 
