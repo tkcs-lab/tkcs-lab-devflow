@@ -187,3 +187,66 @@ def test_matcher_units():
 
 def test_unparseable_commands_are_allowed(feature_repo):
     assert run(HOOK, bash("echo 'unterminated > .env", feature_repo)).code == 0
+
+
+# ---- docs.changelog guard
+
+def _changelog_repo(repo, policy=None, commit=False):
+    import yaml
+    prof = repo / ".tld" / "toolkit.yaml"
+    data = yaml.safe_load(prof.read_text()) if prof.exists() else {}
+    cl = {"file": "CHANGELOG.md"}
+    if policy != "release-only":
+        cl["section"] = "## [Unreleased]"
+    if policy:
+        cl["policy"] = policy
+    data.setdefault("docs", {})["changelog"] = cl
+    prof.parent.mkdir(exist_ok=True)
+    prof.write_text(yaml.safe_dump(data))
+    (repo / "CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n\n## [1.0.0]\n- first\n")
+    if commit:
+        import subprocess
+        subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], check=True)
+        subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", "HEAD"], check=True)  # as if merged
+
+
+@pytest.mark.parametrize("tool", ["Write", "Edit"])
+def test_release_only_denies_every_changelog_edit(tmp_path, tool):
+    repo = make_repo_with_origin(tmp_path / "r")
+    _changelog_repo(repo, "release-only")
+    r = run(HOOK, event(tool, repo, file_path="CHANGELOG.md", content="x", new_string="x"))
+    assert r.code == 2 and "release only" in r.stderr
+    assert run(HOOK, bash("echo x >> CHANGELOG.md", repo)).code == 2
+    assert run(HOOK, event("Write", repo, file_path="docs/CHANGELOG.md", content="x")).code == 0
+
+
+def test_unreleased_policy_allows_a_line_and_denies_a_new_version_heading(tmp_path):
+    repo = make_repo_with_origin(tmp_path / "r")
+    _changelog_repo(repo)
+    ok = run(HOOK, event("Edit", repo, file_path="CHANGELOG.md", new_string="- A new thing.\n"))
+    assert ok.code == 0
+    bad = run(HOOK, event("Edit", repo, file_path="CHANGELOG.md", new_string="## [1.1.0] - 2026-01-01\n- x\n"))
+    assert bad.code == 2 and "version heading" in bad.stderr and "## [Unreleased]" in bad.stderr
+
+
+def test_rewriting_the_file_with_its_old_headings_is_fine(tmp_path):
+    repo = make_repo_with_origin(tmp_path / "r")
+    _changelog_repo(repo)
+    same = "# Changelog\n\n## [Unreleased]\n- more\n\n## [1.0.0]\n- first\n"
+    assert run(HOOK, event("Write", repo, file_path="CHANGELOG.md", content=same)).code == 0
+
+
+def test_no_changelog_key_means_no_changelog_guard(tmp_path):
+    repo = make_repo_with_origin(tmp_path / "r")
+    assert run(HOOK, event("Write", repo, file_path="CHANGELOG.md", content="## [9.9.9]\n")).code == 0
+
+
+@pytest.mark.parametrize("policy", [None, "release-only"])
+def test_a_changelog_only_change_may_open_the_version_heading(tmp_path, policy):
+    repo = make_repo_with_origin(tmp_path / "r")
+    _changelog_repo(repo, policy, commit=True)
+    heading = event("Edit", repo, file_path="CHANGELOG.md", new_string="## [1.1.0] - 2026-01-01\n- x\n")
+    assert run(HOOK, heading).code == 0
+    (repo / "src.py").write_text("x = 1\n")  # another change in the same branch: no longer changelog-only
+    assert run(HOOK, heading).code == 2

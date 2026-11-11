@@ -63,6 +63,10 @@ COMPAT = {
         ("git push -u origin chore/deps-npm-20260101", "apply the bump, push it"),
         ("git commit -am 'chore(deps): bump lodash'", "commit the fix onto it"),
     ],
+    "ci": [
+        ("git checkout -b chore/ci-pages-20260101 origin/main", "git checkout -b chore/ci-<workflow>-<yyyymmdd> origin/<main>"),
+        ("git push -u origin chore/ci-pages-20260101", "git push -u origin chore/ci-<workflow>-<yyyymmdd>"),
+    ],
     "docs": [
         ("git checkout -b chore/docs-init-20260101 origin/main", "git checkout -b chore/docs-init-<yyyymmdd> origin/<main>"),
         ("git push -u origin chore/docs-init-20260101", "git push -u origin chore/docs-init-<yyyymmdd>"),
@@ -146,7 +150,7 @@ PLACEHOLDERS = {
     "<path>": "docs/foo-plan.md", "<ref>": "plan/foo", "<main>": "main", "<slug>": "foo", "<feature_branch>": "feature/demo",
     "<branch>": "feature/demo", "<phase branch>": "feature/demo--p1", "<base>": "abc1234", "<feature>": "feature/demo",
     "<new-with-hyphens>": "v1-2-3", "<new>": "v1.2.3", "<ecosystem>": "npm", "<plan file>": "/tmp/plan.md", "<version_file>": "UPSTREAM", "<upstream.tag_pattern>": "^v[0-9.]+$",
-    "<yyyymmdd-hhmm>": "20260101-0101", "<yyyymmdd>": "20260101", "<owner>/<repo>": "o/r",
+    "<yyyymmdd-hhmm>": "20260101-0101", "<yyyymmdd>": "20260101", "<workflow>": "pages", "<owner>/<repo>": "o/r",
 }
 SPAN = re.compile(r"`((?:git|gh) [^`]+)`")
 

@@ -165,6 +165,16 @@ does extracting outside the repository. `patch` and `git apply` reading the diff
 the files named in it. A program that writes a file itself (`npm install` updating its lockfile, a Python one-liner)
 is not seen, which is why lockfiles are protected from hand edits and not from tools.
 
+**The changelog.** With `docs.changelog` in the profile, the hook also guards that file. The release workflow takes the
+version from the `## [X.Y.Z]` heading, so that heading is the human gate of a release. With the default `unreleased`
+policy lines under `docs.changelog.section` pass, and a Write, Edit or MultiEdit that adds a version heading
+(`## [1.2.0]`, `## 1.2.0`) the file does not already have is denied unless the change is a changelog-only change.
+`policy: release-only` denies every edit of the file (Write tools and the visible Bash writes) unless the change is a
+changelog-only change. Changelog-only means the commits since `origin/<main>` and the working tree change nothing but the
+changelog file, so a release is two separate pull requests: the changelog, and the version bump. The hook does not check
+which section an edit lands in, and a Bash write is checked only for `release-only`. The key is read from the trusted
+copy of the profile when there is one.
+
 Default list (a list in the profile replaces it): `.tld/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`,
 `go.sum`, `.github/workflows/**`. Always protected: `.git/config`, `.git/hooks/**`, `.git/tld/**` (the markers), `.git/refs/**`,
 `.git/packed-refs`, `.git/info/**` and `.git/objects/**` (what the trusted ref and its profile are read from; S18), and
