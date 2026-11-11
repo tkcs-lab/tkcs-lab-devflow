@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import os
+import signal
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,6 +26,18 @@ DEFAULT_PROTECT_PATHS = [".claude/toolkit.yaml", ".env", ".env.*", "*.lock", "pa
 BUILTIN_PROTECT_ALLOW = [".env.example", ".env.sample", ".env.template", ".env.dist",
                          ".github/workflows/devflow-land.yml", ".github/workflows/devflow-release.yml"]
 DEFAULT_MAX_ATTEMPTS = 3
+HOOK_BUDGET_SECONDS = 15  # below the 20 s hook timeout, so a slow destructive hook denies instead of being killed
+
+
+class HookBudgetExceeded(BaseException):
+    """Raised by the SIGALRM handler. A BaseException so that `except OSError` / `except Exception`
+    around a git call cannot swallow it."""
+
+
+def exit_import_error(name: str, exc: BaseException) -> None:
+    """A destructive hook could not load its helpers: deny (exit 2) instead of crashing with status 1."""
+    print(f"devflow {name}: internal error while loading ({type(exc).__name__}: {exc}).", file=sys.stderr)
+    sys.exit(2)
 
 
 class ProfileError(Exception):
@@ -40,6 +54,7 @@ class Ctx:
     tool: str = ""
     tool_input: dict = field(default_factory=dict)
     notice: str | None = None  # shown to the user (stdout `systemMessage`) when the hook allows
+    disable_error: ProfileError | None = None  # dod-gate only: a malformed hooks.disable, re-raised by its evaluate
 
     def hooks_section(self) -> dict:
         section = (self.profile or {}).get("hooks")
@@ -67,20 +82,84 @@ class Ctx:
         return value
 
     def disabled(self, name: str) -> bool:
+        return name in trusted_disable(self)
+
+
+def _committed_profile(project: str, main: str) -> dict | None:
+    """The profile as committed on origin/<main>, else <main>; None when neither can be read."""
+    import yaml
+    for ref in (f"origin/{main}", main):
         try:
-            return name in self.list_key("disable", [])
-        except ProfileError:
-            return False
+            r = subprocess.run(["git", "-C", project, "show", f"{ref}:{PROFILE.as_posix()}"], capture_output=True,
+                               text=True, timeout=5, stdin=subprocess.DEVNULL)
+            if r.returncode == 0:
+                data = yaml.safe_load(r.stdout)
+                return data if isinstance(data, dict) else None
+        except (OSError, subprocess.SubprocessError, yaml.YAMLError):
+            continue
+    return None
+
+
+def _disable_list(profile: dict) -> list[str]:
+    section = profile.get("hooks")
+    if section is None:
+        return []
+    if not isinstance(section, dict):
+        raise ProfileError("toolkit.yaml: 'hooks' must be a mapping")
+    value = section.get("disable")
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+        raise ProfileError("toolkit.yaml: 'hooks.disable' must be a list of non-empty strings")
+    return list(value)
+
+
+def trusted_disable(ctx: Ctx) -> list[str]:
+    """`hooks.disable` as committed on the main branch, so a branch cannot switch a guardrail off for itself.
+    With no commit yet (or no repository) no trusted copy can exist and the working tree's list is used."""
+    if ctx.profile is None:
+        return []
+    working = _disable_list(ctx.profile)  # validated even when only the committed list is applied
+    git = ctx.profile.get("git")
+    main = git.get("main_branch") if isinstance(git, dict) else None
+    try:
+        head = subprocess.run(["git", "-C", ctx.project_dir, "rev-parse", "--verify", "-q", "HEAD"],
+                              capture_output=True, text=True, timeout=5, stdin=subprocess.DEVNULL).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        head = False
+    if not head:
+        return working
+    committed = _committed_profile(ctx.project_dir, main) if isinstance(main, str) and main else None
+    if committed is None:
+        return []
+    if committed.get("hooks") != ctx.profile.get("hooks"):
+        ctx.notice = (f"the working tree's hooks section differs from the committed {main} profile; "
+                      "only the committed hooks.disable is applied")
+    return _disable_list(committed)
 
 
 def find_project(cwd: str) -> tuple[str, dict | None, str | None]:
     """Project directory, parsed profile (or None) and the reason there is none."""
     starts = []
     env = os.environ.get("CLAUDE_PROJECT_DIR")
-    if env:
-        starts.append(Path(env))
     start = Path(cwd or os.getcwd())
-    starts += [start, *start.parents]
+    outside = False
+    if env:
+        root = Path(env).resolve()
+        starts.append(Path(env))
+        try:
+            inside = start.resolve().is_relative_to(root)
+        except OSError:
+            inside = False
+        if inside:  # the walk up from cwd stops at the project directory
+            for d in (start, *start.parents):
+                starts.append(d)
+                if d.resolve() == root:
+                    break
+        else:
+            outside = True
+    else:
+        starts += [start, *start.parents]
     for d in starts:
         path = d / PROFILE
         if path.is_file():
@@ -94,6 +173,8 @@ def find_project(cwd: str) -> tuple[str, dict | None, str | None]:
             if not isinstance(data, dict):
                 return str(d), None, f"{PROFILE} must be a YAML mapping"
             return str(d), data, None
+    if outside and (start / PROFILE).is_file():
+        return env or str(start), None, f"{PROFILE} outside CLAUDE_PROJECT_DIR ignored"
     return env or str(start), None, f"no {PROFILE} found from {start}"
 
 
@@ -111,6 +192,27 @@ class Result(NamedTuple):
     stdout: str = ""
 
 
+def _arm_budget():
+    """Start the time budget; returns the previous handler, or None when SIGALRM is unavailable."""
+    if not hasattr(signal, "SIGALRM"):
+        return None
+
+    def on_alarm(signum, frame):  # noqa: ARG001
+        raise HookBudgetExceeded()
+    try:
+        previous = signal.signal(signal.SIGALRM, on_alarm)
+        signal.setitimer(signal.ITIMER_REAL, HOOK_BUDGET_SECONDS)
+    except (ValueError, OSError):  # not the main thread
+        return None
+    return (previous,)
+
+
+def _disarm_budget(armed) -> None:
+    if armed:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, armed[0])
+
+
 def execute(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: bool, stdin_text: str) -> Result:
     """Run one hook on the raw stdin text."""
     prefix = f"devflow {name}: "
@@ -121,15 +223,27 @@ def execute(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: bool,
             raise ValueError("the event is not a JSON object")
     except ValueError as exc:
         return Result(problem_code, prefix + f"cannot read the hook event ({exc}).")
+    armed = _arm_budget() if fail_closed else None
     try:
         ctx = make_ctx(payload)
-        if ctx.disabled(name):
-            return Result(0)
+        try:
+            if ctx.disabled(name):
+                return Result(0)
+        except ProfileError as exc:
+            if name != "dod-gate":
+                raise
+            ctx.disable_error = exc  # the gate stays on and counts it as a failed attempt
         message = evaluate(ctx)
+        _disarm_budget(armed)  # before returning: an alarm in this window is still caught below
+        armed = None
+    except HookBudgetExceeded:
+        return Result(2, prefix + f"took longer than {HOOK_BUDGET_SECONDS} s, so the call is denied.")
     except ProfileError as exc:
         return Result(2, prefix + str(exc))
     except Exception as exc:  # noqa: BLE001 - a hook must never crash into an allow
         return Result(problem_code, prefix + f"internal error ({type(exc).__name__}: {exc}).")
+    finally:
+        _disarm_budget(armed)
     if message:
         return Result(2, prefix + message)
     if ctx.notice:

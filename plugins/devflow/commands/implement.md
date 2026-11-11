@@ -244,7 +244,8 @@ On each check-in, for each `running` phase, call `get_session`:
    messages, and it always exits 0: when the check itself fails it records `unavailable` with a short
    reason. A phase whose `Plan-Phase` trailer is already in the feature branch (a resumed run) is
    reported `skipped` and not checked again. For a fix session or a `-rev<n>` session pass the original
-   phase's id as `--phase` and the session's own name as `--label` (`fix-<n>`, `<phase id>-rev<n>`).
+   phase's id as `--phase` and the session's own name as `--label` (`fix-<n>`, `<phase id>-rev<n>`);
+   with a label that differs from the phase id the check always runs, and is never reported `skipped`.
 
    The result is **never a reason to hold the merge back**: carry on with step 4 whatever it says. Add
    one line to the ledger (`<phase id>: scope n out of scope, m collisions`, or `scope check

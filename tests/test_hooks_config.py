@@ -2,6 +2,7 @@
 import ast
 import json
 import re
+import os
 import subprocess
 import sys
 
@@ -9,9 +10,10 @@ import pytest
 import yaml
 
 from conftest import DEVFLOW, ROOT
-from hooks_helpers import HOOKS, MODULES
+from hooks_helpers import FAIL_CLOSED, HOOKS, MODULES, bash, git, make_repo, module, run, run_script
 
 import _common
+from evals.harness.hookcheck import matcher_matches
 
 HOOKS_JSON = HOOKS / "hooks.json"
 
@@ -46,8 +48,12 @@ def test_hooks_json_is_valid_and_every_script_exists():
     ("no_merge.py", "mcp__github__enable_pr_auto_merge", True), ("no_merge.py", "mcp__github__pull_request_review_write", True),
     ("no_merge.py", "mcp__github__push_files", True), ("no_merge.py", "mcp__github__create_branch", False),
     ("no_merge.py", "Write", False),
+    ("no_merge.py", "mcp__github__create_or_update_file", True), ("no_merge.py", "mcp__github__delete_file", True),
+    ("secret_scan.py", "NotebookEdit", True), ("protect_paths.py", "NotebookEdit", True),
     ("no_force_push.py", "Bash", True), ("no_force_push.py", "Write", False),
     ("no_git_tag.py", "Bash", True), ("no_git_tag.py", "Edit", False),
+    ("no_git_tag.py", "mcp__github__actions_run_trigger", True), ("no_git_tag.py", "mcp__github__merge_pull_request", False),
+    ("no_force_push.py", "mcp__github__actions_run_trigger", False),
     ("secret_scan.py", "Write", True), ("secret_scan.py", "Edit", True), ("secret_scan.py", "MultiEdit", True),
     ("secret_scan.py", "Bash", False),
     ("protect_paths.py", "Write", True), ("protect_paths.py", "Edit", True), ("protect_paths.py", "MultiEdit", True),
@@ -56,7 +62,30 @@ def test_hooks_json_is_valid_and_every_script_exists():
 def test_matchers(script, tool, listens):
     for _, matcher, hook in entries():
         if hook["command"].endswith(f'/hooks/{script}"'):
-            assert bool(re.fullmatch(matcher, tool)) is listens, (script, matcher, tool)
+            assert matcher_matches(matcher, tool) is listens, (script, matcher, tool)
+
+
+@pytest.mark.parametrize("matcher, tool, expected", [
+    ("Bash", "Bash", True), ("Bash", "BashOutput", False), ("Write|Edit", "Edit", True), ("Write|Edit", "MultiEdit", False),
+    ("mcp__.*__push_files", "mcp__github__push_files", True), ("mcp__.*__push", "mcp__github__push_files", True),
+    ("", "Anything", True), ("*", "Anything", True), (None, "Anything", True),
+])
+def test_matcher_matches_follows_claude_codes_rule(matcher, tool, expected):
+    assert matcher_matches(matcher, tool) is expected
+
+
+@pytest.mark.parametrize("hook", sorted(MODULES))
+def test_internal_error_fails_per_hook(hook, monkeypatch, tmp_path):
+    mod = module(hook)
+
+    def boom(ctx):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(mod, "evaluate", boom)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    result = _common.execute(mod.NAME, mod.evaluate, FAIL_CLOSED[hook], json.dumps(bash("ls", tmp_path)))
+    assert result.code == (2 if FAIL_CLOSED[hook] else 1)
+    assert "internal error (RuntimeError" in result.stderr
 
 
 def test_stop_hook_has_the_longest_timeout():
@@ -174,3 +203,69 @@ def test_docs_cover_every_hook_and_key():
     readme = (ROOT / "README.md").read_text()
     assert "## Guardrails" in readme and "docs/hooks.md" in readme
     assert "hooks.md" in (ROOT / "docs" / "profile-reference.md").read_text()
+
+
+# ---- profile trust and loud errors ---------------------------------------------------------------
+def test_disable_must_be_a_list(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo", "git:\n  main_branch: main\nhooks:\n  disable: no-merge\n")
+    r = run("no-merge", bash("gh pr merge 1", repo))
+    assert r.code == 2 and "hooks.disable" in r.stderr
+
+
+def test_a_non_list_disable_in_the_working_tree_blocks_even_with_a_committed_profile(tmp_path):
+    repo = make_repo(tmp_path / "r", "main", "git:\n  main_branch: main\n")
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", "main")
+    git(repo, "checkout", "-q", "-b", "feature/demo")
+    (repo / ".claude" / "toolkit.yaml").write_text("git:\n  main_branch: main\nhooks:\n  disable: no-merge\n")
+    r = run("no-merge", bash("gh pr merge 1", repo))
+    assert r.code == 2 and "hooks.disable" in r.stderr
+
+
+def test_a_budget_alarm_after_evaluate_still_denies(monkeypatch):
+    armed = object()
+    monkeypatch.setattr(_common, "_arm_budget", lambda: (armed,))
+
+    def late_alarm(token):
+        if token and not getattr(late_alarm, "done", False):
+            late_alarm.done = True
+            raise _common.HookBudgetExceeded()
+
+    monkeypatch.setattr(_common, "_disarm_budget", late_alarm)
+    result = _common.execute("no-merge", lambda ctx: None, True, json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}}))
+    assert result.code == 2 and "took longer" in result.stderr
+
+
+def test_walks_up_from_cwd_without_project_dir(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo")
+    sub = repo / "sub"
+    sub.mkdir()
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
+    payload = bash("git push origin main", sub)
+    r = subprocess.run([sys.executable, str(HOOKS / "no_merge.py")], input=json.dumps(payload), capture_output=True,
+                       text=True, env=env, timeout=60)
+    assert r.returncode == 2 and "missing required key" not in r.stderr
+
+
+def test_hooks_without_pyyaml(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo")
+    fake = tmp_path / "fake"
+    fake.mkdir()
+    (fake / "yaml.py").write_text("raise ImportError('no yaml here')\n")
+    env = {"PYTHONPATH": str(fake)}
+    r = run_script("no-merge", bash("git push -u origin feature/x", repo), project=repo, extra_env=env)
+    assert r.returncode == 2 and "PyYAML is not installed" in r.stderr
+    assert run_script("no-merge", bash("gh pr merge 1", repo), project=repo, extra_env=env).returncode == 2
+
+
+def test_disable_in_a_branch_with_a_bogus_main_branch_is_ignored(tmp_path):
+    repo = make_repo(tmp_path / "r", "main", "git:\n  main_branch: main\n")
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", "main")
+    git(repo, "checkout", "-q", "-b", "feature/demo")
+    (repo / ".claude" / "toolkit.yaml").write_text("git:\n  main_branch: nosuch\nhooks:\n  disable: [no-merge]\n")
+    assert run("no-merge", bash("gh pr merge 1", repo)).code == 2

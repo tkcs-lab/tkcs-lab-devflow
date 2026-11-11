@@ -31,11 +31,20 @@ Denies, in a Bash command: `gh pr merge` (any flags, including `--auto`), `gh pr
 `gh api` calls to the merge endpoint (`pulls/<n>/merge`), to the review endpoints with `event=APPROVE`, to
 `merges` with the main branch as base, to `git/refs/heads/<main>`, to `contents/...` that commit to the main
 branch (no `branch` field means the default branch), GraphQL mutations that merge, enable auto-merge, move
-a ref or approve (a GraphQL `--input` file is read; one that cannot be read, such as stdin, is denied), a `gh alias`
-(could hide a merge), a `curl` to the merge endpoint, and a `git push` whose refspec or current branch is the
-main branch (`git.main_branch`): `git push origin main`, `HEAD:main`, `HEAD:refs/heads/main`, `+x:main`, `:main`,
-a pattern such as `refs/heads/*:refs/heads/*`, `--all`, `--branches`, `--mirror`, and a bare `git push` while
-`main` is checked out.
+a ref or approve (a GraphQL `--input` file, or a `-F query=@file` field, is read; one that cannot be read, such as stdin, is denied), a `gh alias`
+(could hide a merge), a `curl` to the merge endpoint, `gh api` calls that fast-forward or merge upstream into the
+main branch (`merge-upstream`) or rename it, `gh repo sync` of the main branch (or with `--force`), and a `git push`
+whose refspec or destination is the main branch (`git.main_branch`): `git push origin main`, `HEAD:main`,
+`HEAD:refs/heads/main`, `+x:main`, `:main`, a pattern such as `refs/heads/*:refs/heads/*`, `--all`, `--branches`,
+`--mirror`.
+
+A `git push` without a refspec (`git push`, `git push origin`) is resolved from the git configuration, as git would:
+the remote (`--repo`, `branch.<b>.pushRemote`, `remote.pushDefault`, `branch.<b>.remote`, else `origin`), then
+`remote.<name>.push`, then `push.default` (`simple` and `current` push the current branch, `upstream` the configured
+upstream, `nothing` nothing). It is denied when the result is the main branch, and also when the destination cannot be
+determined (a mirror remote, a pattern or a run-time value in `remote.<name>.push`, `matching`, a detached `HEAD`, no
+upstream, or a failed `git` lookup). A `-c remote.*`, `-c push.*` or `-c branch.*` option on the push is denied, because it
+changes where the push writes. `git send-pack`, `git http-push` and `git subtree push` are checked like `git push`.
 
 It also covers the GitHub MCP tools sessions use where there is no `gh`: `merge_pull_request`,
 `enable_pr_auto_merge`, `pull_request_review_write` with `event: APPROVE`, and `push_files` /
@@ -50,17 +59,26 @@ branch, and `/land` merges on its own `chore/land-*` branch. `git merge origin/m
 Denies `git push` with `--force`, `-f` (also inside a cluster such as `-fu`), `--force-with-lease[=...]`,
 `--force-if-includes`, any unambiguous abbreviation of those (git accepts `--force-w`), a refspec starting with
 `+`, a refspec starting with `:`, and `--delete`, `-d`, `--prune`, `--mirror`. It also denies the API forms of branch
-deletion: `gh api -X DELETE .../git/refs/heads/...` and `gh pr close --delete-branch`. Local `git branch -d`,
+deletion: `gh api -X DELETE .../git/refs/heads/...` and `gh pr close --delete-branch`. A word that is only known at run time
+(`git push "$OPT" origin x`) where a push option could stand is denied, because it could be `--force`. Local `git branch -d`,
 `git fetch --prune`, `git revert` and `git merge --abort` are fine.
 
 ### `no-git-tag`
 
 Denies `git tag <name>` (and `-a`, `-s`, `-f`, `-d`, `-m`, ...), `git push --tags`, `--follow-tags`, `git push origin tag <name>`,
 `refs/tags/...` refspecs, `git push origin <name>` when `<name>` is a tag in the local repository (a bare name is a tag
-push only if the repository has such a tag), `git update-ref refs/tags/...`, `gh release create` / `delete`, and the
-API calls that create or move tag refs, tag objects and releases. Reading stays allowed: `git tag -l`, `--list`, `-n`,
+push only if the repository has such a tag), a push that tags through configuration (`push.followTags=true`, a
+`remote.<name>.push` that names `refs/tags/`, or a `-c remote.*.push` / `-c remote.*.mirror` option), `git update-ref
+refs/tags/...` and `git update-ref --stdin` (its input cannot be read), `gh release create` / `delete`, `gh release edit
+--tag`, and the API calls that create or move tag refs, tag objects and releases or edit or delete a release.
+
+Releases are cut by the release workflow, so a session may not start it either: `gh workflow run devflow-release.yml`, the
+`dispatches` API of that workflow, and the GitHub MCP `actions_run_trigger` with `run_workflow` for it are denied
+(`run_workflow` with a workflow id instead of a file name is denied too, since it cannot be checked). Other workflows,
+such as those in `ci.dispatchable`, stay allowed. Reading stays allowed: `git tag -l`, `--list`, `-n`,
 `--contains`, `--points-at`, `--merged`, `-v`, `git describe`, `git fetch --tags`, `git ls-remote --tags`, `gh release list`.
-The release workflow runs in CI and is not affected.
+The release workflow itself runs in CI and is not affected; the template (`devflow-release.yml`) runs in the `release`
+GitHub environment, so a human approves each run there.
 
 ### `secret-scan`
 
@@ -69,26 +87,33 @@ blocks, AWS, GitHub, Google, Slack, Stripe, Anthropic, OpenAI-style, npm, PyPI, 
 and for generic assignments: a name ending in `key`, `token` or `secret` (`API_KEY`, `client_secret`, `apiKey`,
 `deploy-token`) set to a literal of at least 20 characters with a digit, a letter and Shannon entropy of at least 3.5
 bits per character that is not an obvious placeholder (`example`, `changeme`, `your-...`, `xxxx`) and not a `public`
-key. The message names the pattern and the line, never the value:
+key. A name ending in `password`, `passwd` or `pwd` needs only 12 characters (a digit, a letter, entropy of at least 3.0).
+It also matches credentials in a URL (`scheme://user:password@host`), `Bearer` tokens of 20 or more characters and JSON web
+tokens. The message names the pattern and the line, never the value:
 
 ```
 devflow secret-scan: blocked: line 12 of the new file content for src/cfg.py looks like a GitHub token (pattern: github-token).
 The value is not shown. Do not write a credential into a file: read it from the environment or a secret store ...
 ```
 
-For a test fixture or a documented example, build the value at run time, or end the line with `secret-scan:allow`.
-A secret written by a Bash command (`echo $TOKEN > file`) is not seen.
+For a test fixture or a documented example, build the value at run time, or end the line with `secret-scan:allow`; the mark must be the last thing on the line.
+A line of more than a million characters is not checked for generic assignments. A secret written by a Bash command (`echo $TOKEN > file`) is not seen.
 
 ### `protect-paths`
 
-Denies edits to the paths in `hooks.protect_paths`. With Write/Edit/MultiEdit/NotebookEdit the path is checked after
-resolving symlinks. In Bash it sees redirections (`>`, `>>`, `>|`, `&>`, `2>`), `tee`, `sed -i`, `perl -i`, `cp`, `mv`,
-`install`, `ln`, `rm`, `unlink`, `truncate`, `touch`, `dd of=`, `git rm` and `git mv`, expands globs against the file
-system, and follows `cd`. A program that writes a file itself (`npm install` updating its lockfile, a Python one-liner)
+Denies edits to the paths in `hooks.protect_paths`. The path is checked as written and with symlinks resolved. In Bash
+the hook sees redirections (`>`, `>>`, `>|`, `&>`, `2>`), `tee`, `sed -i`, `perl -i`, `cp`, `mv`, `install`, `ln`, `rm`,
+`unlink`, `shred`, `truncate`, `touch`, `dd of=`, `git rm`, `git mv`, `git checkout -- <path>` and `git restore <path>`; it
+expands globs against the file system and `{a,b}` braces (up to 64 results, more is denied), and follows `cd`. A write
+whose target is a hard link to a protected file is denied (same device and inode, found by walking the repository), and so
+is `ln` with a protected file as its source, since a link would let a later write through. `git config` writes to
+`alias.*`, `remote.*`, `push.*`, `branch.*` and `include*` keys are denied, because they can redirect pushes or run commands. A program that writes a file itself (`npm install` updating its lockfile, a Python one-liner)
 is not seen, which is why lockfiles are protected from hand edits and not from tools.
 
 Default list (a list in the profile replaces it): `.claude/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`,
-`go.sum`, `.github/workflows/**`. Always allowed, whatever the profile says: `.env.example`, `.env.sample`,
+`go.sum`, `.github/workflows/**`. Always protected, whatever the profile says: `.claude/settings.json`,
+`.claude/settings.local.json`, `.git/config`, `.git/hooks/**`, and anything under `$CLAUDE_PLUGIN_ROOT` (the installed
+plugin). Always allowed, whatever the profile says: `.env.example`, `.env.sample`,
 `.env.template`, `.env.dist`, and the two workflow files the toolkit's own commands install
 (`.github/workflows/devflow-land.yml` from `/land`, `.github/workflows/devflow-release.yml` from `repo-admin`). That is how
 "workflow files unless a command explicitly owns them" is decided: the command's file is on the built-in allow list;
@@ -123,7 +148,10 @@ commands and the tail of their output back to the agent. Rules that keep it from
   commands failed and why it gave up. If the counter cannot be saved and `stop_hook_active` is set, it also lets the
   session stop. After a give-up the gate comes back only when the tree changes.
 - **Missing keys fail loudly.** With the gate on and no `verify.dod`, or no `git.main_branch`, it blocks with
-  `toolkit.yaml: missing required key '...'` (and gives up after the attempt limit like any other failure).
+  `toolkit.yaml: missing required key '...'`. A profile error of any kind (a malformed `hooks.dod_gate`, a `max_attempts`
+  outside 1..10, a malformed `hooks.disable`) counts as a failed attempt and its message ends with `(attempt N of M)`.
+  After the limit (`max_attempts`, or 3 when that value is itself invalid) the gate lets the session stop and shows the
+  message in `systemMessage`, so it gives up after the attempt limit also for profile errors.
 
 ## How the dod-gate recognises a session
 
@@ -174,14 +202,15 @@ hooks:
   protect_paths_allow: []    # exceptions on top of the built-in ones
   dod_gate:
     enabled: false           # opt in
-    max_attempts: 3          # 1..10
+    max_attempts: 3          # 1..10; a value outside that range is a profile error
 ```
 
 Project facts the hooks read from elsewhere in the profile: `git.main_branch` (`no-merge` when it sees a `git push` or a
 call that could write to the main branch, and `dod-gate`), and `verify.dod` (`dod-gate`). A hook needs a key only when
-it needs the fact: `gh pr merge` is denied in a repository with no profile at all, `git push origin x` is not, because
-deciding it needs the main branch. When the key is missing the hook blocks with
-`toolkit.yaml: missing required key 'git.main_branch'`, the same message the commands give.
+it needs the fact: `gh pr merge` is denied in a repository with no profile. A `git push` (any branch) is also denied
+there, because deciding whether it targets the main branch needs `git.main_branch`. When the key is missing the hook
+blocks with `toolkit.yaml: missing required key 'git.main_branch'`, the same message the commands give. Plugins are enabled
+per Claude Project, so every repository in a Project that enables `devflow` needs a profile with at least that key.
 
 Reference: [profile-reference.md](profile-reference.md).
 
@@ -194,6 +223,14 @@ hooks:
   disable: [protect-paths]   # any of no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate
 ```
 
+`hooks.disable` is read from the profile as committed on the main branch (`origin/<main>`, else `<main>`), not from the
+working tree, so a feature branch cannot switch a guardrail off for itself; when the working tree's `hooks` section differs
+the hook shows a notice and applies only the committed list. In a repository with no commit yet, the working tree's list
+is used. The list must be a list of names; anything else, in the working tree or on the main branch, is a profile
+error (see Parsing) even though only the committed list is applied. Two gaps are accepted: a branch can change
+`git.main_branch`, and the committed copy is read from local refs (`origin/<main>`, then `<main>`), which a session can
+rewrite, for example with `git update-ref refs/remotes/origin/main <sha>`. Branch protection stays the backstop.
+
 It is a profile change, and `.claude/toolkit.yaml` is protected from edits by sessions, so a person does it. Prefer a narrower tool
 first: `hooks.protect_paths_allow` for one more allowed path, a `secret-scan:allow` line mark for one false positive.
 `no-merge`, `no-force-push` and `no-git-tag` have no narrower switch on purpose.
@@ -202,17 +239,32 @@ first: `hooks.protect_paths_allow` for one more allowed path, a `secret-scan:all
 
 The three destructive hooks need to see through the ways a command can be written, so they do not match text. A small
 tokenizer (`hooks/_shell.py`, standard library) splits the command into simple commands: `&&`, `||`, `;`, `|`, `&`,
-newlines, subshells and groups, `$(...)`, backticks and `<(...)`, heredoc bodies (skipped, except that an unquoted
-heredoc still runs its substitutions), comments, and redirections; each command's words are split by `shlex`
-(POSIX quoting and escapes). It then strips prefixes and wrappers (`FOO=1`, `env`, `sudo`, `nice`, `timeout`, `time`,
-`command`, `exec`, `if/then/do`), unpacks `bash -c '...'` and `eval`, follows `xargs` and `find -exec`, tracks `cd`, understands
-`git -C <dir>`, `-c k=v` and `--git-dir`, and resolves git aliases (from `-c alias.x=...` and from the repository's config,
-including `!shell` aliases). Mentions are not commands: `echo "gh pr merge"` and a commit message that says "never git push -f" pass.
+newlines, subshells and groups, `$(...)`, backticks and `<(...)`, heredoc bodies (not scanned as commands, except that
+an unquoted heredoc still runs its substitutions), comments, and redirections; each command's words are split by `shlex`
+(POSIX quoting and escapes), and `$'...'` quoting is decoded to its literal value (`$'--force'` is `--force`). It then
+strips prefixes and wrappers (`FOO=1`, `env` including `env -S`, `sudo`, `nice`, `timeout`, `time`, `flock`, `script -c`,
+`command`, `exec`, `if/then/do` and a few more), unpacks `bash -c '...'` and `eval`, follows `xargs` and `find -exec`
+(only when `git` or `gh` follows), tracks `cd`, understands `git -C <dir>`, `-c k=v`, `--config-env` and `--git-dir`,
+reads `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_<n>` / `GIT_CONFIG_VALUE_<n>` from the command's own assignments or the
+environment, and resolves git aliases (from `-c alias.x=...` and from the repository's config, including `!shell`
+aliases). Mentions are not commands: `echo "gh pr merge"` and a commit message that says "never git push -f" pass.
+
+What is and is not unpacked: a shell given a command string (`bash -c`, `eval`) and a shell fed a herestring or heredoc
+(`bash <<< 'git push -f'`, `bash <<EOF ... EOF`) are parsed like any command line. A shell that reads its commands from
+stdin in any other way (`curl ... | bash`, `bash < file`, a bare `bash`) is **denied** by the three destructive hooks
+("a shell that reads its commands from stdin cannot be checked"). `xargs bash` and similar are not flagged. A script file
+(`bash script.sh`, `bash "$f"`) counts as running a script and is not read.
 
 A command it cannot tokenise (an unterminated quote or substitution) is **denied** by `no-merge`, `no-force-push` and
 `no-git-tag` with "cannot parse this command ... rewrite it as plain, separate commands", and so is an internal
-error in one of them. `secret-scan`, `protect-paths` and `dod-gate` report their own errors and let the call through
-(exit code 1, shown to the user only), because blocking every edit on a bug in a helper would do more harm than good.
+error in one of them, a hook that fails to load, a `git` lookup that fails (`git` cannot run, times out or exits with an
+unexpected status), and a hook that runs longer than its 15 s budget (below the 20 s Claude Code timeout). `secret-scan`,
+`protect-paths` and `dod-gate` report their own errors and let the call through (exit code 1, shown to the user only),
+and a timeout in them allows the call, because blocking every edit on a bug in a helper would do more harm than good.
+
+A profile problem is different: a malformed `hooks` value (not a mapping, or a list key such as `protect_paths` that is not a
+list of non-empty strings, or a `hooks.disable` that is not a list) is a profile error that blocks with exit 2 and names the
+key, in every hook that reads it. `dod-gate` counts it as a failed attempt instead (see above).
 
 ## Compatibility with the commands
 
@@ -231,7 +283,7 @@ the Bash hooks, fails when a command file stops containing the phrase that docum
 | | `git revert -m 1 <merge>` and push the feature branch | allowed |
 | | push the feature branch after each merge, follow-up branches `<feature_branch>--<phase id>-rev<n>` and `--fix-<n>` | allowed |
 | | final `git merge origin/<main>` into the feature branch and push; `git diff origin/<main>...HEAD` | allowed |
-| | MCP: `create_pull_request`, `update_pull_request` (reviewers), `actions_run_trigger`, `add_issue_comment`, `create_branch` | allowed |
+| | MCP: `create_pull_request`, `update_pull_request` (reviewers), `actions_run_trigger` (the `ci.dispatchable` workflows), `add_issue_comment`, `create_branch` | allowed; dispatching the release workflow is denied by `no-git-tag` |
 | | "Never push to `<main>`; never approve, merge or enable auto-merge; never rebase or force-push the feature branch" | now enforced for push, merge, approve, auto-merge and force-push; a local `git rebase` is not blocked |
 | | child phase sessions: push `<phase branch>`, run `/dod` | allowed; **gated** by `dod-gate` when enabled |
 | `/land` | `git fetch origin <main>`; create `chore/land-<stamp>` from `origin/<main>`; `git merge --no-ff` of pull request heads in order; `git merge --abort`; normal push of a pull request branch; `git push -u origin chore/land-<stamp>`; `chore/devflow-land-workflow` and its push | allowed |
@@ -260,12 +312,26 @@ What changed in the commands: `/implement`, `/make-plan`, `/review` and `/land` 
   The hooks make the agent stop early; the rules make sure nothing gets through if the agent, a plugin setting or a
   hook is wrong.
 - **Anything a parser cannot see.** Expansions are not evaluated (`git push origin "$BRANCH"` is allowed; a variable that
-  holds `main` is not noticed), a script file run with `bash script.sh` is not read, a program that merges or writes files
+  holds `main` is not noticed), a script file run with `bash script.sh` is not read (a shell fed by a pipe or a file is denied instead, see Parsing), a program that merges or writes files
   itself (`python -c`, a Makefile target) is not seen, git aliases that exist only in a global config of another machine are
   not known, and `curl` against the API is checked only for the merge endpoint.
 - **Writes the agent does not make through its tools:** secrets in Bash output, in a command line or in a commit message.
-- **A hook switched off** with `hooks.disable`, or a profile edited by someone who may edit it.
+- **A hook switched off** with `hooks.disable` on the main branch, or a profile edited by someone who may edit it. A
+  branch can still change `git.main_branch` in its own working tree, and a session can rewrite the local refs the committed
+  copy is read from.
 - **A hook that has a bug.** The destructive hooks fail closed; the others fail open.
+
+## Installing and checking
+
+Requirements: `python3` 3.11 or newer and PyYAML on the session's `PATH`; the hooks use nothing else. Without PyYAML the
+hooks behave as if there were no profile (the reason is `PyYAML is not installed`), so the destructive hooks deny every
+`git push` that needs `git.main_branch`, while `protect-paths` and `dod-gate` fall back to their defaults or do nothing.
+
+To confirm the hooks are loaded in a session, run `/hooks` and look for the `devflow` entries, or run
+`git tag probe`: with `no-git-tag` active the call is denied with `devflow no-git-tag: blocked` and no tag is created.
+
+Loading the hooks from plugins that a Claude Project syncs into a cloud session is **not verified end to end** (see
+[delivery.md](delivery.md)). The tests exercise the scripts directly, not Claude Code's loading of `hooks.json`.
 
 ## Tests
 

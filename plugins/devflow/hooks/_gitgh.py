@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import os
 import shlex
-import subprocess
 from dataclasses import dataclass, field
 
-from _shell import DYN, ParseError, base, candidates, is_dynamic, split_commands, walk
+from _gitcfg import _run_git, current_branch, ref_exists  # noqa: F401  (re-exported)
+from _shell import DYN, ParseError, base, candidates, is_dynamic, split_commands, walk_commands
 
 # ------------------------------------------------------------------------------------- git
 
@@ -28,10 +28,29 @@ class Git:
     repo_opts: list[str] = field(default_factory=list)  # --git-dir / --work-tree, as given
 
 
-def parse_git(words: list[str]) -> Git:
-    """words[0] is `git`. Splits global options from the subcommand and its arguments."""
+def _env_config(env: dict[str, str]) -> list[str]:
+    """`GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_<n>` / `GIT_CONFIG_VALUE_<n>` as key=value strings (the command's own
+    assignments first, else this process's environment)."""
+    get = lambda k: env[k] if k in env else os.environ.get(k)  # noqa: E731
+    try:
+        count = min(int(get("GIT_CONFIG_COUNT") or 0), 64)
+    except ValueError:
+        return []
+    out = []
+    for n in range(count):
+        key, val = get(f"GIT_CONFIG_KEY_{n}"), get(f"GIT_CONFIG_VALUE_{n}")
+        if key:
+            out.append(f"{key}={val or ''}")
+    return out
+
+
+def parse_git(words: list[str], env: dict[str, str] | None = None) -> Git:
+    """words[0] is `git`. Splits global options from the subcommand and its arguments. `env` holds the
+    command's leading NAME=value words; config comes from the environment, then --config-env, then -c."""
+    env = env or {}
     dirs: list[str] = []
-    config: list[str] = []
+    config: list[str] = _env_config(env)
+    cfg_env: list[str] = []
     repo_opts: list[str] = []
     i = 1
     while i < len(words):
@@ -45,10 +64,16 @@ def parse_git(words: list[str]) -> Git:
         if name == "-C":
             dirs.append(val)
         elif name == "-c":
-            config.append(val)
+            cfg_env.append(val)
+        elif name == "--config-env":
+            key, _, var = val.partition("=")
+            value = env.get(var, os.environ.get(var))
+            if value is not None:
+                config.append(f"{key}={value}")
         elif name in ("--git-dir", "--work-tree"):
             repo_opts.append(f"{name}={val}")
         i += 1
+    config += cfg_env
     sub = words[i] if i < len(words) else None
     return Git(sub, words[i + 1:], dirs, config, repo_opts)
 
@@ -61,31 +86,6 @@ def git_context(cwd: str, git: Git) -> str:
     return path
 
 
-def _run_git(ctx_dir: str, repo_opts: list[str], *args: str) -> str | None:
-    cmd = ["git", *repo_opts, *args]
-    try:
-        r = subprocess.run(cmd, cwd=ctx_dir if os.path.isdir(ctx_dir) else None, capture_output=True,
-                           text=True, timeout=5, stdin=subprocess.DEVNULL)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return r.stdout.strip() if r.returncode == 0 else None
-
-
-def current_branch(ctx_dir: str, repo_opts: list[str] | None = None) -> str | None:
-    return _run_git(ctx_dir, repo_opts or [], "symbolic-ref", "--short", "-q", "HEAD")
-
-
-def ref_exists(ctx_dir: str, full_ref: str, repo_opts: list[str] | None = None) -> bool:
-    """True when the local repository has `full_ref` (for example refs/tags/v1)."""
-    try:
-        r = subprocess.run(["git", *(repo_opts or []), "show-ref", "--verify", "-q", full_ref],
-                           cwd=ctx_dir if os.path.isdir(ctx_dir) else None, capture_output=True,
-                           timeout=5, stdin=subprocess.DEVNULL)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return r.returncode == 0
-
-
 def expand_alias(git: Git, ctx_dir: str, known: set[str]) -> list[list[str]] | None:
     """If `git.sub` is a configured alias, the command lines it stands for (one per command), else None."""
     if git.sub is None or git.sub in known:
@@ -95,7 +95,7 @@ def expand_alias(git: Git, ctx_dir: str, known: set[str]) -> list[list[str]] | N
         if item.startswith(f"alias.{git.sub}="):
             value = item.split("=", 1)[1]
     if value is None:
-        value = _run_git(ctx_dir, git.repo_opts, "config", "--get", f"alias.{git.sub}")
+        value = _run_git(ctx_dir, git.repo_opts, "config", "--no-includes", "--get", f"alias.{git.sub}")
     if not value:
         return None
     if value.startswith("!"):
@@ -117,6 +117,8 @@ GIT_KNOWN = {"add", "am", "apply", "bisect", "blame", "branch", "checkout", "che
              "status", "submodule", "switch", "symbolic-ref", "tag", "update-ref", "worktree", "cat-file",
              "for-each-ref", "gc", "help", "version", "bundle", "archive", "notes", "format-patch"}
 
+PUSH_LIKE = {"send-pack", "http-push"}  # plumbing that updates remote refs like `git push`
+
 
 @dataclass
 class Item:
@@ -130,23 +132,28 @@ class Item:
 
 def iter_items(cwd: str, command: str):
     """Every command `command` may run, aliases expanded. Raises ParseError on unparseable input."""
-    for hint, words, redirects in walk(command):
+    for hint, cmd in walk_commands(command):
+        if cmd.reads_stdin_shell:
+            raise ParseError("a shell that reads its commands from stdin cannot be checked")
         here = cwd if not hint else hint if os.path.isabs(hint) else os.path.join(cwd, hint)
-        yield from _items(words, here, redirects, 0)
+        yield from _items(cmd.words, here, cmd.redirects, 0, cmd.env)
 
 
-def _items(words: list[str], here: str, redirects, depth: int):
+def _items(words: list[str], here: str, redirects, depth: int, env: dict[str, str] | None = None):
     if not words:
         yield Item("other", [], here, None, redirects)
         return
     name = base(words[0])
     if name == "git":
-        git = parse_git(words)
+        git = parse_git(words, env)
         ctx_dir = git_context(here, git)
         aliased = expand_alias(git, ctx_dir, GIT_KNOWN) if depth < 3 else None
         if aliased:
             for aw in aliased:
-                yield from _items(aw, ctx_dir, [], depth + 1)
+                yield from _items(aw, ctx_dir, [], depth + 1, env)
+        if git.sub in PUSH_LIKE or (git.sub == "subtree" and git.args[:1] == ["push"]):
+            git = Git("push", git.args[1:] if git.sub == "subtree" else git.args, git.dirs, git.config,
+                      git.repo_opts)
         yield Item("git", words, ctx_dir, git, redirects)
     elif name == "gh":
         yield Item("gh", words, here, None, redirects)
@@ -176,6 +183,7 @@ class Push:
     all_refs: bool = False
     repo: str | None = None
     refspecs: list[str] = field(default_factory=list)
+    dynamic_option: bool = False  # a run-time word sits where a push option could be
 
 
 def parse_push(args: list[str]) -> Push:
@@ -189,6 +197,8 @@ def parse_push(args: list[str]) -> Push:
         if a == "--":
             positional += args[i:]
             break
+        if is_dynamic(a) and (a.startswith("-") or not any(not is_dynamic(x) for x in positional)):
+            p.dynamic_option = True
         if a.startswith("--"):
             name, eq, val = a[2:].partition("=")
             if name in PUSH_VALUE_LONG and not eq:
@@ -289,6 +299,7 @@ class GhApi:
     method: str = "GET"
     fields: dict[str, str] = field(default_factory=dict)
     input_file: str | None = None
+    field_files: list[str] = field(default_factory=list)  # -F / --field values that start with "@"
     texts: list[str] = field(default_factory=list)  # every field value, for GraphQL scanning
 
 
@@ -320,6 +331,9 @@ def parse_gh_api(words: list[str]) -> GhApi:
         elif name in ("-f", "--raw-field", "-F", "--field"):
             has_body = True
             key, _, v = val.partition("=")
+            if name in ("-F", "--field") and v.startswith("@"):
+                api.field_files.append(v[1:])
+                continue
             api.fields[key] = v
             api.texts.append(v)
         elif name == "--input":
@@ -333,11 +347,13 @@ def parse_gh_api(words: list[str]) -> GhApi:
     return api
 
 
-def read_input_text(api: GhApi, cwd: str) -> str | None:
-    """Contents of `--input <file>` (up to 1 MB) or None when it cannot be read (stdin, missing)."""
-    if not api.input_file or api.input_file == "-":
+def read_input_text(api: GhApi, cwd: str, name: str | None = None) -> str | None:
+    """Contents of `--input <file>` (or the given `-F key=@file` name), up to 1 MB, or None when it cannot
+    be read (stdin, missing)."""
+    name = api.input_file if name is None else name
+    if not name or name == "-":
         return None
-    path = api.input_file if os.path.isabs(api.input_file) else os.path.join(cwd, api.input_file)
+    path = name if os.path.isabs(name) else os.path.join(cwd, name)
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
             return fh.read(1_000_000)

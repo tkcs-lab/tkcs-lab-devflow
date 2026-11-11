@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import sys
 
@@ -421,3 +422,55 @@ def test_docs_describe_the_decisions():
     for needle in ("optional property in schema version 1", "pull request description", "scope.ignore",
                    "never blocks", "are not ignored by default", "partly_reverted", "rejected"):
         assert needle in doc, needle
+
+
+# --- fix and rework sessions, section hardening (DOC-2, SEC-E8, TST-5) -------------------------
+
+def _merge_p1_then_branch_on(repo, trailer="Plan-Phase: demo/p1"):
+    """p1 merged into feature/demo with its trailer; the phase branch then moves on from there."""
+    commit(repo, "phase work", {"src/core/b.py": "b\n"})
+    git(repo, "checkout", "-q", "feature/demo")
+    git(repo, "merge", "-q", "--no-ff", "-m", f"Merge demo p1\n\n{trailer}", "feature/demo--p1")
+    git(repo, "checkout", "-q", "feature/demo--p1")
+    git(repo, "merge", "-q", "--ff-only", "feature/demo")
+    commit(repo, "later work", {"other.py": "o\n"})
+
+
+@pytest.mark.parametrize("label", ["fix-1", "p1-rev1"])
+def test_rev_and_fix_sessions_are_checked(repo, files, label):
+    _merge_p1_then_branch_on(repo)
+    got = check(repo, files, label=label, plan_slug="demo", feature="feature/demo")
+    assert got["check"] == "ok" and got["label"] == label
+    assert got["out_of_scope"] == [{"path": "other.py", "collides_with": []}]
+
+
+def test_run_without_label_is_skipped_when_the_phase_trailer_is_on_the_feature_branch(repo, files):
+    _merge_p1_then_branch_on(repo)
+    got = check(repo, files, plan_slug="demo", feature="feature/demo")
+    assert got["check"] == "skipped"
+
+
+def test_section_code_span_cannot_be_escaped(sc):
+    path = "a``b @someone [x](http://e)``c"
+    e = {"label": "p1", "check": "ok", "in_scope": 0, "disposition": None,
+         "out_of_scope": [{"path": path, "collides_with": []}]}
+    line = sc.build_section([e]).splitlines()[-1]
+    body = line.strip()[2:]  # drop "- "
+    fence = len(body) - len(body.lstrip("`"))
+    assert body.endswith("`" * fence) and not body.endswith("`" * (fence + 1))
+    assert fence > 2  # longer than the longest backtick run in the path
+    inner = body[fence:-fence]
+    assert not re.search(r"@[A-Za-z]", inner)
+    assert "@​someone" in inner
+
+
+def test_resumed_p1_is_not_p10(repo, files, tmp_path):
+    manifest = {**MANIFEST, "phases": MANIFEST["phases"] + [{"id": "p10", "title": "Ten", "touches": ["x/**"]}]}
+    plan = tmp_path / "plan10.md"
+    plan.write_text("# Plan\n\n## Implementation manifest\n\n```yaml\n" + yaml.safe_dump(manifest) + "```\n")
+    commit(repo, "phase work", {"src/core/b.py": "b\n"})
+    git(repo, "checkout", "-q", "feature/demo")
+    git(repo, "merge", "-q", "--no-ff", "-m", "Merge demo p10\n\nPlan-Phase: demo/p10", "feature/demo--p1")
+    got = check(repo, (plan, files[1], files[2]), phase="p1", plan_slug="demo", feature="feature/demo")
+    assert got["check"] == "ok"
+    assert "resumed" not in (got["reason"] or "")

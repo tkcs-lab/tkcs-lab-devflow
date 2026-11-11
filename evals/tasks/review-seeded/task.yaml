@@ -6,7 +6,6 @@ arguments: >-
   open items in it, and stop.
 fixture:
   builder: review_seeded
-model: sonnet
 repeats: 3
 timeout_s: 1800
 cost_ceiling_usd: 8.0
