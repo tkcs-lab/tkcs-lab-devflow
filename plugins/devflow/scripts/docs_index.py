@@ -5,6 +5,11 @@
                             [--max-claude-lines 60] [--max-index-lines 150] [--max-doc-lines 400]
                             [--strict] [--json]
     docs_index.py inventory [--profile .claude/toolkit.yaml] [--root .] [--index PATH] [--json]
+    docs_index.py move SRC DST [--root .] [--apply] [--exclude GLOB]... [--json]
+
+`move` renames one file and rewrites every reference to it (markdown links, root path mentions, quoted
+path expressions in .py files); it is a dry run unless --apply is given, and it reports mentions it
+cannot rewrite safely as `unresolved:` lines. The other two modes never write anything.
 
 `check` exits 1 on an error (and, with --strict, on a warning); 2 when it cannot run (no `docs.index`
 in the profile and no --index). `inventory` always exits 0 and prints, for every markdown file under
@@ -28,12 +33,14 @@ Without `docs.index` in the profile and without --index both modes print
 "toolkit.yaml: missing required key 'docs.index' (or pass --index)" to stderr and exit 2.
 
 Index files are the index itself plus every README.md reachable from it by links (the ADR index is
-one). Python 3.11+, stdlib and PyYAML, no network. Reads files only; it never writes anything.
+one). Python 3.11+, stdlib and PyYAML, no network. `check` and `inventory` read files only.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -41,6 +48,9 @@ import time
 from pathlib import Path
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import validate_manifest as vm  # noqa: E402
 
 DEFAULT_PROFILE = ".claude/toolkit.yaml"
 MAX_CLAUDE_LINES = 60
@@ -51,6 +61,10 @@ PLAN_NAME = re.compile(r"-(plan|review)(-manual-steps)?\.(md|html)$")
 LINK = re.compile(r"\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 FENCE = re.compile(r"^\s*(```|~~~)")
 SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
+SCAN_SUFFIXES = (".md", ".py", ".yaml", ".yml", ".json", ".html", ".js", ".toml", ".txt", ".sh")
+DEFAULT_EXCLUDES = (".git/**", "tests/fixtures/**", "evals/fixtures/**", ".claude/toolkit.yaml")
+MAX_CHANGE_LINES = 200
+MAX_UNRESOLVED_LINES = 50
 MIN_DESCRIPTION = 12  # characters outside the link text on an index line
 
 
@@ -267,6 +281,233 @@ def inventory(cfg) -> list[dict]:
     return out
 
 
+# ---------------------------------------------------------------------------------------------- move
+# An edit is (start, end, new text, rule) on a file's text; rules never overlap (earlier rules win).
+
+def _line_of(text: str, pos: int) -> int:
+    return text.count("\n", 0, pos) + 1
+
+
+def _code_spans(line: str) -> list[tuple[int, int]]:
+    return [(m.start(), m.end()) for m in re.finditer(r"`[^`]*`", line)]
+
+
+def _relative_to(dst: str, from_dir: str) -> str:
+    return posixpath.relpath(dst, from_dir or ".")
+
+
+def link_edits(text: str, file_old: str, file_new: str, src: str, dst: str, exists) -> list[tuple]:
+    """Edits for rule 1: markdown links outside fenced code. `exists(repo path)` says whether a file exists."""
+    edits, fenced, pos = [], False, 0
+    old_dir, new_dir = posixpath.dirname(file_old), posixpath.dirname(file_new)
+    moved_file = file_old == src
+    for line in text.splitlines(keepends=True):
+        base = pos
+        pos += len(line)
+        if FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        spans = _code_spans(line)
+        for m in LINK.finditer(line):
+            if any(a < m.end() and m.start() < b for a, b in spans):
+                continue
+            raw = m.group(2)
+            target, sep, anchor = raw.partition("#")
+            if not target or SCHEME.match(target) or target.startswith("/"):
+                continue
+            resolved = posixpath.normpath(posixpath.join(old_dir, target))
+            if resolved == src:
+                new_target = _relative_to(dst, new_dir)
+            elif moved_file and exists(resolved):
+                new_target = _relative_to(resolved, new_dir)
+            else:
+                continue
+            if new_target != target:
+                edits.append((base + m.start(2), base + m.end(2), new_target + sep + anchor, "link"))
+    return edits
+
+
+def mention_pattern(src: str) -> re.Pattern:
+    return re.compile(r"(?<![\w./-])" + re.escape(src) + r"(?![\w-]|\.\w)")
+
+
+def mention_edits(text: str, src: str, dst: str) -> list[tuple]:
+    """Edits for rule 2: root path mentions anywhere in the text, code spans and fences included."""
+    return [(m.start(), m.end(), dst, "mention") for m in mention_pattern(src).finditer(text)]
+
+
+def expression_edits(text: str, src: str, dst: str) -> list[tuple]:
+    """Edits for rule 3: `"docs" / "hooks.md"` style path expressions (only the matching tail)."""
+    segs = src.split("/")
+    joiner = [r"(?P=q)(?P<sep>\s*/\s*)(?P=q)"] + [r"(?P=q)\s*/\s*(?P=q)"] * (len(segs) - 2)
+    body = re.escape(segs[0])
+    for j, seg in zip(joiner, segs[1:]):
+        body += j + re.escape(seg)
+    pattern = re.compile(r"(?P<q>[\"'])" + body + r"(?P=q)")
+    edits = []
+    for m in pattern.finditer(text):
+        before = text[max(0, m.start() - 20):m.start()]
+        if re.search(r"[\"']\s*/\s*$", before):
+            continue
+        q, sep = m.group("q"), m.groupdict().get("sep") or " / "
+        new = sep.join(f"{q}{seg}{q}" for seg in dst.split("/"))
+        edits.append((m.start(), m.end(), new, "expression"))
+    return edits
+
+
+def _apply(text: str, edits: list[tuple]) -> tuple[str, list[dict]]:
+    changes = []
+    for start, end, new, _ in sorted(edits, reverse=True):
+        changes.append({"line": _line_of(text, start), "old": text[start:end], "new": new})
+        text = text[:start] + new + text[end:]
+    changes.reverse()
+    return text, changes
+
+
+def rewrite_links(text, file_old, file_new, src, dst, exists=lambda p: False):
+    return _apply(text, link_edits(text, file_old, file_new, src, dst, exists))
+
+
+def rewrite_root_mentions(text, src, dst):
+    return _apply(text, mention_edits(text, src, dst))
+
+
+def rewrite_path_expressions(text, src, dst):
+    return _apply(text, expression_edits(text, src, dst))
+
+
+def find_unresolved(text: str, src: str, covered=()) -> list[tuple[int, str, str]]:
+    """(line, kind, message) for mentions the rules cannot rewrite; `covered` are spans already handled."""
+    found = []
+    name = posixpath.basename(src)
+    bare = re.compile(r"(?<![\w./-])" + re.escape(name) + r"(?![\w-]|\.\w)")
+    url = re.compile(r"(?<=/)" + re.escape(src) + r"(?![\w-]|\.\w)")
+    for m in bare.finditer(text):
+        if not any(a <= m.start() < b for a, b in covered):
+            found.append((_line_of(text, m.start()), "bare", f"mentions '{name}' without its directory"))
+    for m in url.finditer(text):
+        line_start = text.rfind("\n", 0, m.start()) + 1
+        line_end = text.find("\n", m.end())
+        if "http" in text[line_start:line_end if line_end >= 0 else len(text)]:
+            found.append((_line_of(text, m.start()), "url", f"URL mentions '{src}'"))
+    return sorted(found)
+
+
+def plan_file(text: str, rel_path: str, src: str, dst: str, exists) -> tuple[str, list[dict], list[tuple]]:
+    """The new text, the changes and the unresolved mentions of one file."""
+    file_new = dst if rel_path == src else rel_path
+    edits = link_edits(text, rel_path, file_new, src, dst, exists) if rel_path.endswith(".md") else []
+    covered = [(m.start(), m.end()) for m in LINK.finditer(text)
+               if posixpath.normpath(posixpath.join(posixpath.dirname(rel_path),
+                                                    m.group(2).partition("#")[0] or "\0")) == src]
+    extra = mention_edits(text, src, dst)
+    if rel_path.endswith(".py"):
+        extra += expression_edits(text, src, dst)
+    for e in extra:
+        if not any(e[0] < b[1] and b[0] < e[1] for b in edits):
+            edits.append(e)
+    covered += [(e[0], e[1]) for e in extra]
+    new_text, changes = _apply(text, edits)
+    return new_text, changes, find_unresolved(text, src, covered)
+
+
+def tracked_files(root: Path) -> list[str] | None:
+    if not (root / ".git").exists():
+        return None
+    try:
+        out = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return [p for p in out.stdout.decode().split("\0") if p]
+
+
+def scanned_files(root: Path, excludes) -> list[str]:
+    files = tracked_files(root)
+    if files is None:
+        files = []
+        for dirpath, dirnames, names in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d != ".git"]
+            files += [os.path.relpath(os.path.join(dirpath, n), root).replace(os.sep, "/") for n in names]
+    keep = []
+    for f in sorted(files):
+        if not f.endswith(SCAN_SUFFIXES) or PLAN_NAME.search(posixpath.basename(f)):
+            continue
+        if any(vm.path_matches(f, g) for g in (*DEFAULT_EXCLUDES, *excludes)):
+            continue
+        if (root / f).is_file():
+            keep.append(f)
+    return keep
+
+
+def is_tracked(root: Path, rel_path: str) -> bool:
+    if not (root / ".git").exists():
+        return False
+    return subprocess.run(["git", "-C", str(root), "ls-files", "--error-unmatch", "--", rel_path],
+                          capture_output=True).returncode == 0
+
+
+def run_move(args) -> int:
+    root = Path(args.root).resolve()
+    src, dst = posixpath.normpath(args.src), posixpath.normpath(args.dst)
+    if not (root / src).is_file():
+        print(f"move: '{args.src}' is not a file", file=sys.stderr)
+        return 1
+    if (root / dst).exists():
+        print(f"move: '{args.dst}' already exists", file=sys.stderr)
+        return 1
+    exists = lambda p: (root / p).is_file()  # noqa: E731
+    plans, changes, unresolved = {}, [], []
+    for f in scanned_files(root, args.exclude):
+        text = (root / f).read_text(errors="replace")
+        new_text, ch, un = plan_file(text, f, src, dst, exists)
+        for c in ch:
+            changes.append({"file": f, **c})
+        for line, kind, msg in un:
+            unresolved.append({"file": f, "line": line, "kind": kind, "message": msg})
+        if ch:
+            plans[f] = new_text
+    n_files = len({c["file"] for c in changes})
+    summary = (f"{len(changes)} reference(s) in {n_files} file(s) would change, {len(unresolved)} unresolved"
+               if not args.apply else None)
+
+    if args.apply:
+        for f, new_text in plans.items():
+            (root / f).write_text(new_text)
+        (root / dst).parent.mkdir(parents=True, exist_ok=True)
+        moved = False
+        if is_tracked(root, src):
+            moved = subprocess.run(["git", "-C", str(root), "mv", "--", src, dst], capture_output=True).returncode == 0
+        if not moved:
+            os.rename(root / src, root / dst)
+        parent = (root / src).parent
+        while parent != root and parent.is_dir() and not any(parent.iterdir()):
+            parent.rmdir()
+            parent = parent.parent
+        summary = (f"moved {src} -> {dst}, rewrote {len(changes)} reference(s) in {n_files} file(s), "
+                   f"{len(unresolved)} unresolved")
+
+    if args.json:
+        print(json.dumps({"src": src, "dst": dst, "applied": bool(args.apply), "changes": changes,
+                          "unresolved": unresolved, "summary": f"move: {summary}"}, indent=2))
+        return 0
+    if not args.apply:
+        print(f"move {src} -> {dst}")
+        for c in changes[:MAX_CHANGE_LINES]:
+            print(f"would rewrite {c['file']}:{c['line']}: {c['old']} -> {c['new']}")
+        if len(changes) > MAX_CHANGE_LINES:
+            print(f"and {len(changes) - MAX_CHANGE_LINES} more")
+    for u in unresolved[:MAX_UNRESOLVED_LINES]:
+        print(f"unresolved: {u['file']}:{u['line']}: {u['message']}")
+    if len(unresolved) > MAX_UNRESOLVED_LINES:
+        print(f"and {len(unresolved) - MAX_UNRESOLVED_LINES} more")
+    print(f"move: {summary}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -276,6 +517,14 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--root", default=".", help="repository root (default: the current directory)")
         p.add_argument("--index", help="docs index path relative to --root (overrides docs.index)")
         p.add_argument("--json", action="store_true")
+    mv = sub.add_parser("move", help="move a doc and rewrite every reference (dry run unless --apply)")
+    mv.add_argument("src", metavar="SRC", help="repo-relative path of the file to move")
+    mv.add_argument("dst", metavar="DST", help="repo-relative destination path (must not exist)")
+    mv.add_argument("--root", default=".", help="repository root (default: the current directory)")
+    mv.add_argument("--apply", action="store_true", help="perform the move and the rewrites (default: dry run)")
+    mv.add_argument("--exclude", action="append", default=[], metavar="GLOB",
+                    help="skip files matching this glob (repeatable; added to the default excludes)")
+    mv.add_argument("--json", action="store_true")
     c = sub.choices["check"]
     c.add_argument("--stale-days", type=int, default=0, help="warn about docs unchanged in git for this many days")
     c.add_argument("--max-claude-lines", type=int, default=MAX_CLAUDE_LINES)
@@ -283,6 +532,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--max-doc-lines", type=int, default=MAX_DOC_LINES)
     c.add_argument("--strict", action="store_true", help="exit 1 on a warning too")
     args = ap.parse_args(argv)
+    if args.cmd == "move":
+        return run_move(args)
     cfg = load_config(args)
 
     if args.cmd == "inventory":
