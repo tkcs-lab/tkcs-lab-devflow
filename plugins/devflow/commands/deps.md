@@ -89,7 +89,7 @@ and the bot-command filter, in `docs/design/maintenance-spike.md`.
   its `pr` number, set the record `status` to `pr_open` and end the run; never wait.
 - Record: `status` is `running` while working, finally `pr_open` when any pull request awaits the owner
   and `done` when none does. Items carry `pr`. Keep `needs_you` and its reason up to date as the
-  `status-board` skill says, validate before each write, and write the final state.
+  `status-board` skill says, write with the version last read, and write the final state.
 
 ## Never
 

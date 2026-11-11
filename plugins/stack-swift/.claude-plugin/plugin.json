@@ -1,6 +1,6 @@
 {
   "name": "stack-swift",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Swift stack skill for devflow: SwiftPM in the container, Apple builds dispatched to a macOS runner",
   "author": { "name": "andras-tkcs" },
   "license": "Apache-2.0",
