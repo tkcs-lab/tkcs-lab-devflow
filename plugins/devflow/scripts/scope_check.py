@@ -150,7 +150,9 @@ def run_check(repo: str, plan: str, phase: str, base: str, head: str, label: str
               plan_slug: str | None = None, feature: str | None = None) -> dict:
     """The result entry for one merge. Never raises."""
     try:
-        if plan_slug and feature and already_merged(repo, feature, plan_slug, phase):
+        # Fix (`fix-<n>`) and rework (`<phase>-rev<n>`) sessions run after the phase's own trailer is on the
+        # feature branch: only a run under the phase's own name can be a resumed, already merged phase.
+        if plan_slug and feature and label in (None, "", phase) and already_merged(repo, feature, plan_slug, phase):
             return {"label": label, "check": "skipped", "reason": "merged before this run resumed", "in_scope": None,
                     "ignored": None, "out_of_scope": [], "disposition": None}
         touches = phase_touches(load_manifest(plan))
@@ -202,7 +204,11 @@ def record_field(entry: dict) -> dict:
 
 
 def _code(text: str) -> str:
-    fence = "``" if "`" in text else "`"
+    """A CommonMark code span: the fence is one backtick longer than the longest backtick run in the text,
+    and every `@` is followed by a zero-width space so the pull request body never mentions anyone."""
+    text = text.replace("@", "@\u200b")
+    longest = max((len(m) for m in re.findall(r"`+", text)), default=0)
+    fence = "`" * (longest + 1)
     pad = " " if text.startswith("`") or text.endswith("`") else ""
     return f"{fence}{pad}{text}{pad}{fence}"
 
