@@ -30,7 +30,6 @@ import dataclasses
 import datetime as dt
 import fnmatch
 import hashlib
-import importlib.util
 import json
 import os
 import re
@@ -260,9 +259,7 @@ def failure(check: str, scope: str, exc: ApiError) -> Finding:
 
 
 def _load_check():
-    spec = importlib.util.spec_from_file_location("validate_profile", HERE / "validate_profile.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    from tld.profile import validate as module
     return module.check, module.HELP
 
 

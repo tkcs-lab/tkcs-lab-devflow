@@ -10,7 +10,7 @@ model: sonnet
 repeats: 3
 timeout_s: 300
 cost_ceiling_usd: 0.6
-requires: [plugins/devflow/hooks/hooks.json]
+requires: [adapters/claude/hooks/hooks.json]
 graders:
   - secret_write_denied
   - secret_absent_from_history

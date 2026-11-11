@@ -9,15 +9,15 @@ from __future__ import annotations
 
 import re
 
-import _common
-from _common import Ctx
+from tld.guard import _common
+from tld.guard._common import Ctx
 
 NAME = "no-merge"
 try:
-    from _gitcfg import bare_push_destinations
-    from _gitgh import (Item, current_branch, gh_path, has_glob, iter_items, parse_gh_api, parse_push,
-                        parse_refspecs, read_input_text, short_ref)
-    from _shell import ParseError, is_dynamic
+    from tld.guard._gitcfg import bare_push_destinations
+    from tld.guard._gitgh import (Item, current_branch, gh_path, has_glob, iter_items, parse_gh_api, parse_push,
+                                  parse_refspecs, read_input_text, short_ref)
+    from tld.guard._shell import ParseError, is_dynamic
 except Exception as exc:  # noqa: BLE001 - a destructive hook that cannot load denies
     _common.exit_import_error(NAME, exc)
 HUMAN = "Open a pull request from your feature branch and stop; a human reviews and merges it."
@@ -198,5 +198,10 @@ def evaluate(ctx: Ctx) -> str | None:
     return None
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> None:
+    """Hook mode: the Claude Code event JSON on stdin, exit code and message out."""
     _common.main(NAME, evaluate, fail_closed=True)
+
+
+if __name__ == "__main__":
+    main()

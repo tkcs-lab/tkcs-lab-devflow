@@ -10,8 +10,8 @@ import os
 import shlex
 from dataclasses import dataclass, field
 
-from _gitcfg import _run_git, current_branch, ref_exists  # noqa: F401  (re-exported)
-from _shell import DYN, ParseError, base, candidates, is_dynamic, split_commands, walk_commands
+from tld.guard._gitcfg import _run_git, current_branch, ref_exists  # noqa: F401  (re-exported)
+from tld.guard._shell import DYN, ParseError, base, candidates, is_dynamic, split_commands, walk_commands
 
 # ------------------------------------------------------------------------------------- git
 

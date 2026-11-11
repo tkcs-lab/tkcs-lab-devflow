@@ -9,8 +9,8 @@ from __future__ import annotations
 import math
 import re
 
-import _common
-from _common import Ctx
+from tld.guard import _common
+from tld.guard._common import Ctx
 
 NAME = "secret-scan"
 ALLOW_MARK = "secret-scan:allow"
@@ -139,5 +139,10 @@ def evaluate(ctx: Ctx) -> str | None:
     return None
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> None:
+    """Hook mode: the Claude Code event JSON on stdin, exit code and message out."""
     _common.main(NAME, evaluate, fail_closed=False)
+
+
+if __name__ == "__main__":
+    main()

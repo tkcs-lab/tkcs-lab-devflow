@@ -1,12 +1,16 @@
 {
-  "name": "claude-toolkit",
-  "owner": { "name": "andras-tkcs" },
-  "metadata": { "description": "Plan → implement toolkit for Claude Code on the web: /setup, /review, /make-plan, /implement, /dod, /board, /deps, /upstream, /land and ten specialist agents" },
+  "name": "tkcs-lab-devflow",
+  "owner": {
+    "name": "tkcs-lab"
+  },
+  "metadata": {
+    "description": "tkcs-lab-devflow (tld): a plan → implement toolkit for coding agents, with a Claude Code plugin: /setup, /review, /make-plan, /implement, /dod, /board, /deps, /upstream, /land, /docs and ten specialist agents"
+  },
   "plugins": [
-    { "name": "devflow", "source": "./plugins/devflow", "description": "/setup, /review, /make-plan, /implement, /dod, /board, /deps, /upstream and /land plus ten specialist agents, driven by a per-project profile (.claude/toolkit.yaml)" },
-    { "name": "stack-python", "source": "./plugins/stack-python", "description": "Python stack skill for devflow" },
-    { "name": "stack-swift", "source": "./plugins/stack-swift", "description": "Swift stack skill for devflow (SwiftPM here, Apple builds on a macOS runner)" },
-    { "name": "stack-ipados", "source": "./plugins/stack-ipados", "description": "iPadOS app stack skill for devflow, on top of stack-swift" },
-    { "name": "stack-go", "source": "./plugins/stack-go", "description": "Go stack skill for devflow" }
+    {
+      "name": "tld",
+      "source": "./",
+      "description": "/setup, /review, /make-plan, /implement, /dod, /board, /deps, /upstream, /land and /docs plus ten specialist agents and the python, go, swift and ipados stack skills, driven by a per-project profile (.tld/toolkit.yaml)"
+    }
   ]
 }

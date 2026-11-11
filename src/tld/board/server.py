@@ -21,10 +21,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import board_mcp  # noqa: E402
-import build_board  # noqa: E402
-from board_store import Conflict, Invalid, Store  # noqa: E402
+from tld.board import mcp as board_mcp  # noqa: E402
+from tld.board import build as build_board  # noqa: E402
+from tld.board.store import Conflict, Invalid, Store  # noqa: E402
 
 MAX_BODY = 1048576
 MIN_TOKEN = 24

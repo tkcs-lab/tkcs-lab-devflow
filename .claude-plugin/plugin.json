@@ -1,8 +1,26 @@
 {
-  "name": "devflow",
-  "version": "0.8.0",
-  "description": "Project-independent plan → implement workflow: /setup, /review, /make-plan, /implement, /dod, /board, /deps, /upstream, /land and /docs, plus ten specialist agents (architect, code-reviewer, debugger, ...), driven by a per-project profile (.claude/toolkit.yaml)",
-  "author": { "name": "andras-tkcs" },
+  "name": "tld",
+  "version": "1.0.0-dev",
+  "description": "tkcs-lab-devflow: project-independent plan → implement workflow: /setup, /review, /make-plan, /implement, /dod, /board, /deps, /upstream, /land and /docs, plus ten specialist agents (architect, code-reviewer, debugger, ...), driven by a per-project profile (.tld/toolkit.yaml)",
+  "author": {
+    "name": "tkcs-lab"
+  },
   "license": "Apache-2.0",
-  "homepage": "https://github.com/tkcs-lab/claude-toolkit"
+  "homepage": "https://github.com/tkcs-lab/tkcs-lab-devflow",
+  "commands": "./adapters/claude/commands/",
+  "skills": "./adapters/claude/skills/",
+  "agents": [
+    "./adapters/claude/agents/architect.md",
+    "./adapters/claude/agents/code-reviewer.md",
+    "./adapters/claude/agents/debugger.md",
+    "./adapters/claude/agents/dependency-auditor.md",
+    "./adapters/claude/agents/refactorer.md",
+    "./adapters/claude/agents/security-reviewer.md",
+    "./adapters/claude/agents/tech-writer.md",
+    "./adapters/claude/agents/test-architect.md",
+    "./adapters/claude/agents/ux-reviewer.md",
+    "./adapters/claude/agents/website-maintainer.md"
+  ],
+  "hooks": "./adapters/claude/hooks/hooks.json",
+  "mcpServers": "./adapters/claude/mcp.json"
 }

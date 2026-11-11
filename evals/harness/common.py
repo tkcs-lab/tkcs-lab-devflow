@@ -2,14 +2,19 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
+import importlib
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 EVALS = ROOT / "evals"
-PLUGIN = ROOT / "plugins" / "devflow"
+PLUGIN = ROOT  # the tld plugin is sourced from the repository root
+CLAUDE = ROOT / "adapters" / "claude"
+# what the plugin needs at run time: its manifest, the Claude adapter, the launcher and the core package
+PLUGIN_PATHS = (".claude-plugin", "adapters", "bin", "src")
+CORE_MODULES = {"validate_profile": "tld.profile.validate", "validate_manifest": "tld.plan.manifest",
+                "validate_status_record": "tld.board.record"}
 TASKS_DIR = EVALS / "tasks"
 BASELINES_DIR = EVALS / "baselines"
 RESULTS_DIR = EVALS / "results"
@@ -19,13 +24,12 @@ _cache: dict[str, object] = {}
 
 
 def plugin_script(name: str):
-    """Import plugins/devflow/scripts/<name>.py (the validators are scripts, not a package)."""
+    """Import one of the core validators (tld.profile.validate, tld.plan.manifest, tld.board.record)."""
     if name not in _cache:
-        spec = importlib.util.spec_from_file_location(f"devflow_{name}", PLUGIN / "scripts" / f"{name}.py")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
-        _cache[name] = module
+        src = str(ROOT / "src")
+        if src not in sys.path:
+            sys.path.insert(0, src)
+        _cache[name] = importlib.import_module(CORE_MODULES[name])
     return _cache[name]
 
 
@@ -50,7 +54,7 @@ def _path() -> str:
 def plugin_git_sha() -> str:
     try:
         sha = git("rev-parse", "HEAD", cwd=ROOT).strip()
-        dirty = bool(git("status", "--porcelain", "--", "plugins", cwd=ROOT).strip())
+        dirty = bool(git("status", "--porcelain", "--", *PLUGIN_PATHS, cwd=ROOT).strip())
         return sha + ("+dirty" if dirty else "")
     except Exception:
         return "unknown"
@@ -58,6 +62,6 @@ def plugin_git_sha() -> str:
 
 def command_hashes(plugin_dir: Path = PLUGIN) -> dict[str, str]:
     out = {}
-    for p in sorted((plugin_dir / "commands").glob("*.md")):
+    for p in sorted((plugin_dir / "adapters" / "claude" / "commands").glob("*.md")):
         out[p.name] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
     return out

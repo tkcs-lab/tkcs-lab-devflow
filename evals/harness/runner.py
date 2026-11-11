@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .agents import Agent, AgentError
-from .common import PLUGIN, ROOT, command_hashes, git, plugin_git_sha
+from .common import PLUGIN_PATHS, ROOT, command_hashes, git, plugin_git_sha
 from .graders import run_graders
 from .model import AgentRequest, AgentResult, Artifacts, Doc, GradeContext
 from .results import scrub, write_transcript
@@ -40,13 +40,14 @@ class Budget:
 
 
 def prepare_plugin(ref: str, dest: Path, names: list[str] | None = None) -> tuple[list[Path], str]:
-    """Export the plugin(s) at `ref` into dest. ref 'worktree' copies the working tree (uncommitted changes included).
+    """Export the tld plugin at `ref` into dest/tld. ref 'worktree' copies the working tree (uncommitted changes included).
 
     Returns (plugin dirs, resolved ref for the record).
     """
     if ref.startswith("-"):
         raise RuntimeError("plugin ref must not start with '-'")
-    names = ["devflow", *(names or [])]
+    if names:
+        raise RuntimeError(f"plugin.extra {names!r}: there are no extra plugins any more (the stack skills are part of tld)")
     sha = ref
     if ref != "worktree":
         v = subprocess.run(["git", "rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}"],
@@ -54,24 +55,18 @@ def prepare_plugin(ref: str, dest: Path, names: list[str] | None = None) -> tupl
         if v.returncode != 0:
             raise RuntimeError(f"plugin ref {ref!r} does not name a commit: {v.stderr.strip()}")
         sha = v.stdout.strip()
-    dirs = []
-    for name in names:
-        out = dest / name
-        out.mkdir(parents=True)
-        if ref == "worktree":
-            shutil.copytree(ROOT / "plugins" / name, out, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-        else:
-            tar = subprocess.run(["git", "archive", sha, f"plugins/{name}"], cwd=ROOT, capture_output=True)
-            if tar.returncode != 0:
-                raise RuntimeError(f"git archive {sha} plugins/{name} failed: {tar.stderr.decode().strip()}")
-            stage = dest / "_x"
-            stage.mkdir(exist_ok=True)
-            subprocess.run(["tar", "-x", "-C", str(stage), "-f", "-"], input=tar.stdout, check=True)
-            shutil.copytree(stage / "plugins" / name, out, dirs_exist_ok=True)
-        dirs.append(out)
-    shutil.rmtree(dest / "_x", ignore_errors=True)
+    out = dest / "tld"
+    out.mkdir(parents=True)
+    if ref == "worktree":
+        for part in PLUGIN_PATHS:
+            shutil.copytree(ROOT / part, out / part, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    else:
+        tar = subprocess.run(["git", "archive", sha, *PLUGIN_PATHS], cwd=ROOT, capture_output=True)
+        if tar.returncode != 0:
+            raise RuntimeError(f"git archive {sha} {' '.join(PLUGIN_PATHS)} failed: {tar.stderr.decode().strip()}")
+        subprocess.run(["tar", "-x", "-C", str(out), "-f", "-"], input=tar.stdout, check=True)
     resolved = "worktree" if ref == "worktree" else sha
-    return dirs, resolved
+    return [out], resolved
 
 
 def build_fixture(task: Task, base: Path) -> tuple[Path, dict]:

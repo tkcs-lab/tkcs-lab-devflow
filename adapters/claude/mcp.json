@@ -1,11 +1,15 @@
 {
   "mcpServers": {
-    "devflow-board": {
+    "tld-board": {
       "command": "python3",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/board_mcp_stdio.py"],
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/bin/tld",
+        "board",
+        "mcp-stdio"
+      ],
       "env": {
-        "DEVFLOW_BOARD_URL": "${DEVFLOW_BOARD_URL:-}",
-        "DEVFLOW_BOARD_TOKEN": "${DEVFLOW_BOARD_TOKEN:-}"
+        "TLD_BOARD_URL": "${TLD_BOARD_URL:-}",
+        "TLD_BOARD_TOKEN": "${TLD_BOARD_TOKEN:-}"
       }
     }
   }

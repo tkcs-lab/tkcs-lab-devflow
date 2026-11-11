@@ -16,10 +16,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import board_client  # noqa: E402
-import board_mcp  # noqa: E402
-from board_client import Config  # noqa: E402
+from tld.board import client as board_client  # noqa: E402
+from tld.board import mcp as board_mcp  # noqa: E402
+from tld.board.client import Config  # noqa: E402
 
 NO_BOARD = "No devflow board is configured (DEVFLOW_BOARD_URL and DEVFLOW_BOARD_TOKEN are unset)."
 
@@ -88,7 +87,7 @@ def serve(stdin: TextIO, stdout: TextIO, config: Config | None, call: Callable =
             _write(stdout, _error(message["id"], -32000, f"board server: HTTP {status}"))
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     try:
         config = board_client.load_config()
     except board_client.ConfigError as err:

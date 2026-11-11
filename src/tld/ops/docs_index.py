@@ -49,8 +49,7 @@ from pathlib import Path
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import validate_manifest as vm  # noqa: E402
+from tld.plan import manifest as vm  # noqa: E402
 
 DEFAULT_PROFILE = ".claude/toolkit.yaml"
 MAX_CLAUDE_LINES = 60

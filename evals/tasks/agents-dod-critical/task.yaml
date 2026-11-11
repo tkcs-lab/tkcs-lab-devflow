@@ -10,7 +10,7 @@ model: sonnet
 repeats: 3
 timeout_s: 900
 cost_ceiling_usd: 1.5
-requires: [plugins/devflow/agents/security-reviewer.md]
+requires: [adapters/claude/agents/security-reviewer.md]
 graders:
   - name: result_matches
     must:

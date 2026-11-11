@@ -16,8 +16,7 @@ import sys
 import threading
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import validate_status_record  # noqa: E402
+from tld.board import record as validate_status_record  # noqa: E402
 
 MAX_RECORD = 262144
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")

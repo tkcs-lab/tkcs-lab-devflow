@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import graders as graders_mod
 from .agents import ClaudeCodeAgent, StubAgent, CHECKED_AGAINST
-from .common import BASELINES_DIR, PLUGIN, RESULTS_DIR, TRANSCRIPTS_DIR
+from .common import BASELINES_DIR, CLAUDE, RESULTS_DIR, TRANSCRIPTS_DIR
 from .compare import compare
 from .results import aggregate, append_results, format_table, read_results, summary
 from .runner import Budget, run_tasks, unmet_requirements
@@ -48,7 +48,7 @@ def command_frontmatter_model(task) -> str | None:
     if not words:
         return None
     cmd = words[0].rsplit(":", 1)[-1].lstrip("/")
-    path = PLUGIN / "commands" / f"{cmd}.md"
+    path = CLAUDE / "commands" / f"{cmd}.md"
     if not cmd or not path.is_file():
         return None
     lines = path.read_text().splitlines()

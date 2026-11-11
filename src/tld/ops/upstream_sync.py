@@ -13,7 +13,6 @@ Exit 1 and `upstream_sync: <message>` on any error; 3 when no release is eligibl
 """
 import argparse
 import datetime
-import importlib.util
 import json
 import os
 import re
@@ -21,15 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-
-def _load_picker():
-    spec = importlib.util.spec_from_file_location("pick_release", Path(__file__).with_name("pick_release.py"))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-pick_release = _load_picker()
+from tld.ops import pick_release
 
 
 class SyncError(Exception):

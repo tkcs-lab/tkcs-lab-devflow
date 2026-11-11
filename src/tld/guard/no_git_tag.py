@@ -9,14 +9,14 @@ from __future__ import annotations
 import os
 import re
 
-import _common
-from _common import Ctx
+from tld.guard import _common
+from tld.guard._common import Ctx
 
 NAME = "no-git-tag"
 try:
-    from _gitcfg import _truthy, git_config_value, git_config_values
-    from _gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs, ref_exists, short_ref
-    from _shell import ParseError, is_dynamic
+    from tld.guard._gitcfg import _truthy, git_config_value, git_config_values
+    from tld.guard._gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs, ref_exists, short_ref
+    from tld.guard._shell import ParseError, is_dynamic
 except Exception as exc:  # noqa: BLE001 - a destructive hook that cannot load denies
     _common.exit_import_error(NAME, exc)
 INSTEAD = ("Tags are cut by the release workflow in CI, on the maintainer's decision. Do not create, move, "
@@ -111,7 +111,7 @@ def check_push_config(it: Item, push) -> str | None:
     cur = None
     remote = push.repo
     if not remote:
-        from _gitcfg import current_branch
+        from tld.guard._gitcfg import current_branch
         cur = current_branch(d, opts)
         remote = (git_config_value(d, opts, ov, f"branch.{cur}.pushRemote") if cur else None) or \
             git_config_value(d, opts, ov, "remote.pushDefault") or \
@@ -208,5 +208,10 @@ def evaluate(ctx: Ctx) -> str | None:
     return None
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> None:
+    """Hook mode: the Claude Code event JSON on stdin, exit code and message out."""
     _common.main(NAME, evaluate, fail_closed=True)
+
+
+if __name__ == "__main__":
+    main()

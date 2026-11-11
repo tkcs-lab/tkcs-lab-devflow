@@ -1,5 +1,5 @@
 {
-  "$comment": "Subset of JSON Schema understood by plugins/devflow/scripts/validate_profile.py:check (type, enum, required, properties, items, minimum, pattern, oneOf, additionalProperties).",
+  "$comment": "Subset of JSON Schema understood by src/tld/profile/validate.py:check (type, enum, required, properties, items, minimum, pattern, oneOf, additionalProperties).",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "description", "fixture", "graders"],

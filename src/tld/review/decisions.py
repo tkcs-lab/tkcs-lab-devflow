@@ -18,7 +18,7 @@ import re
 import sys
 from pathlib import Path
 
-TEMPLATE = Path(__file__).resolve().with_name("review_decisions.html")
+TEMPLATE = Path(__file__).resolve().with_name("decisions.html")
 TITLE_MARK = "__REVIEW_TITLE__"
 DATA_MARK = "__REVIEW_DATA__"
 

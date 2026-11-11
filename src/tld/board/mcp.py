@@ -14,8 +14,7 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from board_store import Conflict, Invalid, Store  # noqa: E402
+from tld.board.store import Conflict, Invalid, Store  # noqa: E402
 
 PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 INSTRUCTIONS = ("Devflow status board. Records are status records (collection 'projects'); "

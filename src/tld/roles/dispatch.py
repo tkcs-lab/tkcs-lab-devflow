@@ -26,9 +26,8 @@ from pathlib import Path
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import validate_manifest as vm  # noqa: E402
-import validate_profile as vp  # noqa: E402
+from tld.plan import manifest as vm  # noqa: E402
+from tld.profile import validate as vp  # noqa: E402
 
 POINTS = ("make_plan", "implement_phase", "implement_final", "review", "dod")
 NO_DIFF_POINTS = ("make_plan", "review")

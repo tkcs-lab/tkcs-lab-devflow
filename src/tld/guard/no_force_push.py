@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import re
 
-import _common
-from _common import Ctx
+from tld.guard import _common
+from tld.guard._common import Ctx
 
 NAME = "no-force-push"
 try:
-    from _gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs
-    from _shell import ParseError
+    from tld.guard._gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs
+    from tld.guard._shell import ParseError
 except Exception as exc:  # noqa: BLE001 - a destructive hook that cannot load denies
     _common.exit_import_error(NAME, exc)
 INSTEAD = ("Push normally (`git push -u origin <branch>`). If the push is rejected because the remote branch "
@@ -69,5 +69,10 @@ def evaluate(ctx: Ctx) -> str | None:
     return None
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> None:
+    """Hook mode: the Claude Code event JSON on stdin, exit code and message out."""
     _common.main(NAME, evaluate, fail_closed=True)
+
+
+if __name__ == "__main__":
+    main()

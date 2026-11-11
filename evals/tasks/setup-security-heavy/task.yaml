@@ -10,7 +10,7 @@ model: sonnet
 repeats: 3
 timeout_s: 900
 cost_ceiling_usd: 3.0
-requires: [plugins/devflow/commands/setup.md]
+requires: [adapters/claude/commands/setup.md]
 graders:
   - profile_valid
   - agents_block_equals

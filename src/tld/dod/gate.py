@@ -22,8 +22,8 @@ import tempfile
 import time
 from pathlib import Path
 
-import _common
-from _common import DEFAULT_MAX_ATTEMPTS, Ctx, ProfileError
+from tld.guard import _common
+from tld.guard._common import DEFAULT_MAX_ATTEMPTS, Ctx, ProfileError
 
 NAME = "dod-gate"
 MARKER_TTL_SECONDS = 24 * 3600   # an exemption lapses a day after the exempt session last stopped
@@ -263,7 +263,13 @@ def cli(argv: list[str]) -> int:
     return 2
 
 
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        sys.exit(cli(sys.argv[1:]))
+def main(argv: list[str] | None = None) -> None:
+    """Hook mode without arguments (event JSON on stdin); with arguments, the command-line flags."""
+    argv = sys.argv[1:] if argv is None else argv
+    if argv:
+        sys.exit(cli(argv))
     _common.main(NAME, evaluate, fail_closed=False)
+
+
+if __name__ == "__main__":
+    main()

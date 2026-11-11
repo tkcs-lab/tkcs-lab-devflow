@@ -13,9 +13,9 @@ from pathlib import Path
 
 import yaml
 
-from .common import EVALS, PLUGIN
+from .common import CLAUDE, EVALS
 
-HOOKS_JSON = PLUGIN / "hooks" / "hooks.json"
+HOOKS_JSON = CLAUDE / "hooks" / "hooks.json"
 CASES = EVALS / "hook_cases.yaml"
 
 
@@ -44,7 +44,7 @@ def pretooluse_hooks(hooks_json: Path, tool_name: str) -> list[dict]:
 
 def decide(hooks_json: Path, tool_name: str, tool_input: dict, cwd: Path, timeout_s: int = 30) -> tuple[str, str]:
     """('deny' | 'allow', reason): deny when any matching hook blocks (exit 2 or a deny decision)."""
-    root = hooks_json.parent.parent
+    root = hooks_json.parents[3]  # <plugin root>/adapters/claude/hooks/hooks.json
     payload = json.dumps({"session_id": "eval", "cwd": str(cwd), "hook_event_name": "PreToolUse",
                           "tool_name": tool_name, "tool_input": tool_input, "tool_use_id": "toolu_eval"})
     env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(root), "CLAUDE_PROJECT_DIR": str(cwd)}

@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import subprocess
 
-from _shell import ParseError
+from tld.guard._shell import ParseError
 
 
 class GitLookupError(ParseError):
@@ -66,7 +66,7 @@ def _truthy(value: str | None) -> bool:
 def bare_push_destinations(it, push, main: str) -> list[str] | None:  # noqa: ARG001
     """Short branch names a push without an explicit refspec would update, or None when that cannot be
     resolved (mirror, a glob, matching, a detached HEAD, a missing upstream)."""
-    from _gitgh import has_glob, parse_refspecs, short_ref  # circular at import time
+    from tld.guard._gitgh import has_glob, parse_refspecs, short_ref  # circular at import time
     d, opts, ov = it.dir, it.git.repo_opts, it.git.config
     cur = current_branch(d, opts)
     if cur is None:

@@ -16,11 +16,11 @@ import re
 import sys
 import time
 
-import _common
-from _common import BUILTIN_PROTECT_ALLOW, DEFAULT_PROTECT_PATHS, Ctx
-from _gitgh import Item, iter_items
-from _shell import ParseError, base, is_dynamic
-from dod_gate import state_dir
+from tld.guard import _common
+from tld.guard._common import BUILTIN_PROTECT_ALLOW, DEFAULT_PROTECT_PATHS, Ctx
+from tld.guard._gitgh import Item, iter_items
+from tld.guard._shell import ParseError, base, is_dynamic
+from tld.dod.gate import state_dir
 
 NAME = "protect-paths"
 # Guardrail files: protected whatever the profile says (hooks.protect_paths and protect_paths_allow never remove them).
@@ -377,7 +377,13 @@ def cli(argv: list[str]) -> int:
     return 2
 
 
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        sys.exit(cli(sys.argv[1:]))
+def main(argv: list[str] | None = None) -> None:
+    """Hook mode without arguments (event JSON on stdin); with arguments, the command-line flags."""
+    argv = sys.argv[1:] if argv is None else argv
+    if argv:
+        sys.exit(cli(argv))
     _common.main(NAME, evaluate, fail_closed=False)
+
+
+if __name__ == "__main__":
+    main()

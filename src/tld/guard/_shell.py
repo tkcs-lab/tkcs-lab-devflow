@@ -18,8 +18,8 @@ import re
 import shlex
 from dataclasses import dataclass, field
 
-from _ansi import ansi_c_decode
-from _wrappers import (ASSIGN, WRAPPER_POSITIONALS, WRAPPER_VALUE_OPTS, WRAPPERS, ParseError,  # noqa: F401
+from tld.guard._ansi import ansi_c_decode
+from tld.guard._wrappers import (ASSIGN, WRAPPER_POSITIONALS, WRAPPER_VALUE_OPTS, WRAPPERS, ParseError,  # noqa: F401
                        script_command, strip_wrapper as _strip_wrapper)
 
 DYN = ""    # a substitution or expansion this module does not evaluate

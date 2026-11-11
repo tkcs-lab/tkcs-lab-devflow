@@ -16,7 +16,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-BOARD = Path(__file__).resolve().parent.parent / "board"
+BOARD = Path(__file__).resolve().parent / "web"
 MARKERS = ("<!--DEVFLOW:TITLE-->", "/*DEVFLOW:RULES*/", "/*DEVFLOW:FIXTURE*/null", "/*DEVFLOW:NOW*/null")
 
 

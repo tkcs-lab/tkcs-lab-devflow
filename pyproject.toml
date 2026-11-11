@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tld"
+version = "1.0.0.dev0"
+description = "tkcs-lab-devflow: a project-independent plan, implement and review workflow for coding agents"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+dependencies = ["PyYAML"]
+
+[project.urls]
+Homepage = "https://github.com/tkcs-lab/tkcs-lab-devflow"
+
+[project.scripts]
+tld = "tld.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+tld = ["schema/*.json", "templates/*", "board/web/*", "review/*.html"]

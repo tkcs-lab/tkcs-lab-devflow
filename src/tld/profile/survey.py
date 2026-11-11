@@ -22,10 +22,9 @@ from pathlib import Path
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import survey_docs  # noqa: E402
-import survey_proposal  # noqa: E402
-import survey_signals  # noqa: E402
+from tld.profile import survey_docs  # noqa: E402
+from tld.profile import survey_proposal  # noqa: E402
+from tld.profile import survey_signals  # noqa: E402
 
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "vendor", "build", "dist", "Pods", ".build",
              "__pycache__", "DerivedData"}

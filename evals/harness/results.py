@@ -20,7 +20,7 @@ SCRUB = [
 ]
 
 
-_HOOKS_DIR = Path(__file__).resolve().parents[2] / "plugins" / "devflow" / "hooks"
+_SRC = Path(__file__).resolve().parents[2] / "src"
 
 # Whole PEM blocks (real newlines or the literal `\n` of JSON-dumped text), URL userinfo, JSON-quoted secrets.
 PEM = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL)
@@ -32,9 +32,9 @@ JSON_SECRET = re.compile(
 @functools.lru_cache(maxsize=1)
 def _hook_patterns() -> tuple[re.Pattern, ...]:
     """The secret-scan hook's SPECIFIC patterns, so the harness and the hook cannot drift apart."""
-    if str(_HOOKS_DIR) not in sys.path:
-        sys.path.insert(0, str(_HOOKS_DIR))
-    import secret_scan
+    if str(_SRC) not in sys.path:
+        sys.path.insert(0, str(_SRC))
+    from tld.guard import secret_scan
     return tuple(rx for _name, _desc, rx in secret_scan.SPECIFIC)
 
 
