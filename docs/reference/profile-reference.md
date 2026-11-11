@@ -39,6 +39,7 @@ Rules:
 | `docs.adr_index` | no (needs `adr_dir`) | File that must list every new ADR |
 | `docs.adr_bar` | no (needs `adr_dir`) | Where the criteria for needing an ADR are written (`path` or `path#anchor`) |
 | `docs.changelog.file`, `docs.changelog.section` | no | A user-visible change adds a line under this heading; never a version heading |
+| `docs.changelog.policy` | no (default `unreleased`) | `unreleased`: a user-visible change adds a line under `section`; the `protect-paths` hook denies a session opening a version heading in the file unless the change touches only the changelog. `release-only`: the changelog is written when a release is cut; the hook denies every session edit of the file unless the change touches only the changelog, `section` is not needed, and no playbook adds a changelog line |
 | `docs.website` | no | The project's website; present means the `website-maintainer` role can run. Keys: `dir`, `build`, `links` |
 | `docs.website.dir` | **yes** (in `docs.website`) | Directory relative to the repo root (`.` for the root); `build` and `links` run from there |
 | `docs.website.build` | **yes** (in `docs.website`) | Command that builds the site |

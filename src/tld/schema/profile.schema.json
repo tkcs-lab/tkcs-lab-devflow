@@ -116,8 +116,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "file",
-            "section"
+            "file"
           ],
           "properties": {
             "file": {
@@ -127,7 +126,14 @@
             "section": {
               "type": "string",
               "minLength": 1,
-              "description": "Heading user-visible changes go under, for example '## [Unreleased]'."
+              "description": "Heading user-visible changes go under, for example '## [Unreleased]'. Required unless policy is release-only."
+            },
+            "policy": {
+              "enum": [
+                "unreleased",
+                "release-only"
+              ],
+              "description": "unreleased (default): sessions add lines under section and never open a version heading. release-only: the changelog is written when a release is cut; sessions do not edit it."
             }
           }
         },

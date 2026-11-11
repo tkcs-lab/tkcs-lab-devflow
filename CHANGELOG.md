@@ -5,6 +5,13 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+### Added
+
+- `docs.changelog.policy` and a changelog guard in the `protect-paths` hook. Lines under `section` stay free.
+  The release workflow takes the version from the `## [X.Y.Z]` heading, so the default `unreleased` denies a session
+  opening a version heading, and `release-only` denies any edit, unless the change touches only the changelog (a
+  separate pull request from the code and the version bump). With `release-only`, `section` is optional.
+
 ### Fixed
 
 - The board client and repo-admin send `User-Agent: tld/<version>` instead of urllib's default, which Cloudflare's
