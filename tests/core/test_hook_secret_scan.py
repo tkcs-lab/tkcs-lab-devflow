@@ -97,10 +97,10 @@ def test_long_line_is_scanned_quickly(feature_repo):
     key = f' API_KEY = "{rand(32)}"'
     t = time.monotonic()
     r = run(HOOK, event("Write", feature_repo, file_path=str(feature_repo / "a.txt"), content="a" * 200_000 + key))
-    assert r.code == 2 and time.monotonic() - t < 1
+    assert r.code == 2 and time.monotonic() - t < 5  # a backtracking pattern takes minutes; 5 s is a wide margin
     t = time.monotonic()
     r = run(HOOK, event("Write", feature_repo, file_path=str(feature_repo / "a.txt"), content="a" * 20_000))
-    assert r.code == 0 and time.monotonic() - t < 1
+    assert r.code == 0 and time.monotonic() - t < 5
 
 
 def test_allow_mark_must_end_the_line(feature_repo):

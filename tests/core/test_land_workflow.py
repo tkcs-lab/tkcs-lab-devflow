@@ -1,7 +1,6 @@
 """The tld-land workflow template: structure, and the script run against a stub gh."""
 import json
 import os
-import shutil
 import subprocess
 
 import pytest
@@ -41,7 +40,7 @@ esac
 if [ -n "$jqexpr" ]; then jq -r "$jqexpr" "$file"; else cat "$file"; fi
 """
 
-needs_jq = pytest.mark.skipif(shutil.which("jq") is None, reason="jq not installed")
+needs_jq = pytest.mark.usefixtures("jq_installed")  # fails instead of skipping under TLD_REQUIRE_BROWSER=1
 
 
 @pytest.fixture(scope="module")

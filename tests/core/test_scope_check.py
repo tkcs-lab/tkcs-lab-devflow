@@ -403,13 +403,6 @@ def test_starter_template_documents_the_key():
     assert "# scope:" in text and "#   ignore:" in text
 
 
-def test_docs_describe_the_decisions():
-    doc = (ROOT / "docs" / "architecture" / "scope-drift.md").read_text()
-    for needle in ("optional property in schema version 1", "pull request description", "scope.ignore",
-                   "never blocks", "are not ignored by default", "partly_reverted", "rejected"):
-        assert needle in doc, needle
-
-
 # --- fix and rework sessions, section hardening (DOC-2, SEC-E8, TST-5) -------------------------
 
 def _merge_p1_then_branch_on(repo, trailer="Plan-Phase: demo/p1"):

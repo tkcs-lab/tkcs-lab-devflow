@@ -105,11 +105,11 @@ def test_allowed(feature_repo, command):
     assert (r.code, r.stderr) == (0, ""), command
 
 
-def test_graphql_query_in_a_readable_input_file_is_scanned(feature_repo):
-    (feature_repo / "q.json").write_text('{"query": "mutation { mergePullRequest(input: {}) { clientMutationId } }"}')
-    assert run(HOOK, bash("gh api graphql --input q.json", feature_repo)).code == 2
-    (feature_repo / "ok.json").write_text('{"query": "query { viewer { login } }"}')
-    assert run(HOOK, bash("gh api graphql --input ok.json", feature_repo)).code == 0
+def test_graphql_query_in_a_readable_input_file_is_scanned(fresh_repo):
+    (fresh_repo / "q.json").write_text('{"query": "mutation { mergePullRequest(input: {}) { clientMutationId } }"}')
+    assert run(HOOK, bash("gh api graphql --input q.json", fresh_repo)).code == 2
+    (fresh_repo / "ok.json").write_text('{"query": "query { viewer { login } }"}')
+    assert run(HOOK, bash("gh api graphql --input ok.json", fresh_repo)).code == 0
 
 
 def test_other_branches_are_allowed_when_the_pushed_ref_is_explicit(main_repo):
@@ -127,14 +127,12 @@ def test_unparseable_commands_fail_closed(feature_repo):
     assert r.code == 2 and "cannot parse" in r.stderr
 
 
-def test_alias_to_a_push_of_main_is_followed(feature_repo):
-    git(feature_repo, "config", "alias.ship", "push origin main")
-    assert run(HOOK, bash("git ship", feature_repo)).code == 2
-    assert run(HOOK, bash("git -c alias.go='push origin main' go", feature_repo)).code == 2
-    git(feature_repo, "config", "alias.mergeit", "!gh pr merge")
-    assert run(HOOK, bash("git mergeit 3", feature_repo)).code == 2
-    git(feature_repo, "config", "--unset", "alias.ship")
-    git(feature_repo, "config", "--unset", "alias.mergeit")
+def test_alias_to_a_push_of_main_is_followed(fresh_repo):
+    git(fresh_repo, "config", "alias.ship", "push origin main")
+    assert run(HOOK, bash("git ship", fresh_repo)).code == 2
+    assert run(HOOK, bash("git -c alias.go='push origin main' go", fresh_repo)).code == 2
+    git(fresh_repo, "config", "alias.mergeit", "!gh pr merge")
+    assert run(HOOK, bash("git mergeit 3", fresh_repo)).code == 2
 
 
 # ---- the missing-key rule ------------------------------------------------------------------------
@@ -297,15 +295,15 @@ def test_upstream_and_config_refspec_to_main_denied(tmp_path, upstream, config, 
     assert run(HOOK, bash(command, repo)).code == expected, command
 
 
-def test_graphql_field_file_is_scanned(feature_repo):
-    (feature_repo / "q.graphql").write_text("mutation { mergePullRequest(input: {}) { clientMutationId } }")
-    (feature_repo / "ok.graphql").write_text("query { viewer { login } }")
-    assert run(HOOK, bash("gh api graphql -F query=@q.graphql", feature_repo)).code == 2
-    assert run(HOOK, bash("gh api graphql --field query=@q.graphql", feature_repo)).code == 2
-    assert run(HOOK, bash("gh api graphql -F query=@-", feature_repo)).code == 2
-    assert run(HOOK, bash("gh api graphql -F query=@missing.graphql", feature_repo)).code == 2
-    assert run(HOOK, bash("gh api graphql -F query=@ok.graphql", feature_repo)).code == 0
-    assert run(HOOK, bash("gh api graphql -f query=@x", feature_repo)).code == 0, "-f is raw text"
+def test_graphql_field_file_is_scanned(fresh_repo):
+    (fresh_repo / "q.graphql").write_text("mutation { mergePullRequest(input: {}) { clientMutationId } }")
+    (fresh_repo / "ok.graphql").write_text("query { viewer { login } }")
+    assert run(HOOK, bash("gh api graphql -F query=@q.graphql", fresh_repo)).code == 2
+    assert run(HOOK, bash("gh api graphql --field query=@q.graphql", fresh_repo)).code == 2
+    assert run(HOOK, bash("gh api graphql -F query=@-", fresh_repo)).code == 2
+    assert run(HOOK, bash("gh api graphql -F query=@missing.graphql", fresh_repo)).code == 2
+    assert run(HOOK, bash("gh api graphql -F query=@ok.graphql", fresh_repo)).code == 0
+    assert run(HOOK, bash("gh api graphql -f query=@x", fresh_repo)).code == 0, "-f is raw text"
 
 
 @pytest.mark.parametrize("tool, args", [
@@ -343,20 +341,20 @@ def test_gh_routes_allowed(feature_repo, command):
 
 
 # ---- fail closed: a failed lookup, a slow hook, an import crash (SEC-H14) ------------------------
-def test_failed_branch_lookup_denies(feature_repo, monkeypatch):
+def test_failed_branch_lookup_denies(fresh_repo, monkeypatch):
     from tld.guard import _gitcfg
 
     def broken(*args, **kwargs):
         raise _gitcfg.GitLookupError("git timed out")
     monkeypatch.setattr(_gitcfg, "_run_git", broken)
-    r = run(HOOK, bash("git push", feature_repo))
+    r = run(HOOK, bash("git push", fresh_repo))
     assert r.code == 2 and "GitLookupError" in r.stderr
     monkeypatch.undo()
-    git(feature_repo, "checkout", "-q", "--detach")
-    assert run(HOOK, bash("git push origin feature", feature_repo)).code == 0
-    git(feature_repo, "checkout", "-q", "feature/demo")  # restore the session-scoped fixture's branch
+    git(fresh_repo, "checkout", "-q", "--detach")
+    assert run(HOOK, bash("git push origin feature", fresh_repo)).code == 0
 
 
+@pytest.mark.slow
 def test_hook_budget_denies(monkeypatch):
     import time
 
@@ -366,16 +364,18 @@ def test_hook_budget_denies(monkeypatch):
 
     def slow(ctx):
         try:
-            time.sleep(3)
+            time.sleep(5)
         except OSError:  # must not swallow the alarm
             pass
         return None
     action = Action("shell", "/", "/", command="true")
     start = time.monotonic()
     d = _common.run_guard("no-merge", slow, True, action)
-    assert d.verdict == "deny" and "took longer than" in d.reason and time.monotonic() - start < 2.9
+    # the 1 s budget stops the fail-closed guard long before the 5 s sleep ends (wide margin for a slow runner)
+    assert d.verdict == "deny" and "took longer than" in d.reason and time.monotonic() - start < 4
+    start = time.monotonic()
     d = _common.run_guard("secret-scan", slow, False, action)
-    assert d.verdict == "allow" and time.monotonic() - start >= 3
+    assert d.verdict == "allow" and time.monotonic() - start >= 4.5, "a fail-open guard has no budget"
 
 
 @pytest.mark.parametrize("script", ["no_merge.py", "no_force_push.py", "no_git_tag.py"])

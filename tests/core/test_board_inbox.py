@@ -130,6 +130,7 @@ def test_ask_without_a_board_is_exit_3():
     assert result.returncode == 3 and "no board configured" in result.stderr
 
 
+@pytest.mark.slow
 def test_answers_exit_codes(server):
     ask = server.store.create_ask(ask_doc())
     env = env_for(base(server))
@@ -147,6 +148,7 @@ def test_answers_exit_codes(server):
     assert tld("answers", ask["id"], env=env_for(None, None)).returncode == 1
 
 
+@pytest.mark.slow
 def test_answers_wait_returns_as_soon_as_the_owner_answers(server):
     ask = server.store.create_ask(ask_doc())
     timer = threading.Timer(1.0, server.store.answer_ask, (ask["id"], {"SEC-1": "plan", "go": False}))
@@ -312,7 +314,7 @@ def test_board_client_does_not_send_the_token_to_another_host():
     other = ThreadingHTTPServer(("127.0.0.1", 0), _Hop)
     board = ThreadingHTTPServer(("127.0.0.1", 0), _Hop)
     board.target = f"http://127.0.0.1:{other.server_address[1]}/elsewhere"
-    threads = [threading.Thread(target=s.serve_forever, daemon=True) for s in (other, board)]
+    threads = [threading.Thread(target=s.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True) for s in (other, board)]
     for t in threads:
         t.start()
     try:

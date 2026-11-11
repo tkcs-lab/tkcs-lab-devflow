@@ -15,6 +15,8 @@ from tld.board import server as board_server  # noqa: E402
 from tld.board import build as build_board  # noqa: E402
 from tld.board.store import Store  # noqa: E402
 
+pytestmark = pytest.mark.slow  # real servers and subprocesses, seconds per test
+
 PAGE = (TLD / "board" / "web" / "board.html").read_text()
 
 

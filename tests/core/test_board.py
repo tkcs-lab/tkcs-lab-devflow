@@ -74,6 +74,7 @@ def test_page_has_no_hard_coded_session_host():
     assert "claude.ai" not in page
 
 
+@pytest.mark.slow
 def test_render_check():
     need_browser()
     result = subprocess.run(["node", str(ROOT / "tests" / "board_render_check.js")], capture_output=True, text=True)

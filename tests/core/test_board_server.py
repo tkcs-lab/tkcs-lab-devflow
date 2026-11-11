@@ -1,6 +1,7 @@
 """The board server: records API, asks API, the owner's login and the auth matrix of every endpoint."""
 import copy
 import http.client
+import itertools
 import json
 import os
 import stat
@@ -58,27 +59,45 @@ MATRIX = [
 ]
 
 
-def _body(kind, server):
-    return {"record": {"data": record(), "if_version": 1}, "ask": ask_doc(),
+def _matrix_record(rec):
+    data = record()
+    data.update(project=rec, repo=f"example-org/{rec}")
+    return data
+
+
+def _body(kind, server, rec="f-running-ok"):
+    return {"record": {"data": _matrix_record(rec), "if_version": 1}, "ask": ask_doc(),
             "answers": {"answers": {"SEC-1": "plan", "go": True}},
             "rpc": {"jsonrpc": "2.0", "id": 1, "method": "ping"}, None: None}[kind]
 
 
+_MATRIX_IDS = itertools.count(1)
+
+
+@pytest.fixture(scope="module")
+def matrix_server(tmp_path_factory):
+    """One server for the whole matrix: each case brings its own record id, ask and owner session, so a case
+    that deletes, cancels or logs out changes nothing another case reads."""
+    with running(tmp_path_factory.mktemp("matrix")) as srv:
+        yield srv
+
+
 @pytest.mark.parametrize("who", ["none", "session", "owner"])
 @pytest.mark.parametrize("method,path,body,expected", MATRIX, ids=[f"{m} {p}" for m, p, _, _ in MATRIX])
-def test_auth_matrix(tmp_path, who, method, path, body, expected):
-    with running(tmp_path) as srv:
-        srv.store.set("f-running-ok", record(), None)
-        ask = srv.store.create_ask(ask_doc())
-        cookie, csrf = login(srv)
-        url = path.format(rec="f-running-ok", ask=ask["id"])
-        kwargs = {"body": _body(body, srv)}
-        if who == "session":
-            kwargs["token"] = WRITE
-        elif who == "owner":
-            kwargs.update(cookie=cookie, csrf=csrf, origin=True)
-        status, _, payload = call(srv, method, url, **kwargs)
-        assert status == expected[["none", "session", "owner"].index(who)], payload
+def test_auth_matrix(matrix_server, who, method, path, body, expected):
+    srv = matrix_server
+    rec = f"matrix-{next(_MATRIX_IDS)}"
+    srv.store.set(rec, _matrix_record(rec), None)
+    ask = srv.store.create_ask(ask_doc())
+    cookie, csrf = login(srv)
+    url = path.format(rec=rec, ask=ask["id"])
+    kwargs = {"body": _body(body, srv, rec)}
+    if who == "session":
+        kwargs["token"] = WRITE
+    elif who == "owner":
+        kwargs.update(cookie=cookie, csrf=csrf, origin=True)
+    status, _, payload = call(srv, method, url, **kwargs)
+    assert status == expected[["none", "session", "owner"].index(who)], payload
 
 
 def test_a_wrong_token_is_401_even_with_an_owner_cookie(server, owner):

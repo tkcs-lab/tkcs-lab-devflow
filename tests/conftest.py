@@ -26,24 +26,35 @@ FORBIDDEN = re.compile(
     r"qa_fixture|andras|bandit|mypy", re.I)
 
 
-# Read before the autouse fixture below removes every TLD_* variable from the tests' environment.
+# Read before the autouse fixture below removes every TLD_* variable from the tests' environment. CI sets it, so a
+# test whose tool (node, Playwright, jq) is missing fails there instead of being skipped silently.
 REQUIRE_BROWSER = os.environ.get("TLD_REQUIRE_BROWSER") == "1"
 
 
-def need_browser() -> None:
-    """Skip a browser test when node or Playwright is missing; fail instead when TLD_REQUIRE_BROWSER=1 (CI)."""
-    import shutil
-    import subprocess
-    reason = None
-    if shutil.which("node") is None:
-        reason = "node is not installed"
-    elif subprocess.run(["node", "-e", "require('playwright')"], capture_output=True, text=True).returncode != 0:
-        reason = "playwright cannot be required"
-    if reason is None:
-        return
+def missing_tool(reason: str) -> None:
+    """Skip the test for a missing tool; fail it instead when TLD_REQUIRE_BROWSER=1 (CI)."""
     if REQUIRE_BROWSER:
         pytest.fail(f"TLD_REQUIRE_BROWSER=1 but {reason}")
     pytest.skip(reason)
+
+
+def need_tool(name: str) -> None:
+    import shutil
+    if shutil.which(name) is None:
+        missing_tool(f"{name} is not installed")
+
+
+def need_browser() -> None:
+    """node and its Playwright package (the board page tests drive Chromium from node)."""
+    import subprocess
+    need_tool("node")
+    if subprocess.run(["node", "-e", "require('playwright')"], capture_output=True, text=True).returncode != 0:
+        missing_tool("playwright cannot be required")
+
+
+@pytest.fixture()
+def jq_installed():
+    need_tool("jq")
 
 
 def frontmatter(path):
@@ -80,18 +91,50 @@ def ra():
 
 
 # ---- guardrail hooks -------------------------------------------------------------------------
-@pytest.fixture(scope="session")
-def feature_repo(tmp_path_factory):
-    """A git repo with a profile (main branch `main`), a local tag v1.0, checked out on feature/demo."""
+def _repo_state(path) -> tuple:
+    """HEAD, the config file, every untracked or changed path and the guards' state under .git/tld: what a
+    read-only test must leave as it was."""
+    import subprocess
+    head = subprocess.run(["git", "-C", str(path), "rev-parse", "--symbolic-full-name", "HEAD"],
+                          capture_output=True, text=True).stdout
+    status = subprocess.run(["git", "-C", str(path), "status", "--porcelain", "--ignored", "--untracked-files=all"],
+                            capture_output=True, text=True).stdout
+    # trusted.json is the guards' cache of the remote profile: it is refreshed on a timer, not by a test
+    state = sorted((str(p), p.read_bytes()) for p in (Path(path) / ".git" / "tld").rglob("*")
+                   if p.is_file() and p.name != "trusted.json")
+    return head, (Path(path) / ".git" / "config").read_text(), status, state
+
+
+def _shared_repo(path, branch):
     from hooks_helpers import make_repo
-    return make_repo(tmp_path_factory.mktemp("feature"), "feature/demo")
+    return make_repo(path, branch)
 
 
 @pytest.fixture(scope="session")
-def main_repo(tmp_path_factory):
-    """The same repo state, checked out on `main`."""
-    from hooks_helpers import make_repo
-    return make_repo(tmp_path_factory.mktemp("onmain"), "main")
+def _feature_repo(tmp_path_factory):
+    return _shared_repo(tmp_path_factory.mktemp("feature"), "feature/demo")
+
+
+@pytest.fixture(scope="session")
+def _main_repo(tmp_path_factory):
+    return _shared_repo(tmp_path_factory.mktemp("onmain"), "main")
+
+
+@pytest.fixture()
+def feature_repo(_feature_repo):
+    """A git repo with a profile (main branch `main`), a local tag v1.0, checked out on feature/demo.
+    Built once per session and shared, so it is read-only: a test that changes it fails (use `fresh_repo`)."""
+    before = _repo_state(_feature_repo)
+    yield _feature_repo
+    assert _repo_state(_feature_repo) == before, "a test changed the shared feature_repo: use fresh_repo"
+
+
+@pytest.fixture()
+def main_repo(_main_repo):
+    """The same repo state, checked out on `main`; read-only like feature_repo."""
+    before = _repo_state(_main_repo)
+    yield _main_repo
+    assert _repo_state(_main_repo) == before, "a test changed the shared main_repo: use a function-scoped repo"
 
 
 @pytest.fixture()

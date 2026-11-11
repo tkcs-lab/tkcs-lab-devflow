@@ -13,6 +13,8 @@ import yaml
 
 from conftest import BIN
 
+pytestmark = pytest.mark.slow  # real servers and subprocesses, seconds per test
+
 TOKEN = "e2e-token-value"
 
 

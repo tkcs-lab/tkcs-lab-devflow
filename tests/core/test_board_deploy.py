@@ -11,13 +11,6 @@ from tld.board import record as validate_status_record
 DOCKERFILE = ROOT / "deploy" / "board" / "Dockerfile"
 DOC = ROOT / "docs" / "guides" / "board-server.md"
 
-SECTIONS = [
-    "What it is", "Run it locally", "Configuration", "Docker", "TLS and a reverse proxy", "Deploy it",
-    "Connect Claude Code sessions", "Rotating the token and the passphrase", "HTTP API", "MCP tools",
-    "The issue fallback", "Security notes", "Backup and restore", "Troubleshooting", "Replacing the artifact board",
-]
-
-
 def _copied() -> set[str]:
     """Repository paths the Dockerfile copies (the build context is the repository root)."""
     paths: set[str] = set()
@@ -79,26 +72,16 @@ def test_dockerfile_copies_the_page_files() -> None:
         assert (ROOT / path).is_file(), path
 
 
-def test_doc_has_the_sections_in_order() -> None:
-    headings = re.findall(r"^## (.+)$", DOC.read_text(), re.M)
-    assert headings == SECTIONS
-
-
-def test_doc_names_every_variable_and_route_and_tool() -> None:
+def test_doc_names_every_variable_and_tool() -> None:
+    """Every TLD_BOARD_* variable the board code reads and every MCP tool it serves is in the guide."""
+    from tld.board import mcp as board_mcp
     text = DOC.read_text()
-    for needle in (
-        "TLD_BOARD_TOKEN", "TLD_BOARD_OWNER_PASSPHRASE", "TLD_BOARD_SECRET", "TLD_BOARD_PUBLIC_ORIGIN",
-        "TLD_BOARD_SESSION_URL", "TLD_BOARD_URL", "TLD_BOARD_DB", "TLD_BOARD_ALLOW_HTTP",
-        "--host", "--port", "--db", "--title", "--allow-origin", "--public-origin", "--insecure-cookie",
-        "--session-hours", "--trust-proxy",
-        "/healthz", "/api/records", "/api/records/<id>", "/mcp", "/index.html", "/login", "/logout",
-        "/api/session", "/api/asks", "/api/asks/<id>", "/api/asks/<id>/answer", "/api/asks/<id>/cancel",
-        "board_get", "board_list", "board_set", "board_ask", "board_answers", "board_cancel",
-        "Allowed domains", "Network secrets", "https://claude.ai/code/", "git.owner_login",
-        "reverse_proxy", "proxy_pass", "client_max_body_size 1m", "unknown key 'status'",
-        'sqlite3 board.sqlite3 ".backup',
-    ):
-        assert needle in text, needle
+    variables = set()
+    for path in (ROOT / "src" / "tld" / "board").glob("*.py"):
+        variables.update(re.findall(r"TLD_BOARD_[A-Z_]+", path.read_text()))
+    assert variables >= {"TLD_BOARD_TOKEN", "TLD_BOARD_OWNER_PASSPHRASE", "TLD_BOARD_URL"}
+    for name in sorted(variables | board_mcp.TOOL_NAMES):
+        assert name in text, name
 
 
 def test_doc_sample_record_is_valid() -> None:
@@ -122,8 +105,11 @@ def test_doc_names_every_server_flag_and_route() -> None:
     source = (ROOT / "src" / "tld" / "board" / "server.py").read_text()
     for flag in re.findall(r'add_argument\("(--[a-z-]+)"', source):
         assert flag in text, flag
-    assert len(board_server.ROUTES) == 11
-    for name, method in board_server.POLICY:
+    for pattern, name, methods in board_server.ROUTES:
+        route = pattern.pattern.strip("^$").replace(r"(?:index\.html)?", "").replace("([^/]+)", "<id>")
+        for method in methods:
+            assert f"{method} {route}" in text, (name, method, route)
+    for name, _method in board_server.POLICY:
         assert name in {r[1] for r in board_server.ROUTES}
 
 

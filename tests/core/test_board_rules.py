@@ -1,11 +1,10 @@
 import json
-import shutil
 import subprocess
 import sys
 
 import pytest
 
-from conftest import ROOT, TLD, FIXTURES, tld_cmd
+from conftest import ROOT, TLD, FIXTURES, need_tool, tld_cmd
 
 FIXTURE = FIXTURES / "board-records.json"
 NOW = "2026-11-09T12:00:00Z"
@@ -19,8 +18,8 @@ def docs():
     return json.loads(FIXTURE.read_text())
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 def test_rules_in_node():
+    need_tool("node")
     result = subprocess.run(["node", str(ROOT / "tests" / "board_rules_check.js")], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "OK"

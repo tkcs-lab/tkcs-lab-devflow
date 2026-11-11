@@ -53,6 +53,15 @@ def test_a_name_containing_pub_is_exempt(feature_repo):
     assert run("secret-scan", event("Write", feature_repo, file_path="a.py", content=content)).code == 0
 
 
+@pytest.mark.parametrize("name", ["PUBSUB_TOKEN", "REPUBLISH_API_KEY", "PUBLISHER_SECRET"])
+def test_only_public_and_pubkey_exempt_a_name(feature_repo, name):
+    """`pub` alone is no exemption: a name that merely contains it is still a secret's name."""
+    assert secret_scan.secret_like_name(name)
+    content = f"{name} = '" + _rand(40) + "'\n"
+    assert run("secret-scan", event("Write", feature_repo, file_path="a.py", content=content)).code == 2
+    assert not secret_scan.secret_like_name("PUBLIC_TOKEN") and not secret_scan.secret_like_name("SSH_PUBKEY")
+
+
 def test_password_needs_only_twelve_characters(feature_repo):
     assert not secret_scan.password_literal("Tr0ub4dor3x")  # 11 chars: below the password minimum
     twelve = "Tr0ub4dor3xy"  # 12 chars with a digit and a letter

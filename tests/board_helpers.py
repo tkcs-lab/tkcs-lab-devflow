@@ -38,7 +38,7 @@ def running(tmp_path, owner=True, insecure=True, **kwargs):
     auth = board_server.OwnerAuth(PASSPHRASE, SECRET, secure=not insecure) if owner else None
     srv = board_server.make_server(Store(str(tmp_path / "b.sqlite3")), board_server.Tokens(WRITE), "T",
                                    "127.0.0.1", 0, owner=auth, **kwargs)
-    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread = threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
     thread.start()
     try:
         yield srv

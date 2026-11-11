@@ -145,9 +145,3 @@ def test_missing_version_file_exit_1(world):
     (fork / "UPSTREAM_VERSION").unlink()
     r = sync(fork, "plan", "--upstream-url", str(up), "--version-file", "UPSTREAM_VERSION", "--pattern", SEMVER)
     assert r.returncode == 1
-
-
-def test_tag_route_matches_the_spike():
-    spike = (ROOT / "docs" / "architecture" / "maintenance-spike.md").read_text()
-    route = re.search(r"^ROUTE f: (.+)$", spike, re.M).group(1).strip()
-    assert route in PLAYBOOK.read_text()

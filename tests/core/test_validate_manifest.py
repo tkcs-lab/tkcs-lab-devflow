@@ -255,3 +255,38 @@ def test_privacyfence_manifests_still_validate(manifest):
          "--profile", str(FIXTURES / "privacyfence-toolkit.yaml")],
         capture_output=True, text=True)
     assert out.returncode == 0, out.stdout + out.stderr
+
+
+# ---- the type checks (mutation survivors of the review: each case fails when its check is removed) -------------
+def _set(path, value):
+    def fn(m):
+        target = m
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+    return fn
+
+
+@pytest.mark.parametrize("path, value, message", [
+    (("max_parallel",), 0, "max_parallel must be a positive integer"),
+    (("max_parallel",), -1, "max_parallel must be a positive integer"),
+    (("max_parallel",), "2", "max_parallel must be a positive integer"),
+    (("max_parallel",), True, "max_parallel must be a positive integer"),
+    (("verify_after_merge",), "make test", "'verify_after_merge' must be a list of strings"),
+    (("verify_after_merge",), ["make test", 3], "'verify_after_merge' must be a list of strings"),
+    (("final_checks",), "done", "'final_checks' must be a list of strings"),
+    (("phases", 0, "acceptance"), "make test passes", "phase 'p1-core': 'acceptance' must be a list"),
+    (("phases", 1, "depends_on"), "p1-core", "phase 'p2-api': depends_on must be a list"),
+    (("phases", 0, "touches"), "src/core.py", "phase 'p1-core': touches must be a list of paths"),
+    (("phases", 0, "touches"), ["src/core.py", 7], "phase 'p1-core': touches must be a list of paths"),
+    (("phases", 0, "human_gate"), "yes", "phase 'p1-core': human_gate must be true or false"),
+    (("phases", 0, "human_gate"), 1, "phase 'p1-core': human_gate must be true or false"),
+])
+def test_type_checks(vm, path, value, message):
+    assert message in errors(mutated(_set(path, value)), vm)
+
+
+@pytest.mark.parametrize("path, value", [(("max_parallel",), 1), (("phases", 0, "human_gate"), True),
+                                         (("phases", 0, "human_gate"), False), (("verify_after_merge",), [])])
+def test_type_checks_accept_the_right_types(vm, path, value):
+    assert errors(mutated(_set(path, value)), vm) == []
