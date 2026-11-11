@@ -11,7 +11,7 @@ import shlex
 import subprocess
 from dataclasses import dataclass, field
 
-from _shell import DYN, ParseError, base, candidates, is_dynamic, split_commands, walk
+from _shell import DYN, ParseError, base, candidates, is_dynamic, split_commands, walk_commands
 
 # ------------------------------------------------------------------------------------- git
 
@@ -130,9 +130,11 @@ class Item:
 
 def iter_items(cwd: str, command: str):
     """Every command `command` may run, aliases expanded. Raises ParseError on unparseable input."""
-    for hint, words, redirects in walk(command):
+    for hint, cmd in walk_commands(command):
+        if cmd.reads_stdin_shell:
+            raise ParseError("a shell that reads its commands from stdin cannot be checked")
         here = cwd if not hint else hint if os.path.isabs(hint) else os.path.join(cwd, hint)
-        yield from _items(words, here, redirects, 0)
+        yield from _items(cmd.words, here, cmd.redirects, 0)
 
 
 def _items(words: list[str], here: str, redirects, depth: int):
