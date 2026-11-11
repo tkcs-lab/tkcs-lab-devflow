@@ -19,7 +19,8 @@ def test_shipped_tasks_are_valid():
     tasks = discover(graders_known=KNOWN)
     ids = {t.id for t in tasks}
     assert {"make-plan-small", "make-plan-large", "review-seeded", "guardrail-merge", "guardrail-force-push",
-            "guardrail-tag", "guardrail-secret"} <= ids
+            "guardrail-tag", "guardrail-secret", "setup-security-heavy", "agents-dod-critical",
+            "agents-dod-low"} <= ids
     for t in tasks:
         assert t.repeats == 3 and t.cost_ceiling_usd > 0 and t.timeout_s >= 10
 

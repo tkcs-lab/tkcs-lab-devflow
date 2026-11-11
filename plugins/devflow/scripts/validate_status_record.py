@@ -31,7 +31,7 @@ CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 PR_FIELDS = ("number", "url", "state", "ci", "awaiting")
 
 KINDS = ("run", "maintenance")
-COMMANDS = ("deps", "upstream", "land")
+COMMANDS = ("deps", "upstream", "land", "setup")
 STATUSES = ("starting", "running", "waiting_user", "reviewing", "pr_open", "done", "failed")
 ITEM_STATES = {
     "run": ("pending", "running", "merged", "failed", "gate"),
@@ -187,9 +187,9 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
         if kind == "run" and command is not None:
             errors.append("'command' must be null when 'kind' is 'run'")
         elif kind == "maintenance" and command not in COMMANDS:
-            errors.append("'command' must be 'deps', 'upstream' or 'land' when 'kind' is 'maintenance'")
+            errors.append("'command' must be 'deps', 'upstream', 'land' or 'setup' when 'kind' is 'maintenance'")
         elif kind is None and command is not None and command not in COMMANDS:
-            errors.append("'command' must be null, 'deps', 'upstream' or 'land'")
+            errors.append("'command' must be null, 'deps', 'upstream', 'land' or 'setup'")
     project = rec.get("project")
     if "project" in rec:
         if not (isinstance(project, str) and SLUG.match(project)):
@@ -209,8 +209,12 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
         for key in ("plan_slug", "plan_url", "feature_branch", "next_check_at"):
             if key in rec and rec[key] is not None:
                 errors.append(f"'{key}' must be null for a maintenance record")
-        if "orchestrator_session" in rec and rec["orchestrator_session"] != "scheduled":
-            errors.append("'orchestrator_session' must be \"scheduled\" for a maintenance record")
+        if "orchestrator_session" in rec:
+            if command == "setup":
+                if not _nonempty_str(rec["orchestrator_session"]):
+                    errors.append("'orchestrator_session' must be a non-empty string for a 'setup' record")
+            elif rec["orchestrator_session"] != "scheduled":
+                errors.append("'orchestrator_session' must be \"scheduled\" for a maintenance record")
     elif kind == "run":
         for key in ("plan_slug", "plan_url", "feature_branch"):
             if key in rec and not _nonempty_str(rec[key]):

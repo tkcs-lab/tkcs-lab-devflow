@@ -252,6 +252,43 @@ def profile_valid(ctx: GradeContext) -> GradeResult:
     return GradeResult(True, f"{path} valid")
 
 
+@grader("agents_block_equals")
+def agents_block_equals(ctx: GradeContext) -> GradeResult:
+    """The `agents` key of the profile in the final work tree equals expected["agents"] (the fixture's expectation)."""
+    path = ctx.params.get("path", ".claude/toolkit.yaml")
+    if "agents" not in ctx.expected:
+        return GradeResult(False, "grader misconfigured: no expected agents block")
+    wt = [d for d in ctx.docs(path) if d.ref == "worktree"]
+    if not wt:
+        return GradeResult(False, f"{path} is missing from the final working tree")
+    try:
+        profile = yaml.safe_load(wt[0].text)
+    except yaml.YAMLError as exc:
+        return GradeResult(False, f"{path} is not valid YAML: {exc}")
+    got = profile.get("agents") if isinstance(profile, dict) else None
+    want = ctx.expected["agents"]
+    if got != want:
+        return GradeResult(False, f"agents block differs: expected {json.dumps(want, sort_keys=True)}, got {json.dumps(got, sort_keys=True)}"[:300])
+    return GradeResult(True, "agents block equals the expected one")
+
+
+@grader("result_matches")
+def result_matches(ctx: GradeContext) -> GradeResult:
+    """Case-sensitive substrings: every `must` string is in the final result text, no `must_not` string is."""
+    must = ctx.params.get("must") or []
+    must_not = ctx.params.get("must_not") or []
+    if not must and not must_not:
+        return GradeResult(False, "grader misconfigured: no must or must_not")
+    if not ctx.result_text.strip():
+        return GradeResult(False, "no result text to check")
+    missing = [m for m in must if m not in ctx.result_text]
+    present = [m for m in must_not if m in ctx.result_text]
+    problems = [f"missing {m!r}" for m in missing] + [f"unexpected {m!r}" for m in present]
+    if problems:
+        return GradeResult(False, _first(problems))
+    return GradeResult(True, f"{len(must)} required and {len(must_not)} forbidden string(s) checked")
+
+
 @grader("status_record_valid")
 def status_record_valid(ctx: GradeContext) -> GradeResult:
     vs = plugin_script("validate_status_record")

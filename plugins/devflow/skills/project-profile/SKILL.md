@@ -41,8 +41,8 @@ rules follow from that:
    Exit 1 prints one message per problem on stderr, each naming the key (for example
    `toolkit.yaml: missing required key 'verify.fast'`). Show those messages verbatim and stop.
    Warnings are shown to the user and do not stop you. On success it prints the resolved profile as
-   JSON: this is the only place defaults are applied (`docs.plan_dir` is `docs`, and the `models`
-   table), and the one you read from here on.
+   JSON: the `--resolved` defaults are `docs.plan_dir` (`docs`) and the `models` table. The `agents`
+   defaults are applied by `scripts/agents.py`, not here. This is the profile you read from here on.
 
 3. **Load the stack skills.** For each name in `stacks`, load the skill `stack-<name>`. If one is
    not installed, tell the user which and stop.
@@ -64,6 +64,8 @@ rules follow from that:
 | `git.codeowners` | Logins `/implement` requests a review from on the pull request it opens |
 | `verify.fast` | Run after every merge in `/implement` and by the final reviewer |
 | `verify.dod`, `dod_conditional`, `dod_manual`, `dod_doc` | `/dod` |
+| `docs.website` | `dir`, `build`, `links` of the project's website; the `website-maintainer` agent and its `Website build` and `Website links` prompt fields |
+| `agents.*` | Which agents are required at which point (`required`), whether a finding blocks, `posture.security`, `disable`, `extra_context`; resolved and checked by `scripts/agents.py` through the `agent-dispatch` skill |
 | `ci.dispatchable` | The dispatch table in `pr-steward`; what is not "manual" in a plan |
 | `stacks` | Which `stack-*` skills to load |
 | `models` | `planner`, `orchestrator` (documentation of intent; the command front matter fixes them), `worker`, `reviewer` (used in `create_session`) |

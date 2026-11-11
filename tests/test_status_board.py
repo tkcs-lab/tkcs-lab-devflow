@@ -12,7 +12,7 @@ def test_skill_has_the_sections_in_order():
     text = (DEVFLOW / "skills" / "status-board" / "SKILL.md").read_text()
     assert "name: status-board" in text
     headings = re.findall(r"^## (.+)$", text, re.M)
-    assert headings == ["Where the board is", "Writing a record", "When to write", "Best effort", "No secrets", "Alerts"]
+    assert headings == ["Where the board is", "Writing a record", "When to write", "Best effort", "No secrets", "Alerts", "/setup records"]
 
 
 def test_implement_has_status_board_section_after_never():

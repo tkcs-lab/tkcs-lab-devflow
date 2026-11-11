@@ -31,6 +31,7 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
 - "the fast checks" are the commands in `verify.fast`.
 - "the project's steward file" is `project_steward`, when the profile has one.
 - "the stack skills" are the `stack-<name>` skills for each name in `stacks`; load them now.
+- "the agent rules" are the profile's agents section, read through the `agent-dispatch` skill.
 
 **Identity.** When the profile has `git.bot_login`, call `get_me` now. If its login differs, stop
 with exactly `get_me returned <login> but git.bot_login is <bot_login>: connect the second GitHub
@@ -40,7 +41,8 @@ account at claude.ai/connect-github and start a new session.`
 starts it in; later turns (check-ins, wakes) run on the session's own model, so for a Sonnet
 orchestrator throughout, start the session on Sonnet. The plan was sized for Sonnet workers by an
 Opus planner, so judgement calls should be rare; when one comes up that the plan does not settle,
-ask the user rather than deciding it.
+ask the user rather than deciding it. The orchestrator never runs an agent that has edit tools; it
+only computes who is required and checks the reports.
 
 | Session | `create_session` `model` |
 |---|---|
@@ -157,10 +159,20 @@ Call `create_session` with:
 >    `<docs.changelog.file>`'s `<docs.changelog.section>`. Never add a version heading.>
 > 3. <If the profile has stacks: also follow the `stack-<name>` skills.> Before your last push, run `/dod`. Every blocking row must pass. Also check every item in
 >    your phase's `acceptance` list, and say how you checked each one.
+> 3b. **Required agents.** Write the names of the files you changed
+>    (`git diff --name-only origin/<feature_branch>...HEAD`) to a temporary file, run
+>    `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at implement_phase --changed <that file>`,
+>    and dispatch every agent it lists as the `agent-dispatch` skill says, before your last push: the
+>    four edit agents (tech-writer, website-maintainer, debugger, refactorer) in edit mode, every
+>    other agent in review mode. Fix every blocking finding yourself and dispatch that agent again;
+>    its new report line is the one that counts. Print each agent's `AGENT-REPORT` line bare into
+>    your PHASE-REPORT after the `/dod` table. Save the JSON and the report text and run
+>    `agents.py verify --required <json> --report <text>`; it must exit 0.
 > 4. Your final commit message ends with the trailer `Plan-Phase: <plan slug>/<phase id>`.
 > 5. End your last turn with a report in exactly this shape, which the orchestrator reads:
 >    `PHASE-REPORT <phase id> status=<done|blocked> head=<sha>` on its own line, then the `/dod`
->    table, the acceptance checklist, and any out-of-scope findings.
+>    table, the `AGENT-REPORT` lines (they follow the `/dod` table), the acceptance checklist, and
+>    any out-of-scope findings.
 > 6. After the final `PHASE-REPORT` line, call `send_message` with `session_id: "@parent"` and
 >    exactly the text `PHASE-REPORT <phase id> status=<done|blocked> head=<sha>` (the same first
 >    line). It only tells the orchestrator to look; the report stays the authority.
@@ -208,6 +220,11 @@ On each check-in, for each `running` phase, call `get_session`:
    touch files other phases own, has it disabled or
    skipped a test, has it deleted an `xfail` that belongs to a different phase? Anything wrong
    goes back to the child, as above.
+2b. **Required agents.** Save the names of the files in `git diff --name-only <base>...origin/<phase branch>`
+   to a file, run `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at implement_phase --changed <file>`
+   (save its JSON) and `agents.py verify --required <json> --report <the child's PHASE-REPORT text>`.
+   Exit 1 goes back to the child like any other defect, with the output of `verify` as the
+   instruction.
 3. **Scope check (monitoring only, never a gate).** Before the merge, with `<feature_branch>` checked
    out, run (the plan file is the one saved in section 0; save it again if the session restarted;
    `<results>` is `scope-results.json` in your scratchpad directory):
@@ -248,7 +265,7 @@ On each check-in, for each `running` phase, call `get_session`:
    wait for the run, and treat a red run like any other failed check. If anything is red, `git merge --abort` is no longer possible, so revert the merge commit
    (`git revert -m 1`), push, send the failure back to the phase, and mark the phase `running`
    again.
-6. Push the feature branch. Mark the phase `merged`, post the comment `Phase <phase id> merged.`
+6. Push the feature branch. Add `agents ok` (or the failing agents) to the phase's ledger line. Mark the phase `merged`, post the comment `Phase <phase id> merged.`
    on the tracking issue (if any), and
    `archive_session` the child. If the manifest has `screenshots_after_merge`, run it and send the
    user the images (`SendUserFile`) with a one-line caption naming the phase, so they can watch
@@ -282,12 +299,21 @@ start one review session with `create_session`: `source_revision` the feature br
 > the code does, and every `final_checks` item. Run <the fast checks, as a list of commands>
 > yourself. Load the `review-checklist` and `secure-code-review` skills and apply them.
 >
+> Run `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at implement_final --changed <the files of git diff --name-only origin/<main>...HEAD>`
+> and dispatch every agent it lists in review mode as the `agent-dispatch` skill says. Put their
+> `AGENT-REPORT` lines before the `REVIEW-REPORT` line. A blocking finding of an agent whose item is
+> blocking is a blocking finding of yours. Run `agents.py verify`; if it exits 1 your verdict is
+> `changes`.
+>
 > End with `REVIEW-REPORT verdict=<approve|changes>` on its own line, then one numbered finding per
 > line: `blocking|non-blocking`, `path:line`, the phase id it belongs to, and what is wrong and what
 > the fix is. `changes` means at least one finding is blocking. Only something you would refuse to
 > merge is blocking.
 
-Wait for it with check-ins as in section 4. Then:
+Wait for it with check-ins as in section 4. After reading the report, first run
+`python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at implement_final --changed <the files of git diff --name-only origin/<main>...HEAD>`
+yourself, save the JSON, and run `agents.py verify --required <json> --report <the review text>`; exit 1
+counts as `changes`, and the findings go to a fix session as for any blocking finding. Then:
 
 - `approve`: post `Final review: approve.` on the tracking issue (if any) and go to Finishing.
 - `changes`: post `Final review: changes (<n> blocking).` on the tracking issue (if any), then group the blocking findings by phase and start one Sonnet fix session per group on a
