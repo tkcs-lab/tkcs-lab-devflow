@@ -8,7 +8,7 @@ should be fixed. Its output is a review document that `/make-plan` turns into a 
 /review [scope]  ──►  review/<slug> branch: <plan_dir>/<slug>-review.md
                        │
                        ├─ open items? ──► one ask on the board (plan | issue | drop per item)
-                       │                    └─ your answers wake the session
+                       │                    └─ you answer, then message the session
                        │                         └─ review updated, issues created
                        ▼
 /make-plan <review URL>  ──►  plan/<slug>  ──►  /implement
@@ -66,7 +66,7 @@ Each kept finding then gets one decision:
 
 When there are open items, the review posts one ask to the status board: one question per item (its title and
 summary, the recommendation first, the choices **plan**, **issue** and **drop**) and a notes field. You answer in the
-board's page after logging in; the answers wake the session. It then:
+board's page after logging in, then tell the session (any message) that you answered. It then:
 
 - moves "plan" items into "Findings to fix" (your note goes with them);
 - moves "drop" items into "Not doing";

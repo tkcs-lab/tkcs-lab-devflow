@@ -32,7 +32,7 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
      entries for the stack.
    - "The reviewer level" is `models.reviewer`; "the worker level" is `models.worker` (C9).
 2. **DoD gate.** This playbook writes a plan, not code: mark the session exempt once with `tld dod exempt`.
-3. **Status record**: `kind: maintenance`, `command: make-plan`, `attended: true`, items `research`, `decide`,
+3. **Status record**: `kind: command`, `command: make-plan`, `attended: true`, items `research`, `decide`,
    `write`, `review`, `hand-over`. Write it first (`starting`), at every step and at the end (`done`, or
    `failed` with the reason). While an ask is open: `waiting_user` with `needs_you`.
 
@@ -290,6 +290,9 @@ it rejects.
    table of phases (id, title, complexity, depends_on, any `worker_level: strong` with its reason); what the
    reviewer flagged that you did not change, and why; without `docs.index` the line `No docs index: run docs
    init to build one (it cuts the tokens every session reads).`
+4. The manual steps reach the owner as asks, never as a page: implement puts every `manual_before` item to the
+   owner as one `confirm` question of its `Start <plan slug>` ask before anything starts, and a small scope's
+   worker asks the same way. The steps themselves live in the plan's Manual steps section and the issue.
 
 Never: implement a phase; open a pull request; push to `<main>` or to any branch but `plan/<slug>`; put a
 secret in the plan or an ask.

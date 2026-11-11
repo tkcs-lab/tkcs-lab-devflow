@@ -325,16 +325,20 @@ everything about it depended on claude.ai. It is now a server you host; see [boa
 
 What was built:
 
-* `src/tld/board/store.py`: SQLite storage; a write needs the version last read (`if_version`), no version means create only.
-* `tld board server`: stdlib HTTP server with a JSON API, one write token and an optional read token, and the page.
-* `src/tld/board/mcp.py`: the same four operations as an MCP endpoint (`POST /mcp`, stateless, JSON only).
-* `tld board client`: a command-line client, the write path for sessions without the MCP server.
+* `src/tld/board/store.py`: SQLite storage of records and asks; a record write needs the version last read
+  (`if_version`), no version means create only; the schema version is SQLite's `user_version`.
+* `tld board server`: stdlib HTTP server with a JSON API and the page. Two principals: the session token (writes
+  records, posts, reads and cancels asks) and the owner's login (passphrase, signed `SameSite=Strict` cookie,
+  CSRF token and Origin check; answers and cancels asks, never writes records). The former read token is gone:
+  the owner login replaces it.
+* `src/tld/board/mcp.py`: the record and ask operations as an MCP endpoint (`POST /mcp`, stateless, JSON only);
+  no delete tool (S19).
+* `tld board client` (records) and `tld board ask | answers | cancel` (asks), for sessions without the MCP server;
+  without a board, `tld board ask --fallback-issue` prints the GitHub comment the session posts (D7).
 * `tld board mcp-stdio`: a stdio bridge to `/mcp` that keeps the token inside our own process.
-* `.mcp.json`: declares the bridge, so a session with the plugin has `board_get`, `board_list`, `board_set`, `board_delete`.
-* `board.html` polls `api/records` every 15 seconds instead of reading the Artifact database.
-* The `status-board` skill and `/board` use the tools or the client; `/board` checks the connection.
-* `board/Dockerfile` and `docs/guides/board-server.md` for deployment.
-* Configuration is `TLD_BOARD_URL` and `TLD_BOARD_TOKEN` (and `TLD_BOARD_READ_TOKEN` on the server).
+* `board.html`: the inbox (open asks first in "Needs you", then the runs), an ask view of form controls built
+  with `textContent`, and the login; it polls every 15 seconds.
+* `deploy/board/Dockerfile` and `docs/guides/board-server.md` for deployment.
 
 Rejected:
 
@@ -343,6 +347,10 @@ Rejected:
 * The `mcp` SDK, FastAPI or Flask: the repository is stdlib-only and the MCP subset needed is small.
 * Server-sent events or WebSockets: records change a few times an hour, polling is enough.
 * Per-project tokens and OAuth: a board for one owner does not need them.
+* Letting the session token answer asks, or Artifact pages for decisions: an agent must not be able to answer
+  for the owner (D7, D10).
+* `tld board ask` posting the fallback comment with `gh`: a session's `gh` may have no token, and one GitHub
+  path (the runtime's GitHub tools) is easier to guard; the command prints the body and exits 5 instead.
 * Automatic expiry of old records on the server: pruning stays a command that asks the owner once.
 * Migrating old records: the next run rewrites them.
 

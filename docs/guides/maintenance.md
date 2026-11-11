@@ -102,9 +102,9 @@ work.
 ## The board
 
 The board is the self-hosted server described in [board-server.md](board-server.md): it stores the
-status record of every command run (C7) and serves a page
-that shows them. Set two variables in every environment that should write to it: `TLD_BOARD_URL`
-(not a secret) and `TLD_BOARD_TOKEN` (a secret you type into the environment settings). Without
+status record of every command run (C7) and every ask a command puts to you, and serves the page you
+log in to. Set two variables in every environment that should write to it: `TLD_BOARD_URL`
+(not a secret) and `TLD_BOARD_TOKEN` (board-server.md says how to keep the token in a network secret). Without
 them the commands skip every board step. `/board` checks the connection and reports how many records
 there are; `/board prune` prunes.
 

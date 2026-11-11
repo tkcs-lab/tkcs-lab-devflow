@@ -65,7 +65,7 @@ is handled at once. A child that finishes cleanly may never report back: the tim
 
 | Action | Tool |
 |---|---|
-| `ask_human(ask)` | `tld board ask` / `tld board answers` as `playbooks/runtime.md` says (or the `board_ask` / `board_answers` tools of the `tld-board` MCP server when the tool list shows them). The fallback comment is `add_issue_comment`; the reply's author is checked with `list_repository_collaborators` (or `get_me` for the session's own login, which is never an answer). Never `AskUserQuestion`, never an Artifact page: the board replaces both. |
+| `ask_human(ask)` | The `board_ask`, `board_answers` and `board_cancel` tools of the `tld-board` MCP server when the tool list shows them (same rules as the CLI; `board_answers` returns `state` and `answers`, so poll it on a wake instead of `--wait`); otherwise `tld board ask` / `answers` / `cancel` as `playbooks/runtime.md` says. On `tld board ask` exit 5 (no board) post its stdout unchanged with `add_issue_comment` (or `issue_write` method `create` without a tracking issue); read the replies with `issue_read` and each author's permission with `list_repository_collaborators` (its `permissions`: `admin`, `maintain` or `push` = write; a login that is not listed is `none`), and your own login from `get_me` for `--ignore-author`. Never `AskUserQuestion`, never an Artifact page: the board replaces both. |
 | `notify_human(text)` | `PushNotification` once, `text` cut to 190 characters. In an attended session also rename it with `set_session_title` to `[NEEDS YOU] <project> · <reason>` (the middle dot U+00B7 with a space on each side), after reading the current title with `get_session` once and keeping it; when `needs_you` goes back to false, rename back to that title. While `needs_you` stays true: no new push, a new rename only when the reason changed. An unattended session pushes only: it has no `get_session` and never renames. |
 | `show_human(files, caption)` | `SendUserFile` |
 | `secrets_help()` | `read_documentation` with topic `environment.secrets` |
@@ -74,8 +74,12 @@ is handled at once. A child that finishes cleanly may never report back: the tim
 An unattended (scheduled) session has no `get_session` or `list_sessions`: never call them there, and write
 `orchestrator_session: null` with `attended: false`.
 
-**Status board.** `tld board client` or, when the tool list has them, the `board_get`, `board_list`, `board_set`
-and `board_delete` tools of the `tld-board` MCP server (same operations, same rules).
+**Status board.** `tld board client` or, when the tool list has them, the `board_get`, `board_list` and
+`board_set` tools of the `tld-board` MCP server (same operations, same rules). There is no delete tool: the board
+playbook's prune runs `tld board client delete` after the owner confirmed.
+
+**Session links on the board.** The board links a record's session when its server has `TLD_BOARD_SESSION_URL`;
+for Claude Code on the web set it to `https://claude.ai/code/` (the session id is appended).
 
 ## GitHub
 

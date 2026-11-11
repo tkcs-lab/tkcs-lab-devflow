@@ -1,20 +1,23 @@
 # Writing to the status board
 
-Every playbook writes a status record to the board (D8), so the owner sees each run in one place. The record
+The board is the owner's inbox (D7, D8): it holds a status record of every run and every ask a playbook puts
+to the owner. Every playbook writes a status record, so the owner sees each run in one place. The record
 format is `src/tld/schema/status-record.schema.json`; `tld board validate-record FILE --doc-id ID` checks one.
-This file says where, how and when to write.
+Asks are [runtime.md](../runtime.md)'s `ask_human`. This file says where, how and when to write records.
 
 ## Where the board is
 
 `tld board client` talks to the board server when `TLD_BOARD_URL` and `TLD_BOARD_TOKEN` are set (an adapter
-may offer the same operations as tools; see its runtime map). When neither works there is no board: skip
-every board step silently and carry on. `notify_human` still goes out.
+may offer the same operations as tools; see its runtime map). The token lets a session write records and
+post, read and cancel asks; only the owner, logged in on the board's page, answers an ask, and the owner never
+writes a record. When neither works there is no board: skip every record step silently and carry on;
+`ask_human` then uses its issue fallback and `notify_human` still goes out.
 
 ## The record (C7)
 
 | Field | Value |
 |---|---|
-| `kind` | `run` for implement; `maintenance` for every other playbook |
+| `kind` | `run` for implement; `command` for every other playbook (deps, upstream, land, setup, docs, review, make-plan) |
 | `command` | `null` for a run; else the playbook: `setup`, `review`, `make-plan`, `deps`, `upstream`, `land`, `docs` |
 | `project` | `tld board project-slug <owner>/<repo>`: the repository name, lower case, other characters as `-` |
 | document id | the project slug for a run, `<project>--<command>` for the others |
@@ -47,8 +50,8 @@ planned write.
 
 ## No secrets
 
-A record holds no file contents, no commit messages and no tokens. The board is readable by everyone with a
-token. The one place a record names files is a phase's optional `scope` (implement's scope-drift
+A record holds no file contents, no commit messages and no tokens. The board is readable by every session
+that has the token and by the owner. The one place a record names files is a phase's optional `scope` (implement's scope-drift
 monitoring): at most 20 repository-relative paths, and counts.
 
 ## Alerts

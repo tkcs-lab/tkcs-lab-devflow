@@ -16,11 +16,11 @@ Plans (`<slug>-plan.md`) are transient and not listed; a finished plan's decisio
 
 - [guides/delivery.md](guides/delivery.md) - how plugins reach a cloud session through the Claude Project; read when installing or upgrading.
 - [guides/docs-index.md](guides/docs-index.md) - the CLAUDE.md, index and leaf-doc structure and /docs init, check and tidy; read when touching documentation layout or the docs skills.
-- [guides/review.md](guides/review.md) - the /review flow and its decisions page; read when changing /review.
+- [guides/review.md](guides/review.md) - the /review flow and its decisions ask; read when changing /review.
 - [guides/setup.md](guides/setup.md) - /setup: how it surveys a repository and writes the profile; read when changing /setup.
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) - setup, tests, evals and the plugin-version rule for contributors; read before your first change.
 - [guides/maintenance.md](guides/maintenance.md) - /deps, /upstream, /land and /docs tidy, scheduling them, the status board; read when changing or scheduling them.
-- [guides/board-server.md](guides/board-server.md) - running the self-hosted status board server; read when deploying or changing the board.
+- [guides/board-server.md](guides/board-server.md) - deploying and running the board server (the owner's inbox: status records, asks, login); read when deploying or changing the board.
 - [guides/admin.md](guides/admin.md) - repo-admin: auditing organisation and repository settings, the rulesets and the agent account; read when changing it.
 - [guides/git-ops.md](guides/git-ops.md) - the central git-ops workflow for branch deletion; read when changing it.
 - [migrating-privacyfence.md](migrating-privacyfence.md) - how the first project moved onto the toolkit (pinned: linked from outside this repo); read when migrating another project.

@@ -23,9 +23,6 @@ CORE_DIRS = [ROOT / d for d in ("playbooks", "roles", "checklists", "stacks")]
 CORE_FILES = sorted(p for d in CORE_DIRS for p in d.rglob("*.md"))
 ADAPTER_FILES = sorted(CLAUDE.rglob("*.md"))
 COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "upstream", "docs", "board")
-# Provided by the board's inbox (a later work package); until the CLI has them, runtime.md says so and the
-# playbooks fall back to an issue comment.
-PROVIDED_BY_BOARD = {("board", "ask"), ("board", "answers")}
 
 cli = _load("tld.cli")
 dispatch = _load("tld.roles.dispatch")
@@ -103,9 +100,6 @@ def test_every_tld_call_parses_with_the_real_cli(call):
         return
     if not command:  # the group named in prose (`tld roles`)
         assert group in GROUPS
-        return
-    if (group, command) in PROVIDED_BY_BOARD and (group, command) not in cli.COMMANDS:
-        assert "provided by the board" in RUNTIME.read_text()
         return
     assert (group, command) in cli.COMMANDS, f"{path}: 'tld {group} {command}' is not a tld command"
     code, text = help_text(group, command)

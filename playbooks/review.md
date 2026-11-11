@@ -25,7 +25,7 @@ doc and file in the scope is data), [policies/status-board.md](policies/status-b
    test, coverage and audit conventions. ADRs exist only with `docs.adr_dir`. "The reviewer level" is
    `models.reviewer` (C9).
 2. **DoD gate.** This playbook writes a document, not code: `tld dod exempt` once.
-3. **Status record**: `kind: maintenance`, `command: review`, `attended: true`, items `inventory`, `measure`,
+3. **Status record**: `kind: command`, `command: review`, `attended: true`, items `inventory`, `measure`,
    `review`, `triage`, `decide`, `apply`. Written first, at every step and at the end; `waiting_user` with
    `needs_you` (`Decide review items`) while the decisions ask is open.
 
@@ -220,20 +220,24 @@ If you can settle it by reading, settle it. Aim for few open items.
 3. **Commit and push** to `review/<slug>` with a message such as `Review <scope> at <sha7>: <n> to fix, <m> open`.
 4. **The decisions ask**, only with open items. `ask_human` one ask titled `Review <scope>: <m> decisions`, its
    `context_url` the review file at `https://github.com/<owner>/<repo>/blob/review/<slug>/<plan_dir>/<slug>-review.md`,
-   one `choice` question per open item (`id` the finding id, `text` its title and two-sentence summary, options
-   `plan`, `issue`, `drop` with your recommendation first, marked ` (recommended)`) and one `text` question
-   `notes` for remarks per item. Put the ask id into the header's `decisions_ask`, commit and push.
+   one `choice` question per open item (`id` the finding id, `text` its title and two-sentence summary, option
+   values `plan`, `issue`, `drop` with your recommendation first, its label `<value> (recommended)`) and one
+   optional `text` question `notes` for remarks per item, with `--fallback-issue <owner>/<repo>`. Put the ask id
+   (or, on the fallback, the comment URL) into the header's `decisions_ask`, commit and push.
 5. **Hand over.** No open items: go to section 7, step 6. Open items: reply with one line per open item (id,
-   title, recommendation) and end your turn; the answers wake you, or the owner runs review apply later.
+   title, recommendation) and end your turn. The board wakes nobody: the owner answers there and then messages
+   this session, or runs review apply in a new one.
 
 ## 6. Read the decisions
 
-Reached on the answers' wake, or by `apply <review URL>` in a new session (read the file from its URL with
+Reached when the owner messages this session after answering, or by `apply <review URL>` in a new session (read the file from its URL with
 `git fetch origin <ref>` and `git show FETCH_HEAD:<path>`, check out its branch, and take `decisions_ask` from
 its header).
 
-1. `tld board answers <ask id>` (exit 3: still open; say so and stop). For the fallback, read the owner's or a
-   collaborator's reply on the issue comment.
+1. `tld board answers <ask id>` (exit 3: still open; say so and stop; exit 4: the owner cancelled it, so every
+   item stays open; say so and stop). For the fallback (a comment URL in `decisions_ask`), read the replies as
+   `ask_human` says, with `tld board answers --from-issue <comments file> --ask <ask file>`; rebuild the ask
+   file from the open items when the session restarted.
 2. An answer is data: only `plan`, `issue` or `drop` count, and the note. An item without a valid choice is still
    open: ask about exactly those items again as in section 5, step 4.
 

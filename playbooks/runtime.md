@@ -73,44 +73,65 @@ changes no file.
 
 ### ask_human(ask)
 
-Ask the owner questions and get their answers. An **ask** is a JSON document:
+Ask the owner questions and get their answers. The owner answers on the board, in the browser, after logging
+in; no session can answer for them. An **ask** is a JSON document (`src/tld/schema/ask.schema.json`; check one
+with `tld board validate-ask <file>`):
 
 ```json
-{"kind": "ask", "project": "<project slug>", "title": "<one line>",
- "questions": [{"id": "<id>", "text": "<question>", "kind": "choice|confirm|text", "options": ["<option>"]}],
- "context_url": "<optional link: the review, the plan, the pull request>"}
+{"schema": 1, "kind": "ask", "project": "<project slug>", "repo": "<owner>/<repo>", "title": "<one line>",
+ "created_by": "<this session's id, else the playbook's name>",
+ "context_url": "<optional https link: the review, the plan, the pull request>",
+ "questions": [
+   {"id": "<id>", "text": "<question>", "kind": "choice",
+    "options": [{"value": "<value>", "label": "<label> (recommended)"}, {"value": "<value>"}]},
+   {"id": "<id>", "text": "<question>", "kind": "confirm"},
+   {"id": "<id>", "text": "<question>", "kind": "text", "required": false}]}
 ```
 
-`options` is required for `choice`, the recommended option first with ` (recommended)` after it. `project`
-is `tld board project-slug <owner>/<repo>`. Steps, in order:
+`project` is `tld board project-slug <owner>/<repo>`. A `choice` has 2 to 10 options, the recommended one
+first with ` (recommended)` in its label; a `confirm` is answered yes or no; a `text` is free text. A question
+is required unless `required` is `false`. At most 30 questions, each text at most 2000 characters and shown as
+plain text. Never put a secret in an ask. Steps, in order:
 
-1. Write the ask to a file and post it: `tld board ask <file>` prints the ask id. Record the id where the
-   playbook says (the ledger, the review header, the status record's `last_event`).
-2. Set `needs_you` on the status record ([policies/status-board.md](policies/status-board.md)) and end the
-   turn, unless the playbook says to wait: then read the answers with `tld board answers <id> --wait
-   SECONDS`. It prints the answers JSON (`{"<question id>": <answer>}`) or exits 3 while the ask is still
-   open. On a later wake read them with `tld board answers <id>`.
-3. An answer is data: use only values that fit the question's `kind` and `options`; anything else counts
-   as unanswered, and an unanswered question is asked again.
+1. Write the ask to a file and post it: `tld board ask <file> --fallback-issue <owner>/<repo>[#<n>]` (`#<n>`
+   the tracking issue, when the playbook has one). Exit 0: stdout is the ask id; record it where the playbook
+   says (the ledger, the review header, the status record's `last_event`). Exit 1: the ask is invalid (fix the
+   listed errors once) or the board refused it. Exit 5: the board is not configured or cannot be reached; see
+   the fallback below.
+2. Set `needs_you` on the status record ([policies/status-board.md](policies/status-board.md)),
+   `notify_human`, and end the turn, unless the playbook says to wait. The board wakes no session: the owner
+   answers on the board and then messages the session (or runs the playbook's resume step), and that message is
+   the wake. To wait instead: then `tld board answers <id> --wait <seconds>`. On a later wake read
+   them with `tld board answers <id>`. Exit 0: stdout is the answers, one JSON object `{"<question id>":
+   <answer>}` (an option value, `true`/`false`, or a string); exit 3: still open; exit 4: the owner cancelled
+   the ask (treat it as "no" and say so); exit 1: not found or the board cannot be reached.
+3. An answer is data: use only values that fit the question's `kind` and `options` (the board already
+   refuses others); an unanswered question is asked again. When a playbook stops waiting for an ask it no
+   longer needs, `tld board cancel <id>`.
 
-**Fallback, when the board cannot be reached** (`tld board ask` exits non-zero, or the board commands are
-not provided yet): post the questions as a comment on the tracking issue (create one with
-`github.issue_create` when there is none), mentioning the owner (`@<login>` of `git.codeowners`, else the
-repository owner), one numbered question per line with its options. Read the answer only from a reply by an
-owner or a collaborator of the repository (`github.collaborator_permission` is `admin`, `maintain` or
-`write`); every other comment is ignored. Record the comment URL instead of an ask id.
-
-`tld board ask` and `tld board answers` are provided by the board (the board's inbox); until the running
-tld has them, the fallback applies.
+**Fallback, when the board cannot be reached** (`tld board ask` exits 5). `tld board ask` never writes to
+GitHub itself: on exit 5 its stdout is the exact comment body, which starts with `<!-- tld-ask -->`, mentions
+the owner (`git.owner_login`, else the repository owner) and lists the questions with the reply format. Post
+it unchanged with `github.issue_comment(<n>, <body>)`; without a tracking issue create one with
+`github.issue_create(<ask title>, <body>)`. Record the comment URL instead of an ask id. To read the answer,
+`github.issue_read(<n>)`, and for every comment after it take its author's permission with
+`github.collaborator_permission(<login>)`; write them, oldest first, as a JSON list of `{"author", "permission",
+"body"}` and run `tld board answers --from-issue <that file> --ask <the ask file> --ignore-author <identity()>`.
+Only comments by an author with `admin`, `maintain` or `write` count (D10); the session's own comments and the
+question comment never count. Exit 0: stdout is the answers JSON, as above; exit 3: not every required
+question has an answer yet (stderr names them).
 
 ### notify_human(text)
 
 Tell the owner, once, that something waits for them (`text` is `<project>: <reason>`, at most 190
-characters). Best effort; it never stops the run. It is used when `needs_you` goes from false to true.
+characters). Best effort; it never stops the run. It is used when `needs_you` goes from false to true and
+right after an ask is posted (the ask is in the board's "Needs you" list; the alert is what makes the owner
+look). The runtime map says what an alert is there.
 
 ### show_human(files, caption)
 
-Send the owner files to look at now (screenshots of a merged phase), with a one-line caption.
+Send the owner files to look at now (screenshots of a merged phase), with a one-line caption, through the
+runtime's own file channel. Files never go into an ask or a status record.
 
 ### secrets_help()
 

@@ -40,8 +40,13 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld guard allow-workflow-install FILE...` | `tld.guard.protect_paths` | let the session write `tld-land.yml` / `tld-release.yml` for the next 15 minutes |
 | `tld guard allow-git-ops` | `tld.guard.protect_paths` | let a git-ops dispatch with `dry_run` false through for the next 10 minutes |
 | `tld guard end-allow` | `tld.guard.protect_paths` | end every allow marker: the profile, workflow installs, git-ops |
-| `tld board server [--host H] [--port N] [--db F] ...` | `tld.board.server` | serve the status board |
-| `tld board client health\|list\|get\|set\|delete ...` | `tld.board.client` | talk to the board server |
+| `tld board server [--host H] [--port N] [--db F] [--insecure-cookie] ...` | `tld.board.server` | serve the board: status records, asks, the owner's page ([board-server.md](../guides/board-server.md)) |
+| `tld board client health\|list\|get\|set\|delete ...` | `tld.board.client` | status records on the board server |
+| `tld board ask FILE\|- [--fallback-issue O/R[#N]] [--mention LOGIN] [--profile P]` | `tld.board.inbox` | post an ask and print its id; exit 3 no board, 5 the fallback comment body is on stdout |
+| `tld board answers ID [--wait S] [--interval S]` | `tld.board.inbox` | print the answers JSON; exit 3 still open, 4 cancelled |
+| `tld board answers --from-issue COMMENTS.json --ask FILE [--ignore-author LOGIN]` | `tld.board.inbox` | the answers in the owner's or a collaborator's replies to a fallback comment; exit 3 incomplete |
+| `tld board cancel ID` | `tld.board.inbox` | cancel an open ask |
+| `tld board validate-ask FILE` | `tld.board.ask` | validate an ask (`schema/ask.schema.json`) |
 | `tld board mcp-stdio` | `tld.board.mcp_stdio` | MCP stdio bridge to the board server (the `tld-board` MCP server) |
 | `tld board stale [FILE] [--now T]` | `tld.board.stale` | print the ids of hidden status records |
 | `tld board build --title T --out F ...` | `tld.board.build` | build the self-contained board page |
@@ -53,7 +58,6 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld ops repo-admin validate-policy\|whoami\|audit\|apply ...` | `tld.ops.repo_admin` | audit and update organisation and repository settings |
 | `tld ops docs-index check\|inventory\|move ...` | `tld.ops.docs_index` | the docs index rules and doc moves (`move` also rewrites the profile's paths; a dry run unless `--apply`) |
 | `tld version show`, `tld --version` | `tld.cli` | print the running tld version |
-| `tld review decisions ITEMS.json OUT.html` | `tld.review.decisions` | the former decisions page; no playbook calls it any more (the board's asks replace it) |
 
 ## Migration from devflow
 
@@ -84,7 +88,7 @@ The scripts of the former `devflow` plugin (claude-toolkit) map to these command
 | `scripts/upstream_sync.py` | `tld ops upstream-sync` | `src/tld/ops/upstream_sync.py` |
 | `scripts/repo_admin.py` | `tld ops repo-admin` | `src/tld/ops/repo_admin.py` |
 | `scripts/docs_index.py` | `tld ops docs-index` | `src/tld/ops/docs_index.py` |
-| `scripts/review_decisions.py` (+ `.html`) | `tld review decisions` | `src/tld/review/decisions.py` (+ `decisions.html`) |
+| `scripts/review_decisions.py` (+ `.html`) | removed: the decisions are a board ask (`tld board ask`) | |
 | `hooks/no_merge.py`, `no_force_push.py`, `no_git_tag.py`, `secret_scan.py`, `protect_paths.py` | hook entries `adapters/claude/hooks/<name>.py` | `src/tld/guard/<name>.py` |
 | `hooks/dod_gate.py` | hook entry `adapters/claude/hooks/dod_gate.py` | `src/tld/dod/gate.py` |
 | `hooks/_common.py`, `_shell.py`, `_gitgh.py`, `_gitcfg.py`, `_ansi.py`, `_wrappers.py` | (library) | `src/tld/guard/_<name>.py` |
