@@ -338,4 +338,4 @@ Rejected:
 * Migrating old records: the next run rewrites them.
 
 Breaking change: the profile key `status.board_url` is removed; a profile that still has `status:` fails
-validation with `unknown key 'status'`. The plugin version is 0.7.1.
+validation with `unknown key 'status'`. This breaking change shipped in 0.7.0.
