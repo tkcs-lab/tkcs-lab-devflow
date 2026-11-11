@@ -1,0 +1,443 @@
+plan_slug: atlassian-user-names
+feature_branch: feature/atlassian-user-names
+max_parallel: 2
+manual_steps_artifact: https://claude.ai/artifact/QtNMCYuE915oX7TTD96n66
+manual_steps_source: docs/atlassian-user-names-plan-manual-steps.html
+manual_before: []
+manual_after:
+  - id: ma1-verify-reads
+    title: Read a Jira issue and a Confluence page that @mention someone on the QA site
+    why: Proves real Atlassian responses resolve to names in both the agent's result and the approval preview, which unit tests with stubbed responses cannot.
+  - id: ma2-verify-mention-writes
+    title: Post a Jira comment and create a Confluence page that @mention someone, and check the notification
+    why: Only a real site shows that the mention node notifies the right person and that the approval card names them.
+verify_after_merge:
+  - ruff check .
+  - python3 -m pytest tests/unit/test_jira_client.py tests/unit/test_confluence_client.py tests/unit/connectors/test_jira_connector.py tests/unit/connectors/test_confluence_connector.py tests/unit/connectors/test_readme_manifest_alignment.py tests/unit/test_docs_tools_reference.py tests/unit/test_systemic_gate_invariants.py tests/unit/policy/test_registry.py tests/unit/test_code_no_history.py -q
+final_checks:
+  - docs/atlassian-user-names-plan.md and docs/atlassian-user-names-plan-manual-steps.html are deleted and nothing links to them
+  - docs/adr/0115-*.md, docs/adr/0116-*.md and docs/adr/0117-*.md exist with Status Accepted and are listed in docs/adr/README.md's index
+  - CHANGELOG.md has [Unreleased] entries and no version heading
+  - python3 -m pytest -q passes and python3 scripts/check_coverage_floor.py coverage.json passes (run with --cov as in docs/coding-and-testing-guidelines.md §2.7)
+phases:
+  - id: p1-user-directory
+    title: atlassian_users module — lazy shared account-id cache and mention markup helpers
+    depends_on: []
+    complexity: M
+    touches:
+      - src/privacyfence/atlassian_users.py
+      - tests/unit/test_atlassian_users.py
+    brief: |
+      Read the plan's "Design" sections D1 and D2 first; they are the spec. Copy the style of
+      src/privacyfence/slack_client.py's directory cache (_load_user_directory_from_disk,
+      _save_user_directory_to_disk, _NEGATIVE_LOOKUP_TTL, _DIRECTORY_RETRY_COOLDOWN) where D2
+      does not say otherwise.
+      1. Create src/privacyfence/atlassian_users.py exactly as D2 specifies: module docstring,
+         `from __future__ import annotations`, logger = logging.getLogger(__name__), the constants
+         with the exact names and values in D2, AtlassianUsersError, the AtlassianUser dataclass,
+         jira_api_base, parse_user, fetch_users_bulk, search_users, mention_markup,
+         markup_mention_ids, display_markup, storage_mention_ids, storage_mentions_to_text,
+         markup_to_storage, and AtlassianUserDirectory with resolve, remember and refresh.
+         Persist with secure_files.atomic_write_json. Type-hint everything (X | None, not
+         Optional). No comments that restate what a line does; no plan/phase references.
+      2. Create tests/unit/test_atlassian_users.py (module docstring naming the module and the
+         invariant "a read never costs more than one bulk call per 100 unseen ids, and an
+         unresolvable id is not retried within an hour"; pytestmark = pytest.mark.unit). Use
+         MagicMock sessions whose .get returns a response with .json() and .raise_for_status(),
+         freezegun for time, tmp_path for cache files. Classes and minimum cases:
+         - TestParseUser: full record; missing accountId -> None; emailAddress in raw is not on the result.
+         - TestFetchUsersBulk: params carry one ("accountId", id) per id plus maxResults=100 and
+           startAt=0; follows isLast=False to a second page with startAt advanced; stops after
+           _BULK_PAGE_BUDGET pages when isLast never turns true; raise_for_status error propagates.
+         - TestSearchUsers: query and maxResults params; list response parsed; entries without
+           accountId dropped.
+         - TestMentionMarkup: mention_markup strips brackets/newlines and falls back to
+           "unknown user"; markup_mention_ids order + dedup; display_markup with and without
+           names (names win over the label); storage_mention_ids; storage_mentions_to_text
+           html-escapes a name like "<b>x</b>" and handles <ac:link-body> and
+           <ac:plain-text-link-body> variants and the non-self-closing
+           <ri:user ri:account-id="..."></ri:user> form; markup_to_storage output string exact; a markup
+           id containing a quote does not match MENTION_MARKUP_RE.
+         - TestDirectoryConcurrency: a fetch that blocks on a threading.Event (in a worker
+           thread) does not block a concurrent resolve of an already-cached id (join with a
+           timeout, no sleeps); a second refresh while one is in progress raises
+           AtlassianUsersError("refresh already in progress").
+         - TestDirectoryResolve: first resolve calls fetch once with only valid, deduplicated ids;
+           second resolve within 7 days makes no fetch call; after 7 days (freezegun) refetches;
+           >100 ids -> chunks of 100; id absent from the response is negative-cached and not
+           refetched within 1 hour but is after; fetch raising -> {} returned, warning logged,
+           and no fetch within 5 minutes, one after; stale name returned when refetch fails;
+           invalid ids ("", "a b", "x"*200, a valid id plus a trailing "\n") never passed to fetch.
+         - TestDirectoryPersistence: resolve writes the file with the D2 format and cloud_id;
+           a new directory with the same file + cloud_id resolves from disk with no fetch; a
+           different cloud_id ignores the file; corrupt JSON and a non-dict are ignored with no
+           raise; cache_file="" writes nothing.
+         - TestDirectoryRememberAndRefresh: remember makes a later resolve fetch-free and clears
+           a negative entry; refresh re-fetches all cached ids, drops ids not returned, returns
+           the count; refresh with an empty cache returns 0 without calling fetch; refresh whose
+           fetch raises -> AtlassianUsersError and the cache is unchanged.
+      3. Run: ruff check src/privacyfence/atlassian_users.py tests/unit/test_atlassian_users.py;
+         python3 -m pytest tests/unit/test_atlassian_users.py -q --cov=privacyfence.atlassian_users
+         --cov-branch --cov-report=term-missing and reach 100% line and branch coverage of the new
+         module; python3 -m pytest tests/unit/test_code_no_history.py -q.
+      No CHANGELOG line in this phase (the last phase writes it).
+      Whole-suite coverage must stay at 100% (see p2's brief for the command).
+      Stop condition: if secure_files.atomic_write_json's signature is not (path, data, *, mode=...,
+      **json_kwargs), stop with status=blocked and quote it.
+    acceptance:
+      - python3 -m pytest tests/unit/test_atlassian_users.py -q passes
+      - coverage of src/privacyfence/atlassian_users.py is 100% lines and branches in the command from step 3
+      - ruff check . passes
+      - grep -n "USER_CACHE_TTL = timedelta(days=7)" src/privacyfence/atlassian_users.py matches
+      - python3 -m pytest tests/unit/test_code_no_history.py -q passes
+
+  - id: p2-jira-client-reads
+    title: JiraClient resolves ADF mentions and gains find_users / refresh_user_cache
+    depends_on: [p1-user-directory]
+    complexity: M
+    touches:
+      - src/privacyfence/jira_client.py
+      - tests/unit/test_jira_client.py
+    brief: |
+      Spec: plan Design D3 (Jira parts) and D4. Do not touch _text_to_adf or any write method
+      (that is a later phase).
+      Every phase rule: do not edit CHANGELOG.md and do not dispatch connector-live-check.yml;
+      p7-retire-plan does both. Report /dod's CHANGELOG and live-QA rows as "owed by
+      p7-retire-plan". Whole-suite coverage must stay at 100% (python3 -m pytest
+      --cov=src/privacyfence --cov-branch --cov-report=json:coverage.json, then
+      python3 scripts/check_coverage_floor.py coverage.json): cover every new branch.
+      1. In src/privacyfence/jira_client.py: `from . import atlassian_users` and import
+         AtlassianUser, AtlassianUserDirectory, AtlassianUsersError, ACCOUNT_ID_RE,
+         UNKNOWN_USER_LABEL, mention_markup from it. Add the `user_directory` constructor param
+         (D3), stored as self._users. Add _fetch_users_bulk, resolve_user_names, find_users,
+         refresh_user_cache (D3) in a new "Users" banner section after "Connection". Update the
+         module docstring with one short paragraph on the shared user directory (ADR 0115).
+      2. Change _extract_adf_text to take `names: Mapping[str, str] | None = None` and render
+         mention nodes per D4; add static _collect_adf_mention_ids. Thread `names` through
+         _parse_issue and _parse_comment. Make get_issue and get_issue_comments resolve per D4
+         (no resolve call when there are no mention ids).
+      3. Extend tests/unit/test_jira_client.py:
+         - TestExtractAdfText: mention with names hit -> "@[Jane Doe](<id>)"; names miss ->
+           uses attrs.text without its "@"; no text and no name -> "@[unknown user](<id>)";
+           mention with invalid id -> attrs.text; mention nested inside a paragraph among text.
+         - new TestCollectAdfMentionIds: nested order and dedup, invalid ids skipped.
+         - TestGetIssue / TestGetIssueComments: monkeypatch
+           privacyfence.atlassian_users.fetch_users_bulk; one bulk call for a description (and
+           one for all comments together) containing mentions; zero calls when there are none;
+           rendered markup uses the fetched name.
+         - new TestUserLookups: find_users blank query -> JiraClientError; max_results clamped to
+           1..50; results remembered (a later resolve_user_names for that id makes no bulk call);
+           search failure -> JiraClientError; refresh_user_cache returns the count and maps
+           AtlassianUsersError to JiraClientError; _fetch_users_bulk refreshes and retries once on
+           401 (reuse this module's unauthorized_error() helper and TestRequest's refresh stub).
+         - TestConstruction: default directory is memory-only; a passed directory is used.
+         - TestLiveFixtureParsing must still pass unchanged.
+      4. Run ruff check ., python3 -m pytest tests/unit/test_jira_client.py -q, and
+         python3 -m pytest tests/unit/test_code_no_history.py -q.
+      Stop condition: if tests/fixtures/live/jira/get_issue.json contains a node with
+      "type": "mention" whose account id is not at attrs.id, stop with status=blocked and quote
+      the node shape.
+    acceptance:
+      - python3 -m pytest tests/unit/test_jira_client.py -q passes
+      - grep -n "def resolve_user_names" src/privacyfence/jira_client.py matches
+      - grep -n "def find_users" src/privacyfence/jira_client.py matches
+      - grep -n "def refresh_user_cache" src/privacyfence/jira_client.py matches
+      - ruff check . passes
+
+  - id: p3-confluence-client-reads
+    title: ConfluenceClient resolves authors and storage mentions and gains find_users / refresh_user_cache
+    depends_on: [p1-user-directory]
+    complexity: M
+    touches:
+      - src/privacyfence/confluence_client.py
+      - tests/unit/test_confluence_client.py
+    brief: |
+      Spec: plan Design D3 (Confluence parts, including _request_jira_api and
+      _jira_api_denied_at) and D5. Do not touch create_page/update_page.
+      Every phase rule: do not edit CHANGELOG.md and do not dispatch connector-live-check.yml;
+      p7-retire-plan does both. Report /dod's CHANGELOG and live-QA rows as "owed by
+      p7-retire-plan". Whole-suite coverage must stay at 100% (python3 -m pytest
+      --cov=src/privacyfence --cov-branch --cov-report=json:coverage.json, then
+      python3 scripts/check_coverage_floor.py coverage.json): cover every new branch.
+      1. In src/privacyfence/confluence_client.py: `from . import atlassian_users`, import
+         AtlassianUser, AtlassianUserDirectory, AtlassianUsersError, storage_mention_ids from it,
+         and is_unauthorized from .atlassian_oauth. Add the user_directory constructor param,
+         _request_jira_api, _fetch_users_bulk, resolve_user_names, find_users,
+         refresh_user_cache (D3) in a new "Users" banner section after "Connection". Update the
+         module docstring with one short paragraph on the shared user directory and why its
+         calls retry only on 401 (ADR 0115).
+      2. Add author_name and mentions to ConfluencePage (D5; import field). author stays the raw
+         authorId. Change _parse_page_v2
+         per D5 and update its docstring. Make get_page, get_page_by_title and
+         list_pages_in_space resolve per D5 (no resolve call when there are no ids).
+      3. Extend tests/unit/test_confluence_client.py:
+         - TestParsePageV2: author is always the raw authorId; author_name from names, "" when
+           unresolved; mentions contains only resolved ids present in the body.
+         - TestGetPage / TestGetPageByTitle: monkeypatch
+           privacyfence.atlassian_users.fetch_users_bulk; exactly one bulk call carrying the
+           author and every storage mention id; no bulk call when the page has neither (the
+           existing TestGetPage.test_fetches_with_body has no authorId); body returned
+           byte-for-byte unchanged.
+         - TestListPagesInSpace: one bulk call for all authors.
+         - new TestUserLookups: same cases as the Jira phase's TestUserLookups, plus: a 404 from
+           the bulk call does NOT call _try_refresh (monkeypatch _try_refresh to fail the test if
+           called), and a 401 does, once; a 401 that survives the refresh sets
+           _jira_api_denied_at, and a second 401 within the hour does not call _try_refresh
+           (freezegun), but one after the hour does.
+         - TestLiveFixtureParsing must still pass unchanged.
+      4. Run ruff check ., python3 -m pytest tests/unit/test_confluence_client.py -q, and
+         python3 -m pytest tests/unit/test_code_no_history.py -q.
+      Stop condition: if tests/fixtures/live/confluence/get_page.json's body stores a mention in
+      a shape other than <ri:user ri:account-id="...">, stop with status=blocked and quote it.
+    acceptance:
+      - python3 -m pytest tests/unit/test_confluence_client.py -q passes
+      - grep -n "author_name: str" src/privacyfence/confluence_client.py matches
+      - grep -n "def _request_jira_api" src/privacyfence/confluence_client.py matches
+      - ruff check . passes
+
+  - id: p4-connector-tools-and-wiring
+    title: Four new auto tools, name-aware read previews, and one shared directory in build_connectors
+    depends_on: [p2-jira-client-reads, p3-confluence-client-reads]
+    complexity: M
+    touches:
+      - src/privacyfence/connectors/jira.py
+      - src/privacyfence/connectors/confluence.py
+      - src/privacyfence/auto_accept.py
+      - src/privacyfence/daemon_main.py
+      - docs/tools-reference.md
+      - website/connectors/index.html
+      - website/how-it-works/index.html
+      - tests/unit/connectors/test_jira_connector.py
+      - tests/unit/connectors/test_confluence_connector.py
+      - tests/unit/test_daemon_main.py
+      - tests/unit/test_gate_real_evaluator.py
+    brief: |
+      Spec: plan Design D6 and D7. Pattern to copy: Slack's slack_refresh_user_cache (spec at
+      src/privacyfence/connectors/slack.py:171, handler at :408, tests in
+      tests/unit/connectors/test_slack_connector.py around line 195-248), from commit 52768c86.
+      Every phase rule: do not edit CHANGELOG.md and do not dispatch connector-live-check.yml;
+      p7-retire-plan does both. Report /dod's CHANGELOG and live-QA rows as "owed by
+      p7-retire-plan". Whole-suite coverage must stay at 100% (python3 -m pytest
+      --cov=src/privacyfence --cov-branch --cov-report=json:coverage.json, then
+      python3 scripts/check_coverage_floor.py coverage.json): cover every new branch.
+      1. connectors/jira.py: add jira_find_users and jira_refresh_user_cache ToolSpecs exactly as
+         D6's table says (place them after jira_get_transitions), their dispatch lines in call(),
+         and handlers _find_users/_refresh_user_cache in the "Auto" section. Append the D6
+         sentence to jira_get_issue's description. In _get_issue apply display_markup (import
+         from ..atlassian_users) to description text, comment bodies, details_text and
+         pii_scan_text exactly as D6 says; `result` keeps the markup.
+      2. connectors/confluence.py: add confluence_find_users and confluence_refresh_user_cache
+         (after confluence_list_attachments), dispatch, handlers in the "Always-allowed" section.
+         Append the D6 sentence to both get-page descriptions. In _get_page and
+         _get_page_by_title build body_text with storage_mentions_to_text(body_raw, page.mentions)
+         before html_to_markdown, and set the "Author" new_info row and sender= exactly as D6
+         says (author_name first). Leave raw_data/filtered_data as asdict(page).
+      3. auto_accept.py TOOL_TO_GATE: add "jira_find_users": "auto",
+         "jira_refresh_user_cache": "auto" in the Jira block and "confluence_find_users": "auto",
+         "confluence_refresh_user_cache": "auto" in the Confluence block, matching the column
+         alignment there. Nothing in TOOL_TO_OPERATION or policy/registry.py.
+      4. daemon_main.py: import AtlassianUserDirectory from .atlassian_users; add D7's block and
+         pass user_directory=atlassian_users to both clients.
+      5. Regenerate docs: python3 scripts/generate_tools_reference.py. The diff must be exactly
+         the four new rows plus the Jira/Confluence/Total count changes (Jira 10 = 5/1/4,
+         Confluence 12 = 7/3/2, Total 118 = 46/21/51).
+         Then update the website counts that tests/unit/test_website_connectors_page.py checks:
+         in website/connectors/index.html the Jira card to data-tools="10" data-auto="5"
+         data-review="1" data-popup="4" with the text "10 tools: 5 without a card · 1 reviewed ·
+         4 need approval", the Confluence card to data-tools="12" data-auto="7" data-review="3"
+         data-popup="2" with "12 tools: 7 without a card · 3 reviewed · 2 need approval", and
+         "Eleven connectors, 114 tools" to "Eleven connectors, 118 tools"; in
+         website/how-it-works/index.html "Each of the 114 connector tools" to "Each of the 118
+         connector tools". Copy the exact surrounding markup already on those lines.
+      6. Tests:
+         - test_jira_connector.py and test_confluence_connector.py: one class per new tool
+           (TestFindUsers, TestRefreshUserCache) proving no gated_call, an audit entry with the
+           tool name, the D6 return shape, and client error -> RuntimeError. Extend the get-issue
+           / get-page preview tests: a description/comment/body with a mention shows "@Jane Doe"
+           in details_text and preview_blocks while the returned data keeps the markup / raw
+           storage. Give the mocked client in each module's assert_all_tools_leave_an_audit_trail
+           test return values for find_users (a list of AtlassianUser) and refresh_user_cache
+           (an int).
+         - test_daemon_main.py: add test_both_clients_share_one_user_directory to the EXISTING
+           TestBuildConnectorsAtlassian (line 989). Use its _patch_token helper and the
+           fake_client_class stubs its other tests use; assert
+           jira_fake.captured_kwargs["user_directory"] is
+           confluence_fake.captured_kwargs["user_directory"], and that the directory's
+           _cache_file == str(data_dir() / "atlassian_user_cache.json"), compared the way
+           TestBuildConnectorsSlack compares its cache paths.
+         - test_gate_real_evaluator.py: next to the existing i_am_author test (around line 655),
+           add a regression test that a Confluence page whose author_name contains my_email but
+           whose author is an account id does NOT match the i_am_author rule.
+      7. Run: ruff check .; python3 -m pytest tests/unit/connectors tests/unit/test_daemon_main.py
+         tests/unit/test_docs_tools_reference.py tests/unit/test_systemic_gate_invariants.py
+         tests/unit/policy tests/unit/test_connector_catalog.py tests/unit/web/test_tool_schema_portability.py
+         tests/unit/test_website_connectors_page.py tests/unit/test_gate_real_evaluator.py
+         tests/unit/test_code_no_history.py -q.
+      Stop condition: if generate_tools_reference.py changes any row other than the four new ones
+      and the count row, stop with status=blocked and paste the diff.
+    acceptance:
+      - python3 -m pytest tests/unit/connectors tests/unit/test_daemon_main.py tests/unit/test_docs_tools_reference.py tests/unit/test_systemic_gate_invariants.py tests/unit/policy tests/unit/test_connector_catalog.py tests/unit/web/test_tool_schema_portability.py tests/unit/test_website_connectors_page.py tests/unit/test_gate_real_evaluator.py -q passes
+      - grep -cE '^\| `(jira|confluence)_(find_users|refresh_user_cache)`' docs/tools-reference.md prints 4
+      - grep -n "atlassian_user_cache.json" src/privacyfence/daemon_main.py matches
+      - ruff check . passes
+
+  - id: p5-jira-mention-writes
+    title: Jira comments and descriptions carry real mentions; create/update take assignee_account_id
+    depends_on: [p4-connector-tools-and-wiring]
+    complexity: M
+    touches:
+      - src/privacyfence/jira_client.py
+      - src/privacyfence/connectors/jira.py
+      - src/privacyfence/write_effects.py
+      - tests/unit/test_jira_client.py
+      - tests/unit/connectors/test_jira_connector.py
+      - tests/unit/test_write_effects.py
+    brief: |
+      Spec: plan Design D8. The approver must always see the directory's name for an id, never
+      the agent's label (ADR 0116).
+      Every phase rule: do not edit CHANGELOG.md and do not dispatch connector-live-check.yml;
+      p7-retire-plan does both. Report /dod's CHANGELOG and live-QA rows as "owed by
+      p7-retire-plan". Whole-suite coverage must stay at 100% (python3 -m pytest
+      --cov=src/privacyfence --cov-branch --cov-report=json:coverage.json, then
+      python3 scripts/check_coverage_floor.py coverage.json): cover every new branch.
+      1. jira_client.py: _text_to_adf(text, names=None) per D8; add mention_names to add_comment
+         and create_issue per D8. Existing TestTextToAdf cases must pass unchanged.
+      2. connectors/jira.py: add _resolve_write_accounts (Helpers section), the
+         assignee_account_id ToolParam on jira_create_issue and jira_update_issue (exact text in
+         D8, before reason), and the _add_comment/_create_issue/_update_issue changes in D8,
+         including the Mentions/Assignee preview rows, the display_markup summary in
+         _add_comment, the jira_add_comment body param description and the sentence appended to
+         jira_update_issue's description. Do not change the first sentence of any tool
+         description.
+      3. write_effects.py: replace the five strings listed at the end of D8 exactly. Add a test to
+         the existing tests/unit/test_write_effects.py (in a new class TestAtlassianMentionEffects)
+         asserting the five new strings.
+      4. Tests:
+         - test_jira_client.py TestTextToAdf: markup -> [text, mention, text] nodes; names override
+           the label in attrs.text; empty leading/trailing text segments omitted; TestAddComment /
+           TestCreateIssue pass mention_names through.
+         - test_jira_connector.py: a comment with @[Fake Name](<id>) where the directory returns
+           "Real Name" -> preview["Mentions"] == "Real Name", details_text shows "@Real Name", the
+           client is called with the names; an unresolvable id -> ValueError before gated_call
+           (gated_call_spy not called); create/update with assignee_account_id -> preview
+           "Assignee" shows the directory name, update fields carry {"accountId": id}, an
+           assignee-only update is accepted, an unresolvable assignee -> ValueError; a body with
+           no mentions makes no resolve_user_names call; with a label differing from the
+           directory name, "Fake Name" is in none of kwargs["summary"], kwargs["details_text"] or
+           kwargs["preview"].
+         - Update the two existing assertions D8 changes:
+           TestCreateIssue.test_result_is_serialized_issue (line ~290) to
+           assert_called_once_with("ENG", "New bug", "Task", "", "", "", None, {}) and
+           TestAddComment.test_preview_and_gate (line ~332) to
+           assert_called_once_with("ENG-42", "On it", {}).
+      5. Run ruff check .; python3 -m pytest tests/unit/test_jira_client.py
+         tests/unit/connectors/test_jira_connector.py tests/unit/test_docs_tools_reference.py
+         tests/unit/connectors/test_readme_manifest_alignment.py tests/unit/test_write_effects.py
+         tests/unit/test_code_no_history.py -q.
+      Stop condition: if test_docs_tools_reference.py fails, a first sentence changed; revert it.
+      If some policy test pins jira_create_issue's args dict shape and fails, stop with
+      status=blocked and name the test.
+    acceptance:
+      - python3 -m pytest tests/unit/test_jira_client.py tests/unit/connectors/test_jira_connector.py tests/unit/test_docs_tools_reference.py -q passes
+      - python3 -c "from privacyfence.write_effects import EFFECT_BY_TOOL as E; assert all('@mentioned' in E[t] for t in ('jira_create_issue','jira_add_comment','jira_update_issue','confluence_create_page','confluence_update_page'))" exits 0
+      - grep -n "assignee_account_id" src/privacyfence/connectors/jira.py matches
+      - ruff check . passes
+
+  - id: p6-confluence-mention-writes
+    title: Confluence page writes turn @[Name](accountId) into storage mentions with named approval rows
+    depends_on: [p4-connector-tools-and-wiring]
+    complexity: S
+    touches:
+      - src/privacyfence/connectors/confluence.py
+      - tests/unit/connectors/test_confluence_connector.py
+    brief: |
+      Spec: plan Design D9 (ADR 0116).
+      Every phase rule: do not edit CHANGELOG.md and do not dispatch connector-live-check.yml;
+      p7-retire-plan does both. Report /dod's CHANGELOG and live-QA rows as "owed by
+      p7-retire-plan". Whole-suite coverage must stay at 100% (python3 -m pytest
+      --cov=src/privacyfence --cov-branch --cov-report=json:coverage.json, then
+      python3 scripts/check_coverage_floor.py coverage.json): cover every new branch.
+      1. connectors/confluence.py: in _create_page and _update_page implement D9 steps 1-6
+         (imports from ..atlassian_users: markup_mention_ids, storage_mention_ids,
+         markup_to_storage). Append the D9 sentence to both tools' body ToolParam descriptions.
+         Do not change the first sentence of any tool description.
+      2. tests/unit/connectors/test_confluence_connector.py: create and update each with a markup
+         mention whose directory name differs from the label -> preview["Mentions"] is the
+         directory name, raw_data["body"], details_text and the client call carry
+         <ac:link><ri:user ri:account-id="<id>" /></ac:link>; an unresolvable markup id ->
+         ValueError before gated_call; an unresolvable raw <ri:user> already in the body is
+         listed as "unknown account <id>" and the write proceeds; a body with no mentions makes
+         no resolve_user_names call and has no "Mentions" row.
+      3. Run ruff check .; python3 -m pytest tests/unit/connectors/test_confluence_connector.py
+         tests/unit/test_docs_tools_reference.py tests/unit/test_code_no_history.py -q.
+      Stop condition: if test_docs_tools_reference.py fails, a first sentence changed; revert it.
+    acceptance:
+      - python3 -m pytest tests/unit/connectors/test_confluence_connector.py tests/unit/test_docs_tools_reference.py -q passes
+      - grep -n "markup_to_storage" src/privacyfence/connectors/confluence.py matches
+      - ruff check . passes
+
+  - id: p7-retire-plan
+    title: ADRs 0115-0117, reference docs, changelog, live check, and delete the plan
+    depends_on: [p5-jira-mention-writes, p6-confluence-mention-writes]
+    complexity: S
+    touches:
+      - docs/adr/0115-atlassian-account-ids-resolve-through-a-lazy-shared-cache.md
+      - docs/adr/0116-an-approver-sees-atlassians-name-for-every-mentioned-or-assigned-account.md
+      - docs/adr/0117-atlassian-find-users-is-auto-approved-and-returns-no-email.md
+      - docs/adr/README.md
+      - docs/atlassian-setup.md
+      - docs/connector-qa.md
+      - CHANGELOG.md
+      - docs/atlassian-user-names-plan.md
+      - docs/atlassian-user-names-plan-manual-steps.html
+      - src/privacyfence/atlassian_users.py
+      - src/privacyfence/jira_client.py
+      - src/privacyfence/confluence_client.py
+      - src/privacyfence/connectors/jira.py
+      - src/privacyfence/connectors/confluence.py
+    brief: |
+      1. Write the three ADRs from this plan's "ADRs" section using docs/adr/README.md's template,
+         Status "Accepted", Date today. Context/Alternatives come from Design D1 (0115), D8/D9
+         (0116) and D10 (0117). Link source files (src/privacyfence/atlassian_users.py,
+         connectors/jira.py, connectors/confluence.py) and commit 52768c86 for the Slack model;
+         never link this plan. If 0115-0117 are taken on main by then, use the next free numbers
+         and rename the files, updating every "ADR 011x" reference in the src files listed in
+         touches. Section labels such as "D1" or "D8" are this plan's; do not copy them into ADRs
+         or docs.
+      2. docs/adr/README.md: add three index rows.
+      3. docs/atlassian-setup.md: add a new "## Names and mentions" section between "## Values"
+         and "## Build and distribute the bundle":
+         Jira's user API (read:jira-user) resolves names for both products; names are cached per
+         user in atlassian_user_cache.json for 7 days; jira_refresh_user_cache /
+         confluence_refresh_user_cache re-fetch them; the agent mentions with @[Name](accountId)
+         and finds ids with jira_find_users / confluence_find_users; a Confluence-only site
+         shows raw account ids and cannot use mention markup. Add a Troubleshooting entry:
+         "Mentions show raw account ids, or a write fails with 'Unknown Atlassian account id'" ->
+         the site has no Jira, or the "Browse users and groups" global permission was removed
+         for the user.
+      4. docs/connector-qa.md: in the Jira checks and Confluence checks lists, add one line each
+         for reading an item with a mention and for jira_find_users / confluence_find_users.
+      5. CHANGELOG.md under ## [Unreleased] (create an "### Added" subheading there if missing;
+         never a version heading), one entry: Jira and Confluence show @mentioned people and
+         Confluence page authors by name, through a shared cache that looks each person up once
+         a week at most; new jira_find_users, confluence_find_users, jira_refresh_user_cache and
+         confluence_refresh_user_cache tools; the agent can @mention people in Jira comments and
+         descriptions and Confluence pages, and assign Jira issues, with the approval card naming
+         each person.
+      6. Delete docs/atlassian-user-names-plan.md and docs/atlassian-user-names-plan-manual-steps.html;
+         grep -rn "atlassian-user-names-plan" . --exclude-dir=.git must print nothing.
+      7. Run python3 scripts/generate_tools_reference.py and confirm no diff; run
+         python3 -m pytest tests/unit/test_docs_no_history.py tests/unit/test_build_site.py
+         tests/unit/test_code_no_history.py -q; run the full §2.7 gate (/dod).
+      8. Dispatch connector-live-check.yml against feature/atlassian-user-names with the GitHub
+         MCP actions_run_trigger tool (it is on main already), wait for it, and put the run URL
+         and pass/fail for jira and confluence in your final report so the PR can link it. This
+         check proves the existing Jira/Confluence calls still work; it makes no user lookup
+         (manual_after ma1 covers that). Do not dispatch qa-record-fixture.yml. If the jira or
+         confluence check fails, stop with status=blocked and paste the failing lines.
+    acceptance:
+      - ls docs/adr/0115-*.md docs/adr/0116-*.md docs/adr/0117-*.md succeeds (or the renumbered files named in the report)
+      - grep -rn "atlassian-user-names-plan" . --exclude-dir=.git prints nothing
+      - grep -n "atlassian_user_cache.json" docs/atlassian-setup.md matches
+      - python3 -m pytest tests/unit/test_code_no_history.py tests/unit/test_docs_tools_reference.py tests/unit/test_docs_no_history.py tests/unit/test_build_site.py -q passes
+      - the final report contains the connector-live-check.yml run URL

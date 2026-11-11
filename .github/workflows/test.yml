@@ -1,0 +1,38 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install -r tests/requirements.txt
+      - name: Tests (includes the no-project-specific-strings check)
+        run: python -m pytest tests -q
+      - name: Validate the marketplace and plugins
+        run: |
+          npm install -g @anthropic-ai/claude-code@2.1.322
+          claude plugin validate .
+          for p in plugins/*/; do claude plugin validate "$p"; done
+      - name: Validators on the starter profile and the PrivacyFence profile
+        run: |
+          python plugins/devflow/scripts/validate_profile.py templates/toolkit.yaml --no-file-checks
+          python plugins/devflow/scripts/validate_profile.py tests/fixtures/privacyfence-toolkit.yaml --no-file-checks
+          python plugins/devflow/scripts/repo_admin.py validate-policy plugins/devflow/templates/admin-policy.yaml
+          for m in tests/fixtures/privacyfence-*-manifest.yaml; do
+            python plugins/devflow/scripts/validate_manifest.py "$m" --profile tests/fixtures/privacyfence-toolkit.yaml
+          done

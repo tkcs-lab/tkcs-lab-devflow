@@ -1,0 +1,44 @@
+{
+  "description": "devflow guardrails: deterministic versions of the never-do-X rules (docs/architecture/hooks.md in the claude-toolkit repo). Project facts come from .claude/toolkit.yaml; a hook can be switched off per repository with hooks.disable.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|mcp__.*__(merge_pull_request|enable_pr_auto_merge|pull_request_review_write|push_files|create_or_update_file|delete_file)",
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/no_merge.py\"", "timeout": 20}
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/no_force_push.py\"", "timeout": 20}
+        ]
+      },
+      {
+        "matcher": "Bash|mcp__.*__actions_run_trigger",
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/no_git_tag.py\"", "timeout": 20}
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/secret_scan.py\"", "timeout": 10}
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/protect_paths.py\"", "timeout": 10}
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/dod_gate.py\"", "timeout": 1800}
+        ]
+      }
+    ]
+  }
+}

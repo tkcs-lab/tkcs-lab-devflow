@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "devflow-board": {
+      "command": "python3",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/board_mcp_stdio.py"],
+      "env": {
+        "DEVFLOW_BOARD_URL": "${DEVFLOW_BOARD_URL:-}",
+        "DEVFLOW_BOARD_TOKEN": "${DEVFLOW_BOARD_TOKEN:-}"
+      }
+    }
+  }
+}

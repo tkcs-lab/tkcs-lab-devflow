@@ -1,0 +1,6 @@
+{
+  "owner": "your-org",
+  "repos": ["repo-one", "app-*"],
+  "protected_branches": ["main", "master", "develop", "release/*", "gh-pages"],
+  "tag_pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.]+)?$"
+}

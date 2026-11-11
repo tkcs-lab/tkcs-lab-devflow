@@ -1,0 +1,346 @@
+<title>__REVIEW_TITLE__</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column of decision rows, a summary header on top and a sticky finish bar below. */
+:root {
+  --bg: #f5f7f9; --surface: #ffffff; --fg: #17202a; --muted: #5a6876; --line: #d9e0e7;
+  --accent: #1f5f8b; --accent-fg: #ffffff; --accent-soft: #e3eef6;
+  --crit: #a3192b; --high: #b4501a; --med: #8a6a00; --low: #4d6b2f;
+  --ok: #2c6e49; --warn-bg: #fff4d6; --warn-fg: #6b4e00;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #182029; --fg: #e4eaf0; --muted: #9aa8b5; --line: #2b3743;
+    --accent: #6fb0e0; --accent-fg: #0d1823; --accent-soft: #1d3346;
+    --crit: #ff7b8a; --high: #f59e63; --med: #e6c14d; --low: #a3c97d;
+    --ok: #6fcf97; --warn-bg: #3a3014; --warn-fg: #f1d68a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #182029; --fg: #e4eaf0; --muted: #9aa8b5; --line: #2b3743;
+  --accent: #6fb0e0; --accent-fg: #0d1823; --accent-soft: #1d3346;
+  --crit: #ff7b8a; --high: #f59e63; --med: #e6c14d; --low: #a3c97d;
+  --ok: #6fcf97; --warn-bg: #3a3014; --warn-fg: #f1d68a;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--sans); }
+.wrap {
+  max-width: 52rem; margin: 0 auto; padding-block: 28px 120px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 20px;
+}
+header { display: grid; gap: 8px; }
+.eyebrow { font: 500 12px/1.4 var(--mono); color: var(--muted); letter-spacing: .04em; overflow-wrap: anywhere; }
+h1 { font-size: 26px; line-height: 1.2; font-weight: 600; margin: 0; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 65ch; }
+a { color: var(--accent); }
+.progress { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-variant-numeric: tabular-nums; }
+.bar { flex: 1 1 160px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+.notice { padding: 10px 14px; border-radius: var(--radius); background: var(--warn-bg); color: var(--warn-fg); }
+.notice.done { background: var(--accent-soft); color: var(--fg); }
+ol.items { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 10px; min-width: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font: 12px/1.4 var(--mono); }
+.id { font-weight: 500; }
+.chip { padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+.sev { padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; text-transform: uppercase; letter-spacing: .05em; }
+.sev-critical { color: var(--crit); } .sev-high { color: var(--high); } .sev-medium { color: var(--med); } .sev-low { color: var(--low); }
+.item h2 { font-size: 17px; line-height: 1.35; font-weight: 600; margin: 0; text-wrap: balance; }
+.where { font: 13px/1.4 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.summary { margin: 0; max-width: 65ch; }
+.rec { margin: 0; font-size: 14px; color: var(--muted); }
+.rec strong { color: var(--fg); font-weight: 600; }
+.choices { display: flex; flex-wrap: wrap; gap: 8px; border: 0; margin: 0; padding: 0; }
+.choices legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.choice { position: relative; }
+.choice input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.choice span {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--bg); font-weight: 500; cursor: pointer; user-select: none;
+}
+.choice small { font-weight: 400; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.choice input:checked + span { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.choice input:checked + span small { color: inherit; }
+.choice input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.choice input:disabled + span { cursor: default; opacity: .7; }
+.note { width: 100%; box-sizing: border-box; min-height: 2.6em; resize: vertical; padding: 8px 10px; font: inherit; font-size: 14px;
+  color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
+.note:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.issue { font-size: 14px; }
+.finish {
+  position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line);
+  padding-top: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.finish-inner { max-width: 52rem; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.finish p { margin: 0; color: var(--muted); font-size: 14px; flex: 1 1 18rem; min-width: 0; }
+button { font: 500 14px/1 var(--sans); padding: 10px 16px; border-radius: var(--radius); cursor: pointer; border: 1px solid var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-fg); }
+button.secondary { background: transparent; color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; }
+summary { cursor: pointer; font-weight: 500; }
+.copy { display: grid; gap: 10px; margin-top: 10px; }
+.copy pre { margin: 0; padding: 10px; background: var(--bg); border-radius: var(--radius); overflow-x: auto; font: 13px/1.5 var(--mono); white-space: pre; }
+@media (prefers-reduced-motion: reduce) { .bar > span { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow" id="eyebrow"></div>
+    <h1>Open decisions</h1>
+    <p class="lede">The reviewer settled everything it could. These items need your call: add each to the plan, turn it into a GitHub issue, or drop it.</p>
+    <p class="lede"><a id="review-link" target="_blank" rel="noopener noreferrer">Read the full review</a></p>
+    <div class="progress"><span id="count"></span><div class="bar" aria-hidden="true"><span id="bar"></span></div></div>
+  </header>
+  <div class="notice" id="notice" hidden></div>
+  <ol class="items" id="items"></ol>
+  <details>
+    <summary>Copy as text</summary>
+    <div class="copy">
+      <p class="lede">If the review session cannot read this page, copy this and paste it into the session.</p>
+      <pre id="copy-text"></pre>
+      <div><button class="secondary" id="copy-btn" type="button">Copy</button></div>
+    </div>
+  </details>
+</div>
+<div class="finish">
+  <div class="finish-inner">
+    <p id="finish-text"></p>
+    <button class="primary" id="finish-btn" type="button" disabled>Finish</button>
+  </div>
+</div>
+
+<script type="application/json" id="review-data">__REVIEW_DATA__</script>
+<script>
+(function () {
+  "use strict";
+  var DATA = JSON.parse(document.getElementById("review-data").textContent);
+  var LABELS = { plan: "Add to plan", issue: "Create issue", drop: "Drop" };
+  var CHOICES = ["plan", "issue", "drop"];
+  var LOCAL_KEY = "review-decisions:" + DATA.repository + ":" + DATA.commit;
+  var decisions = {};      // id -> {choice, note, issue_url}
+  var status = null;       // {state: "submitted" | "applied", at}
+  var mode = "loading";    // loading | db | local | readonly
+  var db = null;
+  var noteTimers = {};
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function validChoice(c) { return CHOICES.indexOf(c) >= 0 ? c : null; }
+  function loadLocal() {
+    try { var raw = localStorage.getItem(LOCAL_KEY); return raw ? JSON.parse(raw) : {}; } catch (e) { return {}; }
+  }
+  function saveLocal() {
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(decisions)); } catch (e) { /* storage unavailable */ }
+  }
+  function decidedCount() {
+    return DATA.items.filter(function (it) { return decisions[it.id] && validChoice(decisions[it.id].choice); }).length;
+  }
+  function locked() { return mode === "readonly" || (status && status.state === "applied"); }
+
+  function buildItems() {
+    var list = document.getElementById("items");
+    DATA.items.forEach(function (it) {
+      var li = el("li", "item");
+      li.id = "item-" + it.id;
+      var meta = el("div", "meta");
+      meta.appendChild(el("span", "id", it.id));
+      meta.appendChild(el("span", "sev sev-" + it.severity, it.severity));
+      meta.appendChild(el("span", "chip", it.dimension));
+      li.appendChild(meta);
+      li.appendChild(el("h2", null, it.title));
+      li.appendChild(el("div", "where", it.where));
+      li.appendChild(el("p", "summary", it.summary));
+      var rec = el("p", "rec");
+      rec.appendChild(el("strong", null, "Reviewer recommends: " + LABELS[it.recommendation] + ". "));
+      rec.appendChild(document.createTextNode(it.reason));
+      li.appendChild(rec);
+
+      var fs = el("fieldset", "choices");
+      fs.appendChild(el("legend", null, "Decision for " + it.id));
+      CHOICES.forEach(function (c) {
+        var lab = el("label", "choice");
+        var input = document.createElement("input");
+        input.type = "radio"; input.name = "choice-" + it.id; input.value = c; input.id = "choice-" + it.id + "-" + c;
+        input.addEventListener("change", function () { choose(it.id, c); });
+        var span = el("span", null, LABELS[c]);
+        if (c === it.recommendation) span.appendChild(el("small", null, "recommended"));
+        lab.appendChild(input); lab.appendChild(span);
+        fs.appendChild(lab);
+      });
+      li.appendChild(fs);
+
+      var note = document.createElement("textarea");
+      note.className = "note"; note.id = "note-" + it.id; note.rows = 2;
+      note.placeholder = "Optional note for the plan or the issue";
+      note.setAttribute("aria-label", "Note for " + it.id);
+      note.addEventListener("input", function () { noteChanged(it.id, note.value); });
+      li.appendChild(note);
+
+      var issue = el("div", "issue");
+      issue.id = "issue-" + it.id; issue.hidden = true;
+      li.appendChild(issue);
+      list.appendChild(li);
+    });
+  }
+
+  function render() {
+    var a = document.getElementById("review-link");
+    if (/^https:\/\//.test(DATA.review_url)) a.href = DATA.review_url;
+    document.getElementById("eyebrow").textContent = DATA.repository + " · " + DATA.scope + " · " + DATA.commit;
+    var n = decidedCount(), total = DATA.items.length;
+    document.getElementById("count").textContent = n + " of " + total + " decided";
+    document.getElementById("bar").style.width = (total ? (100 * n / total) : 0) + "%";
+
+    DATA.items.forEach(function (it) {
+      var d = decisions[it.id] || {};
+      CHOICES.forEach(function (c) {
+        var input = document.getElementById("choice-" + it.id + "-" + c);
+        input.checked = d.choice === c;
+        input.disabled = locked();
+      });
+      var note = document.getElementById("note-" + it.id);
+      if (document.activeElement !== note) note.value = typeof d.note === "string" ? d.note : "";
+      note.disabled = locked();
+      var issue = document.getElementById("issue-" + it.id);
+      issue.textContent = "";
+      if (typeof d.issue_url === "string" && /^https:\/\/github\.com\//.test(d.issue_url)) {
+        var link = el("a", null, "Issue: " + d.issue_url);
+        link.href = d.issue_url; link.target = "_blank"; link.rel = "noopener noreferrer";
+        issue.appendChild(link); issue.hidden = false;
+      } else { issue.hidden = true; }
+    });
+
+    var notice = document.getElementById("notice");
+    notice.className = "notice"; notice.hidden = true;
+    if (status && status.state === "applied") {
+      notice.className = "notice done"; notice.hidden = false;
+      notice.textContent = "Applied: the review is updated and the issues are created. These decisions are now read-only.";
+    } else if (mode === "readonly") {
+      notice.hidden = false; notice.textContent = "You can view these decisions but not change them.";
+    } else if (mode === "local") {
+      notice.hidden = false;
+      notice.textContent = "Your choices stay in this browser only. When you are done, open Copy as text below and paste it into the review session.";
+    }
+
+    var finishBtn = document.getElementById("finish-btn");
+    var finishText = document.getElementById("finish-text");
+    finishBtn.hidden = mode === "local";
+    finishBtn.disabled = locked() || mode !== "db" || n < total;
+    if (status && status.state === "applied") finishText.textContent = "All done.";
+    else if (status && status.state === "submitted") finishText.textContent = "Finished. Go back to the review session and tell it you are done.";
+    else if (mode === "loading") finishText.textContent = "Connecting…";
+    else if (n < total) finishText.textContent = (total - n) + " left to decide.";
+    else if (mode === "local") finishText.textContent = "All decided. Copy the text below into the review session.";
+    else finishText.textContent = "All decided. Press Finish, then tell the review session you are done.";
+
+    document.getElementById("copy-text").textContent = DATA.items.map(function (it) {
+      var d = decisions[it.id] || {};
+      var line = it.id + ": " + (validChoice(d.choice) || "undecided");
+      if (d.note) line += " | " + String(d.note).replace(/\s+/g, " ").trim();
+      return line;
+    }).join("\n");
+  }
+
+  function write(id) {
+    saveLocal();
+    if (mode !== "db") return;
+    var d = decisions[id];
+    db.doc("decisions/" + id).set({ choice: d.choice || null, note: d.note || "" }).catch(writeFailed);
+  }
+  function writeFailed(e) {
+    if (e && (e.code === "invalid_argument" || e.code === "not_granted" || e.code === "revoked")) mode = "readonly";
+    else {
+      var notice = document.getElementById("notice");
+      notice.hidden = false; notice.className = "notice";
+      notice.textContent = "That choice was not saved. Check your connection and choose again.";
+      return;
+    }
+    render();
+  }
+  function choose(id, c) {
+    if (locked()) return;
+    decisions[id] = Object.assign({}, decisions[id], { choice: c });
+    if (status && status.state === "submitted") status = null;
+    write(id); render();
+  }
+  function noteChanged(id, value) {
+    if (locked()) return;
+    decisions[id] = Object.assign({}, decisions[id], { note: value });
+    clearTimeout(noteTimers[id]);
+    noteTimers[id] = setTimeout(function () { write(id); render(); }, 600);
+  }
+
+  document.getElementById("finish-btn").addEventListener("click", function () {
+    if (mode !== "db" || decidedCount() < DATA.items.length) return;
+    var btn = this; btn.disabled = true;
+    db.doc("meta/status").set({ state: "submitted", at: new Date().toISOString() })
+      .then(function () { status = { state: "submitted" }; render(); })
+      .catch(function (e) { writeFailed(e); btn.disabled = false; });
+  });
+  document.getElementById("copy-btn").addEventListener("click", function () {
+    var pre = document.getElementById("copy-text"), btn = this;
+    function selectIt() { var r = document.createRange(); r.selectNodeContents(pre); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+    try {
+      navigator.clipboard.writeText(pre.textContent).then(function () { btn.textContent = "Copied"; }, function () { selectIt(); btn.textContent = "Selected: press Copy"; });
+    } catch (e) { selectIt(); }
+  });
+
+  decisions = loadLocal();
+  buildItems();
+  render();
+
+  var use = window.claude && typeof window.claude.use === "function" ? window.claude.use("db") : Promise.resolve(null);
+  use.then(function (ns) {
+    if (!ns) { mode = "local"; render(); return; }
+    db = ns; mode = "db"; render();
+    var first = true;
+    db.collection("decisions").onSnapshot(function (snap) {
+      var known = {};
+      snap.docs.forEach(function (doc) { known[doc.id] = true; });
+      if (first && !snap.metadata.fromCache) {
+        first = false;
+        // Choices made before the store answered (or in an earlier visit without it) go to the store now.
+        DATA.items.forEach(function (it) {
+          if (!known[it.id] && decisions[it.id] && validChoice(decisions[it.id].choice)) write(it.id);
+        });
+      }
+      var fromStore = {};
+      snap.docs.forEach(function (doc) {
+        var body = doc.data() || {};
+        fromStore[doc.id] = { choice: validChoice(body.choice), note: typeof body.note === "string" ? body.note : "",
+                              issue_url: body.issue_url };
+      });
+      DATA.items.forEach(function (it) {
+        var mine = decisions[it.id];
+        // Keep a note being typed; everything else follows the store.
+        if (fromStore[it.id]) {
+          if (mine && noteTimers[it.id] && document.activeElement === document.getElementById("note-" + it.id)) fromStore[it.id].note = mine.note;
+          decisions[it.id] = fromStore[it.id];
+        }
+      });
+      saveLocal(); render();
+    }, function () { mode = "local"; render(); });
+    db.doc("meta/status").onSnapshot(function (doc) {
+      var body = doc.exists ? doc.data() : null;
+      status = body && (body.state === "submitted" || body.state === "applied") ? { state: body.state, at: body.at } : null;
+      render();
+    });
+  }, function () { mode = "local"; render(); });
+})();
+</script>

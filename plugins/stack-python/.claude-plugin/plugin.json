@@ -1,0 +1,8 @@
+{
+  "name": "stack-python",
+  "version": "0.8.0",
+  "description": "Python stack skill for devflow: venv setup, conventions, acceptance and verify_after_merge entries",
+  "author": { "name": "andras-tkcs" },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/andras-tkcs/claude-toolkit"
+}

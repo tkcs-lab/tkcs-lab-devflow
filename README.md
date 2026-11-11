@@ -1,1 +1,108 @@
-# tkcs-lab-devflow
+# claude-toolkit
+
+A plan → implement workflow for Claude Code on the web (claude.ai/code), for any repository in any
+language.
+
+- **`/setup`** (Sonnet) surveys the repository and creates or updates `.claude/toolkit.yaml`, including the `agents`
+  block, and delivers it as one pull request that it never merges. See [docs/guides/setup.md](docs/guides/setup.md).
+- **Agents.** Ten generic agents (architect, code-reviewer, security-reviewer, test-architect, tech-writer,
+  website-maintainer, ux-reviewer, debugger, dependency-auditor, refactorer) ship in `devflow`. The profile decides
+  which are mandatory at `/make-plan`, each `/implement` phase, the final review, `/review` and `/dod`, whether their
+  findings block, and how strict the security reviewer is. See [docs/architecture/agents.md](docs/architecture/agents.md).
+- **`/make-plan <what you want>`** (Opus) researches the repo, then writes either a self-contained
+  single-session prompt (small scope) or a plan document with a YAML implementation manifest on a
+  `plan/<slug>` branch (large scope), plus a step-by-step page for anything only a human can do. It
+  opens a tracking issue for the ask and keeps it up to date with the plan in plain words.
+- **`/implement <plan URL>`** (Sonnet) orchestrates a plan: one child cloud session per phase,
+  periodic check-ins, merges into one feature branch, verification after every merge, one Opus review
+  session, and one PR driven to green. It comments its progress on the tracking issue and the PR
+  closes it.
+- **`/dod`** runs the project's definition of done and reports a table.
+- **`/review [scope]`** (Opus) reviews the whole repository, some paths, or a PR in depth: security,
+  tests at the unit, integration and e2e levels, and the documentation and website (accuracy,
+  validity, completeness, clarity, readability). It verifies every finding, decides itself what to
+  fix and what not, and writes a review document on a `review/<slug>` branch. What only you can
+  decide goes onto an interactive page (add to the plan, create an issue, or drop); once you have
+  chosen, it updates the review and creates the issues. Then run `/make-plan <review URL>`.
+- **`/board [prune]`**: `/board` checks the connection to your self-hosted status board (a small Python
+  server you run, see [docs/guides/board-server.md](docs/guides/board-server.md)), and `/board prune` deletes the
+  stale records after you confirm.
+- **`/deps`** (scheduled, unattended) triages Dependabot pull requests and audit findings, fixes what
+  is red and opens pull requests. It never merges.
+- **`/upstream`** (scheduled, unattended) syncs a patch-carrying fork to the newest upstream release
+  tag as one commit in one pull request.
+- **`/land`** orders the bot's open pull requests, resolves conflicts before review, runs CI once on
+  the combined set and installs the workflow that updates the next pull request after each merge.
+- **`/docs [check | init | tidy]`** keeps the docs cheap to read: a thin `CLAUDE.md`, one docs index, docs opened
+  only when a row matches. `check` reports, `init` builds the structure and moves docs into place, `tidy` is the
+  unattended weekly cleanup. See [docs/guides/docs-index.md](docs/guides/docs-index.md).
+
+- **`repo-admin`** (a skill, run it with an organisation owner's token) audits a GitHub organisation and
+  its repositories against a policy file and updates what differs: settings, apps, tokens, secrets,
+  variables, labels, webhooks, deploy keys, unused config directories such as `.archon`, and the
+  workflows (for example the release workflow that cuts a tag). Dry run by default; irreversible changes
+  need `--allow-delete`; file changes go into a pull request it never merges.
+- **`git-ops`** (a skill) creates a tag or deletes a remote branch, which a cloud session cannot do itself, by starting a central workflow with its own token. Dry run first, an allowlist, no default or protected branch.
+
+See [docs/guides/review.md](docs/guides/review.md) for the review flow, [docs/guides/maintenance.md](docs/guides/maintenance.md)
+for the maintenance commands and the board, and [docs/guides/admin.md](docs/guides/admin.md) for `repo-admin`.
+
+Everything specific to your project lives in one file, `.claude/toolkit.yaml` (docs to read, branch
+rules, verify commands, CI workflows a session may dispatch, stacks, models). The commands contain no
+project facts and stop with a message naming the missing key.
+
+## Guardrails
+
+The `devflow` plugin ships Claude Code hooks (`plugins/devflow/hooks/`) that make the "never do X" rules
+deterministic. Every repository that enables the plugin gets them without a per-repository copy; project facts
+come from `.claude/toolkit.yaml`.
+
+| Hook | Denies |
+|---|---|
+| `no-merge` | merging or approving a pull request, enabling auto-merge, any push to the main branch (local `git merge` stays allowed) |
+| `no-force-push` | force pushes and deleting a branch by push |
+| `no-git-tag` | creating, moving, deleting or pushing tags (reading them stays allowed) |
+| `secret-scan` | writing a file with something that looks like a credential |
+| `protect-paths` | editing the profile, `.env*`, lockfiles and workflow files (the list is configurable) |
+| `dod-gate` | stopping while the definition of done is red; opt-in, loop-free, not for the `/implement` orchestrator |
+
+A hook that denies tells the agent what to do instead. `hooks.disable` in the profile switches a named hook off
+for one repository. **Branch protection and CI remain the hard enforcement**: the hooks are the fast in-loop layer
+and do not cover sessions without the plugin. See [docs/architecture/hooks.md](docs/architecture/hooks.md).
+
+Plugins are enabled per Claude Project, so every repository in a Project that enables `devflow` needs at least
+`git.main_branch` in its `.claude/toolkit.yaml`: without it `no-merge` denies every `git push` there. The hooks need
+`python3` 3.11+ and PyYAML on the `PATH` of the session; see
+[Installing and checking](docs/architecture/hooks.md#installing-and-checking).
+
+## Use it in a project
+
+1. Run `/setup` to create `.claude/toolkit.yaml` from what the repository shows (one pull request, never merged).
+   As the fallback, copy [`templates/toolkit.yaml`](templates/toolkit.yaml) to `.claude/toolkit.yaml` and fill it in by
+   hand. Reference: [docs/reference/profile-reference.md](docs/reference/profile-reference.md).
+2. Add the plugins in your Claude Project's settings (marketplace `tkcs-lab/claude-toolkit`), see
+   [docs/guides/delivery.md](docs/guides/delivery.md). `/setup` needs them, so add them before step 1 when you use it.
+3. Start a session and run `/make-plan <what you want>`.
+
+## What is here
+
+| Path | |
+|---|---|
+| `plugins/devflow` | the nine commands, the ten agents in `agents/`, the `project-profile`, `agent-dispatch`, `profile-setup`, `pr-steward`, `status-board`, `repo-admin`, `git-ops`, `review-checklist`, `secure-code-review`, `test-review`, `docs-review` and `docs-keeper` skills, the scripts in `scripts/` (manifest, profile and status-record validators, `review_decisions.py` with its page template, `build_board.py`, `board_stale.py`, `board_server.py`, `board_mcp.py`, `board_client.py`, `board_mcp_stdio.py`, `pick_release.py`, `agents.py`, `profile_survey.py`, `survey_signals.py`, `survey_docs.py`, `survey_proposal.py`, `profile_patch.py`, `upstream_sync.py`, `land_order.py`, `repo_admin.py`, `scope_check.py`, `docs_index.py`), `schema/profile.schema.json`, `schema/status-record.schema.json`, `schema/admin-policy.schema.json`, `hooks/` (the guardrail hooks and `hooks.json`), `.mcp.json`, `board/` (the status board page) and `templates/` (the `/land`, release and git-ops workflows, the starter admin policy and the git-ops allowlist example) |
+| `plugins/stack-python`, `plugins/stack-go`, `plugins/stack-swift`, `plugins/stack-ipados` | stack skills the profile selects (`ipados` goes with `swift`) |
+| `templates/toolkit.yaml` | starter profile |
+| `docs/` | [the docs index](docs/README.md), [the docs structure and `/docs`](docs/guides/docs-index.md), profile reference, delivery, design, [the guardrail hooks](docs/architecture/hooks.md), [the review flow](docs/guides/review.md), [the maintenance commands and the board](docs/guides/maintenance.md), [scope-drift monitoring in `/implement`](docs/architecture/scope-drift.md), [auditing and updating organisation and repository settings](docs/guides/admin.md), [the central git-ops workflow](docs/guides/git-ops.md), [the eval harness](docs/architecture/evals.md), [the agents](docs/architecture/agents.md), [`/setup`](docs/guides/setup.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |
+| `evals/` | eval harness: `python3 evals/run.py list\|validate\|run --dry-run`; real runs call the model and cost money, see [docs/architecture/evals.md](docs/architecture/evals.md) |
+| `tests/` | `python -m pytest tests -q` (Python 3.11+, PyYAML) |
+
+There is no server and nothing long-running: everything runs inside Claude Code sessions.
+
+## Development
+
+```
+python3 -m venv .venv && .venv/bin/pip install -r tests/requirements.txt
+.venv/bin/python -m pytest tests -q
+```
+
+The tests include a check that no project-specific word (a particular project's name, test runner
+or linter) appears in the generic plugin. Stack-specific words belong in the `plugins/stack-*` skills.

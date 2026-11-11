@@ -1,0 +1,18 @@
+id: make-plan-large
+description: A request that needs several phases must yield a plan whose manifest validates, has no cycle, disjoint touches per wave and mechanical acceptance.
+command: /devflow:make-plan
+arguments: >-
+  Plan this as a large, phased change with a plan document and manifest: add tags to notes (tags per note,
+  `list --tag` filtering, rename and delete tags), then export notes to markdown grouped by tag, a new
+  `notes/export_md.py` module with its own tests, and user documentation for all of it.
+  Decide every open question yourself; nobody can answer.
+fixture:
+  builder: tiny_app
+repeats: 3
+timeout_s: 1200
+cost_ceiling_usd: 4.0
+graders:
+  - manifest_valid
+  - acyclic_depends_on
+  - touches_disjoint_in_waves
+  - acceptance_runnable

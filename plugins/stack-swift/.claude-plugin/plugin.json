@@ -1,0 +1,8 @@
+{
+  "name": "stack-swift",
+  "version": "0.8.0",
+  "description": "Swift stack skill for devflow: SwiftPM in the container, Apple builds dispatched to a macOS runner",
+  "author": { "name": "andras-tkcs" },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/andras-tkcs/claude-toolkit"
+}
