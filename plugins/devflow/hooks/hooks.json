@@ -1,5 +1,5 @@
 {
-  "description": "devflow guardrails: deterministic versions of the never-do-X rules (docs/hooks.md in the claude-toolkit repo). Project facts come from .claude/toolkit.yaml; a hook can be switched off per repository with hooks.disable.",
+  "description": "devflow guardrails: deterministic versions of the never-do-X rules (docs/architecture/hooks.md in the claude-toolkit repo). Project facts come from .claude/toolkit.yaml; a hook can be switched off per repository with hooks.disable.",
   "hooks": {
     "PreToolUse": [
       {

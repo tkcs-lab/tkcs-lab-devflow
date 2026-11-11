@@ -45,7 +45,7 @@ Also load the `secure-code-review`, `test-review` and `docs-review` skills now: 
 checklists for the three dimensions, and every subagent you start gets told to load the one for
 its dimension.
 
-**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command writes a review document, not code. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
+**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/architecture/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command writes a review document, not code. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
 
 ## 0. The ask and the scope
 

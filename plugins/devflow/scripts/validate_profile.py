@@ -20,7 +20,7 @@ SCHEMA = Path(__file__).resolve().parent.parent / "schema" / "profile.schema.jso
 DEFAULT_PROFILE = ".claude/toolkit.yaml"
 REVIEW_AGENTS = ("security-reviewer", "dependency-auditor", "test-architect", "tech-writer", "website-maintainer")
 DIFF_POINTS = ("implement_phase", "implement_final", "dod")
-HELP = "see docs/profile-reference.md in the claude-toolkit repo"
+HELP = "see docs/reference/profile-reference.md in the claude-toolkit repo"
 
 _TYPES = {
     "object": dict,

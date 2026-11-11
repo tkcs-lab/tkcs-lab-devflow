@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Entry point of the eval harness. See docs/evals.md."""
+"""Entry point of the eval harness. See docs/architecture/evals.md."""
 import sys
 from pathlib import Path
 

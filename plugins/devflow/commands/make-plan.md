@@ -47,7 +47,7 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
   how to write `acceptance` and `verify_after_merge` entries for that stack.
 - "the agent rules" are the profile's agents section, read through the `agent-dispatch` skill; load it now.
 
-**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command writes a plan or a prompt, not code. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
+**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/architecture/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command writes a plan or a prompt, not code. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
 
 ## 0. Understand the ask
 
@@ -290,7 +290,7 @@ and no other plan adds it:
     done_when: get_me in a new session prints <bot_login> and the main branch requires a Code Owner review
 ```
 
-Its page section follows the identity checklist in `docs/profile-reference.md#second-github-user`.
+Its page section follows the identity checklist in `docs/reference/profile-reference.md#second-github-user`.
 
 Secrets never travel through chat, the plan, or the artifact. A step that produces a secret says
 exactly where the user stores it (the Claude Code environment's settings, or the repo's

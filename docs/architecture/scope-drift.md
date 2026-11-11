@@ -8,7 +8,7 @@ when it merges it and **records and reports** what it finds. It never blocks.
 ## What happens at each merge
 
 Before `git merge --no-ff`, `/implement` runs
-[`scripts/scope_check.py`](../plugins/devflow/scripts/scope_check.py) `check`. The script:
+[`scripts/scope_check.py`](../../plugins/devflow/scripts/scope_check.py) `check`. The script:
 
 1. Lists the files the phase branch changed since its merge base with the feature branch
    (`git diff --name-only --no-renames`). A rename counts as the old path deleted and the new path

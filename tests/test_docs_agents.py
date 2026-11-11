@@ -11,12 +11,12 @@ DOCS = ROOT / "docs"
 AGENTS = ["architect", "code-reviewer", "security-reviewer", "test-architect", "tech-writer",
           "website-maintainer", "ux-reviewer", "debugger", "dependency-auditor", "refactorer"]
 POINTS = ["make_plan", "implement_phase", "implement_final", "review", "dod"]
-LINKED = [DOCS / "agents.md", DOCS / "setup.md", DOCS / "design.md", DOCS / "hooks.md",
+LINKED = [DOCS / "architecture" / "agents.md", DOCS / "setup.md", DOCS / "architecture" / "design.md", DOCS / "architecture" / "hooks.md",
           DOCS / "maintenance.md", ROOT / "README.md"]
 
 
 def test_agents_doc_names_agents_and_points():
-    text = (DOCS / "agents.md").read_text()
+    text = (DOCS / "architecture" / "agents.md").read_text()
     for name in AGENTS + POINTS:
         assert f"`{name}`" in text, name
 
@@ -30,12 +30,12 @@ def test_setup_doc_names_scripts_and_branch():
 def test_readme_mentions_setup_and_agents_doc():
     text = (ROOT / "README.md").read_text()
     assert "/setup" in text
-    assert "docs/agents.md" in text
+    assert "docs/architecture/agents.md" in text
     assert "nine commands" in text
 
 
 def test_hooks_doc_documents_allow_profile():
-    text = (DOCS / "hooks.md").read_text()
+    text = (DOCS / "architecture" / "hooks.md").read_text()
     for needle in ("--allow-profile", "--end-allow", "two hours"):
         assert needle in text, needle
 

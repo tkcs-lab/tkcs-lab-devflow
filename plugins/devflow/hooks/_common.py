@@ -1,6 +1,6 @@
 """Shared plumbing of the devflow guardrail hooks (Python 3.11, standard library plus PyYAML).
 
-Contract with Claude Code (see docs/hooks.md): the event JSON arrives on stdin; exit 0 allows;
+Contract with Claude Code (see docs/architecture/hooks.md): the event JSON arrives on stdin; exit 0 allows;
 exit 2 blocks and the stderr text goes back to the agent; any other exit code is a non-blocking
 error that only the user sees. The destructive hooks (no-merge, no-force-push, no-git-tag) block on
 anything they cannot parse or on an internal error; the others report it and allow.
@@ -78,7 +78,7 @@ class Ctx:
         if not isinstance(value, str) or not value:
             why = f" ({self.profile_problem})" if self.profile_problem else ""
             raise ProfileError(f"toolkit.yaml: missing required key 'git.main_branch'{why}. The devflow "
-                               "guardrail hooks need it; see docs/profile-reference.md in the claude-toolkit repo.")
+                               "guardrail hooks need it; see docs/reference/profile-reference.md in the claude-toolkit repo.")
         return value
 
     def disabled(self, name: str) -> bool:
