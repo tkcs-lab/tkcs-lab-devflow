@@ -39,6 +39,11 @@ COMPAT = {
         ("git diff origin/main...HEAD", "git diff origin/<main>...HEAD"),
         ("git status --porcelain", "feature branch"),
     ],
+    "setup": [
+        ("git checkout -b chore/toolkit-profile origin/main", "chore/toolkit-profile"),
+        ("git push -u origin chore/toolkit-profile", "git push -u origin chore/toolkit-profile"),
+        ("git add .claude/toolkit.yaml", "commit only `.claude/toolkit.yaml`"),
+    ],
     "land": [
         ("git fetch origin main", "Fetch `origin/<main>`"),
         ("git checkout -b chore/land-20260101-0101 origin/main", "chore/land-<yyyymmdd-hhmm>"),
