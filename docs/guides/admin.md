@@ -19,7 +19,7 @@ token is available:
 ```
 gh auth login                      # or: export GH_TOKEN=...
 bin/tld ops repo-admin whoami --org your-org
-bin/tld ops repo-admin audit --policy .claude/admin-policy.yaml
+bin/tld ops repo-admin audit --policy .tld/admin-policy.yaml
 ```
 
 The token comes from `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token`, in that order. It is sent only to
@@ -32,8 +32,8 @@ endpoint that answered 401, 403 or 404, so you know which permission to grant.
 ## Use it in a project
 
 1. Copy [`src/tld/templates/admin-policy.yaml`](../../src/tld/templates/admin-policy.yaml)
-   to `.claude/admin-policy.yaml` (or anywhere in the repository), set `org` and edit.
-2. Set `admin.policy: .claude/admin-policy.yaml` in `.tld/toolkit.yaml` (see [profile-reference.md](../reference/profile-reference.md)).
+   to `.tld/admin-policy.yaml` (or anywhere in the repository), set `org` and edit.
+2. Set `admin.policy: .tld/admin-policy.yaml` in `.tld/toolkit.yaml` (see [profile-reference.md](../reference/profile-reference.md)).
 3. `tld ops repo-admin validate-policy <file>` checks the policy against
    [`schema/admin-policy.schema.json`](../../src/tld/schema/admin-policy.schema.json). An unknown key is an error.
 4. Run the `repo-admin` skill, or the script yourself.

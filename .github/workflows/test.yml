@@ -52,6 +52,7 @@ jobs:
             python bin/tld profile validate "$p" --no-file-checks
           done
           python bin/tld ops repo-admin validate-policy src/tld/templates/admin-policy.yaml
+          python bin/tld ops repo-admin validate-policy .tld/admin-policy.yaml
           for m in tests/fixtures/privacyfence-*-manifest.yaml; do
             python bin/tld plan validate-manifest "$m" --profile tests/fixtures/privacyfence-toolkit.yaml
           done

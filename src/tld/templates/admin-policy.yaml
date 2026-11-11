@@ -1,5 +1,5 @@
 # Starter policy for scripts/repo_admin.py (the repo-admin skill). Copy it next to your profile, for
-# example to .claude/admin-policy.yaml, set `admin.policy` in .tld/toolkit.yaml, and edit.
+# example to .tld/admin-policy.yaml, set `admin.policy` in .tld/toolkit.yaml, and edit.
 # A section you leave out is not managed. Everything irreversible is off here; turn it on once an
 # audit shows only what you expect. Reference: docs/guides/admin.md in https://github.com/tkcs-lab/tkcs-lab-devflow
 

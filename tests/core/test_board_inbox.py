@@ -2,6 +2,7 @@
 import json
 import os
 import subprocess
+import tempfile
 import threading
 import time
 import urllib.request
@@ -26,8 +27,12 @@ def env_for(url=None, token=WRITE):
     return env
 
 
+# Run outside this repository by default, so its own .tld/toolkit.yaml (git.owner_login) does not leak in.
+NEUTRAL_CWD = tempfile.mkdtemp(prefix="tld-inbox-")
+
+
 def tld(*args, env=None, stdin=None, cwd=None):
-    return subprocess.run([*tld_cmd("board", *args)], env=env or env_for(), input=stdin, cwd=cwd,
+    return subprocess.run([*tld_cmd("board", *args)], env=env or env_for(), input=stdin, cwd=cwd or NEUTRAL_CWD,
                           capture_output=True, text=True, timeout=60)
 
 

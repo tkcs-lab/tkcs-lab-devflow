@@ -89,7 +89,7 @@ stacks: []               # REQUIRED (may be []). Stack guides to load (stacks/<n
 #   version_file: "<file recording the synced tag>"
 
 # admin:                 # optional: the repo-admin skill stops with a missing-key message when absent
-#   policy: .claude/admin-policy.yaml   # starter: src/tld/templates/admin-policy.yaml
+#   policy: .tld/admin-policy.yaml   # starter: src/tld/templates/admin-policy.yaml
 
 # git_ops:               # optional: the git-ops skill stops with a missing-key message when absent
 #   repo: owner/name       # the central repository that holds the tld-git-ops workflow
