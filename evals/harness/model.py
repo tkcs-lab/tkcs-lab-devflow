@@ -49,6 +49,7 @@ class Artifacts:
     diff: str = ""
     merge_commits: list[str] = field(default_factory=list)
     documents: list[Doc] = field(default_factory=list)
+    origin_path: str | None = None                            # the bare origin repository, when graders may search it
 
 
 @dataclass
