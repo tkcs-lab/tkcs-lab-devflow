@@ -37,7 +37,7 @@ There is no workflow for running evals, because that needs a decision about wher
 credentials live (see "Decisions left open").
 
 A task is stochastic, so a task is run `repeats` times (default 3) and judged by its pass rate. One
-red run is a data point, not a verdict. Three tasks of three runs cannot detect a small regression;
+red run is a data point, not a verdict. A handful of tasks at three runs each cannot detect a small regression;
 they catch a command that stopped working.
 
 ## Running
@@ -68,12 +68,22 @@ signed in.
 4. The runner captures the final git state (refs, tags, merge commits, changed files across HEAD, the
    working tree and every other branch, the documents on them), the transcript, turns, tokens, cost and
    wall time.
-5. The graders run on that capture. The temp directory is deleted.
+5. The graders run on that capture. The temp directory is deleted (unless `--keep`).
 
-The real repository is never touched. The only network the session needs is the model API; the
-adapter strips GitHub, cloud and other token variables from the session's environment and denies
-`WebFetch` and `WebSearch`. It cannot sandbox arbitrary network use by a shell command; run evals on
-a machine you would let the agent loose on.
+The agent works in a temporary clone, not in this repository. It runs with an empty `HOME` and no
+proxy variables unless `--keep-proxy` is given; the network is otherwise not sandboxed: the adapter
+strips GitHub, cloud and other token variables from the session's environment and denies `WebFetch`
+and `WebSearch`, but cannot stop a shell command from using the network. The model needs
+`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` in your environment (a stored login is not usable
+with an empty `HOME`). Run evals on a machine you would let the agent loose on.
+
+Flags of `run`:
+
+- `--keep`: keep the temp directory of each run.
+- `--out FILE`: write the results there instead of `evals/results/<timestamp>.jsonl`.
+- `--agent stub --stub-dir DIR`: replay canned agent outputs from `DIR` instead of calling the model.
+- `--keep-proxy`: pass the proxy and CA variables through to the agent.
+- `--run-ceiling USD`: total spend limit for the invocation (see "Cost").
 
 ### Headless invocation (checked against Claude Code 2.1.322)
 
@@ -122,12 +132,12 @@ and by pytest.
 | `fixture` | `builder: <module in evals/fixtures>` (+ `params`), or `path: <dir under the task>` copied into a fresh repo |
 | `expected` | merged over what the fixture builder returns: the outcome graders compare with |
 | `plugin.ref` | git ref of the plugin to test (default `HEAD`); `plugin.extra`: more plugins, for example `stack-python` |
-| `model` | passed as `--model` |
+| `model` | passed as `--model`; ignored when the command's frontmatter sets `model:` |
 | `repeats` | default 3 |
 | `timeout_s` | default 900 |
 | `cost_ceiling_usd` | per run, default 2.0 |
 | `requires` | repository paths that must exist, else the task is `skipped` (not failed) |
-| `graders` | names, or `{name: ..., params}`, run in order; all must pass for a run to pass |
+| `graders` | names, or a mapping `{name: <grader>, <param>: <value>, …}` (parameters sit beside `name`, for example `{name: forbidden_ops_denied, ops: [tag]}`), run in order; all must pass for a run to pass |
 
 ### Fixtures
 
@@ -215,9 +225,10 @@ Each run appends one JSON line to `evals/results/<timestamp>.jsonl`: `task`, `re
 `tokens`, `cost_usd`, `duration_s`, `exit_status`, `transcript_file`. An `aborted` or `error` run counts
 as a failure; a `skipped` run is listed and not counted.
 
-Transcripts go to `evals/transcripts/` (gitignored), one file per run, scrubbed for token-shaped
-strings (the number of redactions is in the result line). A fixture contains no secrets, so a hit is
-unexpected; read a transcript before you share it anyway.
+Transcripts go to `evals/transcripts/` (gitignored), one file per run. Transcripts and results are
+scrubbed with the secret-scan patterns (the number of redactions is in the result line) and written
+with mode 0600. A fixture contains no secrets, so a hit is unexpected; a scrubber is not a guarantee,
+so read a transcript before you share it.
 
 ```bash
 python3 evals/run.py aggregate evals/results/<file>.jsonl     # pass rate per task
@@ -250,6 +261,8 @@ case, then re-run, rather than editing the baseline.
 ## Cost
 
 - `--dry-run` shows the per-task worst case before you spend anything.
+- `--run-ceiling` must be positive and finite. A run that times out is charged its full allowance.
+  The first ceiling hit stops the invocation with exit code 3.
 - Each run gets `--max-budget-usd` = min(task ceiling, what is left of `--run-ceiling`); the CLI stops
   itself at that line, the result is recorded `aborted: cost_ceiling`, and the invocation stops with
   exit code 3 and does not start another run. An agent that reports more than its allowance is

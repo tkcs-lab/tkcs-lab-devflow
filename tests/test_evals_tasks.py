@@ -111,3 +111,12 @@ def test_stub_agent_refuses_files_outside_the_workdir(tmp_path, key):
 
 def test_infinite_cost_ceiling_is_rejected():
     assert validate_task_data(_with(cost_ceiling_usd=float("inf")), KNOWN)
+
+
+def test_dry_run_shows_the_pinned_model_for_opus_commands(capsys):
+    from evals.harness import cli
+    assert cli.main(["run", "--dry-run", "--task", "make-plan-small", "--task", "make-plan-large",
+                     "--task", "review-seeded"]) == 0
+    out = capsys.readouterr().out
+    assert "model=sonnet" not in out
+    assert out.count("model=opus (command frontmatter)") == 3
