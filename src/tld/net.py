@@ -3,12 +3,18 @@
     from tld.net import SameHostRedirects, opener
 
 urllib copies every request header, `Authorization` included, to a redirect target. `SameHostRedirects`
-keeps it only when the target has the same scheme, host and port as the request (S18). Stdlib only.
+keeps it only when the target has the same scheme, host and port as the request (S18). The opener also sends
+`User-Agent: tld/<version>` unless a request sets its own: urllib's default `Python-urllib/3.x` is refused by
+Cloudflare's Browser Integrity Check (error 1010), which breaks a board behind Cloudflare. Stdlib only.
 """
 from __future__ import annotations
 
 import urllib.parse
 import urllib.request
+
+from tld import __version__
+
+USER_AGENT = f"tld/{__version__}"
 
 
 def same_origin(a: str, b: str) -> bool:
@@ -28,5 +34,10 @@ class SameHostRedirects(urllib.request.HTTPRedirectHandler):
 
 
 def opener() -> urllib.request.OpenerDirector:
-    """An opener that follows redirects with SameHostRedirects."""
-    return urllib.request.build_opener(SameHostRedirects)
+    """An opener that follows redirects with SameHostRedirects and identifies itself as tld/<version>.
+
+    A User-Agent set on the request itself wins over the opener's default.
+    """
+    built = urllib.request.build_opener(SameHostRedirects)
+    built.addheaders = [("User-Agent", USER_AGENT)]
+    return built

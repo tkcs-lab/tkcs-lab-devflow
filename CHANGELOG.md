@@ -5,6 +5,11 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+### Fixed
+
+- The board client and repo-admin send `User-Agent: tld/<version>` instead of urllib's default, which Cloudflare's
+  Browser Integrity Check refuses (error 1010), so a board behind Cloudflare is reachable from a session.
+
 ### Changed
 
 - The CLI launcher moved from `bin/tld` to `launcher/tld`: claude.ai refuses to sync a plugin with a top-level `bin/`
