@@ -62,9 +62,6 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 #   worker: sonnet
 #   reviewer: opus
 
-# status:               # optional. Where /implement writes its status record (the board URL printed by /board)
-#   board_url: https://claude.ai/artifact/...
-
 # scope:                 # optional: /implement reports files a phase changed outside its `touches`
 #   ignore:              # globs not counted as drift; default none. The changelog file is ignored on its own
 #     - "package-lock.json"   # example: a lockfile every phase may regenerate

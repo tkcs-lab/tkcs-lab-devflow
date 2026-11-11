@@ -1,5 +1,7 @@
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -19,6 +21,15 @@ def test_implement_has_status_board_section_after_never():
     assert "`status-board`" in text.split("\n## Status board")[1]
 
 
-def test_profile_schema_has_status_board_url():
+def test_profile_schema_has_no_status_key():
     schema = json.loads((DEVFLOW / "schema" / "profile.schema.json").read_text())
-    assert "board_url" in schema["properties"]["status"]["properties"]
+    assert "status" not in schema["properties"]
+
+
+def test_profile_with_the_old_status_key_is_rejected(tmp_path):
+    profile = tmp_path / "toolkit.yaml"
+    profile.write_text((ROOT / ".claude" / "toolkit.yaml").read_text() + "status:\n  board_url: https://example.org/x\n")
+    script = DEVFLOW / "scripts" / "validate_profile.py"
+    result = subprocess.run([sys.executable, str(script), str(profile)], capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "unknown key 'status'" in result.stderr

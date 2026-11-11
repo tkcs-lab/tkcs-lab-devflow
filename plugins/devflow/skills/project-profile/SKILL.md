@@ -69,7 +69,6 @@ rules follow from that:
 | `ci.dispatchable` | The dispatch table in `pr-steward`; what is not "manual" in a plan |
 | `stacks` | Which `stack-*` skills to load |
 | `models` | `planner`, `orchestrator` (documentation of intent; the command front matter fixes them), `worker`, `reviewer` (used in `create_session`) |
-| `status.board_url` | Where the `status-board` skill writes status records; unset falls back to `DEVFLOW_BOARD_URL` |
 | `scope.ignore` | Globs `/implement` does not count as scope drift (default none; the changelog file is always ignored) |
 | `project_steward` | A project skill or doc with policy that fits none of the keys |
 

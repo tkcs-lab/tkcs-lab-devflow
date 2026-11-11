@@ -80,7 +80,7 @@ land:
 
 Create one scheduled task per repository **in the claude.ai UI, with the repository attached to the
 task**, weekly, with the prompt `/deps` or `/upstream`, permission mode **auto**, and an environment
-that has the variable `DEVFLOW_BOARD_URL` (see the next section). Both commands ask nothing and stop
+that has the variables `DEVFLOW_BOARD_URL` and `DEVFLOW_BOARD_TOKEN` (see the next section). Both commands ask nothing and stop
 cleanly with `needs_you` on the status record when they are unsure. Pick a time outside the hours when
 you work in the repository.
 
@@ -91,12 +91,12 @@ work.
 
 ## The board
 
-`/board` publishes one private page that shows the status record of every project: `/implement` runs and
-the three maintenance commands. Run it once, store the printed URL as the environment variable
-`DEVFLOW_BOARD_URL` (it is not a secret) in every environment that should write to the board, or set
-`status.board_url` in a project's profile to override it for that project. The page reads the records
-live, so it is published once and left alone; run `/board` again with the same file path to change the
-page and keep the URL. Without a board URL the commands skip every board step.
+The board is the self-hosted server described in [board-server.md](board-server.md): it stores the
+status record of every project (`/implement` runs and the three maintenance commands) and serves a page
+that shows them. Set two variables in every environment that should write to it: `DEVFLOW_BOARD_URL`
+(not a secret) and `DEVFLOW_BOARD_TOKEN` (a secret you type into the environment settings). Without
+them the commands skip every board step. `/board` checks the connection and reports how many records
+there are; `/board prune` prunes.
 
 A phase chip shows `drift <n>` when the phase changed `n` files outside its `touches` (and `scope ?`
 when the check was unavailable): a count only, the paths are in the pull request's Scope section. What
