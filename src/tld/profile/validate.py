@@ -133,6 +133,9 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
     errors: list[str] = []
     warnings: list[str] = []
     docs = profile.get("docs", {})
+    changelog = docs.get("changelog")
+    if isinstance(changelog, dict) and "section" not in changelog and changelog.get("policy") != "release-only":
+        errors.append("missing required key 'docs.changelog.section' (only policy: release-only may leave it out)")
     if ("adr_index" in docs or "adr_bar" in docs) and "adr_dir" not in docs:
         errors.append("'docs.adr_index' / 'docs.adr_bar' need 'docs.adr_dir' (ADRs are used iff adr_dir is set)")
     git = profile.get("git", {})

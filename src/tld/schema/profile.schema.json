@@ -116,8 +116,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "file",
-            "section"
+            "file"
           ],
           "properties": {
             "file": {
@@ -127,7 +126,14 @@
             "section": {
               "type": "string",
               "minLength": 1,
-              "description": "Heading user-visible changes go under, for example '## [Unreleased]'."
+              "description": "Heading user-visible changes go under, for example '## [Unreleased]'. Required unless policy is release-only."
+            },
+            "policy": {
+              "enum": [
+                "unreleased",
+                "release-only"
+              ],
+              "description": "unreleased (default): sessions add lines under section and never open a version heading. release-only: the changelog is written when a release is cut; sessions do not edit it."
             }
           }
         },
@@ -265,6 +271,22 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "time_budget_minutes": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 480,
+          "description": "/ci starts no new workflow after 80% of this. Default 60."
+        },
+        "lookback_hours": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 168,
+          "description": "/ci looks at workflow runs of this many hours. Default 36."
+        },
+        "ignore_workflows": {
+          "$ref": "#/$defs/stringList",
+          "description": "Workflow file names /ci does not watch, for example a deliberately red canary."
+        },
         "dispatchable": {
           "type": "array",
           "items": {

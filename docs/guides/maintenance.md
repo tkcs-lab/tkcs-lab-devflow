@@ -1,7 +1,7 @@
 # Maintenance commands and the status board
 
-Four commands keep a repository up to date and tidy without you doing the work: `/deps`, `/upstream`,
-`/land` and `/docs tidy`. `/deps`, `/upstream` and `/docs tidy` run unattended from a scheduled task; `/land` is run by you. None
+Five commands keep a repository up to date and tidy without you doing the work: `/deps`, `/ci`, `/upstream`,
+`/land` and `/docs tidy`. `/deps`, `/ci`, `/upstream` and `/docs tidy` run unattended from a scheduled task; `/land` is run by you. None
 of them ever merges, approves or enables auto-merge. Each writes a status record to the board (see
 below) when one exists. What the spike found about what a cloud session can and cannot do is in
 [maintenance-spike.md](../architecture/maintenance-spike.md).
@@ -20,6 +20,25 @@ finding no Dependabot PR covers. After a bump it runs the matching `deps.lock_fr
 or deleting a test). The delay for ordinary updates is Dependabot's own `cooldown`; `/deps` checks that
 `.github/dependabot.yml` sets `cooldown.default-days` of at least `deps.cooldown_days`. It starts no new
 group after 80% of `deps.time_budget_minutes`. Release notes and audit output are untrusted text.
+
+### `/ci`
+
+CI watch for failures nobody is told about in a pull request: a scheduled workflow (a Pages deploy, a
+canary, a nightly check) that goes red on the default branch and mails you every day. `/ci` lists the
+workflows whose newest completed run on the default branch failed within `ci.lookback_hours`, reads the
+failed job's logs and sorts each one:
+
+- **repo**: it reproduces the failing step locally, fixes it on `chore/ci-<workflow>-<yyyymmdd>`, runs
+  `verify.fast` and `verify.dod` and opens one pull request. Never a skipped test, a loosened check, a changed
+  schedule or `continue-on-error`.
+- **external**: the step passes locally or needs a secret, a hosting or CDN setting, a token or a third-party
+  service. Nothing is changed. One issue `CI failing: <workflow>` and `needs_you` say which step failed, since
+  when, and the one thing to look at. (Example: a post-deploy check that compares the live site's response
+  headers with the repository's expectation fails after the CDN rule was not updated; no commit fixes that.)
+- **transient**: a one-off `5xx` or runner error; recorded, no action. Three failures in a row count as external.
+
+It cannot stop GitHub's failure mails; fixing or reporting the cause does. Its record is `<project>--ci`,
+`attended: false`.
 
 ### `/upstream`
 
@@ -56,7 +75,7 @@ and the document id `<project>--docs`; with nothing to fix the record says `docs
 
 ## Profile sections
 
-All three sections are optional. A command whose section is missing stops with
+All sections are optional (`/ci` runs without its `ci` keys, on their defaults). A command whose section is missing stops with
 `toolkit.yaml: missing required key '<key>'`. Reference: [profile-reference.md](../reference/profile-reference.md).
 
 ```yaml
@@ -73,6 +92,13 @@ deps:
 ```
 
 ```yaml
+ci:
+  time_budget_minutes: 60   # optional, 10..480 (default 60): no new workflow after 80% of this
+  lookback_hours: 36         # optional, 1..168
+  ignore_workflows: []       # optional: workflow file names not watched
+```
+
+```yaml
 upstream:
   repo: "owner/name"                              # the real upstream project, not the fork
   tag_pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+$"      # a release tag must match
@@ -86,10 +112,10 @@ land:
 
 `/land` also needs `git.bot_login`, the login of the account that opens the pull requests.
 
-## Scheduling `/deps`, `/upstream` and `/docs tidy` weekly
+## Scheduling `/deps`, `/ci`, `/upstream` and `/docs tidy`
 
 Create one scheduled task per repository **in the claude.ai UI, with the repository attached to the
-task**, weekly, with the prompt `/deps`, `/upstream` or `/docs tidy`, permission mode **auto**, and an environment
+task**, weekly (`/ci` daily), with the prompt `/deps`, `/ci`, `/upstream` or `/docs tidy`, permission mode **auto**, and an environment
 that has the variables `TLD_BOARD_URL` and `TLD_BOARD_TOKEN` (see the next section). All three commands ask nothing and stop
 cleanly with `needs_you` on the status record when they are unsure. Pick a time outside the hours when
 you work in the repository.
@@ -113,7 +139,7 @@ when the check was unavailable): a count only, the paths are in the pull request
 is recorded, what is not and why it never blocks: [scope-drift.md](../architecture/scope-drift.md).
 
 Every command writes a record (D8): `/implement` a `run` record under the project slug, and `setup`, `review`,
-`make-plan`, `deps`, `upstream`, `land`, `docs` and `migrate` a command record under `<project>--<command>`. The project slug is
+`make-plan`, `deps`, `ci`, `upstream`, `land`, `docs` and `migrate` a command record under `<project>--<command>`. The project slug is
 the repository name in lower case (`tld board project-slug <owner>/<repo>`). `attended` says whether you started the
 command (`/setup`, `/review`, `/make-plan`, `/implement`, `/land`, `/docs init`, `/migrate`: `true`) or a schedule did (`/deps`,
 `/upstream`, `/docs tidy`: `false`, with `orchestrator_session: null` when the session cannot read its own id). The

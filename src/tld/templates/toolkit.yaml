@@ -54,6 +54,9 @@ verify:
   # dod_doc: docs/contributing.md#definition-of-done   # optional pointer, quoted in the report
 
 # ci:
+#   time_budget_minutes: 60  # optional, 10..480 (default 60): /ci starts no new workflow after 80% of this
+#   lookback_hours: 36       # optional, 1..168 (default 36): how far back /ci looks at runs
+#   ignore_workflows: []     # optional: workflow file names /ci does not watch
 #   dispatchable:          # optional. Workflows a session may dispatch against its own branch for
 #     - workflow: macos-tests.yml        # work the cloud container cannot do. One line each.
 #       use_when: "Build or test an iOS/macOS target (xcodebuild, simulators)"
