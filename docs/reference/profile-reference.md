@@ -60,6 +60,9 @@ Rules:
 | `models` | no | The levels of the workers the playbooks start: `strong`, `standard` or `fast`. The adapter maps a level to a model (Claude: the `tld:runtime` skill) |
 | `models.worker` | no (default `standard`) | `/implement`'s phase, fix and conflict workers (a phase's `worker_level` overrides it) |
 | `models.reviewer` | no (default `strong`) | `/implement`'s final reviewer, `/make-plan`'s plan reviewer, `/review`'s roles and verifiers |
+| `ci.time_budget_minutes` | no | Integer 10..480 (default 60): `/ci` starts no new workflow after 80% of this |
+| `ci.lookback_hours` | no | Integer 1..168 (default 36): how far back `/ci` looks at workflow runs on the default branch |
+| `ci.ignore_workflows` | no | List of workflow file names `/ci` does not watch (for example a canary that is red on purpose) |
 | `deps.cooldown_days` | **yes** (in `deps`) | Integer 0..30: the Dependabot cooldown (days) the project's `.github/dependabot.yml` must set. `/deps` needs the `deps` section and stops with a missing-key message when it is absent |
 | `deps.time_budget_minutes` | **yes** (in `deps`) | Integer 10..480: `/deps` starts no new update group after 80% of this |
 | `deps.audit` | no | List of `{ecosystem, run, cwd?}`: commands that list vulnerable packages (sessions cannot read Dependabot alerts). Exit 0 = nothing found; non-zero = findings in the output. `cwd` is relative to the repo root |
