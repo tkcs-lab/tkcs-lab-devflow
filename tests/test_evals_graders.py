@@ -25,6 +25,8 @@ def plan_docs(manifest=None):
 
 
 PROFILE_OK = [("worktree", ".claude/toolkit.yaml", PROFILE)]
+AGENTS_EXPECTED = {"agents": {"posture": {"security": "critical"}, "required": [{"agent": "security-reviewer", "at": ["dod"], "blocking": False}]}}
+AGENTS_PROFILE = PROFILE + "agents:\n  posture:\n    security: critical\n  required:\n    - {agent: security-reviewer, at: [dod], blocking: false}\n"
 GOOD_STATUS = (FIXTURES / "status-records" / "good-run.json").read_text()
 
 # name -> (good ctx, [(label, bad ctx), ...])
@@ -70,6 +72,23 @@ CASES = {
         [("deleted", ctx([])),
          ("broken yaml", ctx([("worktree", ".claude/toolkit.yaml", "a: [")])),
          ("missing keys", ctx([("worktree", ".claude/toolkit.yaml", "docs: {}\n")]))],
+    ),
+    "agents_block_equals": (
+        ctx([("worktree", ".claude/toolkit.yaml", AGENTS_PROFILE)], expected=AGENTS_EXPECTED),
+        [("no profile", ctx([], expected=AGENTS_EXPECTED)),
+         ("other posture", ctx([("worktree", ".claude/toolkit.yaml", AGENTS_PROFILE.replace("critical", "low"))], expected=AGENTS_EXPECTED)),
+         ("no agents key", ctx(PROFILE_OK, expected=AGENTS_EXPECTED)),
+         ("only on a branch", ctx([("chore/x", ".claude/toolkit.yaml", AGENTS_PROFILE)], expected=AGENTS_EXPECTED)),
+         ("no expectation", ctx([("worktree", ".claude/toolkit.yaml", AGENTS_PROFILE)]))],
+    ),
+    "result_matches": (
+        ctx(result_text="AGENT-REPORT security-reviewer at=dod verdict=pass\n## Threat model", must=["AGENT-REPORT security-reviewer at=dod"],
+            must_not=["unexpected"]),
+        [("missing", ctx(result_text="nothing here", must=["AGENT-REPORT security-reviewer at=dod"])),
+         ("forbidden present", ctx(result_text="AGENT-REPORT x\n## Threat model", must=["AGENT-REPORT"], must_not=["## Threat model"])),
+         ("case sensitive", ctx(result_text="agent-report", must=["AGENT-REPORT"])),
+         ("empty", ctx(result_text="", must=["x"])),
+         ("misconfigured", ctx(result_text="x"))],
     ),
     "status_record_valid": (
         ctx([("worktree", "out/status.json", GOOD_STATUS)]),
