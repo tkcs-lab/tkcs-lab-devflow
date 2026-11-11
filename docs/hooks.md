@@ -217,8 +217,10 @@ hooks:
 `hooks.disable` is read from the profile as committed on the main branch (`origin/<main>`, else `<main>`), not from the
 working tree, so a feature branch cannot switch a guardrail off for itself; when the working tree's `hooks` section differs
 the hook shows a notice and applies only the committed list. In a repository with no commit yet, the working tree's list
-is used. The list must be a list of names; anything else is a profile error (see Parsing). The same caveat applies to
-`git.main_branch`: a branch can change it, which is why branch protection stays the backstop.
+is used. The list must be a list of names; anything else, in the working tree or on the main branch, is a profile
+error (see Parsing) even though only the committed list is applied. Two gaps are accepted: a branch can change
+`git.main_branch`, and the committed copy is read from local refs (`origin/<main>`, then `<main>`), which a session can
+rewrite, for example with `git update-ref refs/remotes/origin/main <sha>`. Branch protection stays the backstop.
 
 It is a profile change, and `.claude/toolkit.yaml` is protected from edits by sessions, so a person does it. Prefer a narrower tool
 first: `hooks.protect_paths_allow` for one more allowed path, a `secret-scan:allow` line mark for one false positive.
@@ -306,7 +308,8 @@ What changed in the commands: `/implement`, `/make-plan`, `/review` and `/land` 
   not known, and `curl` against the API is checked only for the merge endpoint.
 - **Writes the agent does not make through its tools:** secrets in Bash output, in a command line or in a commit message.
 - **A hook switched off** with `hooks.disable` on the main branch, or a profile edited by someone who may edit it. A
-  branch can still change `git.main_branch` in its own working tree.
+  branch can still change `git.main_branch` in its own working tree, and a session can rewrite the local refs the committed
+  copy is read from.
 - **A hook that has a bug.** The destructive hooks fail closed; the others fail open.
 
 ## Installing and checking

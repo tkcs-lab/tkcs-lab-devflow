@@ -119,6 +119,7 @@ def trusted_disable(ctx: Ctx) -> list[str]:
     With no commit yet (or no repository) no trusted copy can exist and the working tree's list is used."""
     if ctx.profile is None:
         return []
+    working = _disable_list(ctx.profile)  # validated even when only the committed list is applied
     git = ctx.profile.get("git")
     main = git.get("main_branch") if isinstance(git, dict) else None
     try:
@@ -127,7 +128,7 @@ def trusted_disable(ctx: Ctx) -> list[str]:
     except (OSError, subprocess.SubprocessError):
         head = False
     if not head:
-        return _disable_list(ctx.profile)
+        return working
     committed = _committed_profile(ctx.project_dir, main) if isinstance(main, str) and main else None
     if committed is None:
         return []
@@ -233,6 +234,8 @@ def execute(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: bool,
                 raise
             ctx.disable_error = exc  # the gate stays on and counts it as a failed attempt
         message = evaluate(ctx)
+        _disarm_budget(armed)  # before returning: an alarm in this window is still caught below
+        armed = None
     except HookBudgetExceeded:
         return Result(2, prefix + f"took longer than {HOOK_BUDGET_SECONDS} s, so the call is denied.")
     except ProfileError as exc:
