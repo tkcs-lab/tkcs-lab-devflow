@@ -1,52 +1,52 @@
 ---
-description: Publish the devflow status board page once, or prune the stale records from it
-argument-hint: "[empty to publish the board | prune]"
+description: Check the devflow status board connection, or prune the stale records from it
+argument-hint: "[empty to check the board | prune]"
 model: sonnet
 ---
 
-You publish and tidy the devflow status board: one private `Artifact` page that shows the status
-records of every project (`/implement` runs and the scheduled maintenance commands). The page reads
-the `projects` collection live, so it is published once and then left alone.
+You check and tidy the devflow status board: a server you host yourself that holds the status
+records of every project (`/implement` runs and the scheduled maintenance commands). This command
+publishes nothing; the board is reached with `DEVFLOW_BOARD_URL` and `DEVFLOW_BOARD_TOKEN`.
 
 $ARGUMENTS
 
 ## Profile
 
-Load the `project-profile` skill and follow its "Loading the profile" section. If it reports an
-error, show the message verbatim and stop; never substitute a value of your own for a missing key.
+Use the `project-profile` skill only for its 'Find the toolkit scripts' step; if it reports an error, show the message verbatim and stop; never substitute a path of your own.
 Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profile`,
 `devflow:pr-steward`, `stack-python:stack-python`). Use whichever form the skill list shows.
 
-The board URL comes from the profile key `status.board_url` when set, else from the environment
-variable `DEVFLOW_BOARD_URL`. The scripts named below sit next to the project-profile skill's
-scripts (see its "Find the toolkit scripts" step); call them from there.
+The scripts named below (`board_client.py`, `board_stale.py`) sit next to the project-profile
+skill's scripts; call them from there.
 
 ## `/board` (no argument)
 
-1. If a board URL is already set, say so and print it. Stop unless the user asked for a new board.
-2. Build the page: `build_board.py --title 'Devflow Board' --out <a file in your scratchpad directory, or /tmp>/board.html`.
-3. Publish that file with the `Artifact` tool and `capabilities: {db: {}}` (no other capability, so
-   viewers never see a consent dialog). Give it the icon `board`.
-4. Print the artifact URL. Tell the owner to store it once as the environment variable
-   `DEVFLOW_BOARD_URL` (it is not a secret), or to set `status.board_url` in a project's profile to
-   override it for that project. Do not store it anywhere yourself.
-
-The page has no buttons that write. To change the page later, run `/board` again with the same
-file path and the stored URL so the URL stays the same.
+1. Run `board_client.py health`. Exit 3: print the setup text and stop. The setup text: set the two
+   environment variables `DEVFLOW_BOARD_URL` (the server's base URL, not a secret) and
+   `DEVFLOW_BOARD_TOKEN` (the write token; type it into the environment settings yourself, never in
+   chat), allow the host in the environment's network settings, and host the server as described in
+   `docs/board-server.md` in the claude-toolkit repository. Exit 1: show its stderr and stop.
+2. Run `board_client.py list`. If it exits 3 (the URL is set but the token is not), print
+   "DEVFLOW_BOARD_URL is set but DEVFLOW_BOARD_TOKEN is not" and stop.
+3. Report: which write path this session has (the `board_*` tools of the `devflow-board` MCP server,
+   or `board_client.py` only), the number of records and how many need the owner (`needs_you` true;
+   count them from `board_list` or from the output of `board_client.py list`), and the board URL
+   (the value of `DEVFLOW_BOARD_URL`; never print the token).
 
 ## `/board prune`
 
-Needs a board URL (see Profile); without one, stop and say so.
+Needs a working board (steps 1 and 2 above succeed); without one, stop and say so.
 
-1. List the `projects` collection of that artifact with `ArtifactData` `list` (follow pages until
-   none are left) and save the documents as a JSON list of `{"id", "data"}`.
+1. Get all records with `board_list` or `board_client.py list`. Save the value of `records` (the
+   array of `{"id", "version", "data"}`, not the whole answer) as a JSON file in your scratchpad
+   directory, or `/tmp`.
 2. Run `board_stale.py FILE`. It prints one document id per line for every record the board hides
    (no update for more than 7 days, or finished earlier), never one with `needs_you: true`.
 3. If it prints nothing, say "Nothing to prune" and stop.
 4. Show each id with its `updated_at`, then ask exactly one question: delete these n records? yes
    or no.
-5. On yes, delete them with one `ArtifactData` `batch` of `delete` operations, one per id. On no,
-   delete nothing.
+5. On yes, delete them with `board_delete` (at most 50 ids per call) or
+   `board_client.py delete ID...`. On no, delete nothing.
 
-Nothing else is ever deleted: not a record that is not on that list, not the page, not a record
-because it looks old.
+Nothing else is ever deleted: not a record that is not on that list, not a record because it looks
+old.
