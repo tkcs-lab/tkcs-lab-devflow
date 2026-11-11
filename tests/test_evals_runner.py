@@ -195,8 +195,31 @@ def test_clean_env_drops_credentials(monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "x")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "x")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "keep")
+    monkeypatch.setenv("NPM_TOKEN", "x")
+    monkeypatch.setenv("GH_ENTERPRISE_TOKEN", "x")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "keep")
     env = clean_env()
     assert "GITHUB_TOKEN" not in env and "AWS_SECRET_ACCESS_KEY" not in env and env["ANTHROPIC_API_KEY"] == "keep"
+    assert "NPM_TOKEN" not in env and "GH_ENTERPRISE_TOKEN" not in env and env["CLAUDE_CODE_OAUTH_TOKEN"] == "keep"
+
+
+def test_clean_env_isolates_home_and_network(monkeypatch, tmp_path):
+    for k in ("HTTPS_PROXY", "https_proxy", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_EMAIL", "SSL_CERT_FILE"):
+        monkeypatch.setenv(k, "x")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "keep")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "keep")
+    monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
+    env = clean_env()
+    assert env["HOME"] != os.environ["HOME"]
+    for k in ("HTTPS_PROXY", "https_proxy", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_EMAIL", "SSL_CERT_FILE"):
+        assert k not in env
+    assert env["ANTHROPIC_API_KEY"] == "keep" and env["CLAUDE_CODE_OAUTH_TOKEN"] == "keep"
+    assert env["CLAUDE_CODE_USE_BEDROCK"] == "1"
+    assert env["GIT_AUTHOR_NAME"] and env["GIT_COMMITTER_EMAIL"]
+    home = tmp_path / "h"
+    assert clean_env(home=home)["HOME"] == str(home)
+    kept = clean_env(keep_proxy=True)
+    assert kept["HTTPS_PROXY"] == "x" and kept["SSL_CERT_FILE"] == "x"
 
 
 def test_parse_stream_extracts_metrics():
@@ -218,6 +241,21 @@ def test_parse_stream_flags_budget_stop_and_missing_plugin():
     res = parse_stream([json.dumps({"type": "system", "subtype": "init", "plugins": [], "plugin_errors": [{"message": "x"}]}),
                         json.dumps({"type": "result", "subtype": "error_max_budget_usd", "is_error": True})])
     assert res.aborted == "cost_ceiling" and "plugin did not load" in res.error
+
+
+def test_missing_plugin_is_an_error():
+    res = parse_stream([json.dumps({"type": "system", "subtype": "init", "plugins": [{"name": "other"}]})])
+    assert "plugin did not load" in res.error
+
+
+def test_run_requires_a_credential(monkeypatch, capsys):
+    from evals.harness import cli
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    monkeypatch.setattr(cli.ClaudeCodeAgent, "run", lambda *a, **k: pytest.fail("model called"))
+    assert cli.main(["run", "--task", "make-plan-large"]) == 2
+    assert "set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN" in capsys.readouterr().err
+    assert cli.main(["run", "--task", "make-plan-large", "--dry-run"]) == 0
 
 
 def test_tool_calls_pairs_results():
