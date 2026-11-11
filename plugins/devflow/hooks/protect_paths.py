@@ -18,6 +18,13 @@ from _gitgh import Item, iter_items
 from _shell import ParseError, base, is_dynamic
 
 NAME = "protect-paths"
+# Guardrail files: protected whatever the profile says (hooks.protect_paths and protect_paths_allow never remove them).
+ALWAYS_PROTECTED = [".claude/settings.json", ".claude/settings.local.json", ".git/config", ".git/hooks/**"]
+CONFIG_PREFIXES = ("alias.", "remote.", "push.", "branch.", "include.", "includeif.")
+CONFIG_WRITE_OPTS = {"--add", "--replace-all", "--unset", "--unset-all", "--rename-section", "--remove-section",
+                     "-e", "--edit"}
+CONFIG_VALUE_OPTS = {"-f", "--file", "--blob", "-t", "--type", "--default", "--comment"}
+BRACE_CAP = 64
 WRITE_OPS = {">", ">>", ">|", "&>", "&>>", ">&", "<>"}
 
 
@@ -70,16 +77,98 @@ def relative(ctx: Ctx, path: str, here: str) -> list[str]:
     return list(dict.fromkeys(found))
 
 
+def plugin_root_hit(path: str, here: str) -> str | None:
+    root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if not root:
+        return None
+    path = os.path.expanduser(path)
+    absolute = os.path.normpath(path if os.path.isabs(path) else os.path.join(here, path))
+    for cand in dict.fromkeys([absolute, os.path.realpath(absolute)]):
+        for r in dict.fromkeys([os.path.normpath(root), os.path.realpath(root)]):
+            if cand == r or cand.startswith(r.rstrip("/") + "/"):
+                return (f"blocked: `{cand}` is a protected path (it is under $CLAUDE_PLUGIN_ROOT, the installed "
+                        "plugin). Describe the change you need in your report instead.")
+    return None
+
+
 def violation(ctx: Ctx, path: str, here: str) -> str | None:
     protect = ctx.list_key("protect_paths", DEFAULT_PROTECT_PATHS)
     allow = BUILTIN_PROTECT_ALLOW + ctx.list_key("protect_paths_allow", [])
+    hit = plugin_root_hit(path, here)
+    if hit:
+        return hit
     for rel in relative(ctx, path, here):
+        for pat in ALWAYS_PROTECTED:
+            if matches(pat, rel):
+                return message(rel, pat)
         if any(matches(a, rel) for a in allow):
             continue
         for pat in protect:
             if matches(pat, rel):
                 return message(rel, pat)
     return None
+
+
+def hard_link_hit(ctx: Ctx, path: str, here: str) -> str | None:
+    """The write target is another name (hard link) for an existing protected file: same (device, inode)."""
+    target = os.path.normpath(os.path.expanduser(path) if os.path.isabs(os.path.expanduser(path))
+                              else os.path.join(here, os.path.expanduser(path)))
+    try:
+        st = os.stat(target)
+    except OSError:
+        return None
+    if st.st_nlink < 2 or not os.path.isfile(target):
+        return None
+    protect = ctx.list_key("protect_paths", DEFAULT_PROTECT_PATHS) + ALWAYS_PROTECTED
+    root = os.path.realpath(ctx.project_dir)
+    seen = 0
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in ("node_modules", ".venv", "__pycache__")]
+        for fn in filenames:
+            seen += 1
+            if seen > 50000:
+                return None
+            full = os.path.join(dirpath, fn)
+            try:
+                other = os.stat(full)
+            except OSError:
+                continue
+            if (other.st_dev, other.st_ino) != (st.st_dev, st.st_ino) or os.path.realpath(full) == os.path.realpath(target):
+                continue
+            rel = os.path.relpath(full, root)
+            if any(matches(p, rel) for p in protect):
+                return (f"blocked: `{path}` is a hard link to the protected path `{rel}`. "
+                        "Describe the change you need in your report instead.")
+    return None
+
+
+def expand_braces(word: str) -> list[str] | None:
+    """Bash brace expansion of `{a,b}` groups (nested allowed); None when the result exceeds BRACE_CAP."""
+    start = word.find("{")
+    while start != -1:
+        depth, commas, i = 0, [], start
+        while i < len(word):
+            c = word[i]
+            depth += c == "{"
+            depth -= c == "}"
+            if c == "," and depth == 1:
+                commas.append(i)
+            if depth == 0:
+                break
+            i += 1
+        if depth == 0 and commas:
+            bounds = [start, *commas, i]
+            out: list[str] = []
+            for a, b in zip(bounds, bounds[1:]):
+                sub = expand_braces(word[:start] + word[a + 1:b] + word[i + 1:])
+                if sub is None:
+                    return None
+                out += sub
+                if len(out) > BRACE_CAP:
+                    return None
+            return out
+        start = word.find("{", start + 1)
+    return [word]
 
 
 def message(rel: str, pattern: str) -> str:
@@ -154,6 +243,11 @@ def written_paths(it: Item) -> list[str]:
     if name == "git":
         if it.git and it.git.sub in ("rm", "mv"):
             paths += parse_args(it.git.args, set())[0]
+        elif it.git and it.git.sub == "checkout":
+            args = it.git.args
+            paths += args[args.index("--") + 1:] if "--" in args else []
+        elif it.git and it.git.sub == "restore":
+            paths += parse_args(it.git.args, {"--source", "-s", "--pathspec-from-file"})[0]
     elif name == "tee":
         paths += parse_args(args, set())[0]
     elif name == "dd":
@@ -177,21 +271,60 @@ def written_paths(it: Item) -> list[str]:
     return paths
 
 
+def config_violation(it: Item) -> str | None:
+    """`git config` writes of keys that can redirect pushes or run commands (alias, remote, push, branch, include)."""
+    if not it.git or it.git.sub != "config":
+        return None
+    positional, opts = parse_args(it.git.args, CONFIG_VALUE_OPTS)
+    names = {o for o, _ in opts}
+    write = bool(names & CONFIG_WRITE_OPTS) or len(positional) >= 2
+    keys = [k.lower() for k in positional[:2 if "--rename-section" in names else 1]]
+    if write and (not keys or any(k.startswith(CONFIG_PREFIXES) for k in keys)):
+        return ("blocked: `git config` write to " + (f"`{positional[0]}`" if positional else "the git configuration")
+                + " would change a protected path (git's configuration can redirect pushes or run commands). "
+                "Ask the user to make this change.")
+    return None
+
+
+def link_sources(it: Item) -> list[str]:
+    if not it.words or base(it.words[0]) != "ln":
+        return []
+    positional, opts = parse_args(it.words[1:], VALUE_OPTS["ln"])
+    if any(o in TARGET_DIR_OPTS for o, _ in opts) or len(positional) == 1:
+        return positional
+    return positional[:-1]
+
+
 def check_bash(ctx: Ctx, command: str) -> str | None:
     try:
         items = list(iter_items(ctx.cwd, command))
     except ParseError:
         return None  # the destructive hooks refuse unparseable commands; this one only guards paths
     for it in items:
+        msg = config_violation(it)
+        if msg:
+            return msg
+        for src in link_sources(it):
+            if is_dynamic(src):
+                continue
+            for cand in expand_braces(src) or [src]:
+                msg = violation(ctx, cand, it.dir) or violation(ctx, os.path.join(cand, "x"), it.dir)
+                if msg:
+                    return msg
         for path in written_paths(it):
             if is_dynamic(path):
                 continue
-            expanded = globmod.glob(os.path.join(it.dir, os.path.expanduser(path))) if any(
-                ch in path for ch in "*?[") else []
-            for candidate in [path, *expanded]:
-                msg = violation(ctx, candidate, it.dir)
-                if msg:
-                    return msg
+            words = expand_braces(path)
+            if words is None:
+                return (f"blocked: `{path}` expands to more than {BRACE_CAP} paths, so it cannot be checked "
+                        "against the protected paths.")
+            for word in words:
+                expanded = globmod.glob(os.path.join(it.dir, os.path.expanduser(word))) if any(
+                    ch in word for ch in "*?[") else []
+                for candidate in [word, *expanded]:
+                    msg = violation(ctx, candidate, it.dir) or hard_link_hit(ctx, candidate, it.dir)
+                    if msg:
+                        return msg
     return None
 
 

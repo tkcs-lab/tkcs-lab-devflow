@@ -57,6 +57,12 @@ DENIED_BASH = [
     "git mv .env .env.old", "ln -sf x .env", "bash -c 'echo x > .env'", "cd sub && echo x > ../.env", "cd . && rm uv.lock",
     "echo ok; echo x > .github/workflows/ci.yml", "echo $(echo x > .env)", "sudo rm .env", "FOO=1 tee .env",
     "echo x > ./.env", "echo x > docs/../.env",
+    "ln .env notes2", "ln -s .env notes && echo B=2 >> notes", "ln -s .github/workflows wf && echo 'on: push' > wf/ci.yml",
+    "echo B=2 | tee .{env,tmp}", "git checkout origin/x -- .claude/toolkit.yaml",
+    "git restore --source origin/x .claude/toolkit.yaml", "git restore --source=origin/x -S -W .env",
+    "git checkout -- .env", "git config alias.p push", "git config remote.origin.push HEAD:main",
+    "git config --add include.path ../x", "git config --unset branch.main.remote", "git config -e",
+    "git config Alias.p push",
 ]
 ALLOWED_BASH = [
     "cat .env", "grep x .env", "echo x > out.txt", "cp .env /tmp/backup", "cp .env.example /tmp/x",
@@ -66,6 +72,8 @@ ALLOWED_BASH = [
     "python3 -m pip install x", "echo x > .env.example", "cp x .github/workflows/devflow-land.yml", "diff .env other",
     "mv x y", "cat <<EOF > notes.md\n.env\nEOF", "rm .envrc.md", "ls .github/workflows", "grep -r x .github/workflows",
     "echo $(cat .env)", "bash -c 'cat .env'", "git status", 'echo x > "$OUT"',
+    "git config user.name x", "git config --get alias.p", "git config --list", "git config alias.p",
+    "git checkout feature", "git restore src/a.py", "git checkout -- src/a.py", "echo x > a.{txt,md}",
 ]
 
 
@@ -129,3 +137,44 @@ def test_script_contract(feature_repo):
     ok = run_script(HOOK, event("Write", feature_repo, file_path="a.py", content="x"))
     assert (ok.returncode, ok.stdout, ok.stderr) == (0, "", "")
     assert run_script(HOOK, {}, project=feature_repo, stdin="oops").returncode == 1
+
+
+@pytest.mark.parametrize("path", [".git/config", ".claude/settings.json", ".claude/settings.local.json",
+                                  ".git/hooks/pre-push"])
+def test_guardrail_files_are_always_protected(tmp_path, monkeypatch, path):
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    repo = make_repo(tmp_path / "r", "feature/demo",
+                     "git:\n  main_branch: main\nhooks:\n  protect_paths: []\n  protect_paths_allow: ['**']\n")
+    assert run(HOOK, event("Write", repo, file_path=path, content="x")).code == 2
+    assert run(HOOK, bash(f"echo x > {path}", repo)).code == 2
+    assert run(HOOK, event("Write", repo, file_path="a.py", content="x")).code == 0
+
+
+def test_the_plugin_root_is_protected(feature_repo, tmp_path, monkeypatch):
+    root = tmp_path / "plugin"
+    root.mkdir()
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(root))
+    assert run(HOOK, event("Write", feature_repo, file_path=str(root / "hooks" / "x.py"), content="x")).code == 2
+    assert run(HOOK, bash(f"echo x > {root}/hooks/x.py", feature_repo)).code == 2
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", "")
+    assert run(HOOK, event("Write", feature_repo, file_path=str(root / "x.py"), content="x")).code == 0
+
+
+def test_a_hard_link_made_earlier_is_recognised_by_inode(fresh_repo):
+    (fresh_repo / ".env").write_text("A=1\n")
+    os.link(fresh_repo / ".env", fresh_repo / "notes2")
+    assert run(HOOK, bash("echo C=3 >> notes2", fresh_repo)).code == 2
+    (fresh_repo / "plain.txt").write_text("x")
+    assert run(HOOK, bash("echo C=3 >> plain.txt", fresh_repo)).code == 0
+
+
+def test_matcher_units():
+    from protect_paths import matches
+    assert matches("**/secret.txt", "secret.txt")
+    assert matches("a/**/b", "a/b")
+    assert matches("?.env", "x.env")
+    assert not matches("?.env", "xy.env")
+
+
+def test_unparseable_commands_are_allowed(feature_repo):
+    assert run(HOOK, bash("echo 'unterminated > .env", feature_repo)).code == 0
