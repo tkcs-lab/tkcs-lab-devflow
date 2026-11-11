@@ -1,20 +1,21 @@
-"""Shared plumbing of the tld guardrail hooks (Python 3.11, standard library plus PyYAML).
+"""Shared plumbing of the tld guards (Python 3.11, standard library plus PyYAML).
 
-Contract with Claude Code (see docs/architecture/hooks.md): the event JSON arrives on stdin; exit 0 allows;
-exit 2 blocks and the stderr text goes back to the agent; any other exit code is a non-blocking
-error that only the user sees. The destructive hooks (no-merge, no-force-push, no-git-tag) block on
-anything they cannot parse or on an internal error; the others report it and allow.
+`run_guard(name, evaluate, fail_closed, action, settings)` loads the project profile for the Action,
+applies `hooks.disable` from the trusted copy (trust.py), runs the guard's `evaluate(ctx)` within a time
+budget and returns a Decision. The destructive guards (no-merge, no-force-push, no-git-tag) deny on
+anything they cannot parse and on an internal error; the others report it (verdict `error`) and allow.
+An adapter turns the runtime's event into the Action and the Decision into the runtime's reply.
 """
 from __future__ import annotations
 
-import json
 import os
 import signal
-import subprocess
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, NamedTuple
+from typing import Callable
+
+from tld.guard import trust
+from tld.guard.action import Action, Decision, Settings
 
 HOOK_NAMES = ("no-merge", "no-force-push", "no-git-tag", "secret-scan", "protect-paths", "dod-gate")
 PROFILE = Path(".tld") / "toolkit.yaml"
@@ -26,7 +27,7 @@ DEFAULT_PROTECT_PATHS = [".tld/toolkit.yaml", ".env", ".env.*", "*.lock", "packa
 BUILTIN_PROTECT_ALLOW = [".env.example", ".env.sample", ".env.template", ".env.dist",
                          ".github/workflows/tld-land.yml", ".github/workflows/tld-release.yml"]
 DEFAULT_MAX_ATTEMPTS = 3
-HOOK_BUDGET_SECONDS = 15  # below the 20 s hook timeout, so a slow destructive hook denies instead of being killed
+HOOK_BUDGET_SECONDS = 15  # below a 20 s runtime timeout, so a slow destructive guard denies instead of being killed
 
 
 class HookBudgetExceeded(BaseException):
@@ -34,48 +35,80 @@ class HookBudgetExceeded(BaseException):
     around a git call cannot swallow it."""
 
 
-def exit_import_error(name: str, exc: BaseException) -> None:
-    """A destructive hook could not load its helpers: deny (exit 2) instead of crashing with status 1."""
-    print(f"tld {name}: internal error while loading ({type(exc).__name__}: {exc}).", file=sys.stderr)
-    sys.exit(2)
-
-
 class ProfileError(Exception):
-    """A project fact the hook needs is missing or malformed. The message is shown to the agent."""
+    """A project fact the guard needs is missing or malformed. The message is shown to the agent."""
+
+
+def _list_value(section: dict, key: str) -> list[str] | None:
+    value = section.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+        raise ProfileError(f"toolkit.yaml: 'hooks.{key}' must be a list of non-empty strings")
+    return list(value)
+
+
+def _hooks(profile: dict | None) -> dict:
+    section = (profile or {}).get("hooks")
+    if section is None:
+        return {}
+    if not isinstance(section, dict):
+        raise ProfileError("toolkit.yaml: 'hooks' must be a mapping")
+    return section
+
+
+def _main_of(profile: dict | None) -> str | None:
+    git = (profile or {}).get("git")
+    value = git.get("main_branch") if isinstance(git, dict) else None
+    return value if isinstance(value, str) and value else None
 
 
 @dataclass
 class Ctx:
-    payload: dict
-    cwd: str
+    action: Action
     project_dir: str
     profile: dict | None
     profile_problem: str | None = None
-    tool: str = ""
-    tool_input: dict = field(default_factory=dict)
-    notice: str | None = None  # shown to the user (stdout `systemMessage`) when the hook allows
+    settings: Settings = field(default_factory=Settings)
+    notice: str | None = None  # shown to the user when the guard allows
     disable_error: ProfileError | None = None  # dod-gate only: a malformed hooks.disable, re-raised by its evaluate
+    _trusted: tuple | None = None
+
+    @property
+    def cwd(self) -> str:
+        return self.action.cwd
 
     def hooks_section(self) -> dict:
-        section = (self.profile or {}).get("hooks")
-        if section is None:
-            return {}
-        if not isinstance(section, dict):
-            raise ProfileError("toolkit.yaml: 'hooks' must be a mapping")
-        return section
+        return _hooks(self.profile)
+
+    def trusted(self) -> tuple[dict | None, bool]:
+        """(trusted profile, available); fetched once per guard run."""
+        if self._trusted is None:
+            self._trusted = trust.trusted_profile(self.project_dir, _main_of(self.profile))
+        return self._trusted
 
     def list_key(self, key: str, default: list[str]) -> list[str]:
-        value = self.hooks_section().get(key)
-        if value is None:
+        """A protect list. From the trusted copy when there is one; otherwise the defaults plus the
+        working tree's entries. An allow list (`*_allow`) is never taken from the working tree."""
+        working = _list_value(self.hooks_section(), key)  # validated even when it is not applied
+        trusted, available = self.trusted()
+        if available:
+            value = _list_value(_hooks(trusted), key)
+            return list(default) if value is None else value
+        if key.endswith("_allow"):
             return list(default)
-        if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
-            raise ProfileError(f"toolkit.yaml: 'hooks.{key}' must be a list of non-empty strings")
-        return value
+        return list(dict.fromkeys([*default, *(working or [])]))
+
+    def main_branches(self) -> list[str]:
+        """The main branch of the working tree's profile, plus the trusted copy's when that names another."""
+        main = self.require_main_branch()
+        trusted, available = self.trusted()
+        other = _main_of(trusted) if available else None
+        return [main] + ([other] if other and other != main else [])
 
     def require_main_branch(self) -> str:
-        git = (self.profile or {}).get("git")
-        value = git.get("main_branch") if isinstance(git, dict) else None
-        if not isinstance(value, str) or not value:
+        value = _main_of(self.profile)
+        if value is None:
             why = f" ({self.profile_problem})" if self.profile_problem else ""
             raise ProfileError(f"toolkit.yaml: missing required key 'git.main_branch'{why}. The tld "
                                "guardrail hooks need it; see docs/reference/profile-reference.md in the tkcs-lab-devflow repo.")
@@ -85,73 +118,38 @@ class Ctx:
         return name in trusted_disable(self)
 
 
-def _committed_profile(project: str, main: str) -> dict | None:
-    """The profile as committed on origin/<main>, else <main>; None when neither can be read."""
-    import yaml
-    for ref in (f"origin/{main}", main):
-        try:
-            r = subprocess.run(["git", "-C", project, "show", f"{ref}:{PROFILE.as_posix()}"], capture_output=True,
-                               text=True, timeout=5, stdin=subprocess.DEVNULL)
-            if r.returncode == 0:
-                data = yaml.safe_load(r.stdout)
-                return data if isinstance(data, dict) else None
-        except (OSError, subprocess.SubprocessError, yaml.YAMLError):
-            continue
-    return None
-
-
-def _disable_list(profile: dict) -> list[str]:
-    section = profile.get("hooks")
-    if section is None:
-        return []
-    if not isinstance(section, dict):
-        raise ProfileError("toolkit.yaml: 'hooks' must be a mapping")
-    value = section.get("disable")
-    if value is None:
-        return []
-    if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
-        raise ProfileError("toolkit.yaml: 'hooks.disable' must be a list of non-empty strings")
-    return list(value)
-
-
 def trusted_disable(ctx: Ctx) -> list[str]:
-    """`hooks.disable` as committed on the main branch, so a branch cannot switch a guardrail off for itself.
-    With no commit yet (or no repository) no trusted copy can exist and the working tree's list is used."""
+    """`hooks.disable` from the trusted copy only; [] when there is none (every guard on)."""
     if ctx.profile is None:
         return []
-    working = _disable_list(ctx.profile)  # validated even when only the committed list is applied
-    git = ctx.profile.get("git")
-    main = git.get("main_branch") if isinstance(git, dict) else None
-    try:
-        head = subprocess.run(["git", "-C", ctx.project_dir, "rev-parse", "--verify", "-q", "HEAD"],
-                              capture_output=True, text=True, timeout=5, stdin=subprocess.DEVNULL).returncode == 0
-    except (OSError, subprocess.SubprocessError):
-        head = False
-    if not head:
-        return working
-    committed = _committed_profile(ctx.project_dir, main) if isinstance(main, str) and main else None
-    if committed is None:
+    working = _list_value(ctx.hooks_section(), "disable") or []
+    trusted, available = ctx.trusted()
+    if not available:
+        if working:
+            ctx.notice = ("no trusted copy of the profile could be read from the remote main branch, so "
+                          "hooks.disable is ignored and every guard is on")
         return []
-    if committed.get("hooks") != ctx.profile.get("hooks"):
-        ctx.notice = (f"the working tree's hooks section differs from the committed {main} profile; "
-                      "only the committed hooks.disable is applied")
-    return _disable_list(committed)
+    committed = _list_value(_hooks(trusted), "disable") or []
+    if (trusted or {}).get("hooks") != ctx.profile.get("hooks"):
+        ctx.notice = (f"the working tree's hooks section differs from the {_main_of(ctx.profile)} profile on the "
+                      "remote; only the remote hooks.disable and protect lists are applied")
+    return committed
 
 
-def find_project(cwd: str) -> tuple[str, dict | None, str | None]:
-    """Project directory, parsed profile (or None) and the reason there is none."""
+def find_project(cwd: str, hint: str | None = None) -> tuple[str, dict | None, str | None]:
+    """Project directory, parsed profile (or None) and the reason there is none. `hint` is the project
+    directory the runtime names, if any: the walk up from cwd stops there and never leaves it."""
     starts = []
-    env = os.environ.get("CLAUDE_PROJECT_DIR")
     start = Path(cwd or os.getcwd())
     outside = False
-    if env:
-        root = Path(env).resolve()
-        starts.append(Path(env))
+    if hint:
+        root = Path(hint).resolve()
+        starts.append(Path(hint))
         try:
             inside = start.resolve().is_relative_to(root)
         except OSError:
             inside = False
-        if inside:  # the walk up from cwd stops at the project directory
+        if inside:
             for d in (start, *start.parents):
                 starts.append(d)
                 if d.resolve() == root:
@@ -174,22 +172,13 @@ def find_project(cwd: str) -> tuple[str, dict | None, str | None]:
                 return str(d), None, f"{PROFILE} must be a YAML mapping"
             return str(d), data, None
     if outside and (start / PROFILE).is_file():
-        return env or str(start), None, f"{PROFILE} outside CLAUDE_PROJECT_DIR ignored"
-    return env or str(start), None, f"no {PROFILE} found from {start}"
+        return hint or str(start), None, f"{PROFILE} outside the project directory ignored"
+    return hint or str(start), None, f"no {PROFILE} found from {start}"
 
 
-def make_ctx(payload: dict) -> Ctx:
-    cwd = payload.get("cwd") if isinstance(payload.get("cwd"), str) and payload.get("cwd") else os.getcwd()
-    project, profile, problem = find_project(cwd)
-    tool_input = payload.get("tool_input")
-    return Ctx(payload, cwd, project, profile, problem, str(payload.get("tool_name") or ""),
-               tool_input if isinstance(tool_input, dict) else {})
-
-
-class Result(NamedTuple):
-    code: int
-    stderr: str = ""
-    stdout: str = ""
+def make_ctx(action: Action, settings: Settings) -> Ctx:
+    _, profile, problem = find_project(action.cwd, settings.project_hint or action.project_dir)
+    return Ctx(action, action.project_dir, profile, problem, settings)
 
 
 def _arm_budget():
@@ -213,22 +202,18 @@ def _disarm_budget(armed) -> None:
         signal.signal(signal.SIGALRM, armed[0])
 
 
-def execute(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: bool, stdin_text: str) -> Result:
-    """Run one hook on the raw stdin text."""
+def run_guard(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: bool, action: Action,
+              settings: Settings | None = None) -> Decision:
+    """Run one guard on one Action."""
     prefix = f"tld {name}: "
-    problem_code = 2 if fail_closed else 1
-    try:
-        payload = json.loads(stdin_text)
-        if not isinstance(payload, dict):
-            raise ValueError("the event is not a JSON object")
-    except ValueError as exc:
-        return Result(problem_code, prefix + f"cannot read the hook event ({exc}).")
+    settings = settings or Settings()
     armed = _arm_budget() if fail_closed else None
+    ctx = None
     try:
-        ctx = make_ctx(payload)
+        ctx = make_ctx(action, settings)
         try:
             if ctx.disabled(name):
-                return Result(0)
+                return Decision("allow")
         except ProfileError as exc:
             if name != "dod-gate":
                 raise
@@ -237,24 +222,18 @@ def execute(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: bool,
         _disarm_budget(armed)  # before returning: an alarm in this window is still caught below
         armed = None
     except HookBudgetExceeded:
-        return Result(2, prefix + f"took longer than {HOOK_BUDGET_SECONDS} s, so the call is denied.")
+        return Decision("deny", prefix + f"took longer than {HOOK_BUDGET_SECONDS} s, so the call is denied.")
     except ProfileError as exc:
-        return Result(2, prefix + str(exc))
-    except Exception as exc:  # noqa: BLE001 - a hook must never crash into an allow
-        return Result(problem_code, prefix + f"internal error ({type(exc).__name__}: {exc}).")
+        return Decision("deny", prefix + str(exc))
+    except Exception as exc:  # noqa: BLE001 - a guard must never crash into an allow
+        return Decision("deny" if fail_closed else "error", prefix + f"internal error ({type(exc).__name__}: {exc}).")
     finally:
         _disarm_budget(armed)
     if message:
-        return Result(2, prefix + message)
-    if ctx.notice:
-        return Result(0, "", json.dumps({"systemMessage": prefix + ctx.notice}))
-    return Result(0)
+        return Decision("deny", prefix + message)
+    return Decision("allow", "", prefix + ctx.notice if ctx.notice else None)
 
 
-def main(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: bool) -> None:
-    result = execute(name, evaluate, fail_closed, sys.stdin.read())
-    if result.stdout:
-        print(result.stdout)
-    if result.stderr:
-        print(result.stderr, file=sys.stderr)
-    sys.exit(result.code)
+def problem(name: str, fail_closed: bool, text: str) -> Decision:
+    """A Decision for an input the adapter could not read."""
+    return Decision("deny" if fail_closed else "error", f"tld {name}: {text}")

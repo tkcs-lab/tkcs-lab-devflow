@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""Claude Code hook entry: runs tld.dod.gate on the hook event JSON from stdin.
-
-A thin shim: the policy lives in the core package (src/tld/dod/gate.py).
-"""
+"""Claude Code hook entry for `dod-gate`: the adapter (claude_adapter.py) turns the event into a tld.guard Action."""
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from tld.dod import gate as hook  # noqa: E402
+from claude_adapter import main  # noqa: E402
 
 if __name__ == "__main__":
-    hook.main()
+    main("dod-gate")
