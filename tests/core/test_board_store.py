@@ -119,11 +119,29 @@ def test_an_old_database_is_migrated_and_keeps_its_records(tmp_path):
     db.commit()
     db.close()
     store = Store(str(path))
-    assert store.schema_version() == 2
+    assert store.schema_version() == 3
     assert store.get("f-running-ok") == {"id": "f-running-ok", "version": 7, "data": record()}
     ask = store.create_ask(ask_doc())
     reopened = Store(str(path))  # idempotent on a migrated database
     assert reopened.get_ask(ask["id"]) == ask and reopened.count() == 1
+
+
+def test_a_version_2_database_gains_the_revoked_sessions_table(tmp_path):
+    import sqlite3
+    path = tmp_path / "v2.sqlite3"
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE records(id TEXT PRIMARY KEY, version INTEGER NOT NULL, data TEXT NOT NULL)")
+    db.execute("CREATE TABLE asks(id TEXT PRIMARY KEY, state TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL)")
+    db.execute("PRAGMA user_version = 2")
+    db.commit()
+    db.close()
+    store = Store(str(path))
+    assert store.schema_version() == 3 and not store.session_revoked("a" * 32)
+    store.revoke_session("a" * 32, 2000, now=1000)
+    store.revoke_session("b" * 32, 1500, now=1000)
+    assert Store(str(path)).session_revoked("a" * 32)  # kept across a reopen (a server restart)
+    store.revoke_session("c" * 32, 3000, now=1600)  # prunes what expired by now
+    assert not store.session_revoked("b" * 32) and store.session_revoked("a" * 32)
 
 
 def test_a_newer_database_is_refused(tmp_path):

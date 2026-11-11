@@ -298,7 +298,9 @@ stale records with `tld board client delete`, after you confirmed the list.
 When the board is not configured or cannot be reached, `tld board ask <file> --fallback-issue <owner>/<repo>[#<n>]`
 exits 5 and prints the comment body; the session posts it on the tracking issue (or a new issue) with its
 GitHub tool. The body mentions `git.owner_login` from the profile (else the repository owner) and lists the
-questions. Reply on the issue with one line per question:
+questions, with an example reply as plain lines between `-- example reply --` and `-- end of example --` (no
+code fence). Reply on the issue with one plain line per question, outside any code block, quote or HTML
+comment (text there never counts), for example:
 
 ```
 SEC-1: plan
@@ -306,17 +308,27 @@ go: yes
 notes: one line of text
 ```
 
-Only replies by the owner or a collaborator with write access count; the session reads them with
-`tld board answers --from-issue` (see `playbooks/runtime.md`, `ask_human`).
+Only replies by the owner (every `--owner`, else `git.owner_login`, else the repository owner) or by an admin
+count; replies by collaborators with write or maintain access never do (the agent account has write), and neither
+do the session's own login (`--self LOGIN`, required) and the fallback comment itself. The session reads them with
+`tld board answers --from-issue COMMENTS.json --ask FILE --self LOGIN` (see `playbooks/runtime.md`, `ask_human`).
 
 ## Security notes
 
-* The passphrase is compared in constant time (on SHA-256 digests). Wrong passphrases lock the client out
-  after 5 failures for 2 s, doubling up to 15 minutes, and all clients together get at most 30 failures a
-  minute. The counters live in memory: a restart clears them.
+* The passphrase is compared in constant time (on SHA-256 digests). Wrong passphrases lock that client out
+  after 5 failures for 2 s, doubling up to 15 minutes; a successful login clears it. A client is its IPv4 address
+  or its IPv6 /64 network. When all clients together exceed 30 failures a minute, every login attempt is slowed
+  down (by at most 2 s) but nobody is locked out, so a flood from many addresses cannot keep the owner from
+  logging in. The counters live in memory: a restart clears them.
+* `--trust-proxy` keys the limiter on the **rightmost** `X-Forwarded-For` entry, the one the proxy appended.
+  Only a single trusted proxy in front of the board is supported; behind a chain of proxies every client would
+  share the key of the inner proxy, and without `--trust-proxy` behind a proxy every client shares the proxy's.
+* A connection that sends nothing for 15 s is closed, a request body must arrive within 30 s (else `408`), and
+  at most 64 connections are served at once; one more gets `503` and is closed.
 * The cookie is `HttpOnly`, `Secure` (unless `--insecure-cookie`), `SameSite=Strict`, `Path=/`, named
   `__Host-tld_owner`, signed with HMAC-SHA256 and valid for `--session-hours`. Logout ends the session on the
-  server too.
+  server too, and the logged-out session is kept in the database (`revoked_sessions`, schema version 3), so a
+  restart does not bring it back.
 * Every owner `POST` checks the `Origin` (and `Sec-Fetch-Site` when sent) and a CSRF token bound to the
   session. The session token cannot answer asks; the cookie cannot write records.
 * The page is served with a Content-Security-Policy that allows only its own inline script and style and

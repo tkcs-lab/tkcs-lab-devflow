@@ -60,7 +60,7 @@ def make_repo_with_origin(path, branch="feature/demo", committed=PROFILE, workin
     path = Path(path)
     repo = make_repo(path, "main", committed)
     bare = path.parent / (path.name + "-origin.git")
-    git(path.parent, "init", "-q", "--bare", str(bare))
+    git(path.parent, "init", "-q", "--bare", "-b", "main", str(bare))
     git(repo, "remote", "add", "origin", str(bare))
     git(repo, "push", "-q", "origin", "main")
     if branch != "main":

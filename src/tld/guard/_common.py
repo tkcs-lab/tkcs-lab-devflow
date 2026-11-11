@@ -75,7 +75,7 @@ class Ctx:
     settings: Settings = field(default_factory=Settings)
     notice: str | None = None  # shown to the user when the guard allows
     disable_error: ProfileError | None = None  # dod-gate only: a malformed hooks.disable, re-raised by its evaluate
-    _trusted: tuple | None = None
+    _trusted: trust.Trusted | None = None
 
     @property
     def cwd(self) -> str:
@@ -84,11 +84,17 @@ class Ctx:
     def hooks_section(self) -> dict:
         return _hooks(self.profile)
 
-    def trusted(self) -> tuple[dict | None, bool]:
-        """(trusted profile, available); fetched once per guard run."""
+    def trust(self) -> trust.Trusted:
+        """The trusted copy (profile on the remote default branch); looked up once per guard run. The branch is
+        the one the remote reports, never the working tree's `git.main_branch`."""
         if self._trusted is None:
-            self._trusted = trust.trusted_profile(self.project_dir, _main_of(self.profile))
+            self._trusted = trust.trusted(self.project_dir)
         return self._trusted
+
+    def trusted(self) -> tuple[dict | None, bool]:
+        """(trusted profile, available)."""
+        t = self.trust()
+        return t.profile, t.available
 
     def list_key(self, key: str, default: list[str]) -> list[str]:
         """A protect list. From the trusted copy when there is one; otherwise the defaults plus the
@@ -103,11 +109,16 @@ class Ctx:
         return list(dict.fromkeys([*default, *(working or [])]))
 
     def main_branches(self) -> list[str]:
-        """The main branch of the working tree's profile, plus the trusted copy's when that names another."""
+        """Every name the main branch may have, the working tree's first: its `git.main_branch`, the remote's
+        default branch (also when the trusted copy itself is unavailable), the trusted profile's
+        `git.main_branch` and the local `origin/HEAD`; when there is an origin whose default branch is not known,
+        also `main` and `master`. A longer list only protects more."""
         main = self.require_main_branch()
-        trusted, available = self.trusted()
-        other = _main_of(trusted) if available else None
-        return [main] + ([other] if other and other != main else [])
+        t = self.trust()
+        names = [main, t.branch, _main_of(t.profile) if t.available else None, trust.origin_head(self.project_dir)]
+        if t.origin and not t.branch:
+            names += list(trust.FALLBACK_MAINS)
+        return list(dict.fromkeys(n for n in names if isinstance(n, str) and n))
 
     def require_main_branch(self) -> str:
         value = _main_of(self.profile)
@@ -129,12 +140,13 @@ def trusted_disable(ctx: Ctx) -> list[str]:
     trusted, available = ctx.trusted()
     if not available:
         if working:
-            ctx.notice = ("no trusted copy of the profile could be read from the remote main branch, so "
-                          "hooks.disable is ignored and every guard is on")
+            why = f" ({ctx.trust().problem})" if ctx.trust().problem else ""
+            ctx.notice = ("no trusted copy of the profile could be read from the remote default branch" + why +
+                          ", so hooks.disable is ignored and every guard is on")
         return []
     committed = _list_value(_hooks(trusted), "disable") or []
     if (trusted or {}).get("hooks") != ctx.profile.get("hooks"):
-        ctx.notice = (f"the working tree's hooks section differs from the {_main_of(ctx.profile)} profile on the "
+        ctx.notice = (f"the working tree's hooks section differs from the {ctx.trust().branch} profile on the "
                       "remote; only the remote hooks.disable and protect lists are applied")
     return committed
 

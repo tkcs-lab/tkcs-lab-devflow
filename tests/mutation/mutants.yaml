@@ -31,6 +31,7 @@ tests:
   - tests/core/test_guard_mutations.py
   - tests/core/test_hook_protect_paths_setup.py
   src/tld/guard/_common.py:
+  - tests/core/test_guard_trust.py
   - tests/adapters/claude/test_hooks_config.py
   - tests/core/test_guard_corpus.py
   - tests/core/test_hook_no_force_push.py
@@ -41,6 +42,17 @@ tests:
   src/tld/guard/_wrappers.py:
   - tests/core/test_guard_mutations.py
   - tests/core/test_guard_corpus.py
+  src/tld/guard/integrity.py:
+  - tests/core/test_guard_corpus.py
+  - tests/core/test_guard_trust.py
+  src/tld/guard/trust.py:
+  - tests/core/test_guard_trust.py
+  src/tld/guard/_gitgh.py:
+  - tests/core/test_guard_corpus.py
+  - tests/core/test_hook_protect_paths.py
+  src/tld/guard/_trees.py:
+  - tests/core/test_guard_corpus.py
+  - tests/core/test_guard_trust.py
 
 mutants:
 - id: NM1
@@ -345,3 +357,88 @@ mutants:
   why: script --command=CMD not unwrapped
   old: '            return tok[len("--command="):]'
   new: '            return None'
+- id: TR1
+  file: src/tld/guard/trust.py
+  why: the trusted branch taken from the working tree again (the remote default ignored)
+  old: "            branch = left[len(\"ref: refs/heads/\"):].strip()"
+  new: "            branch = None"
+- id: TR2
+  file: src/tld/guard/trust.py
+  why: replace objects honoured by the trust lookup
+  old: "GIT_NO_REPLACE_OBJECTS=\"1\""
+  new: "GIT_NO_REPLACE_OBJECTS_OFF=\"1\""
+- id: TR3
+  file: src/tld/guard/trust.py
+  why: a repointed origin URL still trusted
+  old: "    if recorded and recorded != url:"
+  new: "    if False:"
+- id: TR4
+  file: src/tld/guard/trust.py
+  why: a moved refs/tld/trusted still trusted
+  old: "    if _ref_sha(project) != sha:\n        return Trusted(branch=branch, problem="
+  new: "    if False:\n        return Trusted(branch=branch, problem="
+- id: CM2
+  file: src/tld/guard/_common.py
+  why: main and master not protected while the remote default is unknown
+  old: "            names += list(trust.FALLBACK_MAINS)"
+  new: "            names += []"
+- id: IN1
+  file: src/tld/guard/integrity.py
+  why: a local push to refs/tld/ allowed
+  old: "            if dst.startswith(GUARD_REF_PREFIXES + (\"refs/remotes/\",)) or (local and _hits_protected(dst, mains)):"
+  new: "            if False:"
+- id: IN2
+  file: src/tld/guard/integrity.py
+  why: git replace allowed
+  old: "        if not listing:\n            return msg.format(ref=\"refs/replace/ (git replace)\")"
+  new: "        if False:\n            return msg.format(ref=\"refs/replace/ (git replace)\")"
+- id: IN3
+  file: src/tld/guard/integrity.py
+  why: git remote rename onto origin allowed
+  old: "    names = positional[:2] if sub == \"rename\" else positional[:1]"
+  new: "    names = positional[:1]"
+- id: IN4
+  file: src/tld/guard/integrity.py
+  why: any $X/bin/tld exempt from the run-time command check
+  old: "    if stripped not in PLUGIN_LAUNCHERS:\n        return False"
+  new: "    if not stripped.endswith(\"/bin/tld\"):\n        return False"
+- id: IN5
+  file: src/tld/guard/integrity.py
+  why: shell writes into .git/refs allowed for the destructive guards
+  old: "                if rel.split(os.sep)[0] in GIT_DIR_PARTS:"
+  new: "                if False:"
+- id: IN6
+  file: src/tld/guard/integrity.py
+  why: url.*.insteadOf config writes allowed
+  old: "    return key.startswith(\"url.\") and key.endswith((\".insteadof\", \".pushinsteadof\"))"
+  new: "    return False"
+- id: GG1
+  file: src/tld/guard/_gitgh.py
+  why: the git 2.46 `git config set` subcommand not understood
+  old: "    sub = positional.pop(0) if positional and positional[0] in CONFIG_SUBS else None"
+  new: "    sub = None"
+- id: PP9
+  file: src/tld/guard/protect_paths.py
+  why: .git/refs writes not protected
+  old: "\".git/refs/**\", "
+  new: ""
+- id: TT1
+  file: src/tld/guard/_trees.py
+  why: a recursive cp of a directory not checked as a whole-directory write
+  old: "        if name == \"cp\" and not _recursive(opts, \"rRa\", (\"--recursive\", \"--archive\")):"
+  new: "        if name == \"cp\":"
+- id: TT2
+  file: src/tld/guard/_trees.py
+  why: an ancestor of an anchored protected pattern allowed
+  old: "                if \"/\" in pat.strip(\"/\") and prefix.startswith(rel + \"/\"):"
+  new: "                if False:"
+- id: TT3
+  file: src/tld/guard/_trees.py
+  why: archives not checked
+  old: "                if ch == \"x\":\n                    extract = True"
+  new: "                if ch == \"x\":\n                    extract = False"
+- id: GT9
+  file: src/tld/guard/no_git_tag.py
+  why: curl to the releases endpoint allowed
+  old: "    msg = check_curl_tag_api(it)\n    if msg:"
+  new: "    msg = None\n    if msg:"

@@ -166,26 +166,43 @@ def test_login_rate_limit_locks_out_with_backoff(tmp_path):
         assert limiter.retry_after("127.0.0.1") == 0  # a success clears the client
 
 
-def test_login_limiter_caps_the_lockout_and_the_global_rate():
+def test_login_limiter_caps_the_lockout_and_only_slows_down_globally():
     clock = [0.0]
     limiter = board_server.LoginLimiter(clock=lambda: clock[0])
     for _ in range(40):
         limiter.failure("a")
     assert limiter.retry_after("a") == board_server.LoginLimiter.MAX_LOCK
-    other = board_server.LoginLimiter(clock=lambda: clock[0])
-    for n in range(board_server.LoginLimiter.GLOBAL_MAX):
+    slept = []
+    other = board_server.LoginLimiter(clock=lambda: clock[0], sleep=slept.append)
+    for n in range(board_server.LoginLimiter.GLOBAL_MAX * 3):
         other.failure(f"ip{n}")  # one failure each: no client is locked
-    assert other.retry_after("fresh") > 0  # but everybody waits
+    assert other.retry_after("fresh") == 0  # nobody is locked out by the others' failures
+    assert other.delay() == board_server.LoginLimiter.MAX_DELAY  # but every attempt waits, at most 2 s
+    other.slow_down()
+    assert slept == [board_server.LoginLimiter.MAX_DELAY]
     clock[0] += board_server.LoginLimiter.WINDOW + 1
-    assert other.retry_after("fresh") == 0
+    assert other.delay() == 0
 
 
-def test_trust_proxy_keys_the_limiter_on_x_forwarded_for(tmp_path):
-    limiter = board_server.LoginLimiter()
+def test_a_flood_of_wrong_passphrases_does_not_lock_the_owner_out(tmp_path):
+    slept = []
+    limiter = board_server.LoginLimiter(sleep=slept.append)
     with running(tmp_path, limiter=limiter, trust_proxy=True) as srv:
-        call(srv, "POST", "/login", body={"passphrase": "w" * 20}, origin=True,
-             headers={"X-Forwarded-For": "203.0.113.9, 198.51.100.7"})
-    assert set(limiter._fails) == {"198.51.100.7"}
+        for n in range(board_server.LoginLimiter.GLOBAL_MAX + 5):
+            assert call(srv, "POST", "/login", body={"passphrase": "w" * 20}, origin=True,
+                        headers={"X-Forwarded-For": f"203.0.113.{n}"})[0] == 401
+        status, _, _ = call(srv, "POST", "/login", body={"passphrase": PASSPHRASE}, origin=True,
+                            headers={"X-Forwarded-For": "198.51.100.1"})
+        assert status == 200 and slept and max(slept) <= board_server.LoginLimiter.MAX_DELAY
+
+
+def test_limiter_keys_ipv6_by_its_64_and_unwraps_mapped_ipv4():
+    assert board_server.client_key("2001:db8:1:2:aaaa::1") == board_server.client_key("2001:db8:1:2:bbbb::9")
+    assert board_server.client_key("2001:db8:1:2::1") == "2001:db8:1:2::/64"
+    assert board_server.client_key("2001:db8:1:3::1") != board_server.client_key("2001:db8:1:2::1")
+    assert board_server.client_key("::ffff:203.0.113.9") == "203.0.113.9"
+    assert board_server.client_key("203.0.113.9") == "203.0.113.9"
+    assert board_server.client_key("not an ip" + "x" * 100) == ("not an ip" + "x" * 100)[:64]
 
 
 def test_passphrase_compare_is_constant_time_on_digests():
@@ -246,6 +263,72 @@ def test_logout_revokes_the_session(server, owner):
     assert status == 200 and "Max-Age=0" in headers["Set-Cookie"]
     assert call(server, "GET", "/api/records", cookie=cookie)[0] == 401
     assert call(server, "GET", "/api/session", cookie=cookie)[2]["owner"] is False
+
+
+def test_logout_survives_a_restart_and_login_works_after_it(tmp_path):
+    with running(tmp_path) as srv:
+        cookie, csrf = login(srv)
+        assert call(srv, "POST", "/logout", cookie=cookie, csrf=csrf, origin=True)[0] == 200
+    with running(tmp_path) as srv:  # a new process: same database, a fresh OwnerAuth
+        assert call(srv, "GET", "/api/records", cookie=cookie)[0] == 401
+        fresh, _ = login(srv)  # board login after a restart
+        assert call(srv, "GET", "/api/records", cookie=fresh)[0] == 200
+
+
+def test_a_silent_or_trickling_client_is_dropped(tmp_path, monkeypatch):
+    import socket
+    import time
+    assert board_server.Handler.timeout == board_server.SOCKET_TIMEOUT == 15
+    monkeypatch.setattr(board_server.Handler, "timeout", 0.5)
+    monkeypatch.setattr(board_server, "BODY_DEADLINE", 0.6)
+    with running(tmp_path) as srv:
+        port = srv.server_address[1]
+        idle = socket.create_connection(("127.0.0.1", port), timeout=5)
+        idle.sendall(b"GET /healthz HTTP/1.1\r\nHost: x\r\n")  # headers never finish
+        start = time.monotonic()
+        assert idle.recv(1024) == b"" and time.monotonic() - start < 4  # closed by the server
+        slow = socket.create_connection(("127.0.0.1", port), timeout=5)
+        slow.sendall(b"POST /login HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nContent-Length: 50\r\n"
+                     b"Origin: http://127.0.0.1:%d\r\n\r\n" % (port, port))
+        reply = b""
+        for _ in range(8):  # one byte at a time, each in time for the socket timeout, never the whole body
+            try:
+                slow.sendall(b"{")
+            except OSError:
+                break
+            time.sleep(0.2)
+            slow.settimeout(0.01)
+            try:
+                reply += slow.recv(4096)
+            except (TimeoutError, BlockingIOError, socket.timeout):
+                pass
+            slow.settimeout(5)
+            if reply:
+                break
+        assert b" 408 " in reply.split(b"\r\n", 1)[0]
+        idle.close()
+        slow.close()
+
+
+def test_connections_beyond_the_cap_get_503(tmp_path):
+    import socket
+    with running(tmp_path, max_connections=2) as srv:
+        port = srv.server_address[1]
+        held = [socket.create_connection(("127.0.0.1", port), timeout=5) for _ in range(2)]
+        for h in held:
+            h.sendall(b"GET /healthz HTTP/1.1\r\nHost: x\r\n\r\n")  # keep-alive: the slot stays taken
+            assert b"200" in h.recv(4096)
+        extra = socket.create_connection(("127.0.0.1", port), timeout=5)
+        assert extra.recv(4096).startswith(b"HTTP/1.1 503")
+        extra.close()
+        for h in held:
+            h.close()
+        import time
+        for _ in range(50):  # the slots come back once the held connections close
+            if call(srv, "GET", "/healthz")[0] == 200:
+                break
+            time.sleep(0.05)
+        assert call(srv, "GET", "/healthz")[0] == 200
 
 
 def test_without_a_passphrase_the_owner_ui_is_off(tmp_path):

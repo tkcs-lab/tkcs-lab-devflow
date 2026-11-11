@@ -219,7 +219,7 @@ def test_disable_must_be_a_list(tmp_path):
 def test_a_non_list_disable_in_the_working_tree_blocks_even_with_a_committed_profile(tmp_path):
     repo = make_repo(tmp_path / "r", "main", "git:\n  main_branch: main\n")
     bare = tmp_path / "origin.git"
-    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(tmp_path, "init", "-q", "--bare", "-b", "main", str(bare))
     git(repo, "remote", "add", "origin", str(bare))
     git(repo, "push", "-q", "origin", "main")
     git(repo, "checkout", "-q", "-b", "feature/demo")
@@ -268,7 +268,7 @@ def test_hooks_without_pyyaml(tmp_path):
 def test_disable_in_a_branch_with_a_bogus_main_branch_is_ignored(tmp_path):
     repo = make_repo(tmp_path / "r", "main", "git:\n  main_branch: main\n")
     bare = tmp_path / "origin.git"
-    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(tmp_path, "init", "-q", "--bare", "-b", "main", str(bare))
     git(repo, "remote", "add", "origin", str(bare))
     git(repo, "push", "-q", "origin", "main")
     git(repo, "checkout", "-q", "-b", "feature/demo")

@@ -171,7 +171,7 @@ def test_disable_flag(tmp_path):
 def _repo_with_origin(tmp_path, committed_profile):
     repo = make_repo(tmp_path / "r", "main", committed_profile)
     bare = tmp_path / "origin.git"
-    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(tmp_path, "init", "-q", "--bare", "-b", "main", str(bare))
     git(repo, "remote", "add", "origin", str(bare))
     git(repo, "push", "-q", "origin", "main")
     git(repo, "checkout", "-q", "-b", "feature/demo")
@@ -252,7 +252,7 @@ def _with_origin(tmp_path, branch):
     """A repo on `branch`, cut from origin/main, with a real bare origin that has main (and `feature`)."""
     repo = make_repo(tmp_path / "w", branch)
     bare = tmp_path / "origin.git"
-    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(tmp_path, "init", "-q", "--bare", "-b", "main", str(bare))
     git(repo, "remote", "add", "origin", str(bare))
     git(repo, "push", "-q", "origin", "main")
     git(repo, "push", "-q", "origin", f"{branch}:feature")

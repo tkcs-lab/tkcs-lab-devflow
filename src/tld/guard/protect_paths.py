@@ -13,22 +13,21 @@ import os
 import re
 import sys
 
-from tld.guard import _common, markers
+from tld.guard import _common, _trees, markers
 from tld.guard._common import BUILTIN_PROTECT_ALLOW, DEFAULT_PROTECT_PATHS, GUARDED_WORKFLOWS, Ctx
-from tld.guard._gitgh import Item, iter_items
+from tld.guard._gitgh import Item, iter_items, parse_config
 from tld.guard._shell import ParseError, base, is_dynamic
 
 NAME = "protect-paths"
 # Guardrail files: protected whatever the profile says (hooks.protect_paths and protect_paths_allow never remove them).
 # Neutral ones only; the Claude adapter passes its own (`~/.claude/**`, `.mcp.json`) as settings.extra_protected.
-ALWAYS_PROTECTED = [".git/config", ".git/hooks/**", ".git/tld/**"]  # .git/tld: the guards' own markers
+# .git/tld: the guards' own markers; refs, packed-refs, objects and info: what the trusted ref and its profile are read from
+ALWAYS_PROTECTED = [".git/config", ".git/hooks/**", ".git/tld/**", ".git/refs/**", ".git/packed-refs",
+                    ".git/info/**", ".git/objects/**"]
 # Protected on their absolute/home path, wherever the write is (S8): git's own configuration.
 ALWAYS_PROTECTED_ABS = ["~/.gitconfig", "~/.config/git/**"]
 CONFIG_PREFIXES = ("alias.", "remote.", "push.", "branch.", "include.", "includeif.", "url.")
 CONFIG_EXACT = ("core.hookspath",)  # sets the hooks directory; can run arbitrary code on the next git command
-CONFIG_WRITE_OPTS = {"--add", "--replace-all", "--unset", "--unset-all", "--rename-section", "--remove-section",
-                     "-e", "--edit"}
-CONFIG_VALUE_OPTS = {"-f", "--file", "--blob", "-t", "--type", "--default", "--comment"}
 BRACE_CAP = 64
 WRITE_OPS = {">", ">>", ">|", "&>", "&>>", ">&", "<>"}
 PROFILE = ".tld/toolkit.yaml"
@@ -314,13 +313,18 @@ def written_paths(it: Item) -> list[str]:
         elif it.git and it.git.sub == "restore":
             paths += parse_args(it.git.args, {"--source", "-s", "--pathspec-from-file"})[0]
         elif it.git and it.git.sub == "apply":  # S17: applies a patch; the files it writes are named inside it
-            for pf in parse_args(it.git.args, {"--exclude", "--include", "--directory", "-p",
-                                               "--build-fake-ancestor", "--whitespace"})[0]:
+            files = parse_args(it.git.args, {"--exclude", "--include", "--directory", "-p",
+                                             "--build-fake-ancestor", "--whitespace"})[0] or _stdin_files(it)
+            for pf in files:
                 paths += patch_targets(os.path.join(it.dir, os.path.expanduser(pf)))
-    elif name == "patch":  # S17: `patch target < diff`, or `patch -i diff target`
-        positional, _ = parse_args(args, {"-i", "--input", "-o", "--output", "-p", "--strip", "-d", "--directory",
-                                          "-B", "-r", "-D", "-F", "-g", "-z", "-V"})
+    elif name == "patch":  # S17: `patch target < diff`, `patch -i diff target`, `patch -p1 < diff`
+        positional, opts = parse_args(args, {"-i", "--input", "-o", "--output", "-p", "--strip", "-d", "--directory",
+                                             "-B", "-r", "-D", "-F", "-g", "-z", "-V"})
         paths += positional
+        inputs = [v for o, v in opts if o in ("-i", "--input") and v] or _stdin_files(it)
+        prefix = next((v for o, v in opts if o in ("-d", "--directory") and v), "")
+        for pf in inputs:
+            paths += [os.path.join(prefix, t) for t in patch_targets(os.path.join(it.dir, os.path.expanduser(pf)))]
     elif name == "tee":
         paths += parse_args(args, set())[0]
     elif name == "dd":
@@ -344,6 +348,10 @@ def written_paths(it: Item) -> list[str]:
     return paths
 
 
+def _stdin_files(it: Item) -> list[str]:
+    return [t for op, t in it.redirects if op == "<" and t and not is_dynamic(t)]
+
+
 def patch_targets(path: str) -> list[str]:
     """Repo-relative files a unified diff writes: the `+++ b/<path>` lines (and `diff --git`)."""
     out: list[str] = []
@@ -365,15 +373,14 @@ def patch_targets(path: str) -> list[str]:
 
 
 def config_violation(it: Item) -> str | None:
-    """`git config` writes of keys that can redirect pushes or run commands (alias, remote, push, branch, include)."""
+    """`git config` writes (old and new syntax) of keys that can redirect pushes or run commands (alias, remote,
+    push, branch, url, include, core.hooksPath)."""
     if not it.git or it.git.sub != "config":
         return None
-    positional, opts = parse_args(it.git.args, CONFIG_VALUE_OPTS)
-    names = {o for o, _ in opts}
-    write = bool(names & CONFIG_WRITE_OPTS) or len(positional) >= 2
-    keys = [k.lower() for k in positional[:2 if "--rename-section" in names else 1]]
-    if write and (not keys or any(k.startswith(CONFIG_PREFIXES) or k in CONFIG_EXACT for k in keys)):
-        return ("blocked: `git config` write to " + (f"`{positional[0]}`" if positional else "the git configuration")
+    call = parse_config(it.git.args)
+    if call.write and (not call.keys or any((k + ".").startswith(CONFIG_PREFIXES) or k in CONFIG_EXACT
+                                            for k in call.keys)):
+        return ("blocked: `git config` write to " + (f"`{call.keys[0]}`" if call.keys else "the git configuration")
                 + " would change a protected path (git's configuration can redirect pushes or run commands). "
                 "Ask the user to make this change.")
     return None
@@ -408,7 +415,7 @@ def check_bash(ctx: Ctx, command: str) -> str | None:
         for name, value in it.env.items():
             if value and not is_dynamic(value):
                 seen_env[name] = value
-        msg = config_violation(it)
+        msg = config_violation(it) or _trees.tree_violation(ctx, it)
         if msg:
             return msg
         for src in link_sources(it):

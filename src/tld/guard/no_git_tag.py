@@ -276,9 +276,67 @@ def check_gh(ctx: Ctx, it: Item) -> str | None:
     return None
 
 
+CURL_TAG_API = re.compile(r"/repos/[^/\s]+/[^/\s]+/(releases(?:/[^/\s?#]+)?|git/tags|git/refs(?:/tags(?:/[^\s?#]*)?)?)"
+                          r"/?(?:[?#]|$)")
+CURL_DATA = {"-d", "--data", "--data-raw", "--data-binary", "--data-ascii", "--data-urlencode", "--json", "-F",
+             "--form", "--form-string", "-T", "--upload-file", "--post-data", "--post-file", "--body-data",
+             "--body-file"}
+HTTP_METHODS = {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+
+
+def _curl_method_and_data(words: list[str]) -> tuple[str, list[str]]:
+    """(HTTP method, data words) of a curl / wget / httpie / xh command line."""
+    method, data, i = None, [], 1
+    while i < len(words):
+        w = words[i]
+        i += 1
+        name, eq, val = w.partition("=")
+        if name in ("-X", "--request", "--method") or (w.startswith("-X") and len(w) > 2):
+            if w.startswith("-X") and len(w) > 2:
+                val = w[2:]
+            elif not eq:
+                val, i = (words[i] if i < len(words) else ""), i + 1
+            method = val.upper()
+        elif name in CURL_DATA:
+            if not eq:
+                val, i = (words[i] if i < len(words) else ""), i + 1
+            data.append(val)
+        elif w.upper() in HTTP_METHODS and i == 2:  # httpie / xh: `http POST url`
+            method = w.upper()
+        elif re.match(r"^[A-Za-z_][\w\[\]]*:?=", w) and not w.startswith("-"):  # httpie / xh body items
+            data.append(w)
+    return method or ("POST" if data else "GET"), data
+
+
+def check_curl_tag_api(it: Item) -> str | None:
+    """S-curl: a raw API call that creates, edits or deletes a release, a tag object or a tag ref (the same
+    endpoints as the `gh api` check)."""
+    method, data = _curl_method_and_data(it.words)
+    if method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    for w in it.words[1:]:
+        if is_dynamic(w):
+            continue
+        m = CURL_TAG_API.search(w)
+        if not m:
+            continue
+        what = m.group(1)
+        if what == "git/refs" and data and all("refs/tags" not in d and not d.startswith("@") for d in data):
+            continue  # a branch ref; no-merge owns those
+        if what.startswith("releases/") and method == "POST" and what != "releases/generate-notes":
+            continue  # e.g. releases/<id>/assets is an upload, not a tag
+        if what == "releases/generate-notes":
+            continue
+        return deny(f"this request ({method} .../{what}) creates, moves or deletes a tag or a release")
+    return None
+
+
 def check_curl(ctx: Ctx, it: Item) -> str | None:
     """A raw API call to a workflow dispatch: the release one is denied, a git-ops one needs the confirm marker
-    (its body is not parsed)."""
+    (its body is not parsed). A call that creates or edits a release or tag is denied like its `gh api` form."""
+    msg = check_curl_tag_api(it)
+    if msg:
+        return msg
     for w in it.words[1:]:
         m = CURL_DISPATCH.search(w) if not is_dynamic(w) else None
         if not m:

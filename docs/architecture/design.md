@@ -83,14 +83,17 @@ The guardrails are a neutral policy, `src/tld/guard/`: an `Action` (`shell`, `wr
 a `Decision` (`allow`, `deny`, `error`) comes out. The Claude hooks are thin shims over it. They are a seatbelt, not
 the control (D1): they deny merges, pushes to the main branch, force pushes, tags, credential-like writes and edits
 of protected paths before the call runs, and they read the protect lists from the profile on the remote default
-branch, so a branch cannot switch them off. What a parser cannot see (`python -c`, a script file) is out of their
+branch (the branch the remote reports, not the working tree's `git.main_branch`), pinned by commit SHA and origin
+URL, so a branch, a local ref or a repointed origin cannot switch them off. What a parser cannot see (`python -c`, a script file) is out of their
 reach by design. Details: [hooks.md](hooks.md).
 
 ### Ops and GitHub-side control
 
 `src/tld/ops/` holds what talks to GitHub or the repository at large: `land-order`, `upstream-sync`,
 `pick-release`, `docs-index`, `migrate` and `repo-admin`. repo-admin audits and applies a policy file and is where
-the real control lives: the rulesets `tld-main` and `tld-tags`, an agent account with the `write` role, and the
+the real control lives: the rulesets `tld-main` and `tld-tags`, an agent account with the `write` role (it can merge
+a pull request only after `tld-main` is satisfied: the owner's approval, green required checks, stale approvals
+dismissed and the last push approved by someone else; so it cannot land its own unreviewed change), and the
 environments `tld-agent` and `tld-release` that hold the tokens ([admin.md](../guides/admin.md)). Tags have one
 route, the release workflow `tld-release`, run by the owner with `TLD_RELEASE_TOKEN` (D13); the central git-ops
 workflow only deletes branches ([git-ops.md](../guides/git-ops.md)).

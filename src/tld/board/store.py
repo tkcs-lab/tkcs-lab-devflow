@@ -3,10 +3,11 @@
 
     from tld.board.store import Store, Conflict, Invalid
 
-Two tables. `records(id, version, data)`: `Store.set` validates a status record (tld.board.record) and
+Three tables. `records(id, version, data)`: `Store.set` validates a status record (tld.board.record) and
 enforces optimistic concurrency with `if_version`. `asks(id, state, created_at, data)`: `Store.create_ask`
 validates an ask (tld.board.ask) and assigns its id; `answer_ask` and `cancel_ask` move an open ask to its
-final state. The schema version is SQLite's `user_version`; opening an older database adds what is missing
+final state. `revoked_sessions(nonce, expires)` keeps the owner sessions a logout ended, so a logout survives a
+restart of the server. The schema version is SQLite's `user_version`; opening an older database adds what is missing
 and keeps every record. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
@@ -23,7 +24,7 @@ from tld.board import record as validate_status_record
 
 MAX_RECORD = 262144
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 MAX_OPEN_ASKS = 200
 
 
@@ -74,6 +75,9 @@ class Store:
             "CREATE TABLE IF NOT EXISTS asks("
             "id TEXT PRIMARY KEY, state TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL)")
         self._db.execute("CREATE INDEX IF NOT EXISTS asks_state ON asks(state, created_at)")
+        # 3: the owner sessions a logout revoked (until their cookie would have expired anyway).
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS revoked_sessions(nonce TEXT PRIMARY KEY, expires INTEGER NOT NULL)")
         self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self._db.commit()
 
@@ -133,6 +137,20 @@ class Store:
     def count(self) -> int:
         with self._lock:
             return self._db.execute("SELECT COUNT(*) FROM records").fetchone()[0]
+
+    # -- owner sessions --------------------------------------------------------------------------
+
+    def revoke_session(self, nonce: str, expires: int, now: int) -> None:
+        """Remember a logged-out session until `expires`; drops the entries that have expired by `now`."""
+        with self._lock:
+            self._db.execute("DELETE FROM revoked_sessions WHERE expires <= ?", (now,))
+            self._db.execute("INSERT OR REPLACE INTO revoked_sessions(nonce, expires) VALUES (?, ?)",
+                             (nonce, int(expires)))
+            self._db.commit()
+
+    def session_revoked(self, nonce: str) -> bool:
+        with self._lock:
+            return self._db.execute("SELECT 1 FROM revoked_sessions WHERE nonce = ?", (nonce,)).fetchone() is not None
 
     # -- asks -----------------------------------------------------------------------------------
 

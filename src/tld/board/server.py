@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import hmac
+import ipaddress
 import json
 import math
 import os
@@ -44,6 +45,9 @@ MAX_LOGIN_BODY = 4096
 MIN_TOKEN = 24
 MIN_PASSPHRASE = 16
 MIN_SECRET = 32
+SOCKET_TIMEOUT = 15      # seconds a connection may sit idle (headers, body, keep-alive) before it is closed
+BODY_DEADLINE = 30       # seconds a request body may take in total, however slowly it trickles in
+MAX_CONNECTIONS = 64     # connections served at once; one more is answered 503 and closed
 
 CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; "
        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
@@ -100,34 +104,46 @@ class Tokens:
 
 
 class LoginLimiter:
-    """In-memory brake on wrong passphrases: per client, after FREE failures, a lockout that doubles up to
-    MAX_LOCK seconds; and for everybody together, at most GLOBAL_MAX failures per WINDOW seconds."""
+    """In-memory brake on wrong passphrases. Per client key, after FREE failures, a lockout that doubles up to
+    MAX_LOCK seconds; a successful login clears that key. For everybody together, more than GLOBAL_MAX failures
+    per WINDOW seconds only slow every login attempt down (at most MAX_DELAY seconds); they never lock anybody
+    out, so a flood of wrong passphrases from many addresses cannot keep the owner from logging in."""
 
     FREE = 5
     MAX_LOCK = 900
     WINDOW = 60
     GLOBAL_MAX = 30
+    MAX_DELAY = 2.0
     MAX_KEYS = 10000
 
-    def __init__(self, clock=time.monotonic) -> None:
+    def __init__(self, clock=time.monotonic, sleep=time.sleep) -> None:
         self._clock = clock
+        self._sleep = sleep
         self._lock = threading.Lock()
         self._fails: dict[str, list[float]] = {}  # key -> [count, locked_until]
         self._recent: deque[float] = deque()
 
     def retry_after(self, key: str) -> int:
-        """Seconds the client must wait before the next attempt, 0 when it may try now."""
+        """Seconds this client must wait before the next attempt, 0 when it may try now."""
+        now = self._clock()
+        with self._lock:
+            entry = self._fails.get(key)
+            wait = entry[1] - now if entry and entry[1] > now else 0.0
+            return math.ceil(wait) if wait > 0 else 0
+
+    def delay(self) -> float:
+        """The global slow-down in seconds (0 unless more than GLOBAL_MAX failures fell in the last WINDOW)."""
         now = self._clock()
         with self._lock:
             while self._recent and self._recent[0] <= now - self.WINDOW:
                 self._recent.popleft()
-            wait = 0.0
-            if len(self._recent) >= self.GLOBAL_MAX:
-                wait = self._recent[0] + self.WINDOW - now
-            entry = self._fails.get(key)
-            if entry and entry[1] > now:
-                wait = max(wait, entry[1] - now)
-            return math.ceil(wait) if wait > 0 else 0
+            over = len(self._recent) - self.GLOBAL_MAX
+            return min(self.MAX_DELAY, 0.1 * (over + 1)) if over >= 0 else 0.0
+
+    def slow_down(self) -> None:
+        wait = self.delay()
+        if wait:
+            self._sleep(wait)
 
     def failure(self, key: str) -> None:
         now = self._clock()
@@ -139,17 +155,33 @@ class LoginLimiter:
             if entry[0] >= self.FREE:
                 entry[1] = now + min(self.MAX_LOCK, 2 ** (entry[0] - self.FREE + 1))
             self._recent.append(now)
+            if len(self._recent) > 4 * self.GLOBAL_MAX:
+                self._recent.popleft()
 
     def success(self, key: str) -> None:
         with self._lock:
             self._fails.pop(key, None)
 
 
+def client_key(address: str) -> str:
+    """The limiter key of a client address: an IPv4 address as is, an IPv6 address by its /64 network (one host
+    usually holds a whole /64), anything else as given (cut to 64 characters)."""
+    try:
+        ip = ipaddress.ip_address(address.strip().strip("[]"))
+    except ValueError:
+        return address.strip()[:64]
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        return str(ip.ipv4_mapped)
+    if ip.version == 6:
+        return str(ipaddress.ip_network(f"{ip}/64", strict=False))
+    return str(ip)
+
+
 class OwnerAuth:
     """The owner's passphrase and the signed session cookie."""
 
     def __init__(self, passphrase: str, secret: bytes, secure: bool = True, max_age: int = 12 * 3600,
-                 clock=time.time) -> None:
+                 clock=time.time, revocations=None) -> None:
         self._digest = hashlib.sha256(passphrase.encode("utf-8")).digest()
         # The signing key depends on the passphrase too: a new passphrase ends every session.
         self._key = hmac.new(secret, b"tld-owner-session\0" + self._digest, hashlib.sha256).digest()
@@ -159,6 +191,8 @@ class OwnerAuth:
         self._clock = clock
         self._revoked: dict[str, int] = {}
         self._lock = threading.Lock()
+        # Where logouts are kept across restarts (the Store: revoke_session / session_revoked); make_server sets it.
+        self.revocations = revocations
 
     def check(self, candidate: object) -> bool:
         if not isinstance(candidate, str):
@@ -193,6 +227,8 @@ class OwnerAuth:
         with self._lock:
             if nonce in self._revoked:
                 return None
+        if self.revocations is not None and self.revocations.session_revoked(nonce):
+            return None
         return nonce
 
     def revoke(self, value: str) -> None:
@@ -200,9 +236,12 @@ class OwnerAuth:
         if nonce is None:
             return
         now = int(self._clock())
+        expires = int(value.split(".")[0])
         with self._lock:
             self._revoked = {n: e for n, e in self._revoked.items() if e > now}
-            self._revoked[nonce] = int(value.split(".")[0])
+            self._revoked[nonce] = expires
+        if self.revocations is not None:
+            self.revocations.revoke_session(nonce, expires, now)
 
     def set_cookie(self, value: str) -> str:
         parts = [f"{self.cookie_name}={value}", "Path=/", f"Max-Age={self.max_age}", "HttpOnly",
@@ -222,6 +261,7 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "tld-board"
     sys_version = ""
+    timeout = SOCKET_TIMEOUT  # StreamRequestHandler sets it on the socket: a silent client is dropped
 
     # -- output ---------------------------------------------------------------------------------
 
@@ -302,11 +342,13 @@ class Handler(BaseHTTPRequestHandler):
         return parts.scheme in schemes and parts.netloc != "" and parts.netloc == (self.headers.get("Host") or "")
 
     def _client_key(self) -> str:
+        """The client's limiter key. With --trust-proxy, the rightmost X-Forwarded-For entry: the one the single
+        trusted proxy in front of the board appended (entries to its left are whatever the client sent)."""
         if self.server.trust_proxy:
             forwarded = (self.headers.get("X-Forwarded-For") or "").split(",")[-1].strip()
             if forwarded:
-                return forwarded
-        return self.client_address[0]
+                return client_key(forwarded)
+        return client_key(self.client_address[0])
 
     def _dispatch(self, method: str) -> None:
         self._body_read = False
@@ -360,9 +402,24 @@ class Handler(BaseHTTPRequestHandler):
             self.close_connection = True
             self._error(413, "payload_too_large")
             return None
-        body = self.rfile.read(length)
+        chunks, left = [], length
+        deadline = time.monotonic() + BODY_DEADLINE
+        try:
+            while left > 0:
+                chunk = self.rfile.read1(min(left, 65536))
+                if not chunk or time.monotonic() > deadline:
+                    break
+                chunks.append(chunk)
+                left -= len(chunk)
+        except (TimeoutError, OSError):
+            pass
+        if left > 0:
+            self.close_connection = True
+            self._body_read = True
+            self._error(408, "request_timeout")
+            return None
         self._body_read = True
-        return body
+        return b"".join(chunks)
 
     def _read_json(self, limit: int = MAX_BODY) -> tuple[bool, object]:
         body = self._read_body(limit)
@@ -397,6 +454,7 @@ class Handler(BaseHTTPRequestHandler):
         ok, payload = self._read_json(MAX_LOGIN_BODY)
         if not ok:
             return
+        limiter.slow_down()  # many failures from everywhere: every attempt waits a little, nobody is locked out
         candidate = payload.get("passphrase") if isinstance(payload, dict) else None
         if not owner.check(candidate):
             limiter.failure(key)
@@ -550,12 +608,48 @@ class Handler(BaseHTTPRequestHandler):
         self._dispatch("POST")
 
 
+class BoardServer(ThreadingHTTPServer):
+    """A threading HTTP server that serves at most `max_connections` connections at once."""
+
+    daemon_threads = True
+    BUSY = (b"HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: 16\r\n"
+            b"Retry-After: 1\r\nConnection: close\r\n\r\n" + b'{"error":"busy"}')
+
+    def __init__(self, address, handler, max_connections: int = MAX_CONNECTIONS) -> None:
+        super().__init__(address, handler)
+        self.max_connections = max_connections
+        self._slots = threading.BoundedSemaphore(max_connections)
+
+    def process_request(self, request, client_address) -> None:
+        if not self._slots.acquire(blocking=False):
+            try:
+                request.settimeout(1)
+                request.sendall(self.BUSY)
+            except OSError:
+                pass
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+
 def make_server(store: Store, tokens: Tokens, title: str, host: str, port: int,
                 allow_origins: tuple[str, ...] = (), owner: OwnerAuth | None = None,
                 session_url: str | None = None, public_origin: str | None = None,
-                trust_proxy: bool = False, limiter: LoginLimiter | None = None) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer((host, port), Handler)
-    server.daemon_threads = True
+                trust_proxy: bool = False, limiter: LoginLimiter | None = None,
+                max_connections: int = MAX_CONNECTIONS) -> ThreadingHTTPServer:
+    server = BoardServer((host, port), Handler, max_connections)
+    if owner is not None and owner.revocations is None:
+        owner.revocations = store  # logouts survive a restart
     server.store = store  # type: ignore[attr-defined]
     server.tokens = tokens  # type: ignore[attr-defined]
     server.owner = owner  # type: ignore[attr-defined]
@@ -613,7 +707,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="local development over plain http: the session cookie without Secure")
     parser.add_argument("--session-hours", type=int, default=12, dest="session_hours")
     parser.add_argument("--trust-proxy", action="store_true", dest="trust_proxy",
-                        help="rate-limit logins by the last X-Forwarded-For entry (behind a reverse proxy)")
+                        help="rate-limit logins by the last X-Forwarded-For entry (behind exactly one reverse proxy)")
     args = parser.parse_args(argv)
     write = os.environ.get("TLD_BOARD_TOKEN", "")
     passphrase = os.environ.get("TLD_BOARD_OWNER_PASSPHRASE", "")

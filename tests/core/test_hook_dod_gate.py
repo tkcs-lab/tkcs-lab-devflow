@@ -258,7 +258,7 @@ def test_disable_flag(tmp_path):
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "disable on main")
     bare = tmp_path / "origin.git"
-    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(tmp_path, "init", "-q", "--bare", "-b", "main", str(bare))
     git(repo, "remote", "add", "origin", str(bare))
     git(repo, "push", "-q", "origin", "main")
     git(repo, "checkout", "-q", "feature/demo")

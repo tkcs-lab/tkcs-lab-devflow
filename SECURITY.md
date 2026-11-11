@@ -8,15 +8,21 @@ page or a tool result). Two layers, with different jobs:
 
 - **GitHub is the control.** The rulesets `tld-main` (pull request with one approval, required checks, no force
   push, no deletion) and `tld-tags` (no tag except by the owner), an agent account with the `write` role (no
-  merge, no admin), and the environments `tld-agent` and `tld-release`, which keep `TLD_AGENT_TOKEN` and
+  admin, no bypass of the rulesets), and the environments `tld-agent` and `tld-release`, which keep `TLD_AGENT_TOKEN` and
   `TLD_RELEASE_TOKEN` on the default branch and behind the owner's approval. `tld ops repo-admin` audits and
   applies them ([docs/guides/admin.md](docs/guides/admin.md)). A manipulated agent cannot talk its way past them.
+  Precisely: the `write` role *can* press merge on a pull request into the main branch, but only once `tld-main` is
+  satisfied — an approval by the owner (the agent cannot approve its own pull request), the required checks green,
+  stale approvals dismissed by a new push and the last push approved by someone other than its author. So the agent
+  cannot get its own unreviewed change onto the main branch; what it can do is merge a pull request the owner has
+  already approved, which the `no-merge` hook denies as a seatbelt.
 - **The hooks are a seatbelt.** The Claude Code hooks (`adapters/claude/hooks/`, policies in `src/tld/guard/`)
   deny merges, pushes to the main branch, force pushes, tags, writes of credential-like text and edits of protected
   paths before the tool call runs, and tell the agent what to do instead. They read a command, they do not run it:
   `python -c`, a script file or a Makefile target is out of their reach by design
   ([docs/architecture/hooks.md](docs/architecture/hooks.md#what-the-hooks-do-not-protect)). The protect lists and
-  `hooks.disable` come from the profile on the remote default branch, so a branch cannot switch a hook off.
+  `hooks.disable` come from the profile on the remote's default branch (the branch the remote reports, fetched and
+  pinned by commit SHA and origin URL), so a branch, a local ref or a repointed origin cannot switch a hook off.
 - **Untrusted text is data.** Only the owner and collaborators can give an instruction or answer an ask
   ([playbooks/policies/untrusted-text.md](playbooks/policies/untrusted-text.md)). An ask is answered only by the
   owner, logged in on the board; the session token cannot answer one ([docs/guides/board-server.md](docs/guides/board-server.md)).

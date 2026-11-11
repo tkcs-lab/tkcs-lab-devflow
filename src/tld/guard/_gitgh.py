@@ -163,6 +163,54 @@ def _items(words: list[str], here: str, redirects, depth: int, env: dict[str, st
         yield Item("other", words, here, None, redirects, env)
 
 
+# ------------------------------------------------------------------------------------- config
+
+# `git config` before and since git 2.46 (`git config set|unset|get|list|rename-section|remove-section|edit`).
+CONFIG_SUBS = {"list", "get", "set", "unset", "rename-section", "remove-section", "edit"}
+CONFIG_WRITE_SUBS = {"set", "unset", "rename-section", "remove-section", "edit"}
+CONFIG_VALUE_OPTS = {"-f", "--file", "--blob", "-t", "--type", "--default", "--comment", "--value", "--url"}
+CONFIG_WRITE_OPTS = {"--add", "--replace-all", "--unset", "--unset-all", "--rename-section", "--remove-section",
+                     "-e", "--edit", "--append"}
+CONFIG_READ_OPTS = {"--get", "--get-all", "--get-regexp", "--get-urlmatch", "-l", "--list", "--get-color",
+                    "--get-colorbool", "--show-origin", "--show-scope", "--name-only"}
+
+
+@dataclass
+class ConfigCall:
+    write: bool
+    keys: list[str]   # the key (or both section names of a rename), lower-cased
+    sub: str | None   # the subcommand of the new syntax, if one was given
+    section: bool = False  # rename-section / remove-section: the keys are section names
+
+
+def parse_config(args: list[str]) -> ConfigCall:
+    """Which keys a `git config ...` call reads or writes (both syntaxes). Options may stand anywhere."""
+    positional: list[str] = []
+    opts: set[str] = set()
+    i = 0
+    while i < len(args):
+        a = args[i]
+        i += 1
+        if a == "--":
+            positional += args[i:]
+            break
+        if a.startswith("-") and a != "-":
+            name, eq, _ = a.partition("=")
+            if name in CONFIG_VALUE_OPTS and not eq:
+                i += 1
+            opts.add(name)
+        else:
+            positional.append(a)
+    sub = positional.pop(0) if positional and positional[0] in CONFIG_SUBS else None
+    rename = sub == "rename-section" or "--rename-section" in opts
+    if sub is not None:
+        write = sub in CONFIG_WRITE_SUBS
+    else:
+        write = bool(opts & CONFIG_WRITE_OPTS) or (len(positional) >= 2 and not opts & CONFIG_READ_OPTS)
+    section = rename or sub == "remove-section" or "--remove-section" in opts
+    return ConfigCall(write, [k.lower() for k in positional[:2 if rename else 1]], sub, section)
+
+
 # ------------------------------------------------------------------------------------- push
 
 LONG_FORCE = ("force", "force-with-lease", "force-if-includes")

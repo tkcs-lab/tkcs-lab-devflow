@@ -54,8 +54,9 @@ def check_push(ctx: Ctx, it: Item) -> str | None:
         dests = bare_push_destinations(it, push, main)
         if dests is None:
             return deny("the destination of this `git push` cannot be determined from your git configuration")
-        if any(d in mains for d in dests):
-            return deny(f"`git push` would update `{main}` (the current branch or its configured destination)")
+        hit = next((d for d in dests if d in mains), None)
+        if hit:
+            return deny(f"`git push` would update `{hit}` (the current branch or its configured destination)")
         return None
     for spec in specs:
         if spec.raw in (":", "+:") or (not spec.src and not spec.dst):
@@ -70,7 +71,7 @@ def check_push(ctx: Ctx, it: Item) -> str | None:
         if spec.src in ("HEAD", "@") and spec.src == spec.dst:
             dst = current_branch(it.dir, it.git.repo_opts) or ""
         if dst in mains:
-            return deny(f"`git push {spec.raw}` would update `{main}`")
+            return deny(f"`git push {spec.raw}` would update `{dst}`, a name of the main branch")
     return None
 
 

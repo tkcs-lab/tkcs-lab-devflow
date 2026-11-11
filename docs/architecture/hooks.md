@@ -10,7 +10,10 @@ repository that enables the plugin gets them without a per-repository copy. Proj
 boundary: it stops the agent a minute after the mistake instead of a day later, and it tells the agent
 what to do instead. Anything it cannot read it cannot stop (see
 [what the hooks do not protect](#what-the-hooks-do-not-protect)); the GitHub-side rulesets and an agent
-account without merge or tag rights are what actually hold (`rulesets` and `agent` in [admin.md](../guides/admin.md)).
+account with the `write` role are what actually hold (`rulesets` and `agent` in [admin.md](../guides/admin.md)). That
+account can merge a pull request into the main branch only once `tld-main` is satisfied (the owner's approval, green
+required checks, stale approvals dismissed, the last push approved by someone other than its author), so it cannot land
+its own unreviewed change; the hook also stops it from merging a pull request the owner already approved.
 
 ## Neutral core, Claude adapter
 
@@ -94,7 +97,10 @@ Denies `git tag <name>` (and `-a`, `-s`, `-f`, `-d`, `-m`, ...), `git push --tag
 push only if the repository has such a tag), a push that tags through configuration (`push.followTags=true`, a
 `remote.<name>.push` that names `refs/tags/`, or a `-c remote.*.push` / `-c remote.*.mirror` option), `git update-ref
 refs/tags/...` and `git update-ref --stdin` (its input cannot be read), `gh release create` / `delete`, `gh release edit
---tag`, and the API calls that create or move tag refs, tag objects and releases or edit or delete a release.
+--tag`, and the API calls that create or move tag refs, tag objects and releases or edit or delete a release — through `gh api`
+and (S22) through `curl`, `wget`, `http` / `xh` too (`POST .../releases`, `PATCH` / `DELETE .../releases/<id>`,
+`.../git/tags`, `.../git/refs/tags/...`, and `.../git/refs` with a `refs/tags/` body or one read from a file); a `GET`
+stays allowed.
 
 Tags have one route (D13): `tld-release`, which the owner runs by hand; git-ops makes no tags. So a session may not start
 it: `gh workflow run tld-release.yml`, its `dispatches` API (also by `curl`) and MCP `run_workflow` for it are denied.
@@ -146,11 +152,22 @@ expands globs against the file system and `{a,b}` braces (up to 64 results, more
 whose target is a hard link to a protected file is denied (same device and inode, found by walking the repository), and so
 is `ln` with a protected file as its source, since a link would let a later write through. `git config` writes to
 `alias.*`, `remote.*`, `push.*`, `branch.*`, `url.*`, `include*` and `core.hooksPath` keys are denied, because they can
-redirect pushes or run commands (S17). A program that writes a file itself (`npm install` updating its lockfile, a Python one-liner)
+redirect pushes or run commands (S17), in the old syntax and in git 2.46's subcommands (`git config set|unset
+[--all] <key>`, `rename-section`, `remove-section`, `edit`; S19).
+
+**Whole directories (S21).** A command that writes a directory as a whole is checked as such: `git checkout <ref> --
+<dir>` (or without `--`), `git restore --source <ref> <dir>` (a `:/` pathspec is the root), `cp -r` / `-a` and `rsync
+-r` / `-a` of a directory, `tar x` (`-C`, `--strip-components`) and `unzip` (`-d`). When the source tree or the archive
+can be read, every file it would write is checked; otherwise the target directory is denied when it is the repository
+root, lies in a protected tree, would hold a protected path (`.github` holds `.github/workflows/**`) or holds an
+existing protected file. `git checkout -- .` and `git restore .` (from the index, no other ref) stay allowed, and so
+does extracting outside the repository. `patch` and `git apply` reading the diff from `<` or `-i` are checked against
+the files named in it. A program that writes a file itself (`npm install` updating its lockfile, a Python one-liner)
 is not seen, which is why lockfiles are protected from hand edits and not from tools.
 
 Default list (a list in the profile replaces it): `.tld/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`,
-`go.sum`, `.github/workflows/**`. Always protected: `.git/config`, `.git/hooks/**`, `.git/tld/**` (the markers), and
+`go.sum`, `.github/workflows/**`. Always protected: `.git/config`, `.git/hooks/**`, `.git/tld/**` (the markers), `.git/refs/**`,
+`.git/packed-refs`, `.git/info/**` and `.git/objects/**` (what the trusted ref and its profile are read from; S18), and
 anything under `$CLAUDE_PLUGIN_ROOT` (the installed plugin). Protected on their absolute path, wherever the write lands
 (S8): `~/.gitconfig` and `~/.config/git/**` (git's own configuration), and the files the Claude adapter adds —
 `~/.claude/**`, `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/**` and `.mcp.json`, since a
@@ -264,19 +281,33 @@ hooks:
 ```
 
 `hooks.disable` and the protect lists are read from the **trusted copy** of the profile, not from the working tree, so a
-session cannot switch a guardrail off by editing its own files or moving a local ref (S1). The trusted copy is the
-profile on the remote main branch, fetched into `refs/tld/trusted` and cached for ten minutes
-(`git fetch --no-tags origin +refs/heads/<main>:refs/tld/trusted`, stamped in `<git dir>/tld/`). To keep that ref what
-the fetch made it, the destructive guards deny a session's writes to `refs/tld/*`, `refs/remotes/origin/<main>` and
-`refs/heads/<main>` (through `update-ref`, `branch -f`, `fetch` refspecs or `symbolic-ref`) and any repointing of
-`origin` (`remote set-url` / `remote add` over origin, `-c remote.origin.url`). When the working tree's `hooks` section
-differs from the trusted one the guard shows a notice and applies only the trusted list.
+session cannot switch a guardrail off by editing its own files, moving a local ref or repointing origin (S1, S18, S19).
+The trusted copy is the profile on the **remote's default branch**, the one `git ls-remote --symref <origin url> HEAD`
+reports — never the working tree's `git.main_branch`, which any branch can set. Its commit is fetched when missing
+(`git fetch --no-tags <origin url> +refs/heads/<default>:refs/tld/trusted`) and the result is cached for ten minutes
+in `<git dir>/tld/trusted.json`: origin's URL, the default branch and the commit SHA. The profile is read from that SHA,
+and `refs/tld/trusted` must still point at it. The hook's git calls run with `GIT_NO_REPLACE_OBJECTS=1`, without hooks
+and without the `ext::` transport, and ignore `GIT_DIR`-style variables.
 
-When no trusted copy can be read — no remote, no network, or no commit yet — **nothing is disabled** and the protect
-lists are the built-in defaults plus the working tree's `protect_paths` (an allow list is never taken from the working
-tree, so it can only add protection, never remove it). One gap remains: a branch can still change `git.main_branch` in
-its own working tree, so the guards check a push or ref write against both the working tree's main branch and the trusted
-copy's. The GitHub rulesets stay the control.
+The URL recorded at the first lookup is kept: when origin's URL (after `insteadOf` rewriting) is a different one later
+— `git config remote.origin.url`, a `url.*.insteadOf`, a swap of remotes by renaming — the trusted copy is treated as
+unavailable. (A person who really moved the repository deletes `<git dir>/tld/trusted.json`.) The destructive guards
+also deny the commands that would do it: `git remote set-url|add|rename|remove` touching origin (either side of a
+rename), `git config [set] remote.origin.url|pushurl`, `url.*.insteadOf` / `pushInsteadOf` writes and section renames
+onto `remote.origin`, and `-c remote.origin.url` / `-c url.*.insteadOf` on a command. To keep the ref what the lookup
+made it they deny writes to `refs/tld/*`, `refs/replace/*`, `refs/remotes/origin/<main>` and `refs/heads/<main>`
+(`update-ref`, `branch -f`, `fetch` refspecs, `symbolic-ref`, a push to `.` or another local path, any push to
+`refs/tld/`, `refs/replace/` or `refs/remotes/`), `git replace` except its listing forms, and shell writes into the git
+directory's `refs`, `packed-refs`, `objects`, `info`, `hooks`, `config` and `tld`. When the working tree's `hooks`
+section differs from the trusted one the guard shows a notice and applies only the trusted list.
+
+When no trusted copy can be read — no remote, no network, no commit yet, a remote without a default branch, a moved
+URL or ref — **nothing is disabled** and the protect lists are the built-in defaults plus the working tree's
+`protect_paths` (an allow list is never taken from the working tree, so it can only add protection, never remove it).
+A push or ref write is checked against every name the main branch may have: the working tree's `git.main_branch`, the
+remote's default branch (remembered from the last lookup), the trusted profile's `git.main_branch` and the local
+`origin/HEAD`; with an origin whose default branch is not known at all, also `main` and `master`. The GitHub rulesets
+stay the control.
 
 The list must be a list of names; anything else, in the working tree or the trusted copy, is a profile error (see
 Parsing).
@@ -303,7 +334,8 @@ config, including `!shell` aliases). Mentions are not commands: `echo "gh pr mer
 
 Two whole-command checks run first, on every destructive guard (`src/tld/guard/integrity.py`): a command whose **name**
 is only known at run time followed by a git/gh write word (`G=git; $G push --force …`) is denied (S3), unless the name
-is a `.../bin/tld` invocation, which the commands use; and a git command that pulls configuration from a file or the
+is the toolkit's launcher `"${CLAUDE_PLUGIN_ROOT}/bin/tld"` (also `"${CLAUDE_PLUGIN_ROOT}"/bin/tld`) on a command line
+that does not set `CLAUDE_PLUGIN_ROOT` itself, which the commands use; any other `$X/bin/tld` or `$X/tld` is denied (S20); and a git command that pulls configuration from a file or the
 environment (`-c include.*` / `includeIf.*`, `GIT_CONFIG_GLOBAL` / `GIT_CONFIG_SYSTEM` / `GIT_CONFIG_PARAMETERS`,
 `GIT_DIR`) is denied, because it can set a push destination or an alias the parser cannot see (S4).
 
@@ -376,9 +408,12 @@ What changed in the commands: `/implement`, `/make-plan`, `/review` and `/land` 
   word is denied), and `curl` / `gh api` are checked only for the merge, approve, ref, contents and dispatch endpoints.
 - **Writes the agent does not make through its tools:** a secret in Bash output or in a command line that is not written
   to a file, or in a commit message.
-- **A hook switched off** in the trusted copy of the profile on the remote main branch, or a profile edited by someone
-  who may edit it. A branch can still change `git.main_branch` in its own working tree (the guards fall back to checking
-  the trusted copy's main branch as well).
+- **A hook switched off** in the trusted copy of the profile on the remote default branch, or a profile edited by
+  someone who may edit it. A branch that changes `git.main_branch` in its own working tree only adds a protected name:
+  the trusted branch is the one the remote reports.
+- **The first lookup.** The origin URL is recorded the first time a guard runs in a checkout, so an origin changed
+  before that (by a person, or by a program the parser cannot see) is the one trusted. A later hidden change of the
+  URL or of `refs/tld/trusted` only makes the trusted copy unavailable, which switches every guard on.
 - **A hook that has a bug.** The destructive hooks fail closed; the others fail open.
 
 ## Installing and checking
