@@ -19,8 +19,11 @@ for _p in (str(SRC), str(ROOT)):  # the tld package, and the evals/ package (the
         sys.path.insert(0, _p)
 
 
-# One project's words that must not appear in the generic product (tests/core/test_no_project_words.py).
-FORBIDDEN = re.compile(r"privacyfence|ruff|pytest|src/privacyfence|connector", re.I)
+# One project's words that must not appear in the generic product (tests/core/test_no_project_words.py):
+# the first consumer's name, its tools, its domain terms and its example branches and logins (C14).
+FORBIDDEN = re.compile(
+    r"privacy\s*fence|ruff|pytest|connector|approval gate|gated_call|gemini|ai studio|org-mode|mcpb|atlassian|"
+    r"qa_fixture|andras|bandit|mypy", re.I)
 
 
 def frontmatter(path):

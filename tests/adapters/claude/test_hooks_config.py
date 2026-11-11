@@ -181,13 +181,14 @@ def test_resolved_profile_is_unchanged_by_the_hooks_section(vp):
 
 
 # ---- the commands that mark themselves exempt -----------------------------------------------------
-EXEMPT_LINE = '"${CLAUDE_PLUGIN_ROOT}/bin/tld" dod exempt'
+EXEMPT_LINE = "`tld dod exempt`"
 
 
 @pytest.mark.parametrize("name, exempt", [("implement", True), ("make-plan", True), ("review", True), ("land", True),
-                                          ("deps", False), ("docs", False), ("upstream", False), ("dod", False), ("board", False)])
-def test_which_commands_mark_the_session_exempt(name, exempt):
-    assert (EXEMPT_LINE in (CLAUDE / "commands" / f"{name}.md").read_text()) is exempt
+                                          ("setup", True), ("deps", False), ("docs", False), ("upstream", False),
+                                          ("dod", False), ("board", False)])
+def test_which_playbooks_mark_the_session_exempt(name, exempt):
+    assert (EXEMPT_LINE in " ".join((ROOT / "playbooks" / f"{name}.md").read_text().split())) is exempt
 
 
 # ---- docs ----------------------------------------------------------------------------------------

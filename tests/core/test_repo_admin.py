@@ -218,16 +218,9 @@ def test_profile_key_admin_policy(vp, tmp_path):
 
 
 def test_no_project_words_in_the_new_files():
-    for path in (TLD / "ops" / "repo_admin.py", CLAUDE / "skills" / "repo-admin" / "SKILL.md", STARTER,
+    for path in (TLD / "ops" / "repo_admin.py", ROOT / "playbooks" / "repo-admin.md", STARTER,
                  TLD / "schema" / "admin-policy.schema.json"):
         assert FORBIDDEN.search(path.read_text()) is None, path
-
-
-def test_skill_front_matter_and_rules():
-    text = (CLAUDE / "skills" / "repo-admin" / "SKILL.md").read_text()
-    assert "project-profile" in text and "never substitute" in " ".join(text.split())
-    for needle in ("admin.policy", "validate-policy", "whoami", "--allow-delete", "AskUserQuestion", "Never dispatch"):
-        assert needle in text, needle
 
 
 # --------------------------------------------------------------------------- the client

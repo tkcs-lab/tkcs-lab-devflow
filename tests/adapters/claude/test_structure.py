@@ -1,10 +1,27 @@
+"""Contracts of the thin Claude adapter: manifests, command and agent wrappers, and the runtime map."""
 import json
 import re
 
+import pytest
 
 from conftest import ROOT, TLD, CLAUDE, frontmatter
 
+PLAYBOOKS = ROOT / "playbooks"
+RUNTIME_SKILL = CLAUDE / "skills" / "runtime" / "SKILL.md"
+COMMANDS = tuple(sorted(p.stem for p in (CLAUDE / "commands").glob("*.md")))
+AGENTS = tuple(sorted(p.stem for p in (CLAUDE / "agents").glob("*.md")))
+SKILLS = tuple(sorted(p.parent.name for p in CLAUDE.glob("skills/*/SKILL.md")))
+EDIT_ROLES = {"tech-writer", "website-maintainer", "debugger", "refactorer"}
 
+
+def level_aliases() -> dict[str, str]:
+    """level -> alias, from the one table in the runtime skill."""
+    rows = re.findall(r"^\| `(strong|standard|fast)` \| `([a-z]+)` \| `(claude-[a-z0-9-]+)` \|$",
+                      RUNTIME_SKILL.read_text(), re.M)
+    return {level: alias for level, alias, _ in rows}
+
+
+# ---- manifests ------------------------------------------------------------------------------
 def test_marketplace_lists_existing_plugins():
     mp = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
     assert mp["name"] == "tkcs-lab-devflow" and mp["owner"]["name"] == "tkcs-lab"
@@ -26,78 +43,104 @@ def test_plugin_component_paths_point_into_the_claude_adapter():
 
 
 def test_plugin_versions_agree():
+    import tld
     plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())["version"]
     package = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(), re.M).group(1)
-    assert plugin.replace("-", ".") == package
+    assert plugin.replace("-", ".") == package == tld.__version__
 
 
-CORE_COMMANDS = ("make-plan", "implement", "dod", "review")
-COMMANDS = tuple(sorted(p.stem for p in (CLAUDE / "commands").glob("*.md")))
-
-
-def test_core_commands_exist():
-    assert set(CORE_COMMANDS) <= set(COMMANDS)
-
-
-def test_no_session_start_wording_in_the_plugins():
+def test_no_session_start_wording_in_the_plugin():
     for path in [*CLAUDE.rglob("*"), *TLD.rglob("*")]:
         if path.is_file() and "__pycache__" not in path.parts:
             assert "SessionStart" not in path.read_text(errors="ignore"), path
 
 
-def test_project_profile_states_the_one_toolkit_rule():
-    text = (CLAUDE / "skills" / "project-profile" / "SKILL.md").read_text()
-    assert '"${CLAUDE_PLUGIN_ROOT}/bin/tld" <group> <command>' in text
-    assert "plugins/cache" not in text and "plugins/synced" not in text
+# ---- commands -------------------------------------------------------------------------------
+def test_every_playbook_command_has_a_wrapper():
+    assert COMMANDS == tuple(sorted(("setup", "review", "make-plan", "implement", "dod", "land", "deps",
+                                     "upstream", "docs", "board")))
 
 
-def test_commands_have_front_matter():
-    for name in COMMANDS:
-        fm = frontmatter(CLAUDE / "commands" / f"{name}.md")
-        assert fm["description"]
-    assert frontmatter(CLAUDE / "commands" / "make-plan.md")["model"] == "opus"
-    assert frontmatter(CLAUDE / "commands" / "review.md")["model"] == "opus"
-    assert frontmatter(CLAUDE / "commands" / "implement.md")["model"] == "sonnet"
+@pytest.mark.parametrize("name", COMMANDS)
+def test_command_is_a_thin_wrapper_of_its_playbook(name):
+    path = CLAUDE / "commands" / f"{name}.md"
+    fm = frontmatter(path)
+    assert set(fm) <= {"description", "argument-hint", "model"} and len(fm["description"]) > 40
+    if "model" in fm:
+        assert fm["model"] in level_aliases().values(), fm["model"]
+    text = path.read_text()
+    playbook = f"${{CLAUDE_PLUGIN_ROOT}}/playbooks/{name}.md"
+    assert playbook in text and (PLAYBOOKS / f"{name}.md").is_file()
+    assert "`tld:runtime`" in text and "$ARGUMENTS" in text
+    assert len(text) < 1500, f"{name}.md is not thin ({len(text)} bytes)"
 
 
-def test_skills_have_matching_names():
-    skills = list(CLAUDE.glob("skills/*/SKILL.md"))
-    assert {p.parent.name for p in skills} == {
-        "project-profile", "pr-steward", "review-checklist", "secure-code-review", "test-review", "docs-review",
-        "status-board", "repo-admin", "git-ops", "agent-dispatch", "profile-setup", "docs-keeper", "stack-python", "stack-swift", "stack-ipados", "stack-go"}
-    for path in skills:
-        fm = frontmatter(path)
-        assert fm["name"] == path.parent.name
-        assert len(fm["description"]) > 40
+def test_commands_that_must_run_on_a_level():
+    aliases = level_aliases()
+    assert frontmatter(CLAUDE / "commands" / "make-plan.md")["model"] == aliases["strong"]
+    assert frontmatter(CLAUDE / "commands" / "review.md")["model"] == aliases["strong"]
+    assert frontmatter(CLAUDE / "commands" / "implement.md")["model"] == aliases["standard"]
 
 
-def test_commands_load_the_profile_skill_first():
-    for name in COMMANDS:
-        text = (CLAUDE / "commands" / f"{name}.md").read_text()
-        assert "project-profile" in text
-        assert "never substitute" in " ".join(text.split())
+# ---- skills ---------------------------------------------------------------------------------
+def test_skills_are_the_runtime_map_and_two_pointers():
+    assert SKILLS == ("git-ops", "repo-admin", "runtime")
+    for name in SKILLS:
+        fm = frontmatter(CLAUDE / "skills" / name / "SKILL.md")
+        assert fm["name"] == name and len(fm["description"]) > 40
 
 
-def test_commands_call_the_validators():
-    tld = '"${CLAUDE_PLUGIN_ROOT}/bin/tld" '
-    assert tld + "plan validate-manifest" in (CLAUDE / "commands" / "implement.md").read_text()
-    assert tld + "plan validate-manifest" in (CLAUDE / "commands" / "make-plan.md").read_text()
-    assert tld + "profile validate" in (CLAUDE / "skills" / "project-profile" / "SKILL.md").read_text()
-    assert tld + "review decisions" in (CLAUDE / "commands" / "review.md").read_text()
+@pytest.mark.parametrize("name", ["git-ops", "repo-admin"])
+def test_pointer_skill_names_an_existing_playbook(name):
+    text = (CLAUDE / "skills" / name / "SKILL.md").read_text()
+    assert f"${{CLAUDE_PLUGIN_ROOT}}/playbooks/{name}.md" in text and (PLAYBOOKS / f"{name}.md").is_file()
+    assert "`tld:runtime`" in text
 
 
-def test_review_hands_over_to_make_plan():
-    review = (CLAUDE / "commands" / "review.md").read_text()
-    make_plan = (CLAUDE / "commands" / "make-plan.md").read_text()
-    for skill in ("secure-code-review", "test-review", "docs-review"):
-        assert f"`{skill}`" in review
-    # The header fields and section names /make-plan relies on are the ones /review writes.
-    for text in ("review_slug", "ready-for-plan", "decisions-pending", "Findings to fix", "Not doing",
-                 "Issues created", "Suggested grouping", "/review apply"):
-        assert text in review, text
-        assert text in make_plan, text
+def test_level_table_has_every_level_once():
+    rows = re.findall(r"^\| `(strong|standard|fast)` \| `([a-z]+)` \| `(claude-[a-z0-9-]+)` \|$",
+                      RUNTIME_SKILL.read_text(), re.M)
+    assert sorted(r[0] for r in rows) == ["fast", "standard", "strong"]
+    assert all(model.startswith(f"claude-{alias}-") for _, alias, model in rows)
 
 
+def defined_actions() -> set[str]:
+    names = set()
+    for line in (PLAYBOOKS / "runtime.md").read_text().splitlines():
+        if line.startswith("### "):
+            names |= set(re.findall(r"([a-z_]+)\(", line))
+        elif line.startswith("| `"):
+            names |= set(re.findall(r"`([a-z_]+(?:\.[a-z_]+)?)\(", line.split("|")[1]))
+    return names
+
+
+def test_runtime_map_maps_every_action():
+    text = RUNTIME_SKILL.read_text()
+    actions = defined_actions()
+    assert len(actions) > 25
+    missing = sorted(a for a in actions if f"`{a}" not in text)
+    assert missing == [], f"the runtime skill does not map: {missing}"
+
+
+# ---- agents ---------------------------------------------------------------------------------
+def test_one_agent_per_role():
+    assert AGENTS == tuple(sorted(p.stem for p in (ROOT / "roles").glob("*.md")))
+
+
+@pytest.mark.parametrize("name", AGENTS)
+def test_agent_wraps_its_role_card(name):
+    path = CLAUDE / "agents" / f"{name}.md"
+    fm = frontmatter(path)
+    assert set(fm) == {"name", "description", "tools", "model"} and fm["name"] == name
+    level = re.search(r"\*\*Default level:\*\* `(\w+)`", (ROOT / "roles" / f"{name}.md").read_text()).group(1)
+    assert fm["model"] == level_aliases()[level], f"{name}: model {fm['model']} is not the role's level {level}"
+    tools = {t.strip() for t in fm["tools"].split(",")}
+    assert {"Read", "Grep", "Glob", "Bash"} <= tools <= {"Read", "Grep", "Glob", "Bash", "Edit", "Write"}
+    assert ({"Edit", "Write"} <= tools) == (name in EDIT_ROLES), name
+    assert f"${{CLAUDE_PLUGIN_ROOT}}/roles/{name}.md" in path.read_text()
+
+
+# ---- profile reference ----------------------------------------------------------------------
 def test_every_profile_key_in_the_schema_is_documented():
     schema = json.loads((TLD / "schema" / "profile.schema.json").read_text())
     reference = (ROOT / "docs" / "reference" / "profile-reference.md").read_text()
@@ -110,3 +153,12 @@ def test_every_profile_key_in_the_schema_is_documented():
                 walk(sub, dotted + ".")
 
     walk(schema, "")
+
+
+def test_review_hands_over_to_make_plan():
+    """The header fields and section names make-plan reads are the ones review writes."""
+    review = (PLAYBOOKS / "review.md").read_text()
+    make_plan = (PLAYBOOKS / "make-plan.md").read_text()
+    for text in ("review_slug", "ready-for-plan", "decisions-pending", "Findings to fix", "Not doing",
+                 "Issues created", "Suggested grouping"):
+        assert text in review and text in make_plan, text

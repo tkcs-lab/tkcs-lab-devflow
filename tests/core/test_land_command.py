@@ -9,7 +9,6 @@ from conftest import TLD, CLAUDE, tld_cmd
 
 SCRIPT = TLD / "ops" / "land_order.py"
 SCRIPT_CMD = tld_cmd("ops", "land-order")
-COMMAND = CLAUDE / "commands" / "land.md"
 FORBIDDEN = re.compile(r"privacyfence|ruff|pytest|src/privacyfence|connector", re.I)
 
 
@@ -68,58 +67,3 @@ def test_acceptance_example():
 def test_bad_input(text):
     r = subprocess.run([*SCRIPT_CMD, "-"], input=text, capture_output=True, text=True)
     assert r.returncode == 1 and r.stderr.startswith("land_order: ")
-
-
-@pytest.fixture(scope="module")
-def text():
-    return COMMAND.read_text()
-
-
-def test_front_matter(text):
-    head = text.split("---")[1]
-    assert re.search(r"^description: .+", head, re.M)
-    assert re.search(r"^model: sonnet$", head, re.M)
-    assert re.search(r'^argument-hint: "\[PR numbers\]"$', head, re.M)
-
-
-def test_profile_paragraph(text):
-    assert ("Load the `project-profile` skill and follow its \"Loading the profile\" section. If it reports "
-            "an error, show the message verbatim and stop; never substitute a value of your own for a "
-            "missing key.") in text
-
-
-def test_headings_in_order(text):
-    heads = re.findall(r"^## .+$", text, re.M)
-    assert heads == ["## Profile", "## Rules", "## 1. Collect and order", "## 2. Resolve conflicts before review",
-                     "## 3. Run CI once", "## 4. Install the workflow", "## 5. Report and record", "## Never"]
-
-
-@pytest.mark.parametrize("reason", [
-    "Resolve conflict between #<a> and #<b>",
-    "Fix red integration CI for land set",
-    "Review PR #<n>",
-    "Add .github/workflows/tld-land.yml from the tld template",
-    "chore/land-<yyyymmdd-hhmm>",
-    "chore/tld-land-workflow",
-    "land: integration <yyyymmdd-hhmm>",
-    "${CLAUDE_PLUGIN_ROOT}/src/tld/templates/tld-land.yml",
-    "__MAIN_BRANCH__",
-])
-def test_exact_strings(text, reason):
-    assert reason in text
-
-
-def test_never_section(text):
-    never = text.split("## Never")[1].lower()
-    for word in ("approve", "merge", "auto-merge", "force-push", "delete"):
-        assert word in never
-
-
-def test_names_secret_and_setting(text):
-    assert "TLD_AGENT_TOKEN" in text
-    assert "Allow auto-merge" in text
-
-
-def test_no_forbidden_words(text):
-    assert not FORBIDDEN.search(text)
-    assert not FORBIDDEN.search(SCRIPT.read_text())

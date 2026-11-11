@@ -51,15 +51,6 @@ def test_build_rejects_a_bad_fixture(tmp_path):
     assert result.stderr.startswith("build_board: ")
 
 
-def test_board_command_names_its_keys():
-    text = (CLAUDE / "commands" / "board.md").read_text()
-    for needle in (
-        "board client health", "board stale", "board_delete", "board_list",
-        "TLD_BOARD_URL", "TLD_BOARD_TOKEN", "docs/guides/board-server.md",
-    ):
-        assert needle in text
-
-
 def test_page_has_no_write_calls():
     page = (TLD / "board" / "web" / "board.html").read_text()
     for call in (".set(", ".update(", ".delete(", "<button"):

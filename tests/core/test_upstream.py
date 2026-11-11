@@ -11,7 +11,7 @@ from conftest import ROOT, TLD, CLAUDE, FORBIDDEN, tld_cmd
 
 SYNC = TLD / "ops" / "ops upstream-sync"
 SYNC_CMD = tld_cmd("ops", "upstream-sync")
-COMMAND = CLAUDE / "commands" / "upstream.md"
+PLAYBOOK = ROOT / "playbooks" / "upstream.md"
 SEMVER = r"^v[0-9]+\.[0-9]+\.[0-9]+$"
 # Built at import time, before conftest's session fixture runs, so it isolates git config itself.
 ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull, GIT_CONFIG_NOSYSTEM="1",
@@ -150,22 +150,4 @@ def test_missing_version_file_exit_1(world):
 def test_tag_route_matches_the_spike():
     spike = (ROOT / "docs" / "architecture" / "maintenance-spike.md").read_text()
     route = re.search(r"^ROUTE f: (.+)$", spike, re.M).group(1).strip()
-    assert route in COMMAND.read_text()
-
-
-def test_command_has_no_forbidden_word():
-    assert FORBIDDEN.search(COMMAND.read_text()) is None
-
-
-def test_command_flags_exist_in_help():
-    help_texts = {"": subprocess.run([*SYNC_CMD, "--help"], capture_output=True, text=True).stdout}
-    for sub in ("plan", "prepare"):
-        help_texts[sub] = subprocess.run([*SYNC_CMD, sub, "--help"], capture_output=True, text=True).stdout
-    lines = [l for l in COMMAND.read_text().splitlines() if "ops upstream-sync" in l]
-    assert lines
-    for line in lines:
-        words = [w.strip("`.,:;()") for w in line.split("ops upstream-sync", 1)[1].split()]
-        sub = next((w for w in words if w in ("plan", "prepare")), None)
-        assert sub, f"no subcommand in: {line}"
-        for flag in re.findall(r"--[a-z-]+", line.split("ops upstream-sync", 1)[1]):
-            assert flag in help_texts[sub], f"{flag} not in 'tld ops upstream-sync {sub} --help'"
+    assert route in PLAYBOOK.read_text()

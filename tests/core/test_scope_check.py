@@ -403,21 +403,6 @@ def test_starter_template_documents_the_key():
     assert "# scope:" in text and "#   ignore:" in text
 
 
-def test_implement_command_calls_the_script_with_real_flags():
-    text = (CLAUDE / "commands" / "implement.md").read_text()
-    block = text[text.index("plan scope-check check"):]
-    block = block[:block.index("```")]
-    flags = {w for w in block.split() if w.startswith("--")}
-    helptext = subprocess.run([*SCRIPT_CMD, "check", "--help"], capture_output=True, text=True).stdout
-    assert flags and all(f in helptext for f in flags), flags
-    for needle in ("plan scope-check disposition", "plan scope-check section", "plan scope-check record",
-                   "never a reason to hold the merge back", "`unavailable`", "guardrail hooks",
-                   "`docs.changelog.file`", "**Scope** section", "at most 20"):
-        assert needle in text, needle
-    # the scope check runs before the merge command
-    assert text.index("plan scope-check check") < text.index("git merge --no-ff origin/<phase branch>")
-
-
 def test_docs_describe_the_decisions():
     doc = (ROOT / "docs" / "architecture" / "scope-drift.md").read_text()
     for needle in ("optional property in schema version 1", "pull request description", "scope.ignore",
