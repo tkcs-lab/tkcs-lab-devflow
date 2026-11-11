@@ -86,8 +86,8 @@ def build_fixture(task: Task, base: Path) -> tuple[Path, dict]:
     return work, expected
 
 
-def capture(work: Path, base_sha: str) -> Artifacts:
-    a = Artifacts(base_sha=base_sha)
+def capture(work: Path, base_sha: str, origin: Path | None = None) -> Artifacts:
+    a = Artifacts(base_sha=base_sha, origin_path=str(origin) if origin is not None else None)
     a.head = git("rev-parse", "HEAD", cwd=work).strip()
     for line in git("for-each-ref", "--format=%(refname) %(objectname)", "refs/heads", "refs/remotes", "refs/tags", cwd=work).splitlines():
         ref, sha = line.split()
@@ -183,7 +183,7 @@ def run_once(task: Task, repeat: int, agent: Agent, budget: Budget, *, model_ove
             res = AgentResult(exit_status=-1, error=str(exc))
         res.duration_s = res.duration_s or round(time.monotonic() - t0, 2)
         budget.add(res.cost_usd)
-        art = capture(work, base_sha)
+        art = capture(work, base_sha, tmp / "origin.git")
         ctx = GradeContext(art, expected, res.transcript, res.result_text, work)
         graded = run_graders(ctx, task.graders)
         status, reason = "ok", ""
