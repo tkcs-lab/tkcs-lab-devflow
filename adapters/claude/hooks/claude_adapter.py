@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import NamedTuple
@@ -30,6 +31,10 @@ WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 PROTECTED = ("~/.claude/**", ".claude/settings.json", ".claude/settings.local.json", ".claude/hooks/**", ".mcp.json")
 
 
+# A prompt that starts with a tld command or skill: `/tld:make-plan x` or `/make-plan x`.
+INVOKED = re.compile(r"^\s*/(?:tld:)?([a-z][a-z-]*)(?:\s|$)")
+
+
 class Result(NamedTuple):
     code: int
     stderr: str = ""
@@ -39,6 +44,27 @@ class Result(NamedTuple):
 def settings() -> Settings:
     return Settings(extra_protected=PROTECTED, plugin_root=os.environ.get("CLAUDE_PLUGIN_ROOT") or None,
                     project_hint=os.environ.get("CLAUDE_PROJECT_DIR") or None)
+
+
+def known_commands() -> frozenset[str]:
+    """The names of the tld commands (commands/*.md) and skills (skills/*/) of this adapter."""
+    base = Path(__file__).resolve().parents[1]
+    names = {f.stem for f in (base / "commands").glob("*.md")}
+    skills = base / "skills"
+    if skills.is_dir():
+        names |= {d.name for d in skills.iterdir() if d.is_dir()}
+    return frozenset(names)
+
+
+def invoked_command(prompt: str) -> str | None:
+    """The tld command or skill a prompt starts with, or None."""
+    m = INVOKED.match(prompt)
+    return m.group(1) if m and m.group(1) in known_commands() else None
+
+
+def _sid(payload: dict) -> str | None:
+    sid = payload.get("session_id")
+    return None if sid is None else str(sid)
 
 
 def _content(tool: str, ti: dict) -> tuple[tuple[str, str], ...]:
@@ -60,23 +86,38 @@ def to_action(payload: dict, project_dir: str | None = None) -> Action | None:
     project = project_dir or _common.find_project(cwd, os.environ.get("CLAUDE_PROJECT_DIR") or None)[0]
     ti = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
     tool = str(payload.get("tool_name") or "")
+    if payload.get("hook_event_name") == "UserPromptSubmit":
+        text = payload.get("prompt")
+        if not isinstance(text, str):
+            return None
+        return Action("prompt", project, cwd, prompt=text, invoked=invoked_command(text), session_id=_sid(payload))
     if payload.get("hook_event_name") == "Stop" or (not tool and "stop_hook_active" in payload):
-        sid = payload.get("session_id")
-        return Action("stop", project, cwd, session_id=None if sid is None else str(sid),
+        return Action("stop", project, cwd, session_id=_sid(payload),
                       continuing=bool(payload.get("stop_hook_active")))
     if tool == "Bash":
         command = ti.get("command")
-        return Action("shell", project, cwd, command=command) if isinstance(command, str) else None
+        return Action("shell", project, cwd, command=command, session_id=_sid(payload)) if isinstance(command, str) else None
     if tool in WRITE_TOOLS:
         path = ti.get("file_path") or ti.get("notebook_path")
         return Action("write", project, cwd, path=path if isinstance(path, str) and path else None,
-                      content=_content(tool, ti))
+                      content=_content(tool, ti), session_id=_sid(payload))
     if tool.startswith("mcp__") and "__" in tool[5:]:
-        return Action("github_op", project, cwd, op=tool.rsplit("__", 1)[-1], args=dict(ti))
+        return Action("github_op", project, cwd, op=tool.rsplit("__", 1)[-1], args=dict(ti), session_id=_sid(payload))
     return None
 
 
-def to_result(decision: Decision) -> Result:
+def to_result(decision: Decision, prompt: bool = False) -> Result:
+    if prompt:  # a prompt event never exits non-zero: that would erase what the user typed
+        if decision.verdict != "allow":
+            return Result(0, "", json.dumps({"systemMessage": decision.reason}))
+        if decision.context is None and not decision.notice:
+            return Result(0)
+        out: dict = {}
+        if decision.context is not None:
+            out["hookSpecificOutput"] = {"hookEventName": "UserPromptSubmit", "additionalContext": decision.context}
+        if decision.notice:
+            out["systemMessage"] = decision.notice
+        return Result(0, "", json.dumps(out))
     if decision.verdict == "deny":
         return Result(2, decision.reason)
     if decision.verdict == "error":
@@ -101,10 +142,11 @@ def execute(name: str, stdin_text: str) -> Result:
             raise ValueError("the event is not a JSON object")
     except ValueError as exc:
         return to_result(_common.problem(name, fail_closed, f"cannot read the hook event ({exc})."))
+    prompt = payload.get("hook_event_name") == "UserPromptSubmit"
     try:
-        return to_result(decide(name, payload))
+        return to_result(decide(name, payload), prompt)
     except Exception as exc:  # noqa: BLE001 - loading the guard failed
-        return to_result(_common.problem(name, fail_closed, f"internal error while loading ({type(exc).__name__}: {exc})."))
+        return to_result(_common.problem(name, fail_closed, f"internal error while loading ({type(exc).__name__}: {exc})."), prompt)
 
 
 def main(name: str) -> None:
