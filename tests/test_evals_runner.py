@@ -1,7 +1,12 @@
 """Runner with the stub agent: no model call anywhere in these tests."""
 import json
 import os
+import random
+import stat
+import string
 import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 from evals_support import GOOD_MANIFEST, bash, mutated, plan_text
@@ -9,7 +14,7 @@ from evals_support import GOOD_MANIFEST, bash, mutated, plan_text
 from evals.harness.agents import AgentError, ClaudeCodeAgent, StubAgent, build_command, clean_env, parse_stream
 from evals.harness.common import git
 from evals.harness.model import AgentRequest, tool_calls
-from evals.harness.results import aggregate, append_results, read_results, scrub
+from evals.harness.results import aggregate, append_results, read_results, scrub, write_transcript
 from evals.harness.runner import Budget, run_once, run_tasks
 from evals.harness.taskspec import Task, discover
 
@@ -154,10 +159,79 @@ def test_transcripts_are_stored_separately_and_scrubbed(tmp_path):
     assert secret not in json.dumps(r)
 
 
+HOOKS = str(Path(__file__).resolve().parents[1] / "plugins" / "devflow" / "hooks")
+if HOOKS not in sys.path:
+    sys.path.insert(0, HOOKS)
+import secret_scan  # noqa: E402
+
+_ALNUM = string.ascii_letters + string.digits
+
+
+def _r(n, alphabet=_ALNUM):
+    rng = random.Random(n * 31 + len(alphabet))
+    return "a7" + "".join(rng.choice(alphabet) for _ in range(n - 2))
+
+
+# One runtime-built sample per secret_scan.SPECIFIC pattern (no token-shaped literal in this file).
+SAMPLES = {
+    "private-key": "-----BEGIN " + "RSA PRIVATE KEY" + "-----",
+    "aws-access-key-id": "AKIA" + "A" * 16,
+    "aws-secret-key": "aws_secret_access_key = " + _r(40, _ALNUM + "/+"),
+    "github-token": "ghp_" + _r(36),
+    "gcp-api-key": "AIza" + _r(35, _ALNUM + "_-"),
+    "gcp-oauth-token": "ya29." + _r(40),
+    "slack-token": "xoxb-" + _r(30, string.digits),
+    "stripe-key": "sk_live_" + _r(30),
+    "anthropic-key": "sk-ant-" + _r(40),
+    "openai-key": "sk-" + _r(48),
+    "npm-token": "npm_" + _r(36),
+    "pypi-token": "pypi-AgEIcHlwaS5vcmc" + _r(60),
+    "sendgrid-key": "SG." + _r(22) + "." + _r(43),
+    "azure-storage-key": "AccountKey=" + _r(64, _ALNUM + "+/") + "==",
+    "url-credentials": "postgres://user:" + _r(10) + "@db.internal/app",
+    "bearer-token": "Bearer " + _r(30),
+    "jwt": "eyJ" + _r(12) + ".eyJ" + _r(12) + "." + _r(16),
+}
+
+
+def test_samples_cover_every_specific_pattern():
+    assert set(SAMPLES) == {name for name, _, _ in secret_scan.SPECIFIC}
+    for name, _, rx in secret_scan.SPECIFIC:
+        assert rx.search(SAMPLES[name]), name
+
+
+@pytest.mark.parametrize("name", sorted(SAMPLES))
+def test_scrub_patterns_specific(name):
+    out, n = scrub(f"prefix {SAMPLES[name]} suffix")
+    assert n >= 1, name
+    assert SAMPLES[name].split()[-1] not in out
+
+
 def test_scrub_patterns():
-    for s in ["sk-ant-api03-" + "x" * 20, "AKIA" + "A" * 16, "password = hunter2hunter2hunter2", "-----BEGIN RSA PRIVATE KEY-----"]:
+    pem = json.dumps("-----BEGIN " + "RSA PRIVATE KEY" + "-----\n" + _r(40) + "\n-----END " + "RSA PRIVATE KEY" + "-----\n")
+    body = _r(40)
+    jsons = json.dumps({"access_token": _r(40)})
+    url = "https://user:pw@host/x"
+    for s in ["sk-ant-api03-" + "x" * 20, "AKIA" + "A" * 16, "password = hunter2hunter2hunter2",
+              "-----BEGIN RSA PRIVATE KEY-----", pem, jsons, url]:
         assert scrub(s)[1] >= 1, s
+    assert body not in scrub(pem)[0] and "RSA PRIVATE KEY" not in scrub(pem)[0]
+    assert "pw@" not in scrub(url)[0]
     assert scrub("plain text")[1] == 0
+
+
+def test_results_records_are_scrubbed(tmp_path):
+    tok = SAMPLES["github-token"]
+    rec = {"task": "t", "error": f"boom {tok}", "graders": [{"name": "g", "passed": False, "reason": f"saw {tok}"}]}
+    f = tmp_path / "out" / "r.jsonl"
+    append_results(f, [rec])
+    assert tok not in f.read_text() and "[REDACTED]" in f.read_text()
+    assert stat.S_IMODE(f.stat().st_mode) == 0o600
+    events = [{"type": "assistant", "message": {"content": [{"type": "text", "text": f"tok {tok}"}]}}]
+    name, n = write_transcript(tmp_path / "tr", "t", 1, events, "2026-01-01T00:00:00")
+    tf = tmp_path / "tr" / name
+    assert tok not in tf.read_text() and n >= 1
+    assert stat.S_IMODE(tf.stat().st_mode) == 0o600
 
 
 def test_results_jsonl_roundtrip_and_aggregate(tmp_path):
