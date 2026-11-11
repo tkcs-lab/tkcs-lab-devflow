@@ -331,7 +331,7 @@ To confirm the hooks are loaded in a session, run `/hooks` and look for the `dev
 `git tag probe`: with `no-git-tag` active the call is denied with `devflow no-git-tag: blocked` and no tag is created.
 
 Loading the hooks from plugins that a Claude Project syncs into a cloud session is **not verified end to end** (see
-[delivery.md](../delivery.md)). The tests exercise the scripts directly, not Claude Code's loading of `hooks.json`.
+[delivery.md](../guides/delivery.md)). The tests exercise the scripts directly, not Claude Code's loading of `hooks.json`.
 
 ## Tests
 

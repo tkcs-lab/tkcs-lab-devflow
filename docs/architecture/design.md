@@ -2,7 +2,7 @@
 
 Status: review 1 answered; this is the design as built. The three decisions in §8 are resolved.
 
-Since devflow 0.4 the SessionStart-hook route and `toolkit.ref` no longer exist; plugins in the Claude Project are the only delivery route (see delivery.md). Section 3 is kept as the record of the probe that led to the first design.
+Since devflow 0.4 the SessionStart-hook route and `toolkit.ref` no longer exist; plugins in the Claude Project are the only delivery route (see guides/delivery.md). Section 3 is kept as the record of the probe that led to the first design.
 
 ## 1. What this is
 
@@ -23,9 +23,9 @@ Nightshift's runtime is not used. From it I take: the marketplace shape, the `re
 .claude-plugin/marketplace.json         # name: claude-toolkit; plugins: devflow, stack-python, stack-swift, stack-ipados, stack-go
 plugins/devflow/
   .claude-plugin/plugin.json
-  commands/{make-plan,implement,dod,review}.md   # review: see docs/review.md
-  commands/{board,deps,upstream,land}.md         # maintenance commands: see docs/maintenance.md
-  commands/setup.md                     # /setup: survey a repository, create or update the profile: see docs/setup.md
+  commands/{make-plan,implement,dod,review}.md   # review: see docs/guides/review.md
+  commands/{board,deps,upstream,land}.md         # maintenance commands: see docs/guides/maintenance.md
+  commands/setup.md                     # /setup: survey a repository, create or update the profile: see docs/guides/setup.md
   agents/<name>.md                      # the ten generic agents (architect ... refactorer): see docs/architecture/agents.md
   skills/project-profile/SKILL.md       # how every command reads, validates and quotes the profile
   skills/pr-steward/SKILL.md            # generic steward policy; table comes from ci.dispatchable
@@ -33,7 +33,7 @@ plugins/devflow/
   skills/secure-code-review/SKILL.md    # Nightshift, adapted; whole-repository section for /review
   skills/{test-review,docs-review}/SKILL.md   # checklists for /review's test and documentation dimensions
   skills/status-board/SKILL.md          # how a session writes its status record to the board
-  skills/repo-admin/SKILL.md            # audit and update organisation and repository settings: see docs/admin.md
+  skills/repo-admin/SKILL.md            # audit and update organisation and repository settings: see docs/guides/admin.md
   skills/{agent-dispatch,profile-setup}/SKILL.md   # dispatching the profile's agents; how /setup decides and asks
   scripts/validate_manifest.py          # CLI: validate_manifest.py <plan.md|manifest.yaml> [--profile P]
   scripts/validate_profile.py           # CLI: validate_profile.py [.claude/toolkit.yaml]
@@ -63,7 +63,7 @@ evals/                                  # eval harness (not shipped): see docs/a
 docs/architecture/{design.md,hooks.md,evals.md,scope-drift.md,agents.md}
 docs/architecture/maintenance-spike.md  # record of the spike behind the maintenance commands
 docs/reference/profile-reference.md
-docs/{delivery.md,board-server.md,review.md,admin.md,git-ops.md,maintenance.md,setup.md,migrating-privacyfence.md}
+docs/{guides/{delivery,board-server,review,admin,git-ops,maintenance,setup}.md,migrating-privacyfence.md}
 tests/                                  # pytest; fixtures from real PrivacyFence plans
 .github/workflows/test.yml
 ```
@@ -112,7 +112,7 @@ switches to `<project>/.claude/` for people who want it; in that mode the script
 installed path to `.git/info/exclude`, as you asked. (In user scope the exclude is moot, so the script
 does not write it.)
 
-Not tested, and said so in `docs/delivery.md`:
+Not tested, and said so in `docs/guides/delivery.md`:
 
 1. **Route 1 (Claude Project plugins)**: it is a settings-UI feature of claude.ai and cannot be driven
    from a session. The marketplace is validated structurally (`claude plugin validate`, if the CLI is
@@ -305,7 +305,7 @@ the first two run unattended from a scheduled task, `/land` is run by the owner,
 merges. `/make-plan` and `/implement` now keep a tracking issue for every plan. Profile sections
 `deps`, `upstream`, `land` and the key `git.bot_login` configure the new commands. Delivery is by plugins
 only. How to run and schedule the commands, the profile sections, the board and the secret and setting
-`/land` needs are in [maintenance.md](../maintenance.md); what a cloud session can and cannot do, which
+`/land` needs are in [maintenance.md](../guides/maintenance.md); what a cloud session can and cannot do, which
 shaped the design, is recorded in [design/maintenance-spike.md](maintenance-spike.md).
 
 ## 11. git-ops
@@ -317,12 +317,12 @@ lives in a private repository of its own, not in this one (D1), so that the repo
 with write access to other repositories contains only the workflow and its allowlist. The token is an
 environment secret limited to the default branch (D7), and the workflow starts as a dry run and checks an
 allowlist and a set of guards. Rejected: a copy of the workflow in every repository, and for now a GitHub
-App token instead of a fine-grained one. Setup, use and guards are in [git-ops.md](../git-ops.md).
+App token instead of a fine-grained one. Setup, use and guards are in [git-ops.md](../guides/git-ops.md).
 
 ## 12. A self-hosted status board
 
 Why: the board was a private claude.ai Artifact page whose data lived in the Artifact database, so
-everything about it depended on claude.ai. It is now a server you host; see [board-server.md](../board-server.md).
+everything about it depended on claude.ai. It is now a server you host; see [board-server.md](../guides/board-server.md).
 
 What was built:
 
@@ -334,7 +334,7 @@ What was built:
 * `.mcp.json`: declares the bridge, so a session with the plugin has `board_get`, `board_list`, `board_set`, `board_delete`.
 * `board.html` polls `api/records` every 15 seconds instead of reading the Artifact database.
 * The `status-board` skill and `/board` use the tools or the client; `/board` checks the connection.
-* `board/Dockerfile` and `docs/board-server.md` for deployment.
+* `board/Dockerfile` and `docs/guides/board-server.md` for deployment.
 * Configuration is `DEVFLOW_BOARD_URL` and `DEVFLOW_BOARD_TOKEN` (and `DEVFLOW_BOARD_READ_TOKEN` on the server).
 
 Rejected:
@@ -352,7 +352,7 @@ validation with `unknown key 'status'`. This breaking change shipped in 0.7.0.
 
 ## 13. Agents and /setup
 
-Ten generic agents and the `/setup` command were added. [agents.md](agents.md) and [setup.md](../setup.md) describe what
+Ten generic agents and the `/setup` command were added. [agents.md](agents.md) and [setup.md](../guides/setup.md) describe what
 they do; this section records why.
 
 - **The agents live in devflow, not in a new plugin.** They are wired into `/make-plan`, `/implement`, `/review` and

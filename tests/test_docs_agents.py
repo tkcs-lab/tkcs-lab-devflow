@@ -11,8 +11,8 @@ DOCS = ROOT / "docs"
 AGENTS = ["architect", "code-reviewer", "security-reviewer", "test-architect", "tech-writer",
           "website-maintainer", "ux-reviewer", "debugger", "dependency-auditor", "refactorer"]
 POINTS = ["make_plan", "implement_phase", "implement_final", "review", "dod"]
-LINKED = [DOCS / "architecture" / "agents.md", DOCS / "setup.md", DOCS / "architecture" / "design.md", DOCS / "architecture" / "hooks.md",
-          DOCS / "maintenance.md", ROOT / "README.md"]
+LINKED = [DOCS / "architecture" / "agents.md", DOCS / "guides" / "setup.md", DOCS / "architecture" / "design.md", DOCS / "architecture" / "hooks.md",
+          DOCS / "guides" / "maintenance.md", ROOT / "README.md"]
 
 
 def test_agents_doc_names_agents_and_points():
@@ -22,7 +22,7 @@ def test_agents_doc_names_agents_and_points():
 
 
 def test_setup_doc_names_scripts_and_branch():
-    text = (DOCS / "setup.md").read_text()
+    text = (DOCS / "guides" / "setup.md").read_text()
     for needle in ("profile_survey.py", "profile_patch.py", "chore/toolkit-profile"):
         assert needle in text, needle
 
