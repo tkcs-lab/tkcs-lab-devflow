@@ -488,7 +488,8 @@
               "no-git-tag",
               "secret-scan",
               "protect-paths",
-              "dod-gate"
+              "dod-gate",
+              "plan-gate"
             ]
           },
           "x-hook-default": [],
@@ -527,6 +528,17 @@
               "maximum": 10,
               "x-hook-default": 3,
               "description": "Failed attempts after which the gate lets the session stop and says why."
+            }
+          }
+        },
+        "plan_gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "x-hook-default": false,
+              "description": "Opt in: a session that no tld command started cannot write into the repository; it is told to answer and propose /tld:make-plan."
             }
           }
         }

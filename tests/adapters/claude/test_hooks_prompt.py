@@ -1,7 +1,10 @@
 """The Claude adapter's UserPromptSubmit support: command detection, the prompt Action, the prompt result."""
 import json
+import subprocess
+import sys
 
-from hooks_helpers import claude_adapter as ca, event
+import hooks_helpers as hh
+from hooks_helpers import HOOKS, claude_adapter as ca, event, make_repo
 
 from tld.guard.action import Decision
 
@@ -59,3 +62,53 @@ def test_non_prompt_to_result_is_unchanged():
     assert ca.to_result(Decision("error", "bad")) == ca.Result(1, "bad")
     assert ca.to_result(Decision("allow", "", "n", "CTX")) == ca.Result(0, "", json.dumps({"systemMessage": "n"}))
     assert ca.to_result(Decision("allow")) == ca.Result(0, "", "")
+
+
+# ---- end to end through execute("plan-gate", ...) ------------------------------------------------
+ON = hh.PROFILE + "hooks:\n  plan_gate:\n    enabled: true\n"
+
+
+def prompt_event(cwd, text, sid="s1"):
+    return {"session_id": sid, "cwd": str(cwd), "hook_event_name": "UserPromptSubmit", "prompt": text}
+
+
+def gate(repo, payload):
+    return hh.run("plan-gate", payload, project=repo)
+
+
+def test_plain_prompt_returns_context_json(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo", ON)
+    r = gate(repo, prompt_event(repo, "add a comment to README.md"))
+    assert r.code == 0
+    out = json.loads(r.stdout)["hookSpecificOutput"]
+    assert out["hookEventName"] == "UserPromptSubmit" and "/tld:make-plan" in out["additionalContext"]
+
+
+def test_opening_prompt_opens_then_write_is_allowed(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo", ON)
+    write = event("Write", repo, file_path=str(repo / "a.txt"), content="x")
+    assert gate(repo, write).code == 2
+    assert gate(repo, prompt_event(repo, "/tld:make-plan add a thing")) == ca.Result(0)
+    assert gate(repo, write).code == 0
+
+
+def test_write_in_a_closed_session_exits_2_with_the_deny_text(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo", ON)
+    r = gate(repo, event("Write", repo, file_path=str(repo / "a.txt"), content="x"))
+    assert r.code == 2 and "blocked:" in r.stderr + r.stdout and "/tld:make-plan" in r.stderr + r.stdout
+
+
+def test_script_runs_as_a_subprocess(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo", ON)
+    import os
+    env = {**os.environ, "CLAUDE_PROJECT_DIR": str(repo)}
+    r = subprocess.run([sys.executable, str(HOOKS / "plan_gate.py")], input=json.dumps(prompt_event(repo, "hello")),
+                       capture_output=True, text=True, env=env, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert "additionalContext" in r.stdout
+
+
+def test_gate_off_prints_nothing(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo")
+    assert gate(repo, prompt_event(repo, "hello")) == ca.Result(0)
+    assert gate(repo, event("Write", repo, file_path=str(repo / "a.txt"), content="x")) == ca.Result(0)
