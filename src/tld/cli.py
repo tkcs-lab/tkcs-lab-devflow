@@ -33,6 +33,8 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
                                           "allow writing tld-land.yml / tld-release.yml for the next 15 minutes"),
     ("guard", "allow-git-ops"): ("tld.guard.protect_paths", ("--allow-git-ops",),
                                  "allow a git-ops dispatch with dry_run false for the next 10 minutes"),
+    ("guard", "allow-plan"): ("tld.guard.protect_paths", ("--allow-plan",),
+                              "let every session in this checkout edit files for 8 hours (a plan-gate marker for /implement workers)"),
     ("guard", "end-allow"): ("tld.guard.protect_paths", ("--end-allow",),
                              "end every allow-* marker (profile, workflow install, git-ops)"),
     ("board", "server"): ("tld.board.server", (), "serve the status board"),
@@ -64,7 +66,8 @@ TOP: dict[str, tuple[str, str]] = {
 # --help` prints the one-line help and the module's docstring instead of running it.
 DOC_HELP = {("profile", "survey"), ("profile", "survey-docs"), ("profile", "survey-signals"),
             ("profile", "survey-proposal"), ("dod", "exempt"), ("guard", "allow-profile"),
-            ("guard", "allow-workflow-install"), ("guard", "allow-git-ops"), ("guard", "end-allow"),
+            ("guard", "allow-workflow-install"), ("guard", "allow-git-ops"), ("guard", "allow-plan"),
+            ("guard", "end-allow"),
             ("board", "mcp-stdio"), ("version", "show")}
 
 
