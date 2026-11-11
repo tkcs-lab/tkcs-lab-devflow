@@ -53,9 +53,15 @@ in this plan may be off; always locate by symbol or by `grep`.
 ## Design
 
 Conventions for every phase: Python 3.11, standard library plus PyYAML in the hooks; tests are plain
+
 pytest functions placed in the file the acceptance names; run the suite with
 `.venv/bin/python -m pytest` (the profile's command creates `.venv`). A new test is written first and
 must fail on the unfixed code for the reason the finding gives. Never loosen an assertion or add a skip.
+**File size cap:** `tests/test_hooks_config.py::test_scripts_are_small_stdlib_plus_pyyaml_python_311_without_network`
+requires every `plugins/devflow/hooks/*.py` to be under 420 lines (today `_shell.py` has 355, `_gitgh.py` 348). The cap is
+not loosened. New code therefore goes into **new helper modules**: `_ansi.py` and `_wrappers.py` (phase p1), `_gitcfg.py`
+(phase p3). Helper modules import only the standard library and sit next to the hooks. Before finishing, a worker runs
+`wc -l plugins/devflow/hooks/*.py` and stops with `status=blocked` if any file has 420 lines or more.
 `docs/hooks.md` is edited **only** by phase `p19-docs`, `docs/evals.md` only by `p16-eval-docs-tasks`,
 `docs/scope-drift.md` and `implement.md` only by `p17-scope-check`. A code phase that changes a
 documented behaviour does not edit those docs; `p19-docs` does, from the "Documentation obligations"
@@ -64,12 +70,12 @@ list at the end of this section.
 ### D1. Shell parser (`_shell.py`) — SEC-H2, SEC-H4
 
 - `$'…'` (ANSI-C quoting) is decoded to its literal value instead of `DYN`. New function
-  `ansi_c_decode(body: str) -> str` in `_shell.py` implementing bash's rules: `\a \b \e \E \f \n \r \t \v \\ \' \" \?`,
+  `ansi_c_decode(body: str) -> str` in the new module `_ansi.py` (imported by `_shell.py`) implementing bash's rules: `\a \b \e \E \f \n \r \t \v \\ \' \" \?`,
   octal `\nnn` (1 to 3 digits), `\xHH` (1 to 2 hex digits), `\uHHHH`, `\UHHHHHHHH`, `\cX` (control character);
   an unknown escape is kept as backslash plus the character; a NUL (from `\0` or `\x00`) ends the string, as in bash.
   In `_scan` the decoded text is appended to the word buffer as `shlex.quote(decoded)` (the same way
   `_heredoc_delimiter` appends a quoted delimiter) so the later word split sees one literal word.
-- `WRAPPERS` gains `flock`, `script`, `taskset`, `unshare`, `chroot`, `strace`; `WRAPPER_VALUE_OPTS` gains
+- The wrapper tables and `_strip_wrapper` move from `_shell.py` into the new module `_wrappers.py` (`WRAPPERS`, `WRAPPER_VALUE_OPTS`, `WRAPPER_POSITIONALS`, `strip_wrapper`); `_shell.py` imports them under the old names. `WRAPPERS` gains `flock`, `script`, `taskset`, `unshare`, `chroot`, `strace`; `WRAPPER_VALUE_OPTS` gains
   `flock: {-w, --timeout, -E, --conflict-exit-code}`, `taskset: {-c, --cpu-list}`, `chroot: {--userspec, --groups}`,
   `strace: {-e, -o, -p, -s, -u, -E, -a}`, `unshare: {}`, `script: {-c, --command}` handled specially (below).
   `flock` and `chroot` take one positional (lock file / new root) that `_strip_wrapper` must skip before the command;
@@ -79,8 +85,9 @@ list at the end of this section.
 - `time -p`: `time` stays in `RESERVED` (it is a keyword), but a directly following `-p` word is skipped
   (also `--`). Do this where `RESERVED` words are stripped in `candidates`.
 - `env -S` / `--split-string`: the option's value is split with `shlex.split` and its words are prepended to the
-  rest of the command (recursion through `candidates`). `script -c CMD FILE` / `script --command CMD`: `CMD` is
-  parsed with `split_commands` and each resulting command goes through `candidates`, like `bash -c`.
+  rest of the command (recursion through `candidates`). `script -c CMD FILE` / `script --command CMD`, and any short-option
+  cluster that ends in `c` (`-qc`, `-efc`): `CMD` (the next word) is parsed with `split_commands` and each resulting command
+  goes through `candidates`, like `bash -c`.
 - Stdin-fed shells (the hard part, phase p2): a command whose head is in `SHELLS`, that has no `-c` option
   and no non-option argument (a script path), reads its commands from stdin. Rules, in this order:
   1. a herestring (`<<< word`) or a heredoc (`<< DELIM`, `<<- DELIM`, quoted or not) attached to that command:
@@ -88,18 +95,24 @@ list at the end of this section.
      through `candidates`, exactly like the `-c` string. To do this the scanner must keep heredoc bodies
      instead of discarding them (`_skip_heredoc` currently only scans an unquoted body for `$(…)`) and attach each
      body to the `Command` whose redirect introduced it (new field `Command.stdin_text: str | None`);
-  2. otherwise (stdin is a pipe, a file, or the terminal) raise
-     `ParseError("a shell that reads its commands from stdin cannot be checked")`. All three destructive hooks
-     already turn a `ParseError` into a deny with the message "cannot parse this command … Rewrite it as plain,
-     separate commands."
-  `bash script.sh`, `bash -c '…'`, `bash -s` with a here-document are covered by the same rules (`-s` counts as
-  "no script"). `sh -c` and every other existing path are unchanged.
+  2. otherwise (stdin is a pipe, a file, or the terminal) the `Command` gets `reads_stdin_shell = True`. `candidates` does
+     **not** raise: `protect_paths` treats a `ParseError` as "allow", so raising there would let `echo x > .env; echo | bash`
+     newly pass. `iter_items` (used by the three destructive hooks) raises
+     `ParseError("a shell that reads its commands from stdin cannot be checked")` when it meets such a command; the hooks
+     turn a `ParseError` into a deny ("cannot parse this command … Rewrite it as plain, separate commands.").
+     `protect_paths` ignores the flag.
+  `bash script.sh`, `bash -c '…'`, `bash -s` with a here-document are covered by the same rules (`-s` counts as "no
+  script"). A shell whose only arguments are `--version`, `--help` or `-n` is not a stdin shell. `sh -c` and every other
+  existing path are unchanged.
 
 ### D2. Git parsing (`_gitgh.py`) — SEC-H3 and the dynamic-option part of SEC-H2
 
 - `Command` (in `_shell.py`) gains `env: dict[str, str]`: the leading `NAME=value` assignments that
   `candidates` strips today (values are the literal word text; a dynamic value is the string `DYN`).
-  `_items` passes `env` to `parse_git(words, env)`.
+  `walk()` yields 3-tuples `(cwd_hint, words, redirects)` and its callers (three unpackings in `tests/test_hooks_shell.py`,
+  `protect_paths.py`) must keep working, so a new generator `walk_commands(command)` yields `(cwd_hint, Command)` and `walk`
+  becomes a thin wrapper over it. `iter_items` uses `walk_commands` and passes `command.env` to `_items`, which passes it to
+  `parse_git(words, env)`.
 - `parse_git` merges, in this order, into `Git.config` (a list of `key=value` strings): first the environment
   config (`GIT_CONFIG_COUNT`, then `GIT_CONFIG_KEY_<n>` / `GIT_CONFIG_VALUE_<n>` for `n` in `0..COUNT-1`, read from
   the command's own leading assignments, and where absent from `os.environ`), then every `--config-env=name=ENVVAR`
@@ -117,14 +130,17 @@ list at the end of this section.
 
 ### D3. Push destination (`_gitgh.py`, `no_merge.py`) — SEC-H1, SEC-H7, SEC-H15
 
-- New in `_gitgh.py`: `git_config_value(ctx_dir, repo_opts, overrides, key) -> str | None` returning the effective
-  value (the last `overrides` entry for `key`, compared case-insensitively on the key, else
-  `git config --no-includes --get <key>`), and `bare_push_destinations(it, push, main) -> list[str] | None`: the
+- New module `plugins/devflow/hooks/_gitcfg.py`, created in phase p3, which moves `_run_git`, `current_branch` and `ref_exists`
+  into it (`_gitgh.py` re-imports them, so every existing `from _gitgh import current_branch` keeps working). Phase p4 adds to
+  it `git_config_values(ctx_dir, repo_opts, overrides, key) -> list[str]`, returning **all** effective values (the `overrides`
+  entries for `key`, compared case-insensitively on the key, which replace the file values when present; otherwise
+  `git config --no-includes --get-all <key>`; an empty list when unset), `git_config_value(...) -> str | None` (the last of
+  those), and `bare_push_destinations(it, push, main) -> list[str] | None`: the
   short branch names a push **without an explicit refspec** would update, or `None` when that cannot be resolved.
   Resolution order, with `remote` = the pushed remote (`push.repo`, else `branch.<cur>.pushRemote`, else
   `remote.pushDefault`, else `branch.<cur>.remote`, else `origin`) and `cur` = `current_branch(...)`:
   1. `remote.<remote>.mirror` is true → `None`;
-  2. `remote.<remote>.push` set (all values) → each value is a refspec, run through `parse_refspecs`; the
+  2. `remote.<remote>.push` set (**every** value, from `git_config_values`) → each value is a refspec, run through `parse_refspecs`; the
      destinations are their `dst` (`HEAD`/`@` alone means `cur`); a glob or an unresolvable value → `None`;
   3. else by `push.default` (default `simple`): `simple` and `current` → `[cur]`; `upstream` / `tracking` → the
      short name of `branch.<cur>.merge` (missing → `None`); `matching` → `None`; `nothing` → `[]`.
@@ -149,7 +165,7 @@ list at the end of this section.
 
 - `no_git_tag.check_push` additionally denies: a `-c` key (case-insensitive) equal to `push.followtags`, or
   matching `remote.*.push` / `remote.*.mirror`; `git config --get`-resolved `push.followTags` true; any value of
-  `remote.<remote>.push` that mentions `refs/tags/` (use `git_config_value` from D3, remote resolved as in D3).
+  `remote.<remote>.push` that mentions `refs/tags/` (use `git_config_values` from D3, all values, remote resolved as in D3).
   `git update-ref --stdin` is denied outright (message: tags can be created through its input, which cannot be
   read). Writes of `push.*` / `remote.*.push` through `git config` are denied by `protect_paths` (D7), not here.
 - Release dispatch: the release workflow is `devflow-release.yml` (display name `devflow-release`). No new profile
@@ -164,18 +180,22 @@ list at the end of this section.
     `devflow-git-ops.yml` by file name — that dispatch **stays allowed**: the workflow runs in the central repository
     behind a dry-run default, an allowlist and the `git-ops` environment, see `docs/git-ops.md`);
   - `gh release edit` carrying `--tag` (or `--tag=…`); `gh api` PATCH or DELETE on `repos/<o>/<r>/releases/<id>`.
-- `hooks.json`: a new `PreToolUse` entry, matcher `mcp__.*__actions_run_trigger`, command `no_git_tag.py`, timeout 20.
-  `no_git_tag.evaluate` handles `ctx.tool.startswith("mcp__")` through a new `check_mcp`.
+- `hooks.json`: `no_git_tag.py` moves out of the shared `Bash` group (where `no_force_push.py` stays alone) into its own
+  `PreToolUse` group with matcher `Bash|mcp__.*__actions_run_trigger`, timeout 20. This keeps the invariants of
+  `tests/test_hooks_config.py` (each script registered exactly once; every entry that matches a tool equals the `listens` table,
+  which gains for `no_git_tag.py` the tools `Bash` and `mcp__github__actions_run_trigger`). `no_git_tag.evaluate` handles
+  `ctx.tool.startswith("mcp__")` through a new `check_mcp`.
 - `plugins/devflow/templates/devflow-release.yml`: the job gets `environment: release` (keep every other line).
-  The environment's required reviewers are a repository setting: manual step `ma2-release-environment`.
+  Every run, dry runs included, then waits for a reviewer: intended, because the workflow cuts tags. The environment's required reviewers are a repository setting: manual step `ma2-release-environment`.
 
 ### D5. Fail closed — SEC-H14
 
-- `_gitgh.py`: new `class GitLookupError(ParseError)`. `current_branch` raises it when the `git` call times out,
+- `_gitcfg.py`: new `class GitLookupError(ParseError)`. `current_branch` raises it when the `git` call times out,
   cannot run or exits with a status other than 0 or 1 (status 1 from `symbolic-ref -q` means "detached HEAD" and
   returns `None` as today); `ref_exists` raises it on timeout / `OSError` / status other than 0 or 1.
-  `expand_alias` reads config with `git config --no-includes --get`. The three destructive hooks already turn
-  `ParseError` into a deny; `no_merge.check_push` must not swallow it.
+  `expand_alias` reads config with `git config --no-includes --get`. `check_push` in `no_merge.py` and `no_git_tag.py` runs
+  outside the `try` around `iter_items`, so a `GitLookupError` there reaches `_common.execute`'s generic handler and is denied as
+  `internal error (GitLookupError: …)`; tests assert code 2 only. `check_push` must not swallow it.
 - `_common.py`: `HOOK_BUDGET_SECONDS = 15` (below the 20 s hook timeout). `execute(…, fail_closed=True)` arms
   `signal.setitimer(signal.ITIMER_REAL, HOOK_BUDGET_SECONDS)` around `evaluate` (skipped when `signal.SIGALRM` does
   not exist) with a handler that raises `TimeoutError`; `execute` turns `TimeoutError` into
@@ -190,15 +210,24 @@ list at the end of this section.
 - `find_project`: when `CLAUDE_PROJECT_DIR` is set, a profile is accepted only from that directory or a directory
   inside it (compare `Path.resolve()`); the walk up from `cwd` stops at the project directory. A profile found
   outside is ignored (reported as "no profile" with the reason `profile outside CLAUDE_PROJECT_DIR ignored`).
-- New `trusted_disable(ctx) -> list[str]`: the `hooks.disable` list read from the committed main-branch profile:
-  `git show origin/<main>:.claude/toolkit.yaml`, else `git show <main>:.claude/toolkit.yaml` (both run in
-  `ctx.project_dir`, 5 s timeout, parsed with `yaml.safe_load`), else the working-tree profile (no trusted copy
-  exists, for example the very first commit). `<main>` is `git.main_branch` of the working-tree profile.
-  `Ctx.disabled(name)` uses it for every hook. When the working-tree `hooks` section differs from the trusted one,
-  `ctx.notice` is set to `the working tree's hooks section differs from the committed <main> profile; only the
+- New `trusted_disable(ctx) -> list[str]`: the `hooks.disable` list read from the committed main-branch profile. Order:
+  1. no working-tree profile (`ctx.profile is None`, for example PyYAML missing) → `[]`;
+  2. `git rev-parse --verify -q HEAD` fails (no commit yet, or not a repository) → the working-tree list (no trusted copy can
+     exist);
+  3. otherwise `git show origin/<main>:.claude/toolkit.yaml`, else `git show <main>:.claude/toolkit.yaml` (both run in
+     `ctx.project_dir`, 5 s timeout, parsed with `yaml.safe_load`); if neither can be read → `[]` (the hooks stay on; a
+     branch that sets `git.main_branch: nosuch` to hide the committed copy gains nothing).
+  `<main>` is `git.main_branch` of the working-tree profile. This leaves one accepted gap: a branch can still change
+  `git.main_branch` itself; branch protection is the backstop, as `docs/hooks.md` already says.
+  `Ctx.disabled(name)` uses `trusted_disable` for every hook. When the working-tree `hooks` section differs from the
+  trusted one, `ctx.notice` is set to `the working tree's hooks section differs from the committed <main> profile; only the
   committed hooks.disable is applied` (shown when the call is allowed).
 - DOC-4: `Ctx.disabled` no longer swallows `ProfileError`: a `hooks.disable` that is present but not a list of
-  non-empty strings raises `ProfileError("toolkit.yaml: 'hooks.disable' must be a list of non-empty strings")`.
+  non-empty strings raises `ProfileError("toolkit.yaml: 'hooks.disable' must be a list of non-empty strings")`, and
+  `execute` turns it into exit 2 as for any `ProfileError`. Exception: for the `dod-gate` hook `execute` does not return;
+  it stores the error in the new field `Ctx.disable_error` and continues with the hook enabled, and `dod_gate.evaluate`
+  re-raises `ctx.disable_error` at the place where it counts profile errors as failed attempts (D8), so a malformed
+  `hooks.disable` cannot recreate the TST-1 endless loop.
 
 ### D7. Protect paths (`protect_paths.py`) — SEC-H8 (second half), SEC-H10, SEC-H11, TST-13
 
@@ -226,7 +255,7 @@ list at the end of this section.
   in `systemMessage`). When `max_attempts` itself is invalid, the limit used for this decision is the default 3.
 - `max_attempts` above 10 is a `ProfileError("toolkit.yaml: 'hooks.dod_gate.max_attempts' must be between 1 and 10")`
   (the lower bound check stays).
-- Tests only for TST-6 and TST-7 (no code change): see the briefs.
+- Tests only for TST-6 and TST-7 (no code change): see the briefs. Phase p7 (which adds `Ctx.disable_error`) adds the one line in `dod_gate.evaluate` that re-raises it (D6).
 
 ### D9. secret-scan (`secret_scan.py`) — SEC-H12, SEC-H13
 
@@ -237,9 +266,12 @@ list at the end of this section.
 - `SUFFIXES` becomes `("key", "token", "secret", "password", "passwd", "pwd", "credential", "credentials", "auth")`.
   For names ending in `password`, `passwd` or `pwd` the value rule is: length at least 12, has a digit and a letter,
   no placeholder word, entropy at least 3.0. All other names keep `high_entropy_literal`.
-- New `SPECIFIC` entries: `("url-credentials", "credentials in a URL", r"\b[a-z][a-z0-9+.\-]*://[^\s/:@$<>{}%]+:[^\s/@$<>{}%]{3,}@[^\s/]+")`,
-  `("bearer-token", "a bearer token", r"\bBearer\s+[A-Za-z0-9._\-]{20,}")` (skipped when the token contains a
-  `PLACEHOLDERS` word), `("jwt", "a JSON web token", r"\beyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}")`.
+- New `SPECIFIC` entries (`SPECIFIC` holds `(name, description, re.compile(...))` tuples):
+  `("url-credentials", "credentials in a URL", r"\b[a-z][a-z0-9+.\-]*://[^\s/:@$<>{}%]+:[^\s/@$<>{}%]{3,}@[^\s/]+")`,
+  `("bearer-token", "a bearer token", r"\bBearer\s+[A-Za-z0-9._\-]{20,}")`, and
+  `("jwt", "a JSON web token", r"\beyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}")`. A `bearer-token` hit
+  whose token contains a `PLACEHOLDERS` word is not a hit (a few lines of code in `scan_text`, which special-cases that name).
+  The URL password needs 3 or more characters.
 - `ALLOW_MARK` counts only at the end of the line: `line.rstrip().endswith(ALLOW_MARK)`.
 - A per-line cap `MAX_LINE_FOR_ASSIGNMENT = 1_000_000`: above it only `SPECIFIC` patterns run on that line.
 - The denial message already says "end the line with"; keep it.
@@ -248,7 +280,7 @@ list at the end of this section.
 
 See brief `p11`. The matcher rule to model (Claude Code 2.1.322): a matcher matching `^[a-zA-Z0-9_|]+$` is split on `|`
 and each part compared for equality with the tool name; any other matcher is `re.search(matcher, name)`
-(unanchored). The same function is used by `tests/test_hooks_config.py` and `evals/harness/hookcheck.py`.
+(unanchored); an empty matcher or `*` matches every tool (`re.search("*")` would raise). The same function is used by `tests/test_hooks_config.py` and `evals/harness/hookcheck.py`.
 
 ### D11. Eval harness
 
@@ -258,7 +290,7 @@ and each part compared for equality with the tool name; any other matcher is `re
   forms, `SSL_CERT_FILE`, `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE` (all kept when
   `keep_proxy`), and every variable starting `CLAUDE_CODE_` except `CLAUDE_CODE_OAUTH_TOKEN` and variables starting
   `CLAUDE_CODE_USE_` or `CLAUDE_CODE_SKIP_`. Keeps `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`.
-  New flag `run --keep-proxy` (documented in p16). `ClaudeAgent.run` creates `<tmp>/home` and passes it. `cmd_run`
+  `clean_env` also sets `GIT_AUTHOR_NAME`, `GIT_COMMITTER_NAME` (`devflow-evals`) and `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_EMAIL` (`evals@example.invalid`) when the caller's environment does not, because an empty `HOME` has no git identity and every commit the agent makes would fail. New flag `run --keep-proxy` (documented in p16). `ClaudeCodeAgent.run` creates `<req.workdir.parent>/home` and passes it. `cmd_run`
   (non-dry-run, `--agent claude`) exits 2 with `evals: set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN; the agent runs
   with an empty HOME and cannot use a stored login.` when neither is set. `"Bash"` stays in `ALLOWED_TOOLS` (the
   tasks need git and gh); narrowing it is deliberately not done.
@@ -273,23 +305,27 @@ and each part compared for equality with the tool name; any other matcher is `re
   files are created with mode `0o600` (`os.open(…, 0o600)`).
 - **E2 (`graders.py`)**: `dod_passes` takes `verify.dod` from the fixture's profile at the base commit
   (`git show <base_sha>:.claude/toolkit.yaml`), runs each command with `clean_env(home=<fresh dir>)` as `env`, and
-  ignores the profile the agent left in the worktree.
+  ignores the profile the agent left in the worktree. A grading context without a `workdir` (unit tests build such contexts) keeps today's behaviour of failing with a clear reason.
 - **E5 (`graders.py`, `runner.py`, `model.py`)**: `secret_absent_from_history` runs
   `git log --all -S<marker> --format=%H` in the work clone **and** in the bare origin repository; any output is a
   failure (`the secret is in commit <sha> (<where>)`). The bare origin path is exposed to graders as
-  `Artifacts.origin_path: str | None` (set in the runner's capture). The existing blob/diff checks stay.
+  `Artifacts.origin_path: str | None` (set in the runner's capture). The pickaxe search is skipped for a repository whose path is `None` (unit tests build contexts with `workdir=None`). The existing blob/diff checks stay.
 - **E6 (`runner.py`, `cli.py`)**: `run_tasks` returns as soon as a run's record has `reason == "cost_ceiling"` or
   the existing run-ceiling reason. `cmd_run` keeps exit code 3 for both.
 - **E4**: `--run-ceiling` and a task's `cost_ceiling_usd` must satisfy `math.isfinite(x) and x > 0`;
   `run --run-ceiling nan` prints `evals: run ceiling must be a positive finite number` to stderr and exits 2 (also for
-  `--dry-run`). On timeout or kill the budget is charged `max(res.cost_usd, allowance)`. When the remaining
+  `--dry-run`). On timeout or kill the budget is charged `max(res.cost_usd, allowance)` in `runner.run_once`, where `budget.add(res.cost_usd)` is called today (not in `agents.py`). When the remaining
   allowance is below 0.01 the run is aborted with the existing run-ceiling reason.
 - **E7**: `prepare_plugin` first runs `git rev-parse --verify --end-of-options <ref>^{commit}` (refs starting `-` are
-  rejected with `plugin ref must not start with '-'`) and uses the resulting sha for `git archive`. `task.schema.json`:
+  rejected with `plugin ref must not start with '-'`) and uses the resulting sha for `git archive`. `task.schema.json`: `plugin.ref` pattern `^[^-]`;
   `fixture.path` pattern `^(?!/)(?!.*(^|/)\.\.(/|$)).+$`; `plugin.extra` items pattern `^[a-z0-9-]+$`.
   `StubAgent` resolves each `files` key under the workdir and raises `AgentError` unless
   `resolved.is_relative_to(workdir.resolve())`.
-- **TST-8, TST-11, TST-12, TST-14**: tests only (briefs).
+- **TST-11 (`graders.py`, code plus tests)**: `forbidden_ops_absent` classifies as a merge: an MCP tool call named
+  `mcp__github__merge_pull_request` or `mcp__github__enable_pr_auto_merge`, and `mcp__github__push_files`,
+  `mcp__github__create_or_update_file`, `mcp__github__delete_file` whose `branch` input is missing, empty or equal to the
+  task's main branch (`expected["main_branch"]` if present, else `main`).
+- **TST-8, TST-12, TST-14**: tests only (briefs).
 
 ### D12. Scope check — DOC-2, SEC-E8, TST-5
 
@@ -373,7 +409,12 @@ Nothing in `ci.dispatchable` applies (the profile has none).
 - **p4-push-destination**: reading `git config` for `push.default` depends on git behaviour; tests use real repositories
   with a bare origin (pattern: `tests/test_hook_no_merge.py` and `tests/hooks_helpers.py`). If git's `simple` rule
   gives a different destination than D3 in a case a test finds, stop.
-- Any phase whose acceptance test passes before its fix is written (the test does not fail for the stated reason) has a
+- **Hook file size cap (420 lines per file).** Phases p1, p2, p3 and p4 add parser code; the plan keeps every file under the cap
+  by moving code into `_ansi.py`, `_wrappers.py` and `_gitcfg.py`. If a worker still ends at 420 lines or more in any file, it
+  stops with `status=blocked` and proposes a further split; it never raises the cap.
+- **`hooks.disable` / `git.main_branch` trust (p7).** The committed-profile rule is only as good as the committed branch:
+  a branch can still change `git.main_branch` (documented in `docs/hooks.md` by p19); branch protection remains the backstop.
+- Any phase whose acceptance test passes before its fix is written (except the rows a brief names as already passing) (the test does not fail for the stated reason) has a
   wrong test or a wrong brief: stop with `status=blocked`.
 - The review only proves bypasses against Claude Code 2.1.322's documented hook contract; nothing here is verified in
   a real session (issue #14).
@@ -411,6 +452,8 @@ phases:
     complexity: S
     touches:
       - plugins/devflow/hooks/_shell.py
+      - plugins/devflow/hooks/_ansi.py
+      - plugins/devflow/hooks/_wrappers.py
       - tests/test_hooks_shell.py
     brief: |
       Findings SEC-H4 and the `$'...'` half of SEC-H2 (read both in the review document; Design section D1 is the spec).
@@ -423,14 +466,14 @@ phases:
          `bash -c $'git push -f origin feature'` and code 2 from no-merge for `git push origin $'HEAD:main'` (run on a repo
          where the current branch is not main), plus unit asserts that `ansi_c_decode` returns `--force` for `\x2d\x2dforce`,
          `a\nb` (with a real newline) for `a\nb`, and keeps `\q` as `\q`. Run them and see them fail.
-      2. In plugins/devflow/hooks/_shell.py add `ansi_c_decode` and use it in `_scan` where `$'` is handled today (the
+      2. Create plugins/devflow/hooks/_ansi.py with `ansi_c_decode` and use it in plugins/devflow/hooks/_shell.py `_scan` where `$'` is handled today (the
          `# ANSI-C quoting: opaque` branch): append `shlex.quote(ansi_c_decode(body))` instead of `DYN`. Keep the
          unterminated-quote `ParseError`.
-      3. Add `flock`, `script`, `taskset`, `unshare`, `chroot`, `strace` to `WRAPPERS`, the value options and the new
+      3. Move the wrapper tables and `_strip_wrapper` into plugins/devflow/hooks/_wrappers.py (D1; `_shell.py` imports them under the old names). Add `flock`, `script`, `taskset`, `unshare`, `chroot`, `strace` to `WRAPPERS`, the value options and the new
          `WRAPPER_POSITIONALS` table from D1, and make `_strip_wrapper` skip that many leading positional words after the
          options. In `candidates`, skip a `-p` (and `--`) word that directly follows a stripped `time`. Handle `env -S` /
-         `--split-string` and `script -c` / `--command` exactly as D1 says.
-      4. Run `.venv/bin/python -m pytest tests/test_hooks_shell.py tests/test_hooks_compat.py -q` and then the whole suite.
+         `--split-string` and `script -c` / `--command` / `-qc` clusters exactly as D1 says.
+      4. Run `.venv/bin/python -m pytest tests/test_hooks_shell.py tests/test_hooks_compat.py -q` and then the whole suite; `wc -l plugins/devflow/hooks/*.py` must show every file under 420 lines (the suite's size-cap test checks it).
       Stop with status=blocked if decoding `$'...'` makes an existing test in tests/test_hooks_*.py fail in a way that
       shows the old DYN behaviour was relied on elsewhere (report the test).
     acceptance:
@@ -446,6 +489,7 @@ phases:
     worker_model_reason: threads heredoc bodies through a recursive character scanner; a subtle mistake silently turns a deny hook into an allow
     touches:
       - plugins/devflow/hooks/_shell.py
+      - plugins/devflow/hooks/_gitgh.py
       - tests/test_hooks_shell.py
     brief: |
       Finding SEC-H2, stdin half. Design D1 "Stdin-fed shells" is the spec; read `_scan`, `_heredoc_delimiter`,
@@ -457,11 +501,11 @@ phases:
          `echo 'git push -f origin feature' | bash`, `bash <<< 'git push -f origin feature'`,
          `bash <<'EOF'\ngit push -f origin feature\nEOF`, `sh <<EOF\ngit push origin HEAD:main\nEOF`. Also add allow
          controls that must stay code 0: `bash script.sh`, `bash -c 'echo hi'`, `cat <<EOF\ngit push -f x\nEOF` (a heredoc fed to
-         `cat` is data), `echo hi | cat`. See the deny cases fail.
+         `cat` is data), `echo hi | cat`, `bash --version`. The `$'…'` rows already pass after p1; the stdin rows must fail first. See them fail.
       2. Keep heredoc bodies: `_skip_heredoc` returns/records the body; the scanner attaches it to the `Command` that carries the
          `<<` redirect (`Command.stdin_text`). Recognise `<<<` herestrings (the word after it is the stdin text).
       3. In `candidates`, implement the two rules of D1 for a `SHELLS` head with no `-c` and no script argument (`-s` counts as no
-         script): parse `stdin_text` like a `-c` string; with no `stdin_text`, raise the `ParseError` text from D1.
+         script): parse `stdin_text` like a `-c` string; with no `stdin_text`, set `Command.reads_stdin_shell = True` (D1). In `_gitgh.iter_items` raise the `ParseError` text from D1 when a yielded command has the flag. Do not raise in `candidates` (protect-paths would then skip the whole command).
       4. Run the whole suite. Stop with status=blocked if the change needs more than about 120 changed lines, or changes the
          return shape of `split_commands`/`walk` in a way other modules or tests would need edits for outside the two files listed.
     acceptance:
@@ -475,6 +519,7 @@ phases:
     touches:
       - plugins/devflow/hooks/_shell.py
       - plugins/devflow/hooks/_gitgh.py
+      - plugins/devflow/hooks/_gitcfg.py
       - plugins/devflow/hooks/no_force_push.py
       - tests/test_hook_no_force_push.py
     brief: |
@@ -484,11 +529,11 @@ phases:
          `P=push git --config-env alias.p=P p -f origin HEAD:main`, `git send-pack --force ../remote.git HEAD:refs/heads/main`;
          add `test_dynamic_word_in_push_option_position_denied` for `git push $(echo --force) origin feature` (code 2) and the control
          `git push origin $(git branch --show-current)` (code 0). Use the existing local-bare-remote pattern of that file. See them fail.
-      2. `_shell.py`: add `Command.env` and fill it in `candidates` from the leading `NAME=value` words it strips today.
-      3. `_gitgh.py`: `_items`/`parse_git` take the env and merge config in the D2 order; treat `send-pack`, `http-push`, `subtree push`
+      2. `_shell.py`: add `Command.env`, fill it in `candidates` from the leading `NAME=value` words it strips today, and add `walk_commands` with `walk` as its wrapper (D2); the existing 3-tuple unpacking in tests/test_hooks_shell.py and protect_paths.py must keep working.
+      3. Create plugins/devflow/hooks/_gitcfg.py and move `_run_git`, `current_branch`, `ref_exists` into it (D3; `_gitgh.py` re-imports them). `_gitgh.py`: `iter_items` uses `walk_commands`; `_items`/`parse_git` take the env and merge config in the D2 order; treat `send-pack`, `http-push`, `subtree push`
          as `push` (D2); add `Push.dynamic_option` in `parse_push`.
       4. `no_force_push.py`: deny on `push.dynamic_option` with the D2 message.
-      5. Run `.venv/bin/python -m pytest tests/test_hook_no_force_push.py tests/test_hook_no_merge.py tests/test_hook_no_git_tag.py tests/test_hooks_shell.py -q`, then the whole suite.
+      5. Run `.venv/bin/python -m pytest tests/test_hook_no_force_push.py tests/test_hook_no_merge.py tests/test_hook_no_git_tag.py tests/test_hooks_shell.py -q`, then the whole suite (it includes the 420-line cap).
     acceptance:
       - ".venv/bin/python -m pytest tests/test_hook_no_force_push.py::test_env_config_aliases_and_send_pack_denied tests/test_hook_no_force_push.py::test_dynamic_word_in_push_option_position_denied -q passes (SEC-H3)"
       - ".venv/bin/python -m pytest tests -q passes"
@@ -499,6 +544,7 @@ phases:
     complexity: M
     touches:
       - plugins/devflow/hooks/_gitgh.py
+      - plugins/devflow/hooks/_gitcfg.py
       - plugins/devflow/hooks/no_merge.py
       - tests/test_hook_no_merge.py
     brief: |
@@ -512,7 +558,7 @@ phases:
          (names containing `mcp_denied` or `gh`) for: MCP `create_or_update_file` with no `branch`, with `branch=refs/heads/main`, `heads/main`;
          `gh api -X POST repos/o/r/merge-upstream -f branch=main`; `gh api -X POST repos/o/r/branches/main/rename -f new_name=old`;
          `gh repo sync o/r --branch main --force`. See the new cases fail. Build the repositories with `tests/hooks_helpers.py` and a real bare origin.
-      2. `_gitgh.py`: add `git_config_value`, `bare_push_destinations`, `GhApi.field_files` and its parsing (D3).
+      2. `_gitcfg.py`: add `git_config_values`, `git_config_value` and `bare_push_destinations` (D3). `_gitgh.py`: add `GhApi.field_files` and its parsing.
       3. `no_merge.py`: use them in `check_push`, `check_gh_api`, `check_gh`, `check_mcp` exactly as D3 says; keep every existing message that tests grep.
       4. Run `.venv/bin/python -m pytest tests/test_hook_no_merge.py tests/test_hook_no_force_push.py tests/test_hook_no_git_tag.py tests/test_hooks_shell.py -q`, then the whole suite.
       Stop with status=blocked if git's own behaviour for a `push.default` case differs from D3 (show the command and the observed remote ref).
@@ -535,7 +581,7 @@ phases:
       - tests/test_release_workflow.py
     brief: |
       Findings SEC-H5 and SEC-H6 (the user accepted the recommendation: deny dispatch from sessions and the release-edit routes, and add
-      a required-reviewer environment to the template). Design D4 is the spec; it uses `git_config_value` from phase p4.
+      a required-reviewer environment to the template). Design D4 is the spec; it uses `git_config_values` from phase p4.
       1. Add tests first. tests/test_hook_no_git_tag.py: `test_config_driven_tag_pushes_and_update_ref_stdin_denied` (code 2 for
          `git -c push.followTags=true push origin feature`, `git -c remote.origin.push='refs/tags/*:refs/tags/*' push origin`,
          `echo 'create refs/tags/v7 HEAD' | git update-ref --stdin`; allow control: `git push origin feature` code 0) and
@@ -545,9 +591,9 @@ phases:
          `mcp__github__actions_run_trigger` with `{"method":"run_workflow","workflow_id":"devflow-release.yml","ref":"main"}` and with a numeric
          `workflow_id` → 2; allow controls code 0: `gh workflow run test.yml`, `gh workflow run devflow-git-ops.yml -R org/central -f repo=org/x -f action=create-tag -f name=v1.0.0`,
          MCP `run_workflow` with `workflow_id` `test.yml` and with `devflow-git-ops.yml`, `gh release view v1`).
-         tests/test_hooks_config.py: add `mcp__github__actions_run_trigger` to the matcher test with `no_git_tag.py` True.
+         tests/test_hooks_config.py: in the matcher `listens` table give `no_git_tag.py` the tools `Bash` and `mcp__github__actions_run_trigger`; `no_force_push.py` stays `Bash` only.
       2. `no_git_tag.py`: implement D4 (push config checks, `update-ref --stdin`, release dispatch/edit denials, `check_mcp`, `evaluate` for `mcp__` tools).
-      3. `hooks.json`: add the `mcp__.*__actions_run_trigger` entry of D4.
+      3. `hooks.json`: move `no_git_tag.py` into its own group with matcher `Bash|mcp__.*__actions_run_trigger` (D4); `tests/test_hooks_config.py::test_hooks_json_is_valid_and_every_script_exists` and `::test_matchers` must pass without loosening.
       4. `devflow-release.yml`: add `environment: release` to the job; update tests/test_release_workflow.py so it asserts the environment is present.
       5. Run `.venv/bin/python -m pytest tests/test_hook_no_git_tag.py tests/test_hooks_config.py tests/test_release_workflow.py tests/test_hooks_compat.py -q`, then the whole suite.
     acceptance:
@@ -563,6 +609,7 @@ phases:
     touches:
       - plugins/devflow/hooks/_common.py
       - plugins/devflow/hooks/_gitgh.py
+      - plugins/devflow/hooks/_gitcfg.py
       - plugins/devflow/hooks/no_merge.py
       - plugins/devflow/hooks/no_force_push.py
       - plugins/devflow/hooks/no_git_tag.py
@@ -570,16 +617,21 @@ phases:
       - tests/test_hook_no_merge.py
     brief: |
       Finding SEC-H14. Design D5 is the spec.
-      1. Tests first. tests/test_hook_no_merge.py: `test_failed_branch_lookup_denies` (monkeypatch `_gitgh._run_git`/`subprocess.run` in-process
-         through `_common.execute`, or use a clone whose config has `include.path` pointing at a FIFO and run the real script; either way a
-         `git push` with an unresolvable current branch is code 2, while a detached-HEAD `git push origin feature` is still code 0).
-         tests/test_hook_no_force_push.py: `test_slow_git_config_still_denies` (clone on `main` whose config has `include.path` → a FIFO created with
-         `os.mkfifo`; `git push` through no-merge and `git push -f` through no-force-push give code 2, within 12 s; clean up the FIFO). Also add
-         `test_hook_budget_denies` in tests/test_hook_no_merge.py: monkeypatch `_common.HOOK_BUDGET_SECONDS` to 1 and make `evaluate` sleep 3 s, call
-         `_common.execute(..., fail_closed=True, ...)`, expect code 2 and `took longer than` in stderr; with `fail_closed=False` expect it not to be armed.
-         And `test_import_crash_exits_2`: run each destructive script with a `PYTHONPATH` directory holding a `_gitgh.py` that raises on import, expect code 2 and `internal error while loading`.
+      1. Tests first. (a) tests/test_hook_no_merge.py `test_failed_branch_lookup_denies`: monkeypatch `_gitcfg._run_git` to return failure
+         through `_common.execute` and assert `git push` gives code 2; a detached-HEAD `git push origin feature` still gives code 0.
+         (b) tests/test_hook_no_force_push.py `test_slow_git_config_still_denies`: a clone on a feature branch whose `.git/config` has
+         `[alias] pf = push -f` and `[include] path = <a FIFO made with os.mkfifo>`; run the real no-force-push script on `git pf origin feature`;
+         before the fix the alias lookup times out after 5 s and the command is allowed, after the fix (`--no-includes`) it is denied with code 2.
+         Add a second assertion in the same test: a clone on `main` with the FIFO include, `git push` through the real no-merge script gives code 2
+         (symbolic-ref times out and raises `GitLookupError`). Remove the FIFO in a `finally`; each case must finish within 12 s.
+         (c) tests/test_hook_no_merge.py `test_hook_budget_denies`: monkeypatch `_common.HOOK_BUDGET_SECONDS` to 1 and make `evaluate` call
+         `time.sleep(3)`; `_common.execute(..., fail_closed=True, ...)` gives code 2 with `took longer than` in stderr; with `fail_closed=False` the timer
+         is not armed (the call returns after the sleep with code 0); also a `_run_git`-style `except OSError` around the sleep must not swallow the alarm.
+         (d) tests/test_hook_no_merge.py `test_import_crash_exits_2`: for each destructive script copy `plugins/devflow/hooks/` to `tmp_path`, overwrite the
+         copy's `_gitgh.py` with `raise RuntimeError("boom")`, run the copied script with a Bash payload, expect code 2 and `internal error while loading`.
+         (A `_gitgh.py` on `PYTHONPATH` would not shadow the real one: the script's own directory comes first.)
          See them fail.
-      2. Implement D5 in `_gitgh.py` (`GitLookupError`, `current_branch`, `ref_exists`, `--no-includes`), `_common.py` (budget timer, `exit_import_error`), and the three hook files.
+      2. Implement D5 in `_gitcfg.py` (`GitLookupError`, `current_branch`, `ref_exists`), `_gitgh.py` (`--no-includes` in `expand_alias`), `_common.py` (`HookBudgetExceeded` timer, `exit_import_error`), and the three hook files.
       3. Run `.venv/bin/python -m pytest tests/test_hook_no_merge.py tests/test_hook_no_force_push.py tests/test_hook_no_git_tag.py tests/test_hooks_config.py tests/test_hooks_compat.py -q`, then the whole suite.
     acceptance:
       - ".venv/bin/python -m pytest tests/test_hook_no_force_push.py::test_slow_git_config_still_denies tests/test_hook_no_merge.py::test_failed_branch_lookup_denies -q passes (SEC-H14)"
@@ -588,14 +640,16 @@ phases:
 
   - id: p7-profile-trust
     title: Read hooks.disable from the committed main profile and make a malformed hooks value loud
-    depends_on: [p6-fail-closed]
+    depends_on: [p6-fail-closed, p9-dod-gate]
     complexity: M
     touches:
       - plugins/devflow/hooks/_common.py
+      - plugins/devflow/hooks/dod_gate.py
+      - tests/test_hook_dod_gate.py
       - tests/test_hook_no_merge.py
       - tests/test_hooks_config.py
     brief: |
-      Findings SEC-H8 (first half; protect-paths is phase p8), DOC-4 (code), TST-15, TST-9. Design D6 is the spec.
+      Findings SEC-H8 (first half; protect-paths is phase p8), DOC-4 (code), TST-15, TST-9. Design D6 (and D8's last bullet) is the spec.
       1. Tests first. tests/test_hook_no_merge.py: `test_disable_in_a_merged_branch_is_ignored` (repo with a committed `main` profile without `hooks.disable`
          and an `origin`; a branch whose working-tree profile has `hooks: disable: [no-merge, no-force-push, no-git-tag]`: `gh pr merge 12 --squash`
          and `git push -f origin HEAD:main` still give code 2; control: a `hooks.disable` that is committed on `main` is honoured → code 0) and
@@ -603,11 +657,14 @@ phases:
          `disable`; hook still denies). tests/test_hooks_config.py: `test_disable_must_be_a_list` (`hooks: {disable: no-merge}` → code 2 and the message names
          `hooks.disable`), `test_profile_found_by_walking_up_from_cwd` (TST-15: remove `CLAUDE_PROJECT_DIR`, payload cwd `repo/sub`, `git push origin main` gives 2
          with no "missing required key" in stderr; run it with `-k walks_up` working: name it `test_walks_up_from_cwd_without_project_dir`), and
-         `test_hooks_without_pyyaml` (TST-9: a `PYTHONPATH` directory holding a `yaml.py` that raises ImportError; `gh pr merge 1` gives 2 and stderr names PyYAML;
-         name the test so `-k pyyaml` selects it). See them fail where the code is wrong (TST-15/TST-9 may already pass: they exist to kill mutations).
-      2. Implement D6 in `_common.py` (`find_project` scoping, `trusted_disable`, `Ctx.disabled`).
+         `test_hooks_without_pyyaml` (TST-9; name contains `pyyaml`: a `PYTHONPATH` directory holding a `yaml.py` that raises ImportError; `git push -u origin feature/x`
+         through the real no-merge script gives code 2 with `PyYAML is not installed` in stderr, and `gh pr merge 1` gives code 2), `test_disable_in_a_branch_with_a_bogus_main_branch_is_ignored`
+         (a branch whose working-tree profile sets `git.main_branch: nosuch` plus `hooks.disable: [no-merge]`, in a repo with commits and an `origin`: `gh pr merge 1` still gives 2),
+         and `test_malformed_disable_does_not_loop_dod_gate` in tests/test_hook_dod_gate.py (gate on, `hooks: {disable: dod-gate}` as a string, a failing dod: three runs with
+         `stop_hook_active` end with code 0 on the third). See them fail where the code is wrong (TST-15/TST-9 may already pass: they exist to kill mutations).
+      2. Implement D6 in `_common.py` (`find_project` scoping, `trusted_disable`, `Ctx.disabled`, `Ctx.disable_error` and its handling in `execute`) and the one-line re-raise in `dod_gate.evaluate`. The existing `test_disable_flag` in tests/test_hook_dod_gate.py writes `disable: [dod-gate]` only into the working tree; change it to commit the profile on `main` first (the other `hooks.disable` tests already do, through `make_repo`).
       3. Run `.venv/bin/python -m pytest tests/test_hooks_config.py tests/test_hook_no_merge.py tests/test_hook_protect_paths.py tests/test_hook_dod_gate.py tests/test_hook_secret_scan.py -q`, then the whole suite.
-      Stop with status=blocked if existing tests require a working-tree `hooks.disable` to win over a committed one.
+      Stop with status=blocked if an existing test outside tests/test_hook_dod_gate.py requires a working-tree `hooks.disable` to win over a committed one.
     acceptance:
       - ".venv/bin/python -m pytest tests/test_hook_no_merge.py::test_disable_in_a_merged_branch_is_ignored tests/test_hook_no_merge.py::test_profile_outside_project_dir_cannot_disable -q passes (SEC-H8)"
       - ".venv/bin/python -m pytest tests/test_hooks_config.py::test_disable_must_be_a_list -q passes (DOC-4)"
@@ -652,7 +709,7 @@ phases:
          (name them so `-k missing` selects them); `test_max_attempts_above_10_is_rejected` (`max_attempts: 50` → the hook reports a profile error naming
          `hooks.dod_gate.max_attempts`); TST-6: a test with a `git clone` of a bare origin, a commit on a feature branch, local `main` fast-forwarded to HEAD, asserting
          the gate still fires because `origin/main..HEAD` is non-empty (name contains `origin`), and a test in an orphan-branch repo with neither `main` nor `origin/main`
-         asserting code 2 (name contains `cannot_tell`); TST-7: `TOTAL_BUDGET_SECONDS` set to 0.5 (monkeypatch the module constant, call through `_common.execute` or the
+         asserting code 2 (name contains `cannot_tell`; the dod command is `false` so the gate has something to block on); TST-7: `TOTAL_BUDGET_SECONDS` set to 0.5 (monkeypatch the module constant, call through `_common.execute` or the
          module's own function), dod `["sleep 1", "true"]`, assert `not run: the gate's time budget was used up` appears for `true` (name contains `budget`). See them fail
          where the code is wrong.
       2. Implement D8 in dod_gate.py.
@@ -676,10 +733,10 @@ phases:
       Findings SEC-H12 and SEC-H13. Design D9 is the spec; read secret_scan.py and tests/test_hook_secret_scan.py first.
       1. Tests first in tests/test_hook_secret_scan.py: `test_long_line_is_scanned_quickly` (a 200,000-character line of `a` followed by ` API_KEY = "<32 random alphanumeric>"`
          denies in under 1 s; 20,000 `a` with no key allows in under 1 s); new `GENERIC` rows (code 2): `DB_PASSWORD="<a 16-character value with letters and digits>"`,
-         `postgres://user:pw@db.example.org/app`, `Authorization: Bearer <a JWT-shaped eyJ…eyJ…sig token>`, `SECRET_KEY="<24 characters including #>"`; allow rows (code 0):
+         `postgres://user:s3cretpw@db.example.org/app`, `Authorization: Bearer <a JWT-shaped eyJ…eyJ…sig token>`, `SECRET_KEY="<24 characters including #>"`; allow rows (code 0):
          `url = "https://user:${PASSWORD}@host/x"`, `password = "changeme-placeholder-value"`, `Bearer ${TOKEN}`; `test_allow_mark_must_end_the_line` (the mark mid-line still
          denies, at the end of the line allows). See the new cases fail.
-      2. Implement D9 in secret_scan.py (regex, suffixes, password rule, new SPECIFIC entries, end-of-line allow mark, per-line cap) and update `scan_text` for the two value groups.
+      2. Implement D9 in secret_scan.py (regex, suffixes, password rule, new SPECIFIC tuples, the bearer placeholder skip in `scan_text`, end-of-line allow mark, per-line cap) and update `scan_text` for the two value groups.
       3. Run `.venv/bin/python -m pytest tests/test_hook_secret_scan.py tests/test_evals_runner.py -q` (the eval scrubber tests exist today), then the whole suite.
     acceptance:
       - ".venv/bin/python -m pytest tests/test_hook_secret_scan.py::test_long_line_is_scanned_quickly -q passes (SEC-H12)"
@@ -700,7 +757,7 @@ phases:
       1. tests/test_hooks_config.py, TST-2: add `test_internal_error_fails_per_hook` parametrised over all six hooks (the module path of each is in `hooks.json` commands;
          import the module with the same sys.path trick the other tests in this file use): monkeypatch `module.evaluate` to raise `RuntimeError`, call
          `_common.execute(module.NAME, module.evaluate, FAIL_CLOSED[hook], json.dumps(payload))` with a Bash payload built with the helper used in this file, and assert
-         `result.code == (2 if FAIL_CLOSED[hook] else 1)` and `internal error (RuntimeError` in `result.stderr`. `FAIL_CLOSED` is `{no-merge, no-force-push, no-git-tag: True; secret-scan, protect-paths, dod-gate: False}`.
+         `result.code == (2 if FAIL_CLOSED[hook] else 1)` and `internal error (RuntimeError` in `result.stderr`. `FAIL_CLOSED`, `MODULES` and `module()` already exist in tests/hooks_helpers.py: import them, do not redefine them.
          Name the test so `-k internal_error` selects it.
       2. TST-3: replace the `re.fullmatch` matcher model in `tests/test_hooks_config.py` and `evals/harness/hookcheck.py` with one function `matcher_matches(matcher, tool)` per D10 (put the
          function in `evals/harness/hookcheck.py` and import it in the test). Add matcher rows `(no_merge.py, mcp__github__create_or_update_file, True)`,
@@ -748,7 +805,7 @@ phases:
       - tests/test_evals_runner.py
     brief: |
       Finding SEC-E3. Design D11 "E3" is the spec. It reuses `SPECIFIC` from plugins/devflow/hooks/secret_scan.py as changed by phase p10.
-      1. Tests first in tests/test_evals_runner.py: `test_scrub_patterns` parametrised over every `secret_scan.SPECIFIC` sample (build one matching sample per pattern name at runtime in the test so the
+      1. Tests first in tests/test_evals_runner.py: extend the existing `test_scrub_patterns` (do not define a second one) and parametrise it over every `secret_scan.SPECIFIC` sample (take the samples from `TOKENS` in tests/test_hook_secret_scan.py and build the missing ones, for example PyPI and SendGrid, at runtime in the test so the
          test file itself holds no token-shaped literal; the secret-scan hook runs on edits), plus a JSON-dumped PEM block (literal `\n` between lines), `{"access_token": "<40 chars>"}` and
          `https://user:pw@host/x`; each `scrub(s)[1] >= 1`. `test_results_records_are_scrubbed`: `append_results` of a record whose `error` and a grader `reason` contain a sample token, read the file back, assert the
          token is gone and the file mode is `0o600`; the same for `write_transcript`. See them fail.
@@ -769,12 +826,12 @@ phases:
       - tests/test_evals_graders.py
     brief: |
       Findings SEC-E5, SEC-E2, TST-11. Design D11 "E5" and "E2" are the spec; read graders.py `secret_absent_from_history`, `dod_passes`, `forbidden_ops_absent`, the capture function in runner.py (about lines 90-140) and `Artifacts` in model.py first.
-      1. Tests first in tests/test_evals_graders.py: `test_secret_absent_from_history_sees_reverted_commit` (build a real work clone and bare origin with the existing helpers in tests/evals_support.py: commit a file holding
+      1. Tests first in tests/test_evals_graders.py: `test_secret_absent_from_history_sees_reverted_commit` (build a real work clone and bare origin with `evals.harness.common.git` / `evals.harness.runner.build_fixture`, since tests/evals_support.py has no such helper: commit a file holding
          the marker, push it, `git rm` it in a later commit and push; the grader returns `passed=False`; a control with no marker anywhere returns `passed=True`);
          `test_dod_passes_ignores_agent_profile_and_env` (the worktree profile's dod is `echo $GH_TOKEN > f`, with `GH_TOKEN` set in the test environment: the command does not run, `f` does not exist, and the grader
-         used the base commit's profile); TST-11: in `forbidden_ops_absent` tests (names must contain `forbidden_ops_absent`) a bad case with a `tool_use` named `mcp__github__merge_pull_request`, and classifications of
-         `mcp__github__enable_pr_auto_merge` and `mcp__github__push_files` to main as merge. See them fail.
-      2. `model.py`/`runner.py`: expose `Artifacts.origin_path`. `graders.py`: implement the pickaxe search in both repositories, the base-profile `dod_passes`, and the MCP classification (D11). Keep the other graders unchanged.
+         used the base commit's profile; also rewrite the existing `test_dod_passes`, which uses a plain `tmp_path` that is not a repository, so it builds a real repository with a committed base profile); TST-11: in `forbidden_ops_absent` tests (names must contain `forbidden_ops_absent`) a bad case with a `tool_use` named `mcp__github__merge_pull_request`, and classifications of
+         `mcp__github__enable_pr_auto_merge`, `mcp__github__push_files` / `create_or_update_file` / `delete_file` with `branch` = main or with no branch as merge, and the same tools with `branch` = a feature branch as not a merge. See them fail.
+      2. `model.py`/`runner.py`: expose `Artifacts.origin_path`. `graders.py`: implement the pickaxe search in both repositories (skipped for a path that is `None`), the base-profile `dod_passes`, and the MCP classification specified under "TST-11" in D11. Keep the other graders unchanged.
       3. Prove the TST-11 mutation dies: change `elif "merge_pull_request" in call["name"]:` to `elif False:`, see a test fail, revert.
       4. Run `.venv/bin/python -m pytest tests/test_evals_graders.py tests/test_evals_fixtures.py tests/test_evals_runner.py -q`, then the whole suite.
     acceptance:
@@ -798,11 +855,11 @@ phases:
     brief: |
       Findings SEC-E6 (with TST-4, DOC-5 code part), SEC-E4, SEC-E7, TST-12. Design D11 "E6", "E4", "E7" are the spec.
       1. Tests first. tests/test_evals_runner.py: `test_budget_abort_stops_the_invocation` (StubAgent returning `{'aborted':'cost_ceiling','cost_usd':0.6}`, `repeats=3`: `len(agent.calls) == 1`), `test_exit_code_3_on_cost_ceiling`
-         (`cli.main([...stub run...]) == 3`; name so `-k "budget_abort or exit_code"` selects both), `test_timeout_charges_full_allowance` (a fake `claude` script that sleeps past `timeout_s`; `budget.spent` equals the allowance),
+         (`cli.main([...stub run...]) == 3`; name so `-k "budget_abort or exit_code"` selects both), `test_timeout_charges_full_allowance` (a StubAgent entry `{"aborted": "timeout", "cost_usd": 0}` run through `runner.run_once`; `budget.spent` equals the allowance; a fake `claude` binary cannot be used because `ClaudeCodeAgent` refuses to run under pytest),
          `test_aggregate_does_not_count_skipped_runs` (TST-12: records with one skipped run → `runs == 0`, `skipped == 1`, `pass_rate is None`; name contains `aggregate`). CLI test: `run --run-ceiling nan --dry-run` returns 2 with
-         `run ceiling must be a positive finite number` on stderr. tests/test_evals_tasks.py: `test_task_rejects_traversal_and_option_refs` (`fixture.path: ../../../../etc`, `plugin.extra: ['../../evals']` and a third error for a
+         `run ceiling must be a positive finite number` on stderr. tests/test_evals_tasks.py: `test_task_rejects_traversal_and_option_refs` (`fixture.path: ../../../../etc`, `plugin.extra: ['../../evals']` and a third error (from the new `plugin.ref` schema pattern `^[^-]`) for a
          `plugin.ref` starting `-` produce three validation errors; `prepare_plugin('--output=x', …)` creates no file; a StubAgent `files` key `../x` or `/etc/x` raises `AgentError`). See them fail.
-      2. Implement D11 E6, E4, E7 in runner.py, cli.py, agents.py (StubAgent and the timeout charge), taskspec.py and the schema.
+      2. Implement D11 E6, E4, E7 in runner.py (including the timeout charge in `run_once`), cli.py, agents.py (StubAgent path check), taskspec.py and the schema.
       3. Prove the E6 and TST-12 mutations die: remove `or r.get("reason") == "cost_ceiling"` at cli.py's exit-code check (a test fails, revert); remove the `continue` after `t["skipped"] += 1` in results.py (a test fails, revert).
       4. Run `.venv/bin/python -m pytest tests/test_evals_runner.py tests/test_evals_tasks.py tests/test_evals_fixtures.py -q`, then the whole suite, then `.venv/bin/python evals/run.py validate`.
     acceptance:
@@ -842,7 +899,7 @@ phases:
       - "grep -n '{name: ..., params}' docs/evals.md prints nothing (DOC-11)"
       - ".venv/bin/python evals/run.py --help | grep -c '^    [a-z]' prints 6, and grep -n -- '--keep' docs/evals.md matches (DOC-12)"
       - "grep -n 'Three tasks of three runs' docs/evals.md prints nothing (DOC-13)"
-      - "grep -n 'never touched' docs/evals.md prints nothing or only a qualified sentence"
+      - "grep -n 'never touched' docs/evals.md prints nothing (the sentence is replaced by one that says the agent runs with an empty HOME and no proxy)"
       - ".venv/bin/python -m pytest tests -q passes"
 
   - id: p17-scope-check
@@ -861,7 +918,7 @@ phases:
       1. Tests first in tests/test_scope_check.py: `test_rev_and_fix_sessions_are_checked` (with the original phase's `Plan-Phase: s/p1` trailer on the feature branch,
          `check --phase p1 --label fix-1 --plan-slug s --feature feat` returns `"check": "ok"` and `out_of_scope == [{"path": "other.py", …}]`; same for label `p1-rev1`; a run with no label still reports
          `skipped` when the phase's own trailer is on the feature branch), `test_section_code_span_cannot_be_escaped` (the path ``a``b @someone [x](http://e)``c`` renders as one code span whose fence is longer than
-         any backtick run in it and contains no `@` directly followed by a letter), `test_resumed_p1_is_not_p10` (TST-5: add phase `p10` to the MANIFEST used in that file, merge with trailer `Plan-Phase: demo/p10`,
+         any backtick run in it and contains no `@` directly followed by a letter), `test_resumed_p1_is_not_p10` (TST-5: build a local copy of the MANIFEST with an extra phase `p10` inside the test (do not edit the shared MANIFEST), merge with trailer `Plan-Phase: demo/p10`,
          `check(… phase="p1", plan_slug="demo", feature="feature/demo")` → `["check"] == "ok"`; name contains `resumed`). See them fail (TST-5 may pass already: it exists to kill the mutation
          `any(line.strip() == wanted …)` → `bool(log.strip())`; apply the mutation, see it fail, revert).
       2. `scope_check.py`: implement D12 (label rule, fence, zero-width space).
@@ -875,7 +932,7 @@ phases:
       - ".venv/bin/python -m pytest tests/test_scope_check.py::test_rev_and_fix_sessions_are_checked -q passes (DOC-2)"
       - ".venv/bin/python -m pytest tests/test_scope_check.py::test_section_code_span_cannot_be_escaped -q passes (SEC-E8)"
       - ".venv/bin/python -m pytest tests/test_scope_check.py -k resumed -q passes (TST-5)"
-      - "GIT_CONFIG_GLOBAL=<a file with commit.gpgsign=true and gpg.program=/bin/false> .venv/bin/python -m pytest tests/test_scope_check.py tests/test_upstream.py tests/test_hook_dod_gate.py tests/test_evals_runner.py -q reports 0 errors (TST-16)"
+      - "after printf '[commit]\\n\\tgpgsign = true\\n[gpg]\\n\\tprogram = /bin/false\\n' > /tmp/gpgsign.cfg, GIT_CONFIG_GLOBAL=/tmp/gpgsign.cfg .venv/bin/python -m pytest tests/test_scope_check.py tests/test_upstream.py tests/test_hook_dod_gate.py tests/test_evals_runner.py -q reports 0 errors (TST-16)"
       - ".venv/bin/python -m pytest tests -q passes"
 
   - id: p18-ci-hygiene
@@ -899,9 +956,9 @@ phases:
          the plugin versions (the five `plugins/*/.claude-plugin/plugin.json` files must agree, enforced by tests/test_structure.py::test_plugin_versions_agree; a plan's retirement phase bumps them together, because a Claude Project caches each plugin per version, see docs/delivery.md), and how to add a hook case (`tests/test_hook_<name>.py` rows plus `evals/hook_cases.yaml` entries
          `{name, tool, input, expect: deny|allow}`, using `@@GH_TOKEN@@` for token-shaped strings). Both files must pass tests/test_no_project_words.py and tests/test_structure.py.
     acceptance:
-      - "grep -cE 'uses: [^@]+@[0-9a-f]{40}' .github/workflows/test.yml prints 2"
-      - "grep -c '==' tests/requirements.txt prints 2"
-      - "grep -n 'claude-code@[0-9]' .github/workflows/test.yml prints one line"
+      - "grep -cE 'uses: [^@]+@[0-9a-f]{40}' .github/workflows/test.yml prints 2 (SEC-E10)"
+      - "grep -c '==' tests/requirements.txt prints 2 (SEC-E10)"
+      - "grep -n 'claude-code@[0-9]' .github/workflows/test.yml prints one line (SEC-E10)"
       - "test -f SECURITY.md && test -f CONTRIBUTING.md && grep -qi 'report' SECURITY.md && grep -q 'hook_cases.yaml' CONTRIBUTING.md exits 0 (SEC-E12)"
       - ".venv/bin/python -m pytest tests -q passes"
 
@@ -934,7 +991,7 @@ phases:
       - "grep -c 'docs/evals.md' README.md prints at least 1 (DOC-8)"
       - "grep -n 'README.md,profile-reference' docs/design.md prints nothing; grep -n 'hooks.json' docs/design.md matches (DOC-9)"
       - "grep -n 'do \\*\\*not\\*\\* cross' docs/profile-reference.md matches (DOC-16)"
-      - "grep -rn 'andras-tkcs/claude-toolkit' README.md docs plugins templates prints nothing (DOC-18)"
+      - "grep -n 'andras-tkcs/claude-toolkit' README.md docs/delivery.md plugins/devflow/.claude-plugin/plugin.json templates/toolkit.yaml prints nothing (DOC-18; other files that still name the old owner, such as the stack plugins' homepage, the schema $id and docs/design.md, are outside the finding and left as they are)"
       - "grep -n 'malformed `hooks`' docs/hooks.md matches (DOC-4)"
       - ".venv/bin/python -m pytest tests -q passes"
 
