@@ -1,7 +1,7 @@
 """plan-gate (UserPromptSubmit and PreToolUse): a session that no tld command started cannot write to the repository.
 
 Opt-in (`hooks.plan_gate.enabled: true`). A prompt that starts a tld command opens the session; a plain prompt gets
-one sentence of context; a write into the repository is denied while the session is not open. See docs/plans/plan-gate-ask-plan.md.
+one sentence of context; a write into the repository is denied while the session is not open. See docs/architecture/hooks.md.
 """
 from __future__ import annotations
 

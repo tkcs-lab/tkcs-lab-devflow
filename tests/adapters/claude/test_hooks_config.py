@@ -197,7 +197,6 @@ def test_which_playbooks_mark_the_session_exempt(name, exempt):
 
 
 # ---- docs ----------------------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason="p9-retire")
 def test_docs_cover_every_hook_and_key():
     """Every hook name and every `hooks.*` profile key of the schema is described in hooks.md."""
     doc = (ROOT / "docs" / "architecture" / "hooks.md").read_text()
