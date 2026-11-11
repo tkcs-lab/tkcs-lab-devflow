@@ -8,7 +8,7 @@ follow from that:
    similar project does, and do not infer a command from the repository layout.
 2. **A missing optional key means "not used here".** No `docs.adr_dir` means no ADRs: leave out every ADR
    step and never mention them. No `docs.index` means no docs index: read `docs.must_read` and leave out
-   every index step. No `docs.changelog` means no changelog step. No `ci.dispatchable` means nothing can be
+   every index step. No `docs.changelog`, or `docs.changelog.policy: release-only`, means no changelog step. No `ci.dispatchable` means nothing can be
    dispatched. No `tracking_issue` (in a manifest) means no issue comments and no `Closes` lines.
 
 ## Loading the profile
