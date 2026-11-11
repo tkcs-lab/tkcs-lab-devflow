@@ -8,17 +8,25 @@ one-liner) is not seen; that is why lockfiles are protected from hand edits, not
 """
 from __future__ import annotations
 
+import calendar
 import glob as globmod
+import json
 import os
 import re
+import sys
+import time
 
 import _common
 from _common import BUILTIN_PROTECT_ALLOW, DEFAULT_PROTECT_PATHS, Ctx
 from _gitgh import Item, iter_items
 from _shell import ParseError, base, is_dynamic
+from dod_gate import state_dir
 
 NAME = "protect-paths"
 WRITE_OPS = {">", ">>", ">|", "&>", "&>>", ">&", "<>"}
+PROFILE = ".claude/toolkit.yaml"
+PROFILE_MARKER = "protect-paths-profile.json"
+PROFILE_TTL_SECONDS = 7200   # /setup may edit the profile for two hours after --allow-profile
 
 
 # --------------------------------------------------------------------------- patterns
@@ -70,11 +78,23 @@ def relative(ctx: Ctx, path: str, here: str) -> list[str]:
     return list(dict.fromkeys(found))
 
 
+def profile_allowed(project: str) -> bool:
+    """True while the /setup marker of this checkout is younger than the TTL."""
+    try:
+        with open(state_dir(project) / PROFILE_MARKER, encoding="utf-8") as f:
+            written = calendar.timegm(time.strptime(json.load(f)["written_at"], "%Y-%m-%dT%H:%M:%SZ"))
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    return 0 <= time.time() - written <= PROFILE_TTL_SECONDS
+
+
 def violation(ctx: Ctx, path: str, here: str) -> str | None:
     protect = ctx.list_key("protect_paths", DEFAULT_PROTECT_PATHS)
     allow = BUILTIN_PROTECT_ALLOW + ctx.list_key("protect_paths_allow", [])
     for rel in relative(ctx, path, here):
         if any(matches(a, rel) for a in allow):
+            continue
+        if rel == PROFILE and profile_allowed(ctx.project_dir):
             continue
         for pat in protect:
             if matches(pat, rel):
@@ -85,7 +105,7 @@ def violation(ctx: Ctx, path: str, here: str) -> str | None:
 def message(rel: str, pattern: str) -> str:
     name = os.path.basename(rel)
     if rel == ".claude/toolkit.yaml":
-        hint = "The project profile is changed by people, not by a session; tell the user what should change."
+        hint = "The project profile is changed by people or by /setup, not by a session; tell the user what should change."
     elif name.startswith(".env"):
         hint = "Environment files hold secrets and are never edited by a session; document a variable in .env.example instead."
     elif name.endswith(".lock") or name in ("package-lock.json", "go.sum"):
@@ -204,5 +224,27 @@ def evaluate(ctx: Ctx) -> str | None:
     return None
 
 
+def cli(argv: list[str]) -> int:
+    if argv[:1] == ["--allow-profile"]:
+        project = _common.find_project(os.getcwd())[0]
+        path = state_dir(project) / PROFILE_MARKER
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"written_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}))
+        print(f"protect-paths: {PROFILE} may be edited for the next 2 hours ({path})")
+        return 0
+    if argv[:1] == ["--end-allow"]:
+        project = _common.find_project(os.getcwd())[0]
+        try:
+            (state_dir(project) / PROFILE_MARKER).unlink()
+        except FileNotFoundError:
+            pass
+        print(f"protect-paths: {PROFILE} is protected again")
+        return 0
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        sys.exit(cli(sys.argv[1:]))
     _common.main(NAME, evaluate, fail_closed=False)
