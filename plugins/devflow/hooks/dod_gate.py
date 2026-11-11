@@ -217,6 +217,8 @@ def _evaluate(ctx: Ctx) -> str | None:
         raise ProfileError("toolkit.yaml: 'hooks.dod_gate' must be a mapping")
     if gate.get("enabled") is not True:
         return None
+    if ctx.disable_error:
+        raise ctx.disable_error
     max_attempts = gate.get("max_attempts", DEFAULT_MAX_ATTEMPTS)
     if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts < 1:
         raise ProfileError("toolkit.yaml: 'hooks.dod_gate.max_attempts' must be a positive integer")

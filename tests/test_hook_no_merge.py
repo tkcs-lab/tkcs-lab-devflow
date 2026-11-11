@@ -159,6 +159,43 @@ def test_disable_flag(tmp_path):
     assert run("no-force-push", bash("git push -f", repo)).code == 2, "other hooks stay on"
 
 
+def _repo_with_origin(tmp_path, committed_profile):
+    repo = make_repo(tmp_path / "r", "main", committed_profile)
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", "main")
+    git(repo, "checkout", "-q", "-b", "feature/demo")
+    return repo
+
+
+_DISABLE_ALL = "hooks:\n  disable: [no-merge, no-force-push, no-git-tag]\n"
+
+
+def test_disable_in_a_merged_branch_is_ignored(tmp_path):
+    repo = _repo_with_origin(tmp_path, "git:\n  main_branch: main\n")
+    (repo / ".claude" / "toolkit.yaml").write_text("git:\n  main_branch: main\n" + _DISABLE_ALL)
+    assert run(HOOK, bash("gh pr merge 12 --squash", repo)).code == 2
+    assert run("no-force-push", bash("git push -f origin HEAD:main", repo)).code == 2
+    assert run("no-git-tag", bash("git push origin v1.0", repo)).code == 2
+    assert "differs from the committed main profile" not in run(HOOK, bash("git status", repo)).stderr
+
+
+def test_a_disable_committed_on_main_is_honoured(tmp_path):
+    repo = _repo_with_origin(tmp_path, "git:\n  main_branch: main\n" + _DISABLE_ALL)
+    assert run(HOOK, bash("gh pr merge 12 --squash", repo)).code == 0
+    assert run("no-force-push", bash("git push -f origin HEAD:main", repo)).code == 0
+
+
+def test_profile_outside_project_dir_cannot_disable(tmp_path):
+    repo = _repo_with_origin(tmp_path, "git:\n  main_branch: main\n")
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / ".claude").mkdir(parents=True)
+    (elsewhere / ".claude" / "toolkit.yaml").write_text("git:\n  main_branch: main\n" + _DISABLE_ALL)
+    assert run(HOOK, bash("gh pr merge 12", elsewhere), project=repo).code == 2
+    assert run(HOOK, bash("gh pr merge 12", repo), project=repo).code == 2
+
+
 # ---- GitHub MCP tools ----------------------------------------------------------------------------
 @pytest.mark.parametrize("tool, args", [
     ("mcp__github__merge_pull_request", {"pullNumber": 3}),
