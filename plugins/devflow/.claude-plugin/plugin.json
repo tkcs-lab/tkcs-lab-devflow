@@ -1,8 +1,8 @@
 {
   "name": "devflow",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Project-independent plan → implement workflow: /review, /make-plan, /implement, /dod, /board, /deps, /upstream and /land, driven by a per-project profile (.claude/toolkit.yaml)",
   "author": { "name": "andras-tkcs" },
   "license": "Apache-2.0",
-  "homepage": "https://github.com/tkcs-lab/claude-toolkit"
+  "homepage": "https://github.com/andras-tkcs/claude-toolkit"
 }

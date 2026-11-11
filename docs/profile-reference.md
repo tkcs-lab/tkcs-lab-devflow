@@ -43,7 +43,6 @@ Rules:
 | `ci.dispatchable` | no | `{workflow, use_when, notes?}`: workflows a session may dispatch against its own branch for work the container cannot do |
 | `stacks` | **yes** (may be `[]`) | Stack skills to load: `python` loads `stack-python`, `go` loads `stack-go`, `swift` loads `stack-swift`, `ipados` loads `stack-ipados` (list it with `swift`) |
 | `models.planner`, `models.orchestrator`, `models.worker`, `models.reviewer` | no | `opus` or `sonnet`. `worker` and `reviewer` pick the model of child sessions; planner and orchestrator document intent (the command front matter sets them) |
-| `status.board_url` | no | URL of the published status board; `/implement` writes its status record there. When unset the environment variable `DEVFLOW_BOARD_URL` is used; with neither, no board is written |
 | `deps.cooldown_days` | **yes** (in `deps`) | Integer 0..30: the Dependabot cooldown (days) the project's `.github/dependabot.yml` must set. `/deps` needs the `deps` section and stops with a missing-key message when it is absent |
 | `deps.time_budget_minutes` | **yes** (in `deps`) | Integer 10..480: `/deps` starts no new update group after 80% of this |
 | `deps.audit` | no | List of `{ecosystem, run, cwd?}`: commands that list vulnerable packages (sessions cannot read Dependabot alerts). Exit 0 = nothing found; non-zero = findings in the output. `cwd` is relative to the repo root |

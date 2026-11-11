@@ -18,9 +18,9 @@ language.
   fix and what not, and writes a review document on a `review/<slug>` branch. What only you can
   decide goes onto an interactive page (add to the plan, create an issue, or drop); once you have
   chosen, it updates the review and creates the issues. Then run `/make-plan <review URL>`.
-- **`/board [prune]`** publishes the status board once: one private page with the status of every
-  `/implement` run and every maintenance command. `/board prune` deletes the stale records after you
-  confirm.
+- **`/board [prune]`**: `/board` checks the connection to your self-hosted status board (a small Python
+  server you run, see [docs/board-server.md](docs/board-server.md)), and `/board prune` deletes the
+  stale records after you confirm.
 - **`/deps`** (scheduled, unattended) triages Dependabot pull requests and audit findings, fixes what
   is red and opens pull requests. It never merges.
 - **`/upstream`** (scheduled, unattended) syncs a patch-carrying fork to the newest upstream release
@@ -78,7 +78,7 @@ Plugins are enabled per Claude Project, so every repository in a Project that en
 
 | Path | |
 |---|---|
-| `plugins/devflow` | the eight commands, the `project-profile`, `pr-steward`, `status-board`, `repo-admin`, `git-ops`, `review-checklist`, `secure-code-review`, `test-review` and `docs-review` skills, the scripts in `scripts/` (manifest, profile and status-record validators, `review_decisions.py` with its page template, `build_board.py`, `board_stale.py`, `pick_release.py`, `upstream_sync.py`, `land_order.py`, `repo_admin.py`, `scope_check.py`), `schema/profile.schema.json`, `schema/status-record.schema.json`, `schema/admin-policy.schema.json`, `hooks/` (the guardrail hooks and `hooks.json`), `board/` (the status board page) and `templates/` (the `/land`, release and git-ops workflows, the starter admin policy and the git-ops allowlist example) |
+| `plugins/devflow` | the eight commands, the `project-profile`, `pr-steward`, `status-board`, `repo-admin`, `git-ops`, `review-checklist`, `secure-code-review`, `test-review` and `docs-review` skills, the scripts in `scripts/` (manifest, profile and status-record validators, `review_decisions.py` with its page template, `build_board.py`, `board_stale.py`, `board_server.py`, `board_mcp.py`, `board_client.py`, `board_mcp_stdio.py`, `pick_release.py`, `upstream_sync.py`, `land_order.py`, `repo_admin.py`, `scope_check.py`), `schema/profile.schema.json`, `schema/status-record.schema.json`, `schema/admin-policy.schema.json`, `hooks/` (the guardrail hooks and `hooks.json`), `.mcp.json`, `board/` (the status board page) and `templates/` (the `/land`, release and git-ops workflows, the starter admin policy and the git-ops allowlist example) |
 | `plugins/stack-python`, `plugins/stack-go`, `plugins/stack-swift`, `plugins/stack-ipados` | stack skills the profile selects (`ipados` goes with `swift`) |
 | `templates/toolkit.yaml` | starter profile |
 | `docs/` | profile reference, delivery, design, [the guardrail hooks](docs/hooks.md), [the review flow](docs/review.md), [the maintenance commands and the board](docs/maintenance.md), [scope-drift monitoring in `/implement`](docs/scope-drift.md), [auditing and updating organisation and repository settings](docs/admin.md), [the central git-ops workflow](docs/git-ops.md), [the eval harness](docs/evals.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |

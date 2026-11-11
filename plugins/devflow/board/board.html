@@ -337,20 +337,58 @@ a { color: var(--run); }
     return list.filter(function (e) { return e && e.data && typeof e.data === "object" && Array.isArray(e.data.phases); });
   }
 
+  function pollMs() {
+    var m = /[?&]poll=(\d+)/.exec(location.search);
+    var n = m ? parseInt(m[1], 10) : 0;
+    return n >= 500 ? n : 15000;
+  }
+
+  function openKeys() {
+    var keys = [];
+    Array.prototype.forEach.call(document.querySelectorAll("details[open]"), function (d) {
+      var key = d.getAttribute("data-project");
+      if (key) keys.push("p:" + key);
+      else if (d.getAttribute("data-section") === "hidden") keys.push("hidden");
+    });
+    return keys;
+  }
+
+  function restoreOpen(keys) {
+    Array.prototype.forEach.call(document.querySelectorAll("details"), function (d) {
+      var key = d.getAttribute("data-project");
+      var id = key ? "p:" + key : (d.getAttribute("data-section") === "hidden" ? "hidden" : null);
+      if (id !== null && keys.indexOf(id) !== -1) d.open = true;
+    });
+  }
+
+  var lastText = null;
+  var lastRender = 0;
+
+  function load() {
+    return fetch("api/records", { cache: "no-store", credentials: "same-origin" }).then(function (resp) {
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      return resp.json();
+    }).then(function (body) {
+      var records = body && Array.isArray(body.records) ? body.records : [];
+      var text = JSON.stringify(records);
+      var t = Date.now();
+      if (text !== lastText || t - lastRender >= 60000 || document.getElementById("status")) {
+        var keys = openKeys();
+        render(validEntries(records));
+        restoreOpen(keys);
+        lastText = text;
+        lastRender = t;
+      }
+    }).catch(function (err) {
+      fail("Cannot reach the board server (" + (err && err.message ? err.message : err) + "). What is shown may be out of date.");
+    });
+  }
+
   function start() {
     document.getElementById("title").textContent = document.title;
     if (FIXTURE !== null) { render(validEntries(FIXTURE)); return; }
-    var timer = setTimeout(function () { fail("The data cannot be reached yet. What is shown may be out of date."); }, 10000);
-    claude.use("db").then(function (db) {
-      if (!db) { clearTimeout(timer); fail("The database is not available in this view."); return; }
-      db.collection("projects").onSnapshot(function (snap) {
-        if (!snap.metadata.fromCache) clearTimeout(timer);
-        render(validEntries(snap.docs.map(function (d) { return { id: d.id, data: d.data() }; })));
-      }, function (err) {
-        clearTimeout(timer);
-        fail("Cannot read the records (" + (err && err.code) + ").");
-      });
-    }, function () { clearTimeout(timer); fail("The database is not available in this view."); });
+    load();
+    setInterval(load, pollMs());
   }
   start();
 })();
