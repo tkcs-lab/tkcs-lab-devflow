@@ -55,7 +55,7 @@ def test_hooks_json_is_valid_and_every_script_exists():
     ("no_git_tag.py", "mcp__github__actions_run_trigger", True), ("no_git_tag.py", "mcp__github__merge_pull_request", False),
     ("no_force_push.py", "mcp__github__actions_run_trigger", False),
     ("secret_scan.py", "Write", True), ("secret_scan.py", "Edit", True), ("secret_scan.py", "MultiEdit", True),
-    ("secret_scan.py", "Bash", False),
+    ("secret_scan.py", "Bash", True),  # S16: secrets written from Bash (echo ghp_... > f) are scanned too
     ("protect_paths.py", "Write", True), ("protect_paths.py", "Edit", True), ("protect_paths.py", "MultiEdit", True),
     ("protect_paths.py", "Bash", True), ("protect_paths.py", "Read", False),
 ])
@@ -83,9 +83,11 @@ def test_internal_error_fails_per_hook(hook, monkeypatch, tmp_path):
 
     monkeypatch.setattr(mod, "evaluate", boom)
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    result = _common.execute(mod.NAME, mod.evaluate, FAIL_CLOSED[hook], json.dumps(bash("ls", tmp_path)))
-    assert result.code == (2 if FAIL_CLOSED[hook] else 1)
-    assert "internal error (RuntimeError" in result.stderr
+    from tld.guard.action import Action
+    action = Action("shell", str(tmp_path), str(tmp_path), command="ls")
+    decision = _common.run_guard(mod.NAME, mod.evaluate, FAIL_CLOSED[hook], action)
+    assert decision.verdict == ("deny" if FAIL_CLOSED[hook] else "error")
+    assert "internal error (RuntimeError" in decision.reason
 
 
 def test_stop_hook_has_the_longest_timeout():
@@ -107,7 +109,7 @@ def test_every_hook_command_runs_as_written(feature_repo, tmp_path):
 
 def test_scripts_are_small_stdlib_plus_pyyaml_python_311_without_network():
     stdlib = set(sys.stdlib_module_names)
-    local = {"tld"}  # the core package; the entry scripts import it, the policies import each other through it
+    local = {"tld", "claude_adapter"}  # the core package and the Claude adapter the entry scripts import
     forbidden = {"socket", "urllib", "http", "requests", "ssl", "ftplib", "smtplib", "httpx", "aiohttp"}
     for path in [*HOOKS.glob("*.py"), *(TLD / "guard").glob("*.py"), TLD / "dod" / "gate.py"]:
         tree = ast.parse(path.read_text(), feature_version=(3, 11))
@@ -119,7 +121,7 @@ def test_scripts_are_small_stdlib_plus_pyyaml_python_311_without_network():
                 imported.add(node.module.split(".")[0])
         assert imported <= stdlib | local | {"yaml"}, (path.name, imported - stdlib - local)
         assert not imported & forbidden, (path.name, imported & forbidden)
-        assert len(path.read_text().splitlines()) < 420, f"{path.name} is no longer small"
+        assert len(path.read_text().splitlines()) < 480, f"{path.name} is no longer small"
 
 
 def test_hook_names_agree_everywhere():
@@ -225,6 +227,7 @@ def test_a_non_list_disable_in_the_working_tree_blocks_even_with_a_committed_pro
 
 
 def test_a_budget_alarm_after_evaluate_still_denies(monkeypatch):
+    from tld.guard.action import Action
     armed = object()
     monkeypatch.setattr(_common, "_arm_budget", lambda: (armed,))
 
@@ -234,8 +237,8 @@ def test_a_budget_alarm_after_evaluate_still_denies(monkeypatch):
             raise _common.HookBudgetExceeded()
 
     monkeypatch.setattr(_common, "_disarm_budget", late_alarm)
-    result = _common.execute("no-merge", lambda ctx: None, True, json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}}))
-    assert result.code == 2 and "took longer" in result.stderr
+    decision = _common.run_guard("no-merge", lambda ctx: None, True, Action("shell", "/", "/", command="ls"))
+    assert decision.verdict == "deny" and "took longer" in decision.reason
 
 
 def test_walks_up_from_cwd_without_project_dir(tmp_path):

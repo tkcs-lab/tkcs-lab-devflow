@@ -251,11 +251,18 @@ def test_bad_max_attempts_is_reported(tmp_path, bad):
 
 
 def test_disable_flag(tmp_path):
+    # S1: dod-gate's disable is read from the remote main branch, so commit and push it there.
     repo = repo_with(tmp_path, ["exit 1"], change=False)
+    git(repo, "checkout", "-q", "main")
     (repo / ".tld" / "toolkit.yaml").write_text(profile(["exit 1"]) + "  disable: [dod-gate]\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "disable on main")
-    git(repo, "branch", "-f", "main", "HEAD")  # the disable is committed on main
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", "main")
+    git(repo, "checkout", "-q", "feature/demo")
+    git(repo, "merge", "-q", "main")
     (repo / "work.txt").write_text("new work\n")
     assert run(HOOK, stop(repo)).code == 0
 

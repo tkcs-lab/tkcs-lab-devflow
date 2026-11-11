@@ -1,7 +1,7 @@
 """no-git-tag: no creating, moving, deleting or pushing tags; reading stays allowed."""
 import pytest
 
-from hooks_helpers import bash, event, git, make_repo, run, run_script
+from hooks_helpers import bash, event, git, make_repo, make_repo_with_origin, run, run_script
 
 HOOK = "no-git-tag"
 
@@ -94,8 +94,15 @@ def test_unparseable_commands_fail_closed(feature_repo):
 
 
 def test_disable_flag(tmp_path):
-    repo = make_repo(tmp_path / "r", "feature/demo", "git:\n  main_branch: main\nhooks:\n  disable: [no-git-tag]\n")
+    # S1: disable only counts when committed on the remote main branch, not in the working tree.
+    repo = make_repo_with_origin(tmp_path / "r", committed="git:\n  main_branch: main\nhooks:\n  disable: [no-git-tag]\n")
     assert run(HOOK, bash("git tag v2", repo)).code == 0
+
+
+def test_disable_in_working_tree_only_is_ignored(tmp_path):
+    repo = make_repo_with_origin(tmp_path / "r", committed="git:\n  main_branch: main\n",
+                                 working="git:\n  main_branch: main\nhooks:\n  disable: [no-git-tag]\n")
+    assert run(HOOK, bash("git tag v2", repo)).code == 2
 
 
 def test_script_contract(feature_repo):

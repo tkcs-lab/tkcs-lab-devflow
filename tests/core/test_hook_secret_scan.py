@@ -8,7 +8,7 @@ import string
 
 import pytest
 
-from hooks_helpers import event, make_repo, run, run_script
+from hooks_helpers import event, make_repo, make_repo_with_origin, run, run_script
 
 HOOK = "secret-scan"
 _rng = random.Random(7)
@@ -158,7 +158,7 @@ def test_message_names_the_line_and_how_to_proceed(feature_repo):
 
 
 def test_disable_flag(tmp_path):
-    repo = make_repo(tmp_path / "r", "feature/demo", "git:\n  main_branch: main\nhooks:\n  disable: [secret-scan]\n")
+    repo = make_repo_with_origin(tmp_path / "r", committed="git:\n  main_branch: main\nhooks:\n  disable: [secret-scan]\n")
     r = run(HOOK, event("Write", repo, file_path="a", content="t = '" + "ghp_" + rand(36) + "'"))
     assert r.code == 0
 

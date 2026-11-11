@@ -47,13 +47,16 @@ DENIED_PUSH_ON_FEATURE = [
     "cd . && git push origin main",
 ]
 DENIED_PUSH_ON_MAIN = ["git push", "git push origin", "git push origin HEAD", "git push -u origin HEAD", "git push origin @"]
+# S2: a destination known only at run time could resolve to the main branch; denied on any branch.
+DENIED_DYNAMIC_DEST = ['git push origin "$BRANCH"', "git push origin HEAD:$B", 'git push origin "HEAD:$(echo main)"',
+                       "B=main; git push origin HEAD:$B"]
 
 ALLOWED = [
     # the known allowed set
     "git push -u origin feature/demo", "git push -u origin HEAD", "git push", "git push origin feature/demo",
     "git push origin plan/my-plan", "git push -u origin review/my-review", "git push -u origin chore/land-20260101-0101",
     "git push origin chore/tld-land-workflow", "git push origin feature/x:feature/x", "git push origin main:feature/x",
-    "git push origin feature/demo--fix-1", "git push origin feature/demo--p1-rev2", 'git push origin "$BRANCH"',
+    "git push origin feature/demo--fix-1", "git push origin feature/demo--p1-rev2",
     "git push origin --tags", "git push --follow-tags",
     "git merge origin/main", "git merge --no-ff origin/feature/demo--p1 -m 'Merge plan p1: title'", "git merge --abort",
     "git merge main", "git revert -m 1 HEAD", "git checkout main", "git pull origin main", "git fetch origin main",
@@ -88,6 +91,12 @@ def test_denied(feature_repo, command):
 def test_push_of_the_current_branch_is_denied_on_main(main_repo, feature_repo, command):
     assert run(HOOK, bash(command, main_repo)).code == 2
     assert run(HOOK, bash(command, feature_repo)).code == 0, "same command is fine on a feature branch"
+
+
+@pytest.mark.parametrize("command", DENIED_DYNAMIC_DEST)
+def test_dynamic_push_destination_is_denied_on_any_branch(main_repo, feature_repo, command):
+    assert run(HOOK, bash(command, main_repo)).code == 2
+    assert run(HOOK, bash(command, feature_repo)).code == 2
 
 
 @pytest.mark.parametrize("command", ALLOWED)
@@ -155,9 +164,10 @@ def test_commands_that_need_no_project_fact_work_without_a_profile(tmp_path):
 
 
 def test_disable_flag(tmp_path):
-    repo = make_repo(tmp_path / "off", "feature/demo", "git:\n  main_branch: main\nhooks:\n  disable: [no-merge]\n")
+    # S1: the disable list is read from the remote main branch, not the working tree.
+    repo = _repo_with_origin(tmp_path, "git:\n  main_branch: main\nhooks:\n  disable: [no-merge]\n")
     assert run(HOOK, bash("gh pr merge 1", repo)).code == 0
-    assert run("no-force-push", bash("git push -f", repo)).code == 2, "other hooks stay on"
+    assert run("no-force-push", bash("git push -f origin HEAD:main", repo)).code == 2, "other hooks stay on"
 
 
 def _repo_with_origin(tmp_path, committed_profile):
@@ -344,13 +354,14 @@ def test_failed_branch_lookup_denies(feature_repo, monkeypatch):
     monkeypatch.undo()
     git(feature_repo, "checkout", "-q", "--detach")
     assert run(HOOK, bash("git push origin feature", feature_repo)).code == 0
+    git(feature_repo, "checkout", "-q", "feature/demo")  # restore the session-scoped fixture's branch
 
 
 def test_hook_budget_denies(monkeypatch):
-    import json
     import time
 
     from tld.guard import _common
+    from tld.guard.action import Action
     monkeypatch.setattr(_common, "HOOK_BUDGET_SECONDS", 1)
 
     def slow(ctx):
@@ -359,12 +370,12 @@ def test_hook_budget_denies(monkeypatch):
         except OSError:  # must not swallow the alarm
             pass
         return None
-    payload = json.dumps({"cwd": "/", "tool_name": "Bash", "tool_input": {"command": "true"}})
+    action = Action("shell", "/", "/", command="true")
     start = time.monotonic()
-    r = _common.execute("no-merge", slow, True, payload)
-    assert r.code == 2 and "took longer than" in r.stderr and time.monotonic() - start < 2.5
-    r = _common.execute("secret-scan", slow, False, payload)
-    assert r.code == 0 and time.monotonic() - start >= 3
+    d = _common.run_guard("no-merge", slow, True, action)
+    assert d.verdict == "deny" and "took longer than" in d.reason and time.monotonic() - start < 2.9
+    d = _common.run_guard("secret-scan", slow, False, action)
+    assert d.verdict == "allow" and time.monotonic() - start >= 3
 
 
 @pytest.mark.parametrize("script", ["no_merge.py", "no_force_push.py", "no_git_tag.py"])

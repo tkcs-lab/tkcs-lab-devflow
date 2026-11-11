@@ -13,9 +13,12 @@ from pathlib import Path
 
 from conftest import CLAUDE
 
-from tld.guard import _common
+from tld.guard import _common  # noqa: F401  (re-exported for tests)
 
 HOOKS = CLAUDE / "hooks"  # the Claude Code hook entry scripts (thin shims over the core modules)
+if str(HOOKS) not in sys.path:
+    sys.path.insert(0, str(HOOKS))
+import claude_adapter  # noqa: E402  (the Claude adapter: event JSON -> Action -> Decision -> exit code)
 # hook name -> entry script stem in adapters/claude/hooks/
 MODULES = {"no-merge": "no_merge", "no-force-push": "no_force_push", "no-git-tag": "no_git_tag",
            "secret-scan": "secret_scan", "protect-paths": "protect_paths", "dod-gate": "dod_gate"}
@@ -51,6 +54,23 @@ def make_repo(path, branch, profile=PROFILE):
     return path
 
 
+def make_repo_with_origin(path, branch="feature/demo", committed=PROFILE, working=None):
+    """A repo whose `main` (with `committed` profile) is pushed to a bare origin, checked out on `branch`.
+    `working` replaces the working tree's profile after checkout. The guards read trust from origin."""
+    path = Path(path)
+    repo = make_repo(path, "main", committed)
+    bare = path.parent / (path.name + "-origin.git")
+    git(path.parent, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", "main")
+    if branch != "main":
+        git(repo, "checkout", "-q", "-b", branch)
+    if working is not None:
+        (repo / ".tld").mkdir(exist_ok=True)
+        (repo / ".tld" / "toolkit.yaml").write_text(working)
+    return repo
+
+
 def module(name):
     return importlib.import_module(CORE[name])
 
@@ -65,12 +85,11 @@ def bash(command, cwd):
 
 
 def run(hook, payload, project=None):
-    """The hook's verdict on an event: a _common.Result (code 0 allow, 2 deny)."""
-    mod = module(hook)
+    """The hook's verdict on an event, through the Claude adapter: a Result (code 0 allow, 2 deny)."""
     old = os.environ.get("CLAUDE_PROJECT_DIR")
-    os.environ["CLAUDE_PROJECT_DIR"] = str(project or payload["cwd"])
+    os.environ["CLAUDE_PROJECT_DIR"] = str(project or payload.get("cwd") or os.getcwd())
     try:
-        return _common.execute(mod.NAME, mod.evaluate, FAIL_CLOSED[hook], json.dumps(payload))
+        return claude_adapter.execute(hook, json.dumps(payload))
     finally:
         if old is None:
             os.environ.pop("CLAUDE_PROJECT_DIR", None)

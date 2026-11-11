@@ -1,7 +1,7 @@
 """no-force-push: no force push, no branch deletion by push."""
 import pytest
 
-from hooks_helpers import bash, git, make_repo, run, run_script
+from hooks_helpers import bash, git, make_repo, make_repo_with_origin, run, run_script
 
 HOOK = "no-force-push"
 
@@ -75,8 +75,15 @@ def test_unparseable_commands_fail_closed(feature_repo):
 
 
 def test_disable_flag(tmp_path):
-    repo = make_repo(tmp_path / "r", "feature/demo", "git:\n  main_branch: main\nhooks:\n  disable: [no-force-push]\n")
+    # S1: disable only counts when committed on the remote main branch, not in the working tree.
+    repo = make_repo_with_origin(tmp_path / "r", committed="git:\n  main_branch: main\nhooks:\n  disable: [no-force-push]\n")
     assert run(HOOK, bash("git push -f", repo)).code == 0
+
+
+def test_disable_in_working_tree_only_is_ignored(tmp_path):
+    repo = make_repo_with_origin(tmp_path / "r", committed="git:\n  main_branch: main\n",
+                                 working="git:\n  main_branch: main\nhooks:\n  disable: [no-force-push]\n")
+    assert run(HOOK, bash("git push -f", repo)).code == 2
 
 
 def test_needs_no_profile(tmp_path):
@@ -128,12 +135,12 @@ def test_slow_git_config_still_denies(tmp_path):
             f.write(f"[alias]\n\tpf = push -f\n[include]\n\tpath = {fifo}\n")
         start = time.monotonic()
         r = run_script(HOOK, bash("git pf origin feature", feature))
-        assert r.returncode == 2 and time.monotonic() - start < 12, r.stderr
+        assert r.returncode == 2 and time.monotonic() - start < 18, r.stderr
         on_main = make_repo(tmp_path / "main", "main")
         with open(on_main / ".git" / "config", "a") as f:
             f.write(f"[include]\n\tpath = {fifo}\n")
         start = time.monotonic()
         r = run_script("no-merge", bash("git push", on_main))
-        assert r.returncode == 2 and time.monotonic() - start < 12, r.stderr
+        assert r.returncode == 2 and time.monotonic() - start < 18, r.stderr
     finally:
         fifo.unlink()

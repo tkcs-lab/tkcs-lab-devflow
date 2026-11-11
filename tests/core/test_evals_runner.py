@@ -238,6 +238,7 @@ SAMPLES = {
     "gcp-api-key": "AIza" + _r(35, _ALNUM + "_-"),
     "gcp-oauth-token": "ya29." + _r(40),
     "slack-token": "xoxb-" + _r(30, string.digits),
+    "gitlab-token": "glpat-" + _r(20),
     "stripe-key": "sk_live_" + _r(30),
     "anthropic-key": "sk-ant-" + _r(40),
     "openai-key": "sk-" + _r(48),

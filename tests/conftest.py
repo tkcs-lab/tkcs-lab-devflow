@@ -86,3 +86,15 @@ def _isolated_git_config():
     mp.setenv("GIT_CONFIG_NOSYSTEM", "1")
     yield
     mp.undo()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_hook_env(monkeypatch):
+    """Keep ambient git / gh / Claude / tld environment out of every test: the guards read GIT_CONFIG_*
+    (including the COUNT/KEY_n/VALUE_n injection vars), GH_*, CLAUDE_* and TLD_*, and a value leaking in
+    from the developer's shell or an earlier test would make a case pass or fail for the wrong reason."""
+    for key in list(os.environ):
+        if (key.startswith(("GH_", "CLAUDE_", "TLD_"))
+                or key in ("GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS", "GIT_DIR", "GITHUB_TOKEN")
+                or re.fullmatch(r"GIT_CONFIG_(KEY|VALUE)_\d+", key)):
+            monkeypatch.delenv(key, raising=False)

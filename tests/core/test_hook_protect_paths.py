@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from hooks_helpers import bash, event, make_repo, run, run_script
+from hooks_helpers import bash, event, make_repo, make_repo_with_origin, run, run_script
 
 HOOK = "protect-paths"
 PROTECTED_FILES = [".tld/toolkit.yaml", ".env", ".env.local", ".env.production", "sub/.env", "package-lock.json",
@@ -97,9 +97,10 @@ def test_globs_expand_against_the_file_system(fresh_repo):
 
 
 def test_profile_can_replace_the_list_and_add_exceptions(tmp_path):
-    repo = make_repo(tmp_path / "r", "feature/demo",
-                     "git:\n  main_branch: main\nhooks:\n  protect_paths: ['secrets/**', 'Makefile']\n"
-                     "  protect_paths_allow: ['secrets/public.txt']\n")
+    # S1: the protect lists are read from the remote main branch (the trusted copy), so commit them there.
+    repo = make_repo_with_origin(tmp_path / "r",
+                                 committed="git:\n  main_branch: main\nhooks:\n  protect_paths: ['secrets/**', 'Makefile']\n"
+                                 "  protect_paths_allow: ['secrets/public.txt']\n")
     ev = lambda p: event("Write", repo, file_path=p, content="x")  # noqa: E731
     assert run(HOOK, ev("secrets/a/b.txt")).code == 2
     assert run(HOOK, ev("Makefile")).code == 2
@@ -108,8 +109,16 @@ def test_profile_can_replace_the_list_and_add_exceptions(tmp_path):
 
 
 def test_exceptions_extend_the_default(tmp_path):
-    repo = make_repo(tmp_path / "r", "feature/demo", "git:\n  main_branch: main\nhooks:\n  protect_paths_allow: ['uv.lock']\n")
+    repo = make_repo_with_origin(tmp_path / "r",
+                                 committed="git:\n  main_branch: main\nhooks:\n  protect_paths_allow: ['uv.lock']\n")
     assert run(HOOK, event("Write", repo, file_path="uv.lock", content="x")).code == 0
+    assert run(HOOK, event("Write", repo, file_path=".env", content="x")).code == 2
+
+
+def test_working_tree_cannot_widen_the_allow_list(tmp_path):
+    # Without a trusted copy an allow list from the working tree is ignored (it never weakens protection).
+    repo = make_repo(tmp_path / "r", "feature/demo",
+                     "git:\n  main_branch: main\nhooks:\n  protect_paths_allow: ['.env']\n")
     assert run(HOOK, event("Write", repo, file_path=".env", content="x")).code == 2
 
 
@@ -126,7 +135,7 @@ def test_works_without_a_profile_using_the_defaults(tmp_path):
 
 
 def test_disable_flag(tmp_path):
-    repo = make_repo(tmp_path / "r", "feature/demo", "git:\n  main_branch: main\nhooks:\n  disable: [protect-paths]\n")
+    repo = make_repo_with_origin(tmp_path / "r", committed="git:\n  main_branch: main\nhooks:\n  disable: [protect-paths]\n")
     assert run(HOOK, event("Write", repo, file_path=".env", content="x")).code == 0
 
 
