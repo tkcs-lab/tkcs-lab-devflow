@@ -7,6 +7,7 @@ Plans (`<slug>-plan.md`) are transient and not listed; a finished plan's decisio
 
 - [architecture/design.md](architecture/design.md) - the design: core and adapter, the concepts (profile, playbooks, runtime actions, roles, stacks, plans, guard, ops, board), rejected alternatives, history; read before changing the architecture.
 - [architecture/hooks.md](architecture/hooks.md) - the guardrail hooks, their configuration and the commands' compatibility; read when changing a hook.
+- [architecture/hooks-parsing.md](architecture/hooks-parsing.md) - how the guards parse a shell command and the playbook commands they must allow; read when changing the parser or a playbook's git or gh commands.
 - [architecture/roles.md](architecture/roles.md) - the ten roles, the profile's roles block, the points and modes they run at; read when changing a role or the roles block.
 - [architecture/scope-drift.md](architecture/scope-drift.md) - scope-drift monitoring at each /implement merge; read when changing tld plan scope-check.
 - [architecture/evals.md](architecture/evals.md) - the eval harness in evals/ (neutral core, Claude adapter), tasks per command, stub mode, graders, baselines and their staleness; read when measuring a change to a command, playbook or hook.

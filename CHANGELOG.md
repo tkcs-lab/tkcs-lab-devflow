@@ -40,8 +40,12 @@ gets no more changes. Migrate a repository with `/tld:migrate` or `tld migrate`;
 
 - Guardrail hooks: a neutral Action/Decision core with a Claude adapter. The critical and high bypasses found in the
   review are closed (trusted profile from the default branch, dynamic push targets, config injection, wrappers,
-  workflow and tag routes, secret scan of redirects and heredocs). The hooks are a seatbelt; the rulesets are the
-  control.
+  workflow and tag routes, secret scan of redirects and heredocs). The trusted copy is read from the remote's
+  default branch and pinned by commit, and the guards deny writes to the trusted ref, replace objects and `.git`
+  internals, repointing origin, directory-level writes over protected paths, and tag or release calls through
+  curl. The hooks are a seatbelt; the rulesets are the control.
+- The board server caps connections (64) and drops slow clients, never locks the owner out of login (failures only
+  slow down), keys IPv6 clients by /64, and keeps a logout across restarts.
 - Tags have one route, the release workflow, run by the owner with `TLD_RELEASE_TOKEN`; git-ops only deletes
   branches.
 - One status-record model: `attended` instead of "scheduled", final states `done`, `failed`, `pr_open`, the
