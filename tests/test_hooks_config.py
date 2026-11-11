@@ -212,6 +212,32 @@ def test_disable_must_be_a_list(tmp_path):
     assert r.code == 2 and "hooks.disable" in r.stderr
 
 
+def test_a_non_list_disable_in_the_working_tree_blocks_even_with_a_committed_profile(tmp_path):
+    repo = make_repo(tmp_path / "r", "main", "git:\n  main_branch: main\n")
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", "main")
+    git(repo, "checkout", "-q", "-b", "feature/demo")
+    (repo / ".claude" / "toolkit.yaml").write_text("git:\n  main_branch: main\nhooks:\n  disable: no-merge\n")
+    r = run("no-merge", bash("gh pr merge 1", repo))
+    assert r.code == 2 and "hooks.disable" in r.stderr
+
+
+def test_a_budget_alarm_after_evaluate_still_denies(monkeypatch):
+    armed = object()
+    monkeypatch.setattr(_common, "_arm_budget", lambda: (armed,))
+
+    def late_alarm(token):
+        if token and not getattr(late_alarm, "done", False):
+            late_alarm.done = True
+            raise _common.HookBudgetExceeded()
+
+    monkeypatch.setattr(_common, "_disarm_budget", late_alarm)
+    result = _common.execute("no-merge", lambda ctx: None, True, json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}}))
+    assert result.code == 2 and "took longer" in result.stderr
+
+
 def test_walks_up_from_cwd_without_project_dir(tmp_path):
     repo = make_repo(tmp_path / "r", "feature/demo")
     sub = repo / "sub"
