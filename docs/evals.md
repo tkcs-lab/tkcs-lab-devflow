@@ -225,11 +225,27 @@ python3 evals/run.py baseline  evals/results/<file>.jsonl --name sonnet   # writ
 python3 evals/run.py compare   evals/results/<new>.jsonl --baseline evals/baselines/sonnet.json [--threshold 1]
 ```
 
+The committed baseline is `evals/baselines/default.json`. It was assembled from the latest run of each task
+after the first runs exposed defects in tasks and graders (see "Reading a failure" below), so every task
+passes 3/3 in it; its `plugin_sha` is that of the first run, and the plugin did not change between runs. A
+100% baseline can only detect a drop, and with 3 repeats only a large one.
+
 A baseline is a small summary (per task: runs, passes, rate, per-grader counts, plugin sha, model,
 command hashes), safe to commit. `compare` flags a task whose pass count dropped by **more than
 `--threshold` repeats** (default 1; the drop is scaled to the current number of runs) and exits 1; it
 also lists grader-level drops, improvements, new tasks and tasks not run. With 3 repeats a 3/3 to 2/3
 move is noise by this rule, 3/3 to 1/3 is a regression.
+
+### Reading a failure
+
+Before you trust a red run, decide whether the agent or the harness failed. The first baseline runs found
+five harness defects, none of them a model failure: a guardrail prompt that hit a different hook first
+(`guardrail-force-push` tried a plain push to main, so `no-force-push` was never reached), a task fixture
+with no local branch to amend, an acceptance heuristic that rejected real shell checks, a section the
+command itself makes conditional ("Before you start"), and a review parser that did not read findings
+grouped under `####` headings or when a finding named a module instead of the file path. Read the
+transcript in `evals/transcripts/` and the grader's `reason`; fix the task or grader and add a test for the
+case, then re-run, rather than editing the baseline.
 
 ## Cost
 
@@ -238,11 +254,11 @@ move is noise by this rule, 3/3 to 1/3 is a regression.
   itself at that line, the result is recorded `aborted: cost_ceiling`, and the invocation stops with
   exit code 3 and does not start another run. An agent that reports more than its allowance is
   aborted the same way.
-- Measured so far: one `make-plan-small` run (Opus, 8 turns, 100 s) cost $0.60. The other tasks are not
-  measured yet: expect `make-plan-large` and `review-seeded` (which starts Opus subagents) to cost
-  several times more, and set `--run-ceiling` accordingly. Start with `--repeats 1`, one task and a ceiling
-  of a few dollars; widen when the task is trusted. Replace this paragraph with measured figures from your
-  own first runs.
+- Measured per run, from the committed baseline (`evals/baselines/default.json`, 3 runs per task): the four
+  `guardrail-*` tasks $0.04 to $0.06 each (Sonnet, a few turns); `make-plan-small` $0.56, `review-seeded`
+  $0.52 and `make-plan-large` $1.19 (all three ran on Opus, because the commands pin it). A full pass of the
+  seven tasks at 3 repeats costs about $9. The ceilings in the task files are 3 to 15 times these figures
+  on purpose: they stop a runaway, they do not predict the cost. Start with `--repeats 1` and one task.
 
 ## Decisions left open
 

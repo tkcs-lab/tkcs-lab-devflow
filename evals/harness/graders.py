@@ -146,11 +146,14 @@ def touches_disjoint_in_waves(ctx: GradeContext) -> GradeResult:
 
 _CMD_WORDS = ("pytest", "python", "python3", "grep", "rg", "test", "git", "make", "npm", "npx", "go", "cargo", "bash", "sh",
               "node", "ruff", "diff", "ls", "cat", "curl", "./", ".venv/", "unittest", "swift", "xcodebuild", "jq", "wc", "head", "tail")
+_SHELL_USE = re.compile(
+    r"(\$\(|&&|\|\||\bfor \w+ in\b|\b(grep|rg|pytest|python3?|unittest|bash|sh|git|make|npm|node|cargo|diff|jq|wc)\b +[-./'\"\w$]"
+    r"|\b(exit|returns?|prints?|exits?) (code )?\d\b)")
 _TESTNAME = re.compile(r"(\btest_\w+|\btests?/[\w./-]+|::\w+|\b\w+_test\.\w+|\b\w+Tests?\b)")
 
 
 def is_runnable(entry: str) -> bool:
-    """Mechanical acceptance: contains a backticked command, starts with a command word, or names a test."""
+    """Mechanical acceptance: a backticked command, a command word first or used in the text (grep x, $(...), &&), or a named test."""
     if not isinstance(entry, str) or not entry.strip():
         return False
     s = entry.strip()
@@ -159,7 +162,7 @@ def is_runnable(entry: str) -> bool:
     first = s.split()[0]
     if first in _CMD_WORDS or first.startswith(("./", ".venv/", "$")):
         return True
-    return bool(_TESTNAME.search(s))
+    return bool(_TESTNAME.search(s) or _SHELL_USE.search(s))
 
 
 @grader("acceptance_runnable")
@@ -460,7 +463,8 @@ _SKIP_SECTIONS = ("not doing", "rejected on verification")
 
 
 def parse_findings(text: str) -> list[dict]:
-    """Findings of a /review document: the '### <ID> · ...' blocks outside 'Not doing' and 'Rejected on verification'."""
+    """Findings of a /review document: headings `###`..`#####` that start with an id (`SEC-3`, `OPEN-TST-4`),
+    outside 'Not doing' and 'Rejected on verification'. Grouping headings without an id end the previous block."""
     findings = []
     section = ""
     block: dict | None = None
@@ -471,21 +475,27 @@ def parse_findings(text: str) -> list[dict]:
             continue
         if section.startswith(_SKIP_SECTIONS):
             continue
-        m = re.match(r"^###\s+([A-Z]{2,4}-\d+)\b\s*[·\-:|]*\s*(.*)$", line)
+        m = re.match(r"^#{3,5}\s+(?:OPEN-)?([A-Z]{2,4}-\d+)\b\s*[·\-:|]*\s*(.*)$", line)
         if m:
             block = {"id": m.group(1), "title": m.group(2), "text": line + "\n", "where": ""}
             findings.append(block)
+        elif line.startswith("#"):
+            block = None
         elif block is not None:
             block["text"] += line + "\n"
             w = re.match(r"^\s*[-*]\s*\*\*Where:?\*\*:?\s*(.*)$", line)
-            if w:
+            if w and not block["where"]:
                 block["where"] = w.group(1).strip().strip("`")
     return findings
 
 
 def _review_findings(ctx: GradeContext) -> list[dict]:
-    out = []
+    """Findings of each review document once: the same file seen in the working tree and on a branch counts once."""
+    out, seen = [], set()
     for d in ctx.docs("*-review.md"):
+        if d.path in seen:
+            continue
+        seen.add(d.path)
         out += parse_findings(d.text)
     return out
 
@@ -504,7 +514,8 @@ def seeded_finding_found(ctx: GradeContext) -> GradeResult:
     missed = []
     for s in seeded:
         words = [w.lower() for w in s["class_words"]]
-        hit = any(s["file"] in f["text"] and any(w in f["text"].lower() for w in words) for f in findings)
+        names = [s["file"], *s.get("file_aliases", [])]  # the file path, or a module reference to it
+        hit = any(any(n in f["text"] for n in names) and any(w in f["text"].lower() for w in words) for f in findings)
         if not hit:
             missed.append(f"{s['id']} ({s['file']})")
     if missed:

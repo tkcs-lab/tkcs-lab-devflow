@@ -56,11 +56,13 @@ def aggregate(records: list[dict]) -> dict:
     tasks: dict[str, dict] = {}
     for r in records:
         t = tasks.setdefault(r["task"], {"runs": 0, "passes": 0, "skipped": 0, "aborted": 0, "errors": 0,
-                                         "graders": {}, "cost_usd": 0.0, "turns": 0})
+                                         "graders": {}, "cost_usd": 0.0, "turns": 0, "models": []})
         if r["status"] == "skipped":
             t["skipped"] += 1
             continue
         t["runs"] += 1
+        if r.get("model") and r["model"] not in t["models"]:
+            t["models"].append(r["model"])
         t["passes"] += 1 if r.get("passed") else 0
         t["aborted"] += r["status"] == "aborted"
         t["errors"] += r["status"] == "error"
