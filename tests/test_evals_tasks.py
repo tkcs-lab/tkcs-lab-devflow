@@ -1,0 +1,83 @@
+"""Task format: every shipped task.yaml validates; broken ones are rejected."""
+import copy
+
+import pytest
+import yaml
+from conftest import ROOT
+
+from evals.harness.graders import GRADERS
+from evals.harness.taskspec import discover, validate_task_data
+
+GOOD = {
+    "id": "demo-task", "description": "d", "command": "/devflow:dod", "arguments": "x",
+    "fixture": {"builder": "tiny_app"}, "graders": ["no_manifest"],
+}
+KNOWN = set(GRADERS)
+
+
+def test_shipped_tasks_are_valid():
+    tasks = discover(graders_known=KNOWN)
+    ids = {t.id for t in tasks}
+    assert {"make-plan-small", "make-plan-large", "review-seeded", "guardrail-merge", "guardrail-force-push",
+            "guardrail-tag", "guardrail-secret"} <= ids
+    for t in tasks:
+        assert t.repeats == 3 and t.cost_ceiling_usd > 0 and t.timeout_s >= 10
+
+
+def test_no_implement_task_in_slice_1():
+    assert not (ROOT / "evals" / "tasks" / "implement").exists()
+
+
+def test_good_example_is_valid():
+    assert validate_task_data(GOOD, KNOWN) == []
+
+
+def _with(**kw):
+    d = copy.deepcopy(GOOD)
+    for k, v in kw.items():
+        if v is None:
+            d.pop(k, None)
+        else:
+            d[k] = v
+    return d
+
+
+@pytest.mark.parametrize("data,needle", [
+    (_with(id="Bad_ID"), "id"),
+    (_with(graders=None), "graders"),
+    (_with(graders=[]), "graders"),
+    (_with(graders=["nope"]), "unknown grader"),
+    (_with(fixture={}), "exactly one"),
+    (_with(fixture={"builder": "a", "path": "b"}), "exactly one"),
+    (_with(command=None), "command"),
+    (_with(prompt="also"), "not both"),
+    (_with(repeats=0), "repeats"),
+    (_with(timeout_s=1), "timeout_s"),
+    (_with(cost_ceiling_usd=0), "positive"),
+    (_with(cost_ceiling_usd="1"), "positive"),
+    (_with(surprise=1), "unknown key"),
+    (_with(command="devflow:dod"), "command"),
+])
+def test_invalid_tasks_are_rejected(data, needle):
+    errors = validate_task_data(data, KNOWN)
+    assert errors and any(needle in e for e in errors), errors
+
+
+def test_task_can_express_starting_state_plus_expected_scope():
+    """The /implement fixtures of the future: a fixture plus an expected scope (touches)."""
+    d = _with(expected={"touches": ["notes/"], "phase": "p1"}, fixture={"path": "repo"})
+    assert validate_task_data(d, KNOWN) == []
+
+
+def test_id_must_match_directory(tmp_path):
+    from evals.harness.taskspec import load_task
+    (tmp_path / "other").mkdir()
+    (tmp_path / "other" / "task.yaml").write_text(yaml.safe_dump(GOOD))
+    with pytest.raises(ValueError, match="directory name"):
+        load_task(tmp_path / "other", KNOWN)
+
+
+def test_full_prompt():
+    from evals.harness.taskspec import load_task
+    t = [t for t in discover(graders_known=KNOWN) if t.id == "make-plan-small"][0]
+    assert t.full_prompt().startswith("/devflow:make-plan Add a --limit")
