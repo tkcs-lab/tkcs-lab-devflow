@@ -192,7 +192,7 @@ def evaluate(ctx: Ctx) -> str | None:
         return _evaluate(ctx)
     except ProfileError as exc:
         project = ctx.project_dir
-        sid = ctx.payload.get("session_id")
+        sid = ctx.action.session_id
         state = load_state(project, sid)
         now = fingerprint(project)
         if now == state.get("gave_up"):
@@ -200,7 +200,7 @@ def evaluate(ctx: Ctx) -> str | None:
         attempts = int(state.get("profile_attempts", 0)) + 1
         limit = _limit_for_errors(ctx)
         saved = save_state(project, sid, {"profile_attempts": attempts})
-        if attempts >= limit or (ctx.payload.get("stop_hook_active") and not saved):
+        if attempts >= limit or (ctx.action.continuing and not saved):
             save_state(project, sid, {"gave_up": now, "profile_attempts": 0})
             ctx.notice = (f"letting the session stop although the profile is still broken ({exc}): "
                           f"{attempts} failed attempt(s) reached the limit of {limit}"
@@ -229,7 +229,7 @@ def _evaluate(ctx: Ctx) -> str | None:
     project = ctx.project_dir
     if exempt(project) or not has_changes(project, main):
         return None
-    sid = ctx.payload.get("session_id")
+    sid = ctx.action.session_id
     state = load_state(project, sid)
     if fingerprint(project) in (state.get("passed"), state.get("gave_up")):
         return None  # nothing changed since the gate last passed, or since it gave up
@@ -241,7 +241,7 @@ def _evaluate(ctx: Ctx) -> str | None:
     attempts = int(state.get("attempts", 0)) + 1
     names = ", ".join(f"`{run}`" for run, _ in failures)
     saved = save_state(project, sid, {"attempts": attempts})
-    if attempts >= max_attempts or (ctx.payload.get("stop_hook_active") and not saved):
+    if attempts >= max_attempts or (ctx.action.continuing and not saved):
         save_state(project, sid, {"gave_up": now, "attempts": 0})
         ctx.notice = (f"letting the session stop although the definition of done is still red ({names}): "
                       f"{attempts} failed attempt(s) reached the limit of {max_attempts}"
@@ -263,13 +263,10 @@ def cli(argv: list[str]) -> int:
     return 2
 
 
-def main(argv: list[str] | None = None) -> None:
-    """Hook mode without arguments (event JSON on stdin); with arguments, the command-line flags."""
-    argv = sys.argv[1:] if argv is None else argv
-    if argv:
-        sys.exit(cli(argv))
-    _common.main(NAME, evaluate, fail_closed=False)
+def main(argv: list[str] | None = None) -> int:
+    """The `tld dod exempt` command line (the hook path goes through the Claude adapter, not here)."""
+    return cli(list(sys.argv[1:] if argv is None else argv))
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

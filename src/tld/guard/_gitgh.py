@@ -128,6 +128,7 @@ class Item:
     dir: str                      # directory it runs in (cd and -C applied)
     git: Git | None = None
     redirects: list[tuple[str, str]] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)  # leading NAME=value assignments on the command
 
 
 def iter_items(cwd: str, command: str):
@@ -140,8 +141,9 @@ def iter_items(cwd: str, command: str):
 
 
 def _items(words: list[str], here: str, redirects, depth: int, env: dict[str, str] | None = None):
+    env = env or {}
     if not words:
-        yield Item("other", [], here, None, redirects)
+        yield Item("other", [], here, None, redirects, env)
         return
     name = base(words[0])
     if name == "git":
@@ -154,11 +156,11 @@ def _items(words: list[str], here: str, redirects, depth: int, env: dict[str, st
         if git.sub in PUSH_LIKE or (git.sub == "subtree" and git.args[:1] == ["push"]):
             git = Git("push", git.args[1:] if git.sub == "subtree" else git.args, git.dirs, git.config,
                       git.repo_opts)
-        yield Item("git", words, ctx_dir, git, redirects)
+        yield Item("git", words, ctx_dir, git, redirects, env)
     elif name == "gh":
-        yield Item("gh", words, here, None, redirects)
+        yield Item("gh", words, here, None, redirects, env)
     else:
-        yield Item("other", words, here, None, redirects)
+        yield Item("other", words, here, None, redirects, env)
 
 
 # ------------------------------------------------------------------------------------- push

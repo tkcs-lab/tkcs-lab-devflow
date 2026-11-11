@@ -299,7 +299,7 @@ def _read_heredoc(text: str, i: int, delim: str, strip: bool, quoted: bool, out:
 
 RESERVED = {"if", "then", "else", "elif", "fi", "do", "done", "while", "until", "for", "case", "esac",
             "in", "!", "{", "}", "time", "select", "function", "coproc"}
-SHELLS = {"bash", "sh", "zsh", "dash", "ksh", "ash"}
+SHELLS = {"bash", "sh", "zsh", "dash", "ksh", "ash", "fish", "mksh"}
 SCANNING = {"xargs", "find", "parallel", "watch", "ssh"}  # run other commands whose words follow
 
 
@@ -365,8 +365,12 @@ def candidates(words: list[str], redirects: list[tuple[str, str]] | None = None,
         else:
             break
     if not w:
-        return out + ([Command([], list(redirects or []))] if redirects else [])
+        if redirects or env:  # a pure-assignment command (`F=.env`) still carries its env to later commands
+            return out + [Command([], list(redirects or []), env=env)]
+        return out
     name = base(w[0])
+    if name == "busybox" and len(w) > 1 and base(w[1]) in SHELLS:  # busybox is a multiplexer: `busybox sh -c ...`
+        return out + candidates(w[1:], redirects, depth, stdin_text)
     if name in SHELLS:
         c_opts = [k for k, t in enumerate(w[1:], 1) if t.startswith("-") and not t.startswith("--") and "c" in t[1:]]
         script = w[c_opts[0] + 1] if c_opts and c_opts[0] + 1 < len(w) else None  # `bash -c` alone runs nothing
@@ -381,11 +385,43 @@ def candidates(words: list[str], redirects: list[tuple[str, str]] | None = None,
         for cmd in split_commands(" ".join(w[1:]), depth + 1):
             out += candidates(cmd.words, cmd.redirects, depth + 1, cmd.stdin_text)
     elif name in SCANNING:
-        for k, tok in enumerate(w[1:], 1):
-            if base(tok) in ("git", "gh"):
-                out += candidates(w[k:], None, depth + 1)
+        out += _scan_runner(name, w, depth)
     out.append(Command(w, list(redirects or []), env=env))
     return out
+
+
+def _scan_runner(name: str, w: list[str], depth: int) -> list[Command]:
+    """The commands a `find -exec`, `xargs` or similar runs. The sub-command is unpacked like any other
+    (so `sh -c '...'` is read), and when the runner appends run-time arguments (`xargs`, `find ... {} +`)
+    a DYN word is added so a push there is seen as possibly carrying --force."""
+    out: list[Command] = []
+    if name == "find":
+        k = 0
+        while k < len(w):
+            if w[k] in ("-exec", "-execdir", "-ok", "-okdir"):
+                sub, k2 = [], k + 1
+                while k2 < len(w) and w[k2] not in (";", "\\;", "+"):
+                    sub.append(w[k2])
+                    k2 += 1
+                appends = k2 < len(w) and w[k2] == "+"
+                if sub:
+                    out += _runner_candidates(sub, appends, depth)
+                k = k2 + 1
+            else:
+                k += 1
+        return out
+    # xargs / parallel / watch / ssh: the rest (after options) is one command fed run-time arguments
+    rest = w[1:]
+    while rest and rest[0].startswith("-") and rest[0] != "-":
+        rest = rest[1:]
+    if rest:
+        out += _runner_candidates(rest, name in ("xargs", "parallel"), depth)
+    return out
+
+
+def _runner_candidates(sub: list[str], appends: bool, depth: int) -> list[Command]:
+    cmds = candidates(sub + ([DYN] if appends else []), None, depth + 1)
+    return cmds
 
 
 def walk_commands(command: str):

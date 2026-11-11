@@ -9,16 +9,13 @@ from __future__ import annotations
 import os
 import re
 
-from tld.guard import _common
 from tld.guard._common import Ctx
+from tld.guard._gitcfg import _truthy, git_config_value, git_config_values
+from tld.guard._gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs, ref_exists, short_ref
+from tld.guard._shell import ParseError, is_dynamic
+from tld.guard.integrity import dynamic_command, integrity
 
 NAME = "no-git-tag"
-try:
-    from tld.guard._gitcfg import _truthy, git_config_value, git_config_values
-    from tld.guard._gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs, ref_exists, short_ref
-    from tld.guard._shell import ParseError, is_dynamic
-except Exception as exc:  # noqa: BLE001 - a destructive hook that cannot load denies
-    _common.exit_import_error(NAME, exc)
 INSTEAD = ("Tags are cut by the release workflow in CI, on the maintainer's decision. Do not create, move, "
            "delete or push a tag from a session; say in your report that a release is due instead. Reading "
            "is fine: `git tag -l`, `git describe`, `git fetch --tags`, `git ls-remote --tags`.")
@@ -132,7 +129,8 @@ def check_push(it: Item) -> str | None:
     for k, spec in enumerate(specs):
         if spec.raw == "tag" and k + 1 < len(specs):
             return deny(f"`git push {push.repo} tag {specs[k + 1].raw}` pushes a tag")
-        if "refs/tags/" in spec.src or "refs/tags/" in spec.dst:
+        if "refs/tags/" in spec.src or "refs/tags/" in spec.dst or spec.src.startswith("tags/") \
+                or spec.dst.startswith("tags/"):
             return deny(f"refspec `{spec.raw}` names a tag")
         if is_dynamic(spec.src) or not spec.src:
             continue
@@ -142,10 +140,19 @@ def check_push(it: Item) -> str | None:
     return None
 
 
+def _uncheckable_workflow_id(ident: str) -> bool:
+    """A workflow referenced by a numeric id (or any non-file value) cannot be checked against the release one."""
+    return not ident.lower().endswith((".yml", ".yaml"))
+
+
 def check_gh(it: Item) -> str | None:
     path = gh_path(it.words)
-    if path[:2] == ["workflow", "run"] and len(path) > 2 and is_release_workflow(path[2]):
-        return deny("this dispatches the release workflow")
+    if path[:2] == ["workflow", "run"] and len(path) > 2:
+        if is_release_workflow(path[2]):
+            return deny("this dispatches the release workflow")
+        if _uncheckable_workflow_id(path[2]):  # S10: a numeric id could be the release workflow
+            return deny("`gh workflow run` with a numeric workflow id cannot be checked against the release "
+                        "workflow; dispatch a workflow by its file name")
     if path[:2] == ["release", "edit"] and any(w == "--tag" or w.startswith("--tag=") for w in it.words):
         return deny("`gh release edit --tag` moves a release to another tag")
     if path[:2] in (["release", "create"], ["release", "delete"]):
@@ -156,6 +163,9 @@ def check_gh(it: Item) -> str | None:
         m = DISPATCH.match(ep)
         if api.method != "GET" and m and is_release_workflow(m.group(1)):
             return deny("this dispatches the release workflow")
+        if api.method != "GET" and m and _uncheckable_workflow_id(m.group(1)):  # S10: numeric workflow id
+            return deny("this `gh api` dispatch uses a numeric workflow id that cannot be checked against the "
+                        "release workflow; dispatch a workflow by its file name")
         if api.method in ("PATCH", "PUT", "DELETE") and REL_EDIT.match(ep):
             return deny("this `gh api` call edits or deletes a release, which moves or removes its tag")
         if api.method != "GET":
@@ -167,10 +177,14 @@ def check_gh(it: Item) -> str | None:
 
 
 def check_mcp(ctx: Ctx) -> str | None:
-    if ctx.tool.rsplit("__", 1)[-1] != "actions_run_trigger":
+    if (ctx.action.op or "") != "actions_run_trigger":
         return None
-    args = ctx.tool_input
-    if str(args.get("method", "")) != "run_workflow":
+    args = ctx.action.args
+    method = str(args.get("method", ""))
+    if method in ("rerun_workflow_run", "rerun_failed_jobs"):
+        return deny("re-running a workflow run may re-run the release workflow; a release is cut by a new, "
+                    "approved release run, not by re-running an old one")
+    if method != "run_workflow":
         return None
     wid = args.get("workflow_id")
     if isinstance(wid, str) and wid.lower().endswith((".yml", ".yaml")):
@@ -180,17 +194,23 @@ def check_mcp(ctx: Ctx) -> str | None:
 
 
 def evaluate(ctx: Ctx) -> str | None:
-    if ctx.tool.startswith("mcp__"):
+    if ctx.action.kind == "github_op":
         return check_mcp(ctx)
-    if ctx.tool != "Bash" or not isinstance(ctx.tool_input.get("command"), str):
+    if ctx.action.kind != "shell" or not isinstance(ctx.action.command, str):
         return None
+    command = ctx.action.command
     try:
-        items = list(iter_items(ctx.cwd, ctx.tool_input["command"]))
+        items = list(iter_items(ctx.cwd, command))
     except ParseError as exc:
         return (f"blocked: cannot parse this command ({exc}), so it cannot be checked for tag changes. "
                 "Rewrite it as plain, separate commands.")
+    dyn = dynamic_command(command)
+    if dyn:
+        return dyn
     for it in items:
-        msg = None
+        msg = integrity(ctx, it)
+        if msg:
+            return msg
         if it.kind == "git":
             sub = it.git.sub
             if sub == "tag":
@@ -207,11 +227,3 @@ def evaluate(ctx: Ctx) -> str | None:
             return msg
     return None
 
-
-def main(argv: list[str] | None = None) -> None:
-    """Hook mode: the Claude Code event JSON on stdin, exit code and message out."""
-    _common.main(NAME, evaluate, fail_closed=True)
-
-
-if __name__ == "__main__":
-    main()

@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import re
 
-from tld.guard import _common
 from tld.guard._common import Ctx
+from tld.guard._gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs
+from tld.guard._shell import ParseError
+from tld.guard.integrity import dynamic_command, integrity
 
 NAME = "no-force-push"
-try:
-    from tld.guard._gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs
-    from tld.guard._shell import ParseError
-except Exception as exc:  # noqa: BLE001 - a destructive hook that cannot load denies
-    _common.exit_import_error(NAME, exc)
 INSTEAD = ("Push normally (`git push -u origin <branch>`). If the push is rejected because the remote branch "
            "moved, `git fetch`, merge `origin/<branch>` into yours (a merge commit, never a rebase) and push "
            "again. Branches are deleted by the owner, not by a session.")
@@ -54,25 +51,22 @@ def check_gh(it: Item) -> str | None:
 
 
 def evaluate(ctx: Ctx) -> str | None:
-    if ctx.tool != "Bash" or not isinstance(ctx.tool_input.get("command"), str):
+    if ctx.action.kind != "shell" or not isinstance(ctx.action.command, str):
         return None
+    command = ctx.action.command
     try:
-        items = list(iter_items(ctx.cwd, ctx.tool_input["command"]))
+        items = list(iter_items(ctx.cwd, command))
     except ParseError as exc:
         return (f"blocked: cannot parse this command ({exc}), so it cannot be checked for force pushes. "
                 "Rewrite it as plain, separate commands.")
+    dyn = dynamic_command(command)
+    if dyn:
+        return dyn
     for it in items:
-        msg = check_push(it) if it.kind == "git" and it.git.sub == "push" else \
-            check_gh(it) if it.kind == "gh" else None
+        msg = integrity(ctx, it)
+        if not msg:
+            msg = check_push(it) if it.kind == "git" and it.git.sub == "push" else \
+                check_gh(it) if it.kind == "gh" else None
         if msg:
             return msg
     return None
-
-
-def main(argv: list[str] | None = None) -> None:
-    """Hook mode: the Claude Code event JSON on stdin, exit code and message out."""
-    _common.main(NAME, evaluate, fail_closed=True)
-
-
-if __name__ == "__main__":
-    main()

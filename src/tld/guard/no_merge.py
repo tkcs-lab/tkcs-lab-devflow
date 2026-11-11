@@ -9,17 +9,14 @@ from __future__ import annotations
 
 import re
 
-from tld.guard import _common
 from tld.guard._common import Ctx
+from tld.guard._gitcfg import bare_push_destinations
+from tld.guard._gitgh import (Item, current_branch, gh_path, has_glob, iter_items, parse_gh_api, parse_push,
+                              parse_refspecs, read_input_text, short_ref)
+from tld.guard._shell import ParseError, is_dynamic
+from tld.guard.integrity import dynamic_command, integrity
 
 NAME = "no-merge"
-try:
-    from tld.guard._gitcfg import bare_push_destinations
-    from tld.guard._gitgh import (Item, current_branch, gh_path, has_glob, iter_items, parse_gh_api, parse_push,
-                                  parse_refspecs, read_input_text, short_ref)
-    from tld.guard._shell import ParseError, is_dynamic
-except Exception as exc:  # noqa: BLE001 - a destructive hook that cannot load denies
-    _common.exit_import_error(NAME, exc)
 HUMAN = "Open a pull request from your feature branch and stop; a human reviews and merges it."
 
 MERGE_ENDPOINT = re.compile(r"^repos/[^/]+/[^/]+/pulls/\d+/merge$")
@@ -42,7 +39,8 @@ def deny(what: str) -> str:
 
 def check_push(ctx: Ctx, it: Item) -> str | None:
     push = parse_push(it.git.args)
-    main = ctx.require_main_branch()
+    mains = ctx.main_branches()
+    main = mains[0]
     if push.all_refs:
         return deny(f"`git push` with --all, --branches or --mirror would update `{main}`")
     for item in it.git.config:
@@ -56,18 +54,22 @@ def check_push(ctx: Ctx, it: Item) -> str | None:
         dests = bare_push_destinations(it, push, main)
         if dests is None:
             return deny("the destination of this `git push` cannot be determined from your git configuration")
-        if main in dests:
+        if any(d in mains for d in dests):
             return deny(f"`git push` would update `{main}` (the current branch or its configured destination)")
         return None
     for spec in specs:
+        if spec.raw in (":", "+:") or (not spec.src and not spec.dst):
+            # S5: the matching refspec pushes every branch that exists on both sides, `main` among them.
+            return deny(f"`git push {it.git.args[-1] if it.git.args else ''} :` matches every branch and would update `{main}`")
         if spec.dynamic:
-            continue
+            # S2: a destination known only at run time can resolve to the main branch; refuse it rather than skip it.
+            return deny(f"refspec `{spec.raw}` has a destination that is only known at run time and could be `{main}`")
         dst = short_ref(spec.dst)
         if has_glob(dst):
             return deny(f"refspec `{spec.raw}` is a pattern that can match `{main}`")
         if spec.src in ("HEAD", "@") and spec.src == spec.dst:
             dst = current_branch(it.dir, it.git.repo_opts) or ""
-        if dst == main:
+        if dst in mains:
             return deny(f"`git push {spec.raw}` would update `{main}`")
     return None
 
@@ -78,7 +80,8 @@ def check_gh(ctx: Ctx, it: Item) -> str | None:
         return deny("`gh pr merge` merges (or arms auto-merge on) a pull request")
     if path[:2] == ["pr", "review"]:
         for w in it.words[1:]:
-            if w == "--approve" or (w.startswith("--ap") and "--approve".startswith(w)):
+            name = w.split("=", 1)[0]
+            if name == "--approve" or (name.startswith("--ap") and "--approve".startswith(name)):
                 return deny("`gh pr review --approve` approves a pull request")
             if w.startswith("-") and not w.startswith("--") and "a" in w[1:]:
                 return deny("`gh pr review -a` approves a pull request")
@@ -159,7 +162,13 @@ def check_bash(ctx: Ctx, command: str) -> str | None:
     except ParseError as exc:
         return (f"blocked: cannot parse this command ({exc}), so it cannot be checked for merges or pushes to "
                 "the main branch. Rewrite it as plain, separate commands.")
+    dyn = dynamic_command(command)
+    if dyn:
+        return dyn
     for it in items:
+        flag = integrity(ctx, it)
+        if flag:
+            return flag
         if it.kind == "git" and it.git.sub == "push":
             msg = check_push(ctx, it)
         elif it.kind == "gh":
@@ -175,8 +184,8 @@ def check_bash(ctx: Ctx, command: str) -> str | None:
 
 
 def check_mcp(ctx: Ctx) -> str | None:
-    name = ctx.tool.rsplit("__", 1)[-1]
-    args = ctx.tool_input
+    name = ctx.action.op or ""
+    args = ctx.action.args
     if name in MCP_ALWAYS:
         return deny(f"`{name}` {MCP_ALWAYS[name]}")
     if name == "pull_request_review_write" and str(args.get("event", "")).upper() == "APPROVE":
@@ -190,18 +199,8 @@ def check_mcp(ctx: Ctx) -> str | None:
 
 
 def evaluate(ctx: Ctx) -> str | None:
-    if ctx.tool == "Bash":
-        command = ctx.tool_input.get("command")
-        return check_bash(ctx, command) if isinstance(command, str) else None
-    if ctx.tool.startswith("mcp__"):
+    if ctx.action.kind == "shell":
+        return check_bash(ctx, ctx.action.command)
+    if ctx.action.kind == "github_op":
         return check_mcp(ctx)
     return None
-
-
-def main(argv: list[str] | None = None) -> None:
-    """Hook mode: the Claude Code event JSON on stdin, exit code and message out."""
-    _common.main(NAME, evaluate, fail_closed=True)
-
-
-if __name__ == "__main__":
-    main()

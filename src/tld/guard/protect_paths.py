@@ -24,8 +24,12 @@ from tld.dod.gate import state_dir
 
 NAME = "protect-paths"
 # Guardrail files: protected whatever the profile says (hooks.protect_paths and protect_paths_allow never remove them).
-ALWAYS_PROTECTED = [".claude/settings.json", ".claude/settings.local.json", ".git/config", ".git/hooks/**"]
-CONFIG_PREFIXES = ("alias.", "remote.", "push.", "branch.", "include.", "includeif.")
+# Neutral ones only; the Claude adapter passes its own (`~/.claude/**`, `.mcp.json`) as settings.extra_protected.
+ALWAYS_PROTECTED = [".git/config", ".git/hooks/**"]
+# Protected on their absolute/home path, wherever the write is (S8): git's own configuration.
+ALWAYS_PROTECTED_ABS = ["~/.gitconfig", "~/.config/git/**"]
+CONFIG_PREFIXES = ("alias.", "remote.", "push.", "branch.", "include.", "includeif.", "url.")
+CONFIG_EXACT = ("core.hookspath",)  # sets the hooks directory; can run arbitrary code on the next git command
 CONFIG_WRITE_OPTS = {"--add", "--replace-all", "--unset", "--unset-all", "--rename-section", "--remove-section",
                      "-e", "--edit"}
 CONFIG_VALUE_OPTS = {"-f", "--file", "--blob", "-t", "--type", "--default", "--comment"}
@@ -71,6 +75,34 @@ def matches(pattern: str, rel: str) -> bool:
     return bool(_regex(pattern).match(rel))
 
 
+def _abspath(path: str, here: str) -> str:
+    path = os.path.expanduser(path)
+    return os.path.normpath(path if os.path.isabs(path) else os.path.join(here, path))
+
+
+def abs_match(pattern: str, path_abs: str) -> bool:
+    """Match an absolute or `~`-rooted pattern against an absolute path, with the same `**`/`*` rules."""
+    pat = os.path.expanduser(pattern)
+    if pat.endswith("/"):
+        pat += "**"
+    for cand in dict.fromkeys([path_abs, os.path.realpath(path_abs)]):
+        if _regex(pat).match(cand):
+            return True
+    return False
+
+
+def outside_protected(ctx: Ctx, path: str, here: str) -> str | None:
+    """S8: files outside the project that a session must not edit, matched on their absolute path
+    (git's own config, and whatever the adapter lists, e.g. `~/.claude/**`)."""
+    path_abs = _abspath(path, here)
+    patterns = list(ALWAYS_PROTECTED_ABS) + [p for p in ctx.settings.extra_protected if p.startswith(("~", "/"))]
+    for pat in patterns:
+        if abs_match(pat, path_abs):
+            return (f"blocked: `{path}` is a protected file ({pat}); a session does not edit it. "
+                    "Describe the change you need in your report instead.")
+    return None
+
+
 def relative(ctx: Ctx, path: str, here: str) -> list[str]:
     """Repo-relative spellings of `path` (as written, and with symlinks resolved); [] when outside."""
     path = os.path.expanduser(path)
@@ -112,11 +144,12 @@ def plugin_root_hit(path: str, here: str) -> str | None:
 def violation(ctx: Ctx, path: str, here: str) -> str | None:
     protect = ctx.list_key("protect_paths", DEFAULT_PROTECT_PATHS)
     allow = BUILTIN_PROTECT_ALLOW + ctx.list_key("protect_paths_allow", [])
-    hit = plugin_root_hit(path, here)
+    hit = plugin_root_hit(path, here) or outside_protected(ctx, path, here)
     if hit:
         return hit
+    always = ALWAYS_PROTECTED + [p for p in ctx.settings.extra_protected if not p.startswith(("~", "/"))]
     for rel in relative(ctx, path, here):
-        for pat in ALWAYS_PROTECTED:
+        for pat in always:
             if matches(pat, rel):
                 return message(rel, pat)
         if any(matches(a, rel) for a in allow):
@@ -264,10 +297,22 @@ def written_paths(it: Item) -> list[str]:
         if it.git and it.git.sub in ("rm", "mv"):
             paths += parse_args(it.git.args, set())[0]
         elif it.git and it.git.sub == "checkout":
-            args = it.git.args
-            paths += args[args.index("--") + 1:] if "--" in args else []
+            gargs = it.git.args
+            if "--" in gargs:
+                paths += gargs[gargs.index("--") + 1:]
+            else:  # S17: `git checkout <ref> <path>` with no `--`: treat every positional as a candidate path
+                positional = parse_args(gargs, {"-b", "-B", "--orphan", "--conflict", "--pathspec-from-file"})[0]
+                paths += [p for p in positional if p not in ("-b", "-B")]
         elif it.git and it.git.sub == "restore":
             paths += parse_args(it.git.args, {"--source", "-s", "--pathspec-from-file"})[0]
+        elif it.git and it.git.sub == "apply":  # S17: applies a patch; the files it writes are named inside it
+            for pf in parse_args(it.git.args, {"--exclude", "--include", "--directory", "-p",
+                                               "--build-fake-ancestor", "--whitespace"})[0]:
+                paths += patch_targets(os.path.join(it.dir, os.path.expanduser(pf)))
+    elif name == "patch":  # S17: `patch target < diff`, or `patch -i diff target`
+        positional, _ = parse_args(args, {"-i", "--input", "-o", "--output", "-p", "--strip", "-d", "--directory",
+                                          "-B", "-r", "-D", "-F", "-g", "-z", "-V"})
+        paths += positional
     elif name == "tee":
         paths += parse_args(args, set())[0]
     elif name == "dd":
@@ -291,6 +336,26 @@ def written_paths(it: Item) -> list[str]:
     return paths
 
 
+def patch_targets(path: str) -> list[str]:
+    """Repo-relative files a unified diff writes: the `+++ b/<path>` lines (and `diff --git`)."""
+    out: list[str] = []
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            text = fh.read(1_000_000)
+    except OSError:
+        return []
+    for line in text.splitlines():
+        if line.startswith("+++ ") and line[4:].strip() not in ("/dev/null", ""):
+            target = line[4:].strip().split("\t")[0]
+            out.append(target[2:] if target[:2] in ("a/", "b/") else target)
+        elif line.startswith("diff --git "):
+            parts = line.split()
+            if len(parts) >= 4:
+                b = parts[3]
+                out.append(b[2:] if b[:2] in ("a/", "b/") else b)
+    return list(dict.fromkeys(out))
+
+
 def config_violation(it: Item) -> str | None:
     """`git config` writes of keys that can redirect pushes or run commands (alias, remote, push, branch, include)."""
     if not it.git or it.git.sub != "config":
@@ -299,7 +364,7 @@ def config_violation(it: Item) -> str | None:
     names = {o for o, _ in opts}
     write = bool(names & CONFIG_WRITE_OPTS) or len(positional) >= 2
     keys = [k.lower() for k in positional[:2 if "--rename-section" in names else 1]]
-    if write and (not keys or any(k.startswith(CONFIG_PREFIXES) for k in keys)):
+    if write and (not keys or any(k.startswith(CONFIG_PREFIXES) or k in CONFIG_EXACT for k in keys)):
         return ("blocked: `git config` write to " + (f"`{positional[0]}`" if positional else "the git configuration")
                 + " would change a protected path (git's configuration can redirect pushes or run commands). "
                 "Ask the user to make this change.")
@@ -315,12 +380,26 @@ def link_sources(it: Item) -> list[str]:
     return positional[:-1]
 
 
+def _resolve_env(path: str, env: dict[str, str]) -> str:
+    """Substitute `$NAME` / `${NAME}` by a literal value the same command set in front of it."""
+    if "$" not in path or not env:
+        return path
+    for name, value in env.items():
+        if value and not is_dynamic(value):
+            path = path.replace("${" + name + "}", value).replace("$" + name, value)
+    return path
+
+
 def check_bash(ctx: Ctx, command: str) -> str | None:
     try:
         items = list(iter_items(ctx.cwd, command))
     except ParseError:
         return None  # the destructive hooks refuse unparseable commands; this one only guards paths
+    seen_env: dict[str, str] = {}  # NAME=value assignments from earlier simple commands (`F=.env; echo x > $F`)
     for it in items:
+        for name, value in it.env.items():
+            if value and not is_dynamic(value):
+                seen_env[name] = value
         msg = config_violation(it)
         if msg:
             return msg
@@ -332,6 +411,7 @@ def check_bash(ctx: Ctx, command: str) -> str | None:
                 if msg:
                     return msg
         for path in written_paths(it):
+            path = _resolve_env(path, {**seen_env, **it.env})  # S17: `F=.env; echo x > $F`
             if is_dynamic(path):
                 continue
             words = expand_braces(path)
@@ -349,11 +429,11 @@ def check_bash(ctx: Ctx, command: str) -> str | None:
 
 
 def evaluate(ctx: Ctx) -> str | None:
-    if ctx.tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
-        path = ctx.tool_input.get("file_path") or ctx.tool_input.get("notebook_path")
+    if ctx.action.kind == "write":
+        path = ctx.action.path
         return violation(ctx, path, ctx.cwd) if isinstance(path, str) and path else None
-    if ctx.tool == "Bash" and isinstance(ctx.tool_input.get("command"), str):
-        return check_bash(ctx, ctx.tool_input["command"])
+    if ctx.action.kind == "shell" and isinstance(ctx.action.command, str):
+        return check_bash(ctx, ctx.action.command)
     return None
 
 
@@ -377,13 +457,11 @@ def cli(argv: list[str]) -> int:
     return 2
 
 
-def main(argv: list[str] | None = None) -> None:
-    """Hook mode without arguments (event JSON on stdin); with arguments, the command-line flags."""
-    argv = sys.argv[1:] if argv is None else argv
-    if argv:
-        sys.exit(cli(argv))
-    _common.main(NAME, evaluate, fail_closed=False)
+
+def main(argv: list[str] | None = None) -> int:
+    """The `tld guard allow-profile` / `end-allow` command line (the hook path goes through the adapter)."""
+    return cli(list(sys.argv[1:] if argv is None else argv))
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
