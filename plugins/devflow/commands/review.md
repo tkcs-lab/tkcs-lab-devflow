@@ -131,6 +131,15 @@ its skill and follow it fully.
 | Security | `SEC` | `secure-code-review` (its "Whole-repository review" section for a repo or path scope) | the scope has more than one component with its own trust boundary: one subagent per component, plus one for CI and the supply chain |
 | Tests | `TST` | `test-review` | more than about 20k lines of source: one per component |
 | Documentation | `DOC` | `docs-review` | there is a website: a separate subagent for it, prefix `WEB` |
+| Required agents | AGT | the agent's own file (see the `agent-dispatch` skill) | one per agent in `agents.py required --at review`; run alongside the other subagents |
+
+Required agents at `review`: run `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at review`
+and dispatch each agent in `required` in review mode with the same scope (a whole-repository review has no diff, so no
+`--changed` is passed). The /review session itself converts each agent finding into the block format below with the id
+`AGT-<n>`, severity `blocking` to `high` and `non-blocking` to `medium`, and the dimension by agent: `security-reviewer`
+and `dependency-auditor` to `security`, `test-architect` to `tests`, `tech-writer` to `docs`, `website-maintainer` to
+`website` (the profile validation allows no other agent at `review`). Run `agents.py verify` on their reports before
+section 4 and treat a `MISSING` line as an open item in the document.
 
 Each subagent returns its candidate findings, one block per finding, exactly:
 
