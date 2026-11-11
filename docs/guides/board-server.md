@@ -2,7 +2,7 @@
 
 ## What it is
 
-The devflow status board is a small Python server you host yourself. Sessions that run `/implement`, `/deps`, `/upstream` and `/land` write short status records to it; you open the board in a browser to see which runs are going, which wait for you, and which are stale. It replaces the earlier board that lived on claude.ai.
+The devflow status board is a small Python server you host yourself. Sessions that run `/implement`, `/deps`, `/upstream`, `/land` and `/docs tidy` write short status records to it; you open the board in a browser to see which runs are going, which wait for you, and which are stale. It replaces the earlier board that lived on claude.ai.
 
 * `board_server.py` stores the records in SQLite, serves the board page, offers a JSON API with optimistic `if_version` concurrency, and exposes the same operations as an MCP endpoint (`POST /mcp`).
 * `board_mcp_stdio.py` is a stdio bridge that the devflow plugin declares in its `.mcp.json`; it gives every session the tools `board_get`, `board_list`, `board_set` and `board_delete`.

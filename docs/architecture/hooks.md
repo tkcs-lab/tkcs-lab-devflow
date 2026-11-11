@@ -177,7 +177,7 @@ python3 "<devflow root>/hooks/dod_gate.py" --exempt
   orchestrator that keeps stopping stays exempt, and a marker left in a reused container does not switch the gate off for the
   next session for long.
 - `/deps` and `/upstream` are not exempt: they already require `verify.dod` to pass before they push, so the gate agrees
-  with them.
+  with them. `/docs` is not exempt either.
 
 Why a marker the command writes instead of detecting the command from the transcript: it needs no knowledge of Claude
 Code's transcript format, it is one line to audit, and a command that forgets it fails safe (the gate blocks a few times,

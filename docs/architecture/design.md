@@ -25,6 +25,7 @@ plugins/devflow/
   .claude-plugin/plugin.json
   commands/{make-plan,implement,dod,review}.md   # review: see docs/guides/review.md
   commands/{board,deps,upstream,land}.md         # maintenance commands: see docs/guides/maintenance.md
+  commands/docs.md                      # /docs [check | init | tidy]: the docs index, see docs/guides/docs-index.md
   commands/setup.md                     # /setup: survey a repository, create or update the profile: see docs/guides/setup.md
   agents/<name>.md                      # the ten generic agents (architect ... refactorer): see docs/architecture/agents.md
   skills/project-profile/SKILL.md       # how every command reads, validates and quotes the profile
@@ -34,6 +35,7 @@ plugins/devflow/
   skills/{test-review,docs-review}/SKILL.md   # checklists for /review's test and documentation dimensions
   skills/status-board/SKILL.md          # how a session writes its status record to the board
   skills/repo-admin/SKILL.md            # audit and update organisation and repository settings: see docs/guides/admin.md
+  skills/docs-keeper/SKILL.md           # the docs structure, reading protocol and the init, maintain and tidy procedures
   skills/{agent-dispatch,profile-setup}/SKILL.md   # dispatching the profile's agents; how /setup decides and asks
   scripts/validate_manifest.py          # CLI: validate_manifest.py <plan.md|manifest.yaml> [--profile P]
   scripts/validate_profile.py           # CLI: validate_profile.py [.claude/toolkit.yaml]
@@ -42,6 +44,7 @@ plugins/devflow/
   scripts/agents.py                     # CLI: agents.py required|verify, which agents a point requires and whether they reported
   scripts/profile_survey.py             # CLI: profile_survey.py [ROOT], the survey and proposal behind /setup
   scripts/{survey_signals,survey_docs,survey_proposal}.py   # modules of the survey
+  scripts/docs_index.py                 # CLI: docs_index.py check|inventory|move, the docs index rules and doc moves
   scripts/profile_patch.py              # CLI: profile_patch.py set-block|diff, text-level edits of the profile
   schema/profile.schema.json
   schema/status-record.schema.json
@@ -372,3 +375,19 @@ they do; this section records why.
   `protect_paths.py --allow-profile`, which writes a marker with a two-hour lifetime inside the git directory (per
   checkout) that lets exactly `.claude/toolkit.yaml` through. Like the `dod-gate` marker it is a convention, not a lock;
   branch protection and the pull request review remain the hard control ([hooks.md](hooks.md#protect-paths)).
+
+## 14. Docs structure
+
+The docs are read through one index. `CLAUDE.md` (at most 60 lines) points to `docs/README.md` (at most
+150 lines, one row per doc), and the index routes to leaf docs under `docs/architecture/`, `docs/guides/`
+and `docs/reference/`. Plans are transient and never indexed.
+
+- **Why.** Every session pays for what it reads. A flat set of docs made each planner and worker read the
+  must-read docs of every phase; the index makes the choice a row match.
+- **Deterministic checks.** `scripts/docs_index.py` checks the limits and links and moves a doc with every
+  reference rewritten; the `docs-keeper` skill and `/docs` carry the procedures.
+- **Same profile, one new key.** `docs.index`; without it every command behaves as before.
+- **No eleventh agent.** The `tech-writer` agent checks the index through `docs-review`.
+- **Rejected:** generating the index from the docs' first lines (the "read when" condition cannot be derived).
+
+The structure, the rules and the procedures are in [guides/docs-index.md](../guides/docs-index.md).

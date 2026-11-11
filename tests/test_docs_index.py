@@ -452,3 +452,26 @@ def test_move_rule_functions_work_without_a_repository():
     text = "[x](x.md#a)\n```\n[x](x.md)\n```\n"
     assert mod.rewrite_links(text, "docs/i.md", "docs/i.md", "docs/x.md", "docs/y/x.md")[0].startswith("[x](y/x.md#a)")
     assert mod.find_unresolved("see x.md\n", "docs/x.md") == [(1, "bare", "mentions 'x.md' without its directory")]
+
+
+REPO_ROOT = SCRIPT.parents[3]
+
+
+def test_this_repository_docs_index_is_clean():
+    r = subprocess.run([sys.executable, str(SCRIPT), "check", "--index", "docs/README.md", "--root", str(REPO_ROOT)],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "error:" not in r.stdout
+
+
+def test_claude_md_is_thin():
+    text = (REPO_ROOT / "CLAUDE.md").read_text()
+    assert len(text.splitlines()) <= 60
+    assert "docs/README.md" in text
+
+
+def test_all_plugins_are_0_8_0():
+    manifests = sorted((REPO_ROOT / "plugins").glob("*/.claude-plugin/plugin.json"))
+    assert len(manifests) == 5
+    for m in manifests:
+        assert json.loads(m.read_text())["version"] == "0.8.0", m
