@@ -22,6 +22,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import board_mcp  # noqa: E402
 import build_board  # noqa: E402
 from board_store import Conflict, Invalid, Store  # noqa: E402
 
@@ -117,6 +118,8 @@ class Handler(BaseHTTPRequestHandler):
             return "page", None, "GET"
         if path == "/api/records":
             return "list", None, "GET"
+        if path == "/mcp":
+            return "mcp", None, "POST"
         match = RECORD_PATH.match(path)
         if match:
             return "record", unquote(match.group(1)), "GET, PUT, DELETE"
@@ -142,7 +145,9 @@ class Handler(BaseHTTPRequestHandler):
         if method != "GET" and role != "write":
             self._error(403, "forbidden")
             return
-        if name == "page":
+        if name == "mcp":
+            self._mcp()
+        elif name == "page":
             self._send(200, self.server.page, "text/html; charset=utf-8",
                        {"X-Frame-Options": "DENY", "Content-Security-Policy": CSP})
         elif name == "list":
@@ -176,6 +181,31 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(length)
         self._body_read = True
         return body
+
+    def _rpc_error(self, status: int, code: int, message: str) -> None:
+        self._json(status, {"jsonrpc": "2.0", "id": None, "error": {"code": code, "message": message}})
+
+    def _mcp(self) -> None:
+        origin = self.headers.get("Origin")
+        if origin is not None and origin not in self.server.allow_origins:
+            self._error(403, "origin_not_allowed")
+            return
+        body = self._read_body()
+        if body is None:
+            return
+        try:
+            message = json.loads(body.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            self._rpc_error(400, -32700, "Parse error")
+            return
+        if isinstance(message, list):
+            self._rpc_error(400, -32600, "Batch requests are not supported")
+            return
+        reply = board_mcp.handle(self.server.store, message)
+        if reply is None:
+            self._send(202, b"", "application/json")
+        else:
+            self._json(200, reply)
 
     def _put(self, doc_id: str) -> None:
         body = self._read_body()
