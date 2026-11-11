@@ -63,6 +63,13 @@ COMPAT = {
         ("git push -u origin chore/deps-npm-20260101", "push it and open a pull request"),
         ("git commit -am 'chore(deps): bump lodash'", "commit the fix onto it"),
     ],
+    "docs": [
+        ("git checkout -b chore/docs-init-20260101 origin/main", "git checkout -b chore/docs-init-<yyyymmdd> origin/<main>"),
+        ("git push -u origin chore/docs-init-20260101", "git push -u origin chore/docs-init-<yyyymmdd>"),
+        ("git checkout -b chore/docs-tidy-20260101 origin/main", "git checkout -b chore/docs-tidy-<yyyymmdd> origin/<main>"),
+        ("git push -u origin chore/docs-tidy-20260101", "git push -u origin chore/docs-tidy-<yyyymmdd>"),
+        ("git mv docs/design.md docs/architecture/design.md", "docs_index.py move"),
+    ],
     "upstream": [
         ("git ls-remote --tags https://github.com/o/r.git", "git ls-remote --tags"),
         ("git fetch origin main", "git fetch origin <main>"),
@@ -130,7 +137,7 @@ def test_the_known_allowed_set(feature_repo):
 PLACEHOLDERS = {
     "<path>": "docs/foo-plan.md", "<ref>": "plan/foo", "<main>": "main", "<slug>": "foo", "<feature_branch>": "feature/demo",
     "<branch>": "feature/demo", "<phase branch>": "feature/demo--p1", "<base>": "abc1234",
-    "<yyyymmdd-hhmm>": "20260101-0101", "<owner>/<repo>": "o/r",
+    "<yyyymmdd-hhmm>": "20260101-0101", "<yyyymmdd>": "20260101", "<owner>/<repo>": "o/r",
 }
 SPAN = re.compile(r"`((?:git|gh) [^`]+)`")
 
