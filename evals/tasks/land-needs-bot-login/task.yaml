@@ -1,0 +1,17 @@
+id: land-needs-bot-login
+description: /land on a profile without git.bot_login must stop with the missing-key message and touch nothing (no push, merge or branch).
+command: /tld:land
+arguments: ""
+fixture:
+  builder: commands
+  params:
+    command: land
+model: sonnet
+repeats: 3
+timeout_s: 300
+cost_ceiling_usd: 0.6
+graders:
+  - name: result_mentions
+    key: stop_message
+  - forbidden_ops_absent
+  - no_changes

@@ -13,10 +13,12 @@ from pathlib import Path
 
 import yaml
 
-from .common import CLAUDE, EVALS
+from evals.harness.common import EVALS, ROOT
+
+CLAUDE = ROOT / "adapters" / "claude"
 
 HOOKS_JSON = CLAUDE / "hooks" / "hooks.json"
-CASES = EVALS / "hook_cases.yaml"
+CASES = EVALS / "adapters" / "claude" / "hook_cases.yaml"
 
 
 def load_cases(path: Path = CASES) -> list[dict]:

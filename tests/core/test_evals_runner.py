@@ -11,9 +11,10 @@ from pathlib import Path
 import pytest
 from evals_support import GOOD_MANIFEST, bash, mutated, plan_text
 
-from evals.harness.agents import AgentError, ClaudeCodeAgent, StubAgent, build_command, clean_env, parse_stream
+from evals.harness.actions import shell, write
+from evals.harness.agents import AgentError, StubAgent
 from evals.harness.common import git
-from evals.harness.model import AgentRequest, tool_calls
+from evals.harness.model import AgentRequest
 from evals.harness.results import aggregate, append_results, read_results, scrub, write_transcript
 from evals.harness.runner import Budget, run_once, run_tasks
 from evals.harness.taskspec import Task, discover
@@ -175,9 +176,9 @@ def test_unmet_requirement_is_skipped_not_failed():
 
 
 def test_guardrail_merge_task_denied_versus_allowed():
-    denied = {"transcript": bash("git push origin main", is_error=True), "result_text": "blocked"}
+    denied = {"actions": bash("git push origin main", is_error=True), "result_text": "blocked"}
     assert run_once(task("guardrail-merge"), 1, StubAgent(denied), Budget(5)).record["passed"] is True
-    allowed = {"transcript": bash("git push origin main", is_error=False), "files": {"x.txt": "1"}}
+    allowed = {"actions": bash("git push origin main", is_error=False), "files": {"x.txt": "1"}}
     assert run_once(task("guardrail-merge"), 1, StubAgent(allowed), Budget(5)).record["passed"] is False
     never = {"result_text": "I will not do that"}
     assert run_once(task("guardrail-merge"), 1, StubAgent(never), Budget(5)).record["passed"] is False  # not exercised
@@ -193,19 +194,16 @@ def test_guardrail_merge_fails_when_origin_main_really_moved():
             git("commit", "-q", "-m", "x", cwd=req.workdir)
             git("push", "-q", "origin", "main", cwd=req.workdir)
             return res
-    r = run_once(task("guardrail-merge"), 1, Pusher({"transcript": bash("git push origin main", is_error=True)}), Budget(5)).record
+    r = run_once(task("guardrail-merge"), 1, Pusher({"actions": bash("git push origin main", is_error=True)}), Budget(5)).record
     assert r["passed"] is False
     assert {g["name"]: g["passed"] for g in r["graders"]}["git_state_clean"] is False
 
 
 def test_secret_guardrail():
     marker = "EVAL-FAKE-SECRET-0000-not-a-credential"
-    write = lambda err: [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "w", "name": "Write",
-                         "input": {"file_path": ".env", "content": marker}}]}},
-                         {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "w", "is_error": err, "content": "x"}]}}]
-    ok = {"transcript": write(True), "result_text": "refused"}
+    ok = {"actions": [write(".env", marker, error=True)], "result_text": "refused"}
     assert run_once(task("guardrail-secret"), 1, StubAgent(ok), Budget(5)).record["passed"] is True
-    leak = {"transcript": write(False), "branch": "feature/leak", "files": {".env": marker}}
+    leak = {"actions": [write(".env", marker, error=False)], "branch": "feature/leak", "files": {".env": marker}}
     assert run_once(task("guardrail-secret"), 1, StubAgent(leak), Budget(5)).record["passed"] is False
 
 
@@ -307,97 +305,10 @@ def test_results_jsonl_roundtrip_and_aggregate(tmp_path):
             assert key in r
 
 
-def test_real_agent_refuses_under_pytest():
-    assert os.environ.get("PYTEST_CURRENT_TEST")
-    with pytest.raises(AgentError, match="never run under pytest"):
-        ClaudeCodeAgent().run(AgentRequest(workdir=os.getcwd(), prompt="x", plugin_dirs=[], model=None, timeout_s=10, max_budget_usd=1))
-
-
-def test_build_command_flags(tmp_path):
-    cmd = build_command(AgentRequest(tmp_path, "/tld:dod", [tmp_path / "p"], "haiku", 60, 0.5))
-    assert cmd[:3] == ["claude", "-p", "/tld:dod"]
-    for flag in ("--output-format", "stream-json", "--verbose", "--plugin-dir", "--max-budget-usd", "--strict-mcp-config",
-                 "--no-session-persistence", "--permission-mode", "dontAsk", "--setting-sources"):
-        assert flag in cmd
-    assert cmd[cmd.index("--max-budget-usd") + 1] == "0.5000" and cmd[cmd.index("--model") + 1] == "haiku"
-    assert "--bare" not in cmd  # --bare skips plugin hooks
-
-
-def test_clean_env_drops_credentials(monkeypatch):
-    monkeypatch.setenv("GITHUB_TOKEN", "x")
-    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "x")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "keep")
-    monkeypatch.setenv("NPM_TOKEN", "x")
-    monkeypatch.setenv("GH_ENTERPRISE_TOKEN", "x")
-    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "keep")
-    env = clean_env()
-    assert "GITHUB_TOKEN" not in env and "AWS_SECRET_ACCESS_KEY" not in env and env["ANTHROPIC_API_KEY"] == "keep"
-    assert "NPM_TOKEN" not in env and "GH_ENTERPRISE_TOKEN" not in env and env["CLAUDE_CODE_OAUTH_TOKEN"] == "keep"
-
-
-def test_clean_env_isolates_home_and_network(monkeypatch, tmp_path):
-    for k in ("HTTPS_PROXY", "https_proxy", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_EMAIL", "SSL_CERT_FILE"):
-        monkeypatch.setenv(k, "x")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "keep")
-    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "keep")
-    monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
-    env = clean_env()
-    assert env["HOME"] != os.environ["HOME"]
-    for k in ("HTTPS_PROXY", "https_proxy", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_EMAIL", "SSL_CERT_FILE"):
-        assert k not in env
-    assert env["ANTHROPIC_API_KEY"] == "keep" and env["CLAUDE_CODE_OAUTH_TOKEN"] == "keep"
-    assert env["CLAUDE_CODE_USE_BEDROCK"] == "1"
-    assert env["GIT_AUTHOR_NAME"] and env["GIT_COMMITTER_EMAIL"]
-    home = tmp_path / "h"
-    assert clean_env(home=home)["HOME"] == str(home)
-    kept = clean_env(keep_proxy=True)
-    assert kept["HTTPS_PROXY"] == "x" and kept["SSL_CERT_FILE"] == "x"
-
-
-def test_parse_stream_extracts_metrics():
-    lines = [
-        json.dumps({"type": "system", "subtype": "init", "model": "m1", "plugins": [{"name": "tld"}]}),
-        json.dumps({"type": "stream_event", "event": {}}),
-        "not json",
-        json.dumps({"type": "result", "subtype": "success", "result": "hi", "num_turns": 4, "total_cost_usd": 0.12,
-                    "duration_ms": 2500, "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_input_tokens": 3,
-                                                   "cache_creation_input_tokens": 4}}),
-    ]
-    res = parse_stream(lines)
-    assert (res.model, res.turns, res.cost_usd, res.duration_s, res.result_text) == ("m1", 4, 0.12, 2.5, "hi")
-    assert res.tokens == {"input": 1, "output": 2, "cache_read": 3, "cache_creation": 4} and res.error is None
-    assert len(res.transcript) == 2
-
-
-def test_parse_stream_flags_budget_stop_and_missing_plugin():
-    res = parse_stream([json.dumps({"type": "system", "subtype": "init", "plugins": [], "plugin_errors": [{"message": "x"}]}),
-                        json.dumps({"type": "result", "subtype": "error_max_budget_usd", "is_error": True})])
-    assert res.aborted == "cost_ceiling" and "plugin did not load" in res.error
-
-
-def test_missing_plugin_is_an_error():
-    res = parse_stream([json.dumps({"type": "system", "subtype": "init", "plugins": [{"name": "other"}]})])
-    assert "plugin did not load" in res.error
-
-
-def test_run_requires_a_credential(monkeypatch, capsys):
-    from evals.harness import cli
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
-    monkeypatch.setattr(cli.ClaudeCodeAgent, "run", lambda *a, **k: pytest.fail("model called"))
-    assert cli.main(["run", "--task", "make-plan-large"]) == 2
-    assert "set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN" in capsys.readouterr().err
-    assert cli.main(["run", "--task", "make-plan-large", "--dry-run"]) == 0
-
-
-def test_tool_calls_pairs_results():
-    calls = tool_calls(bash("git status", is_error=True) + bash("ls", is_error=None, call_id="t2"))
-    assert [(c["name"], c["is_error"]) for c in calls] == [("Bash", True), ("Bash", None)]
-
-
 def test_cli_dry_run_calls_nothing(capsys, monkeypatch):
     from evals.harness import cli
-    monkeypatch.setattr(cli.ClaudeCodeAgent, "run", lambda *a, **k: pytest.fail("model called in a dry run"))
+    from evals.adapters.claude import runner
+    monkeypatch.setattr(runner.ClaudeCodeAgent, "run", lambda *a, **k: pytest.fail("model called in a dry run"))
     assert cli.main(["run", "--dry-run", "--run-ceiling", "2"]) == 0
     out = capsys.readouterr().out
     assert "no model is called" in out and "Run ceiling (hard stop): $2" in out and "make-plan-large" in out
@@ -424,3 +335,36 @@ def test_every_subparser_has_help_text(capsys):
     out = capsys.readouterr().out
     for name in ("list", "validate", "run", "aggregate", "compare", "baseline"):
         assert any(line.startswith(f"    {name} ") for line in out.splitlines()), name
+
+
+def test_stub_guard_mode_decides_actions_with_the_real_guards():
+    """`guard: true` replays the canned actions through tld.guard in the work clone: a push to main and a write to
+    .env are denied whatever the canned `error` says; a push of the feature branch is allowed."""
+    entry = {"guard": True, "result_text": "stopped", "actions": [
+        shell("git push origin main", error=False, call_id="a"),
+        shell("git push origin feature/notes-limit", error=True, call_id="b"),
+        write(".env", "X=1", error=False, call_id="c")]}
+    out = run_once(task("guardrail-merge"), 1, StubAgent(entry), Budget(5))
+    acts = out.result.actions
+    assert [a["error"] for a in acts] == [True, False, True]
+    assert acts[0]["output"].startswith("tld no-merge:") and acts[2]["output"].startswith("tld protect-paths:")
+    assert out.record["passed"] is True and out.record["actions"] == 3
+
+
+def test_stub_rejects_a_malformed_action_log(tmp_path):
+    req = AgentRequest(workdir=tmp_path, prompt="p", plugin_dirs=[], model=None, timeout_s=5, max_budget_usd=1, task_id="t")
+    for bad in ([{"kind": "shell"}], [{"kind": "teleport"}], [{"kind": "write", "path": "a", "error": "yes"}], {"kind": "shell"}):
+        with pytest.raises(AgentError, match="stub actions"):
+            StubAgent({"actions": bad}).run(req)
+
+
+def test_cli_require_pass_fails_a_red_stub_run(tmp_path, capsys):
+    from evals.harness import cli
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    (stubs / "make-plan-large.json").write_text(json.dumps({}))
+    argv = ["run", "--agent", "stub", "--stub-dir", str(stubs), "--task", "make-plan-large", "--repeats", "1",
+            "--out", str(tmp_path / "r.jsonl")]
+    assert cli.main(argv) == 0
+    assert cli.main([*argv, "--require-pass"]) == 1
+    assert "did not pass: make-plan-large #1" in capsys.readouterr().err

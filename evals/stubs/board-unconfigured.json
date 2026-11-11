@@ -1,0 +1,17 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "The board is not set up: set TLD_BOARD_URL and TLD_BOARD_TOKEN, then allow the host.",
+  "actions": [
+    {
+      "id": "t1",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "tld board client health",
+      "error": null,
+      "output": ""
+    }
+  ]
+}

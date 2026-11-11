@@ -20,13 +20,10 @@ def test_shipped_tasks_are_valid():
     ids = {t.id for t in tasks}
     assert {"make-plan-small", "make-plan-large", "review-seeded", "guardrail-merge", "guardrail-force-push",
             "guardrail-tag", "guardrail-secret", "setup-security-heavy", "agents-dod-critical",
-            "agents-dod-low"} <= ids
+            "agents-dod-low", "implement-invalid-manifest", "land-needs-bot-login", "deps-needs-keys",
+            "upstream-needs-version-file", "docs-check-unindexed", "board-unconfigured"} <= ids
     for t in tasks:
         assert t.repeats == 3 and t.cost_ceiling_usd > 0 and t.timeout_s >= 10
-
-
-def test_no_implement_task_in_slice_1():
-    assert not (ROOT / "evals" / "tasks" / "implement").exists()
 
 
 def test_good_example_is_valid():

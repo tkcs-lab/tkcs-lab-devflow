@@ -1,0 +1,6 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "result_text": "## Goal\nAdd --limit.\n\n## Context\nnotes/cli.py.\n\n## Design\nslice.\n\n## Steps\n1. Add the option.\n\n## Acceptance\n- `python3 -m unittest discover -s tests -q`\n\n## Stop conditions\n- none\n\n## Finish\nOpen a PR.\n"
+}

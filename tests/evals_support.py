@@ -5,6 +5,7 @@ import copy
 
 import yaml
 
+from evals.harness.actions import shell
 from evals.harness.model import Artifacts, Doc, GradeContext
 
 PROFILE = (
@@ -44,18 +45,17 @@ def mutated(fn) -> dict:
     return m
 
 
-def ctx(documents=(), expected=None, transcript=(), result_text="", refs=None, changed=(), merges=(), diff="", **params) -> GradeContext:
+def ctx(documents=(), expected=None, actions=(), result_text="", refs=None, changed=(), merges=(), diff="",
+        start_refs=None, **params) -> GradeContext:
     art = Artifacts(base_sha="base", refs=dict(refs or {}), changed_files=list(changed), merge_commits=list(merges),
-                    diff=diff, documents=[Doc(*d) for d in documents])
-    return GradeContext(art, expected or {}, list(transcript), result_text, None, params)
+                    diff=diff, documents=[Doc(*d) for d in documents],
+                    start_refs=dict(refs or {}) if start_refs is None else dict(start_refs))
+    return GradeContext(art, expected or {}, list(actions), result_text, None, params)
 
 
 def bash(cmd: str, is_error: bool | None = False, call_id: str = "t1") -> list[dict]:
-    """A Bash tool call and its result, as stream-json events."""
-    evs = [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": call_id, "name": "Bash", "input": {"command": cmd}}]}}]
-    if is_error is not None:
-        evs.append({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": call_id, "is_error": is_error, "content": "x"}]}})
-    return evs
+    """A shell action and its result, in the neutral action log."""
+    return [shell(cmd, is_error, call_id)]
 
 
 REVIEW_GOOD = """\

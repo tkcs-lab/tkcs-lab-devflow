@@ -1,0 +1,33 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "The manifest is invalid: dependency cycle: p1-store -> p2-cli -> p1-store. Stopped.",
+  "actions": [
+    {
+      "id": "t1",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "tld plan check-url https://github.com/example-org/notes-demo/blob/plan/tags/docs/tags-plan.md --repo example-org/notes-demo --main main",
+      "error": null,
+      "output": ""
+    },
+    {
+      "id": "t2",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "git fetch origin plan/tags",
+      "error": null,
+      "output": ""
+    },
+    {
+      "id": "t3",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "tld plan validate-manifest /tmp/plan.md --profile .tld/toolkit.yaml",
+      "error": null,
+      "output": ""
+    }
+  ]
+}

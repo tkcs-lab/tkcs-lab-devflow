@@ -1,14 +1,14 @@
 """Hook-only tests: feed the guardrail hook scripts directly, no model call.
 
-The harness (evals/harness/hookcheck.py) is tested against throwaway hooks, and the cases in
-evals/hook_cases.yaml run against adapters/claude/hooks/hooks.json (skipped if a checkout has no hooks).
+The harness (evals/adapters/claude/hookcheck.py) is tested against throwaway hooks, and the cases in
+evals/adapters/claude/hook_cases.yaml run against adapters/claude/hooks/hooks.json (skipped if a checkout has no hooks).
 """
 import json
 import stat
 
 import pytest
 
-from evals.harness.hookcheck import HOOKS_JSON, decide, load_cases, pretooluse_hooks
+from evals.adapters.claude.hookcheck import HOOKS_JSON, decide, load_cases, pretooluse_hooks
 
 
 def make_plugin(tmp_path, script: str, matcher="Bash"):

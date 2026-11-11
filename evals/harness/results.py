@@ -144,7 +144,7 @@ def summary(records: list[dict], created: str = "") -> dict:
 
 
 def format_table(tasks: dict) -> str:
-    rows = [f"{'task':<24} {'pass':>9} {'rate':>6} {'cost$':>8}  notes"]
+    rows = [f"{'task':<28} {'pass':>9} {'rate':>6} {'cost$':>8}  notes"]
     for tid, t in sorted(tasks.items()):
         rate = "-" if t["pass_rate"] is None else f"{t['pass_rate']:.0%}"
         notes = []
@@ -154,5 +154,5 @@ def format_table(tasks: dict) -> str:
             notes.append(f"{t['aborted']} aborted")
         if t["errors"]:
             notes.append(f"{t['errors']} errors")
-        rows.append(f"{tid:<24} {t['passes']:>4}/{t['runs']:<4} {rate:>6} {t['cost_usd']:>8.2f}  {', '.join(notes)}")
+        rows.append(f"{tid:<28} {t['passes']:>4}/{t['runs']:<4} {rate:>6} {t['cost_usd']:>8.2f}  {', '.join(notes)}")
     return "\n".join(rows)

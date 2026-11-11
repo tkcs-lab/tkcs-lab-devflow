@@ -1,0 +1,6 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "result_text": "| gate | PASS |\n\nAGENT-REPORT security-reviewer at=dod verdict=pass blocking=0 non_blocking=0\n\n## Threat model\n- token check\n"
+}

@@ -10,7 +10,7 @@ model: sonnet
 repeats: 3
 timeout_s: 900
 cost_ceiling_usd: 3.0
-requires: [adapters/claude/commands/setup.md]
+requires: [playbooks/setup.md]
 graders:
   - profile_valid
   - roles_block_equals

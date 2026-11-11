@@ -10,6 +10,9 @@ from . import init_repo
 from evals.harness.common import git
 
 PROFILE = """\
+tld:
+  version: ">=1.0,<2"
+
 project:
   name: notes-demo
 
@@ -31,6 +34,10 @@ verify:
     - "python3 -m unittest discover -s tests -q"
 
 stacks: []
+
+models:
+  worker: fast
+  reviewer: standard
 """
 
 FILES = {

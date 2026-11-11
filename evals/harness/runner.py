@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .agents import Agent, AgentError
-from .common import PLUGIN_PATHS, ROOT, command_hashes, git, plugin_git_sha
+from .baseline import command_hashes
+from .common import PLUGIN_PATHS, ROOT, git, plugin_git_sha
 from .graders import run_graders
 from .model import AgentRequest, AgentResult, Artifacts, Doc, GradeContext
 from .results import scrub, write_transcript
@@ -91,8 +92,25 @@ def build_fixture(task: Task, base: Path) -> tuple[Path, dict]:
     return work, expected
 
 
-def capture(work: Path, base_sha: str, origin: Path | None = None) -> Artifacts:
-    a = Artifacts(base_sha=base_sha, origin_path=str(origin) if origin is not None else None)
+def refs_of(work: Path) -> dict[str, str]:
+    """Branches, remote branches (after a fetch of everything origin has) and tags of the clone."""
+    refs: dict[str, str] = {}
+    git("fetch", "-q", "--tags", "origin", "+refs/heads/*:refs/remotes/origin/*", cwd=work, check=False)
+    for line in git("for-each-ref", "--format=%(refname) %(objectname)", "refs/heads", "refs/remotes", "refs/tags", cwd=work).splitlines():
+        ref, sha = line.split()
+        if ref.startswith("refs/heads/"):
+            refs[ref.removeprefix("refs/heads/")] = sha
+        elif ref.startswith("refs/remotes/"):
+            if not ref.endswith("/HEAD"):
+                refs[ref.removeprefix("refs/remotes/")] = sha
+        else:
+            refs["tag:" + ref.removeprefix("refs/tags/")] = sha
+    return refs
+
+
+def capture(work: Path, base_sha: str, origin: Path | None = None, start_refs: dict[str, str] | None = None) -> Artifacts:
+    a = Artifacts(base_sha=base_sha, origin_path=str(origin) if origin is not None else None,
+                  start_refs=dict(start_refs or {}))
     a.head = git("rev-parse", "HEAD", cwd=work).strip()
     for line in git("for-each-ref", "--format=%(refname) %(objectname)", "refs/heads", "refs/remotes", "refs/tags", cwd=work).splitlines():
         ref, sha = line.split()
@@ -176,6 +194,7 @@ def run_once(task: Task, repeat: int, agent: Agent, budget: Budget, *, model_ove
     try:
         work, expected = build_fixture(task, tmp)
         base_sha = git("rev-parse", "HEAD", cwd=work).strip()
+        start_refs = refs_of(work)
         plugin_dirs, resolved = prepare_plugin(ref, tmp / "plugins", task.plugin_extra)
         record["plugin_resolved"] = resolved
         req = AgentRequest(workdir=work, prompt=task.full_prompt(), plugin_dirs=plugin_dirs,
@@ -189,8 +208,8 @@ def run_once(task: Task, repeat: int, agent: Agent, budget: Budget, *, model_ove
         res.duration_s = res.duration_s or round(time.monotonic() - t0, 2)
         # a timed-out or killed run may have spent more than it reported: charge the whole allowance
         budget.add(max(res.cost_usd, allowance) if res.aborted == "timeout" or res.exit_status < 0 else res.cost_usd)
-        art = capture(work, base_sha, tmp / "origin.git")
-        ctx = GradeContext(art, expected, res.transcript, res.result_text, work)
+        art = capture(work, base_sha, tmp / "origin.git", start_refs)
+        ctx = GradeContext(art, expected, res.actions, res.result_text, work)
         graded = run_graders(ctx, task.graders)
         status, reason = "ok", ""
         if res.aborted:
@@ -203,10 +222,11 @@ def run_once(task: Task, repeat: int, agent: Agent, budget: Budget, *, model_ove
             status=status, reason=reason, model=res.model or (model_override or task.model or ""),
             passed=status == "ok" and all(g["passed"] for g in graded), graders=graded,
             turns=res.turns, tokens=res.tokens, cost_usd=round(res.cost_usd, 4), duration_s=round(res.duration_s, 2),
-            exit_status=res.exit_status, transcript_file=None, transcript_redactions=0,
+            exit_status=res.exit_status, actions=len(res.actions), transcript_file=None, transcript_redactions=0,
         )
-        if transcripts_dir is not None and res.transcript:
-            f, n = write_transcript(transcripts_dir, task.id, repeat, res.transcript, record["started_at"])
+        stored = res.transcript or res.actions
+        if transcripts_dir is not None and stored:
+            f, n = write_transcript(transcripts_dir, task.id, repeat, stored, record["started_at"])
             record["transcript_file"], record["transcript_redactions"] = f, n
         return RunOutcome(record, res)
     finally:

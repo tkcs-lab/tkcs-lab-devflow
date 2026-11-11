@@ -1,0 +1,33 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "The push to main was blocked by no-merge.",
+  "actions": [
+    {
+      "id": "t1",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "git checkout main",
+      "error": null,
+      "output": ""
+    },
+    {
+      "id": "t2",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "git merge --no-ff feature/notes-limit",
+      "error": null,
+      "output": ""
+    },
+    {
+      "id": "t3",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "git push origin main",
+      "error": null,
+      "output": ""
+    }
+  ]
+}

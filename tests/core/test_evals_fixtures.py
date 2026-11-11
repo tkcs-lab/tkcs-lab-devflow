@@ -9,7 +9,7 @@ from evals.harness.common import git
 from evals.harness.runner import build_fixture
 from evals.harness.taskspec import discover
 
-BUILDERS = ["tiny_app", "review_seeded", "guardrail", "setup_repos"]
+BUILDERS = ["tiny_app", "review_seeded", "guardrail", "setup_repos", "commands"]
 
 
 @pytest.mark.parametrize("name", BUILDERS)
@@ -76,3 +76,41 @@ def test_fixtures_hold_no_real_names_or_secrets():
         if f.is_file() and f.suffix in {".py", ".yaml", ".json"} and "harness" not in f.parts:
             for n, line in enumerate(f.read_text().splitlines(), 1):
                 assert not bad.search(line), f"{f.relative_to(ROOT)}:{n}"
+
+
+@pytest.mark.parametrize("command", ["land", "deps", "upstream", "docs", "board", "implement"])
+def test_command_fixture_profiles_are_valid(tmp_path, vp, command):
+    import yaml
+    builder("commands").build(tmp_path / "r", command=command)
+    profile = yaml.safe_load((tmp_path / "r" / ".tld" / "toolkit.yaml").read_text())
+    assert vp.validate(profile, tmp_path / "r")[0] == []
+    if command == "land":
+        assert "bot_login" not in profile["git"]
+    if command == "deps":
+        assert "deps" not in profile
+    if command == "upstream":
+        assert not (tmp_path / "r" / profile["upstream"]["version_file"]).exists()
+
+
+def test_docs_fixture_check_names_the_unindexed_doc(tmp_path):
+    from conftest import tld_cmd
+    expected = builder("commands").build(tmp_path / "r", command="docs")
+    r = subprocess.run([*tld_cmd("ops", "docs-index", "check", "--profile", ".tld/toolkit.yaml", "--stale-days", "180")],
+                       cwd=tmp_path / "r", capture_output=True, text=True)
+    errors = [line for line in (r.stdout + r.stderr).splitlines() if line.startswith("error:")]
+    assert r.returncode == 1 and len(errors) == 1 and expected["stop_message"] in errors[0], r.stdout + r.stderr
+
+
+def test_implement_fixture_plan_passes_check_url_and_fails_validation(tmp_path):
+    from conftest import tld_cmd
+    from evals.fixtures import commands
+    expected = builder("commands").build(tmp_path / "r", command="implement")
+    r = tmp_path / "r"
+    ok = subprocess.run([*tld_cmd("plan", "check-url", expected["plan_url"], "--repo", commands.REPO, "--main", "main")],
+                        cwd=r, capture_output=True, text=True)
+    assert ok.returncode == 0, ok.stderr
+    plan = tmp_path / "plan.md"
+    plan.write_text(git("show", f"plan/tags:{commands.PLAN_PATH}", cwd=r))
+    bad = subprocess.run([*tld_cmd("plan", "validate-manifest", str(plan), "--profile", str(r / ".tld" / "toolkit.yaml"))],
+                         cwd=r, capture_output=True, text=True)
+    assert bad.returncode == 1 and expected["stop_message"] in bad.stdout + bad.stderr

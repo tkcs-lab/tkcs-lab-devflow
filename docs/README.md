@@ -9,7 +9,8 @@ Plans (`<slug>-plan.md`) are transient and not listed; a finished plan's decisio
 - [architecture/hooks.md](architecture/hooks.md) - the guardrail hooks, their configuration and the commands' compatibility; read when changing a hook.
 - [architecture/roles.md](architecture/roles.md) - the ten roles, the profile's roles block, the points and modes they run at; read when changing a role or the roles block.
 - [architecture/scope-drift.md](architecture/scope-drift.md) - scope-drift monitoring at each /implement merge; read when changing tld plan scope-check.
-- [architecture/evals.md](architecture/evals.md) - the eval harness in evals/, tasks, graders, baselines; read when measuring a change to a command, skill or hook.
+- [architecture/evals.md](architecture/evals.md) - the eval harness in evals/ (neutral core, Claude adapter), tasks per command, stub mode, graders, baselines and their staleness; read when measuring a change to a command, playbook or hook.
+- [architecture/evals-implement.md](architecture/evals-implement.md) - the design of the stubbed-children /implement eval (not built) and its cost; read before building it.
 - [architecture/maintenance-spike.md](architecture/maintenance-spike.md) - what a cloud session can and cannot do; read before changing how the maintenance commands push or comment.
 
 ## Guides
@@ -18,7 +19,7 @@ Plans (`<slug>-plan.md`) are transient and not listed; a finished plan's decisio
 - [guides/docs-index.md](guides/docs-index.md) - the CLAUDE.md, index and leaf-doc structure and /docs init, check and tidy; read when touching documentation layout or the docs skills.
 - [guides/review.md](guides/review.md) - the /review flow and its decisions ask; read when changing /review.
 - [guides/setup.md](guides/setup.md) - /setup: how it surveys a repository and writes the profile; read when changing /setup.
-- [../CONTRIBUTING.md](../CONTRIBUTING.md) - setup, tests, evals and the plugin-version rule for contributors; read before your first change.
+- [../CONTRIBUTING.md](../CONTRIBUTING.md) - setup, test rules, coverage gate, mutation check, evals and baseline refresh, the plugin-version rule; read before your first change.
 - [guides/maintenance.md](guides/maintenance.md) - /deps, /upstream, /land and /docs tidy, scheduling them, the status board; read when changing or scheduling them.
 - [guides/board-server.md](guides/board-server.md) - deploying and running the board server (the owner's inbox: status records, asks, login); read when deploying or changing the board.
 - [guides/admin.md](guides/admin.md) - repo-admin: auditing organisation and repository settings, the rulesets and the agent account; read when changing it.

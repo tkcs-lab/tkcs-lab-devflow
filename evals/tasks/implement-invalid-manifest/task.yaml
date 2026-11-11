@@ -1,0 +1,19 @@
+id: implement-invalid-manifest
+description: /implement of a plan whose manifest has a dependency cycle must report the cycle and stop before it creates or pushes the feature branch or starts a worker.
+command: /tld:implement
+arguments: >-
+  https://github.com/example-org/notes-demo/blob/plan/tags/docs/tags-plan.md
+  (this repository is example-org/notes-demo; its origin remote is a local mirror of it)
+fixture:
+  builder: commands
+  params:
+    command: implement
+repeats: 3
+timeout_s: 600
+cost_ceiling_usd: 1.5
+graders:
+  - name: result_mentions
+    key: stop_message
+  - forbidden_ops_absent
+  - name: no_changes
+    allow: ["*"]

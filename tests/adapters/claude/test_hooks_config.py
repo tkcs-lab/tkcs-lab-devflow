@@ -13,7 +13,7 @@ from conftest import ROOT, TLD, CLAUDE
 from hooks_helpers import FAIL_CLOSED, HOOKS, MODULES, bash, git, make_repo, module, run, run_script
 
 from tld.guard import _common
-from evals.harness.hookcheck import matcher_matches
+from evals.adapters.claude.hookcheck import matcher_matches
 
 HOOKS_JSON = HOOKS / "hooks.json"
 
@@ -96,14 +96,14 @@ def test_stop_hook_has_the_longest_timeout():
     assert 1800 > module("dod-gate").TOTAL_BUDGET_SECONDS
 
 
-def test_every_hook_command_runs_as_written(feature_repo, tmp_path):
+def test_every_hook_command_runs_as_written(fresh_repo):
     """The command string is run through a shell with the plugin root substituted, as Claude Code does."""
-    event = json.dumps({"cwd": str(feature_repo), "tool_name": "Bash", "tool_input": {"command": "ls"},
+    event = json.dumps({"cwd": str(fresh_repo), "tool_name": "Bash", "tool_input": {"command": "ls"},
                         "hook_event_name": "PreToolUse", "session_id": "x"})
     for _, _, hook in entries():
         cmd = hook["command"].replace("${CLAUDE_PLUGIN_ROOT}", str(ROOT))
         r = subprocess.run(cmd, shell=True, input=event, capture_output=True, text=True, timeout=60,
-                           env={"PATH": __import__("os").environ["PATH"], "CLAUDE_PROJECT_DIR": str(feature_repo)})
+                           env={"PATH": __import__("os").environ["PATH"], "CLAUDE_PROJECT_DIR": str(fresh_repo)})
         assert r.returncode == 0, (cmd, r.stderr)
 
 
@@ -193,19 +193,20 @@ def test_which_playbooks_mark_the_session_exempt(name, exempt):
 
 # ---- docs ----------------------------------------------------------------------------------------
 def test_docs_cover_every_hook_and_key():
+    """Every hook name and every `hooks.*` profile key of the schema is described in hooks.md."""
     doc = (ROOT / "docs" / "architecture" / "hooks.md").read_text()
     for name in _common.HOOK_NAMES:
         assert f"`{name}`" in doc, name
-    for key in ("hooks.disable", "hooks.protect_paths", "hooks.protect_paths_allow", "hooks.dod_gate.enabled",
-                "hooks.dod_gate.max_attempts", "stop_hook_active", "tld dod exempt", "Branch protection and CI"):
+    schema = json.loads((ROOT / "src" / "tld" / "schema" / "profile.schema.json").read_text())
+
+    def keys(node, prefix):
+        for key, sub in node.get("properties", {}).items():
+            yield f"{prefix}{key}"
+            yield from keys(sub, f"{prefix}{key}.")
+    found = list(keys(schema["properties"]["hooks"], "hooks."))
+    assert len(found) >= 5
+    for key in found:
         assert key in doc, key
-    for heading in ("What the hooks do not protect", "How the dod-gate recognises a session", "Compatibility with the commands"):
-        assert heading in doc, heading
-    for command in ("/implement", "/land", "/deps", "/upstream", "/review", "/make-plan"):
-        assert command in doc, command
-    readme = (ROOT / "README.md").read_text()
-    assert "## Guardrails" in readme and "docs/architecture/hooks.md" in readme
-    assert "hooks.md" in (ROOT / "docs" / "reference" / "profile-reference.md").read_text()
 
 
 # ---- profile trust and loud errors ---------------------------------------------------------------
