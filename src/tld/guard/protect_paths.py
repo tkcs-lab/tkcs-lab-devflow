@@ -13,7 +13,7 @@ import os
 import re
 import sys
 
-from tld.guard import _common, _trees, markers
+from tld.guard import _changelog, _common, _trees, markers
 from tld.guard._common import BUILTIN_PROTECT_ALLOW, DEFAULT_PROTECT_PATHS, GUARDED_WORKFLOWS, Ctx
 from tld.guard._gitgh import Item, iter_items, parse_config
 from tld.guard._shell import ParseError, base, is_dynamic
@@ -147,7 +147,7 @@ def plugin_root_hit(path: str, here: str) -> str | None:
 def violation(ctx: Ctx, path: str, here: str) -> str | None:
     protect = ctx.list_key("protect_paths", DEFAULT_PROTECT_PATHS)
     allow = BUILTIN_PROTECT_ALLOW + ctx.list_key("protect_paths_allow", [])
-    hit = plugin_root_hit(path, here) or outside_protected(ctx, path, here)
+    hit = plugin_root_hit(path, here) or outside_protected(ctx, path, here) or _changelog.violation(ctx, path, here, relative(ctx, path, here))
     if hit:
         return hit
     always = ALWAYS_PROTECTED + [p for p in ctx.settings.extra_protected if not p.startswith(("~", "/"))]
@@ -446,7 +446,9 @@ def check_bash(ctx: Ctx, command: str) -> str | None:
 def evaluate(ctx: Ctx) -> str | None:
     if ctx.action.kind == "write":
         path = ctx.action.path
-        return violation(ctx, path, ctx.cwd) if isinstance(path, str) and path else None
+        if not (isinstance(path, str) and path):
+            return None
+        return violation(ctx, path, ctx.cwd) or _changelog.content_violation(ctx, ctx.action.content, relative(ctx, path, ctx.cwd), path, ctx.cwd)
     if ctx.action.kind == "shell" and isinstance(ctx.action.command, str):
         return check_bash(ctx, ctx.action.command)
     return None

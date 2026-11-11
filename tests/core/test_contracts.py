@@ -22,7 +22,7 @@ RUNTIME = PLAYBOOKS / "runtime.md"
 CORE_DIRS = [ROOT / d for d in ("playbooks", "roles", "checklists", "stacks")]
 CORE_FILES = sorted(p for d in CORE_DIRS for p in d.rglob("*.md"))
 ADAPTER_FILES = sorted(CLAUDE.rglob("*.md"))
-COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "upstream", "docs", "board", "migrate")
+COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "ci", "upstream", "docs", "board", "migrate")
 
 cli = _load("tld.cli")
 dispatch = _load("tld.roles.dispatch")
@@ -268,7 +268,7 @@ def test_every_command_playbook_writes_a_status_record_or_says_why_not(name):
 
 def test_record_commands_cover_the_playbooks():
     record = _load("tld.board.record")
-    expected = {"setup", "review", "make-plan", "deps", "upstream", "land", "docs", "migrate"}
+    expected = {"setup", "review", "make-plan", "deps", "ci", "upstream", "land", "docs", "migrate"}
     assert set(record.COMMANDS) == expected
 
 

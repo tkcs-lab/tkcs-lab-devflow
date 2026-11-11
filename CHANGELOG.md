@@ -12,6 +12,15 @@ entry of the released version at the top of the GitHub release, above the list o
   repository's own pre-release check with the version before the tag, and `create_release: false` only tags and
   leaves the GitHub release to the repository's tag-triggered workflow. The defaults keep the 1.0 behaviour;
   `validate-policy` checks the values.
+- `/ci`: an unattended CI watch for a scheduled task. It finds workflows whose newest run on the default branch
+  failed (scheduled runs included, which no pull request announces), reads the logs, and sorts each failure into
+  repo (reproduced and fixed on `chore/ci-<workflow>-<yyyymmdd>`, never merged), external (a CDN rule, secret or
+  service: nothing changes, one issue and `needs_you` name the single thing to check) or transient. New profile
+  section `ci`.
+- `docs.changelog.policy` and a changelog guard in the `protect-paths` hook. Lines under `section` stay free.
+  The release workflow takes the version from the `## [X.Y.Z]` heading, so the default `unreleased` denies a session
+  opening a version heading, and `release-only` denies any edit, unless the change touches only the changelog (a
+  separate pull request from the code and the version bump). With `release-only`, `section` is optional.
 
 ### Fixed
 

@@ -4,13 +4,13 @@
     "name": "tkcs-lab"
   },
   "metadata": {
-    "description": "tkcs-lab-devflow (tld): a plan → implement toolkit for coding agents, with a Claude Code plugin: /setup, /review, /make-plan, /implement, /dod, /board, /deps, /upstream, /land, /docs and ten specialist agents"
+    "description": "tkcs-lab-devflow (tld): a plan → implement toolkit for coding agents, with a Claude Code plugin: /setup, /review, /make-plan, /implement, /dod, /board, /deps, /ci, /upstream, /land, /docs and ten specialist agents"
   },
   "plugins": [
     {
       "name": "tld",
       "source": "./",
-      "description": "/setup, /review, /make-plan, /implement, /dod, /board, /deps, /upstream, /land and /docs as thin wrappers over neutral playbooks, ten role agents and the python, go, swift and ipados stack guides, driven by a per-project profile (.tld/toolkit.yaml)"
+      "description": "/setup, /review, /make-plan, /implement, /dod, /board, /deps, /ci, /upstream, /land and /docs as thin wrappers over neutral playbooks, ten role agents and the python, go, swift and ipados stack guides, driven by a per-project profile (.tld/toolkit.yaml)"
     }
   ]
 }

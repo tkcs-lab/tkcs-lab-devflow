@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "tld status record",
-  "description": "One database document per project and command (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an implement orchestration, keyed by the project slug; a command record (kind 'command') belongs to every other command (setup, review, make-plan, deps, upstream, land, docs, migrate) and is keyed '<project>--<command>'. The project slug is derived from the repository name (tld board project-slug). 'attended' says whether a person started the command and can answer; the final states are done, failed and pr_open. Schema version 1 gained the optional phase field 'scope' without a bump. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, the project slug) are checked by src/tld/board/record.py. No secrets, file contents or commit messages belong in a record.",
+  "description": "One database document per project and command (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an implement orchestration, keyed by the project slug; a command record (kind 'command') belongs to every other command (setup, review, make-plan, deps, upstream, ci, land, docs, migrate) and is keyed '<project>--<command>'. The project slug is derived from the repository name (tld board project-slug). 'attended' says whether a person started the command and can answer; the final states are done, failed and pr_open. Schema version 1 gained the optional phase field 'scope' without a bump. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, the project slug) are checked by src/tld/board/record.py. No secrets, file contents or commit messages belong in a record.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -195,13 +195,14 @@
         "run",
         "command"
       ],
-      "description": "'run' is an implement orchestration; 'command' is the record of any other command (setup, review, make-plan, deps, upstream, land, docs, migrate)."
+      "description": "'run' is an implement orchestration; 'command' is the record of any other command (setup, review, make-plan, deps, upstream, ci, land, docs, migrate)."
     },
     "command": {
       "enum": [
         null,
         "deps",
         "upstream",
+        "ci",
         "land",
         "setup",
         "docs",

@@ -118,7 +118,7 @@ Docs changed>; add the docs index row for each.`
 >    your brief's `Read first:` line names; open the docs index `<docs.index>` only if they are not enough, and
 >    read no other doc. Do not edit the index or the entry file unless this is the retirement phase; for each
 >    doc you add, move or delete put one line `docs-changed: <added|moved|deleted> <path>` in your report.>
->    <With `docs.changelog`: add user-visible changes under `<file>`'s `<section>`; never add a version heading.>
+>    <With `docs.changelog` unless its `policy` is `release-only`: add user-visible changes under `<file>`'s `<section>`; never add a version heading.>
 > 3. <With stacks: also follow <the stack guides, as paths>.> Before your last push run the dod playbook
 >    (`playbooks/dod.md`); every blocking row must pass. Check every item of your phase's `acceptance`, and say
 >    how you checked each one.

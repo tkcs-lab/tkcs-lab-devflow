@@ -24,7 +24,7 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
    - `<plan_dir>` is `docs.plan_dir`, `<branch pattern>` is `git.branch_pattern`; "the must-read docs" are
      `docs.must_read`.
    - "ADR parts" (the ADRs section, the ADR step, the ADR `final_checks` item) apply only with `docs.adr_dir`;
-     without it leave them out and never mention ADRs. "Changelog parts" apply only with `docs.changelog`.
+     without it leave them out and never mention ADRs. "Changelog parts" apply only with `docs.changelog` whose `policy` is not `release-only`.
    - "Index parts" apply only with `docs.index`; then follow the reading protocol of
      [policies/docs.md](policies/docs.md).
    - "The dispatch table" is `ci.dispatchable` ([policies/pr-steward.md](policies/pr-steward.md)).

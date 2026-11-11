@@ -1,0 +1,17 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "Stopped: toolkit.yaml: 'ci.lookback_hours' must be between 1 and 168.",
+  "actions": [
+    {
+      "id": "t1",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "tld profile validate .tld/toolkit.yaml",
+      "error": null,
+      "output": ""
+    }
+  ]
+}
