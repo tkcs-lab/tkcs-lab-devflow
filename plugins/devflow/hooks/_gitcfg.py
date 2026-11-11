@@ -28,3 +28,56 @@ def ref_exists(ctx_dir: str, full_ref: str, repo_opts: list[str] | None = None) 
     except (OSError, subprocess.SubprocessError):
         return False
     return r.returncode == 0
+
+
+def git_config_values(ctx_dir: str, repo_opts: list[str], overrides: list[str], key: str) -> list[str]:
+    """Every effective value of `key`: the `-c` / environment `overrides` (key=value; key compared
+    case-insensitively) replace the file values when present, else `git config --get-all`."""
+    want = key.lower()
+    mine = [o.partition("=")[2] for o in overrides if o.partition("=")[0].lower() == want]
+    if mine:
+        return mine
+    out = _run_git(ctx_dir, repo_opts, "config", "--no-includes", "--get-all", key)
+    return out.splitlines() if out else []
+
+
+def git_config_value(ctx_dir: str, repo_opts: list[str], overrides: list[str], key: str) -> str | None:
+    values = git_config_values(ctx_dir, repo_opts, overrides, key)
+    return values[-1] if values else None
+
+
+def _truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in ("true", "yes", "on", "1")
+
+
+def bare_push_destinations(it, push, main: str) -> list[str] | None:  # noqa: ARG001
+    """Short branch names a push without an explicit refspec would update, or None when that cannot be
+    resolved (mirror, a glob, matching, a detached HEAD, a missing upstream)."""
+    from _gitgh import has_glob, parse_refspecs, short_ref  # circular at import time
+    d, opts, ov = it.dir, it.git.repo_opts, it.git.config
+    cur = current_branch(d, opts)
+    if cur is None:
+        return None
+    remote = (push.repo or git_config_value(d, opts, ov, f"branch.{cur}.pushRemote")
+              or git_config_value(d, opts, ov, "remote.pushDefault")
+              or git_config_value(d, opts, ov, f"branch.{cur}.remote") or "origin")
+    if _truthy(git_config_value(d, opts, ov, f"remote.{remote}.mirror")):
+        return None
+    pushes = git_config_values(d, opts, ov, f"remote.{remote}.push")
+    if pushes:
+        out = []
+        for spec in parse_refspecs(pushes):
+            dst = short_ref(spec.dst)
+            if spec.dynamic or has_glob(dst) or not dst:
+                return None
+            out.append(cur if dst in ("HEAD", "@") else dst)
+        return out
+    mode = (git_config_value(d, opts, ov, "push.default") or "simple").lower()
+    if mode in ("simple", "current"):
+        return [cur]
+    if mode in ("upstream", "tracking"):
+        merge = git_config_value(d, opts, ov, f"branch.{cur}.merge")
+        return [short_ref(merge)] if merge else None
+    if mode == "nothing":
+        return []
+    return None

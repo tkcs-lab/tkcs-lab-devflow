@@ -199,3 +199,96 @@ def test_script_contract(feature_repo):
     assert (allowed.returncode, allowed.stdout, allowed.stderr) == (0, "", "")
     assert run_script(HOOK, {}, project=feature_repo, stdin="not json").returncode == 2, "fail closed"
     assert run_script(HOOK, {}, project=feature_repo, stdin="[]").returncode == 2
+
+
+# ---- destination of a push without a refspec (SEC-H1), GraphQL -F @file (SEC-H7) ------------------
+def _with_origin(tmp_path, branch):
+    """A repo on `branch`, cut from origin/main, with a real bare origin that has main (and `feature`)."""
+    repo = make_repo(tmp_path / "w", branch)
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", "main")
+    git(repo, "push", "-q", "origin", f"{branch}:feature")
+    git(repo, "fetch", "-q", "origin")
+    return repo
+
+
+UP_MAIN = ("origin/main", "git push")
+CFG_DENIED = [
+    ("origin/main", ["push.default=upstream"], "git push"),
+    ("origin/main", [], "git -c push.default=upstream push"),
+    ("origin/main", [], "git -c remote.origin.push=HEAD:refs/heads/main push origin"),
+    ("origin/main", [], "git -c remote.origin.mirror=true push origin"),
+    ("origin/main", [], "git -c REMOTE.origin.push=refs/heads/x:refs/heads/main push"),
+    ("origin/main", ["remote.origin.push=HEAD:refs/heads/main"], "git push"),
+    ("origin/main", ["remote.origin.mirror=true"], "git push"),
+    ("origin/main", ["push.default=matching"], "git push"),
+    ("origin/main", ["push.default=tracking"], "git push"),
+]
+CFG_ALLOWED = [
+    ("origin/main", ["push.default=simple"], "git push -u origin feature"),
+    ("origin/main", ["push.default=simple"], "git push"),
+    ("origin/feature", ["push.default=upstream"], "git push"),
+    ("origin/main", ["push.default=current"], "git push"),
+    ("origin/main", ["push.default=nothing"], "git push"),
+    ("origin/main", ["remote.origin.push=HEAD:refs/heads/feature"], "git push"),
+]
+
+
+@pytest.mark.parametrize("upstream, config, command", CFG_DENIED + CFG_ALLOWED,
+                         ids=[f"{'deny' if r in CFG_DENIED else 'allow'}-{i}" for i, r in
+                              enumerate(CFG_DENIED + CFG_ALLOWED)])
+def test_upstream_and_config_refspec_to_main_denied(tmp_path, upstream, config, command):
+    repo = _with_origin(tmp_path, "feature/demo")
+    git(repo, "branch", f"--set-upstream-to={upstream}")
+    for item in config:
+        key, _, value = item.partition("=")
+        git(repo, "config", "--add", key, value)
+    expected = 2 if (upstream, config, command) in CFG_DENIED else 0
+    assert run(HOOK, bash(command, repo)).code == expected, command
+
+
+def test_graphql_field_file_is_scanned(feature_repo):
+    (feature_repo / "q.graphql").write_text("mutation { mergePullRequest(input: {}) { clientMutationId } }")
+    (feature_repo / "ok.graphql").write_text("query { viewer { login } }")
+    assert run(HOOK, bash("gh api graphql -F query=@q.graphql", feature_repo)).code == 2
+    assert run(HOOK, bash("gh api graphql --field query=@q.graphql", feature_repo)).code == 2
+    assert run(HOOK, bash("gh api graphql -F query=@-", feature_repo)).code == 2
+    assert run(HOOK, bash("gh api graphql -F query=@missing.graphql", feature_repo)).code == 2
+    assert run(HOOK, bash("gh api graphql -F query=@ok.graphql", feature_repo)).code == 0
+    assert run(HOOK, bash("gh api graphql -f query=@x", feature_repo)).code == 0, "-f is raw text"
+
+
+@pytest.mark.parametrize("tool, args", [
+    ("mcp__github__create_or_update_file", {"path": "a"}),
+    ("mcp__github__create_or_update_file", {"path": "a", "branch": ""}),
+    ("mcp__github__create_or_update_file", {"path": "a", "branch": "refs/heads/main"}),
+    ("mcp__github__create_or_update_file", {"path": "a", "branch": "heads/main"}),
+    ("mcp__github__push_files", {"files": []}),
+    ("mcp__github__delete_file", {"path": "a"}),
+])
+def test_mcp_denied_without_or_with_qualified_main_branch(feature_repo, tool, args):
+    assert run(HOOK, event(tool, feature_repo, **args)).code == 2
+
+
+@pytest.mark.parametrize("command", [
+    "gh api -X POST repos/o/r/merge-upstream -f branch=main",
+    "gh api -X POST repos/o/r/merge-upstream",
+    "gh api -X POST repos/o/r/branches/main/rename -f new_name=old",
+    "gh api repos/o/r/branches/main/rename -X PUT -f new_name=old",
+    "gh repo sync o/r --branch main --force",
+    "gh repo sync o/r -b main",
+    "gh repo sync o/r --force",
+])
+def test_gh_routes_to_main_denied(feature_repo, command):
+    assert run(HOOK, bash(command, feature_repo)).code == 2, command
+
+
+@pytest.mark.parametrize("command", [
+    "gh api -X POST repos/o/r/merge-upstream -f branch=feature/demo",
+    "gh api -X POST repos/o/r/branches/feature/rename -f new_name=x",
+    "gh repo sync o/r --branch feature/demo", "gh repo sync o/r",
+])
+def test_gh_routes_allowed(feature_repo, command):
+    assert run(HOOK, bash(command, feature_repo)).code == 0, command
