@@ -206,6 +206,10 @@ def test_classify_command(cmd, ops):
 @pytest.mark.parametrize("entry,ok", [
     ("`pytest -q`", True), ("pytest tests/test_x.py passes", True), ("tests/test_x.py::test_a passes", True),
     ("grep -q foo bar", True), ("works well", False), ("", False), ("The docs are clear", False),
+    ("README check (prints nothing) - for c in add list; do grep -q \"$c\" README.md || echo $c; done", True),
+    ("From the repo root, this prints OK: r=$PWD; d=$(mktemp -d); cd $d", True),
+    ("the command exits 0 on the happy path", True), ("It should be well tested and a test is good", False),
+    ("Everything passes and the code is clean", False),
 ])
 def test_is_runnable(entry, ok):
     assert is_runnable(entry) is ok
@@ -214,3 +218,62 @@ def test_is_runnable(entry, ok):
 def test_parse_findings_skips_not_doing_and_rejected():
     ids = [f["id"] for f in parse_findings(REVIEW_GOOD + "\n## Rejected on verification\n\n### SEC-8 · x\n")]
     assert ids == ["SEC-1", "TST-1"]
+
+
+GROUPED = """# Review
+
+## Findings to fix
+
+### Security
+
+#### SEC-1 · high · Shell injection in export
+
+- **Where:** `notes/export.py:7`
+- **Evidence:** os.system with a caller string.
+
+### Tests
+
+#### TST-2 · medium · No tests for the security-relevant auth.check_token
+
+- **Where:** `notes/auth.py:4`; missing: `tests/test_auth.py`
+
+## Open decisions
+
+### OPEN-DOC-3 · low · No way to report a vulnerability
+
+- **Where:** missing: SECURITY.md
+"""
+
+
+def test_parse_findings_reads_grouped_headings_and_open_prefix():
+    fs = parse_findings(GROUPED)
+    assert [f["id"] for f in fs] == ["SEC-1", "TST-2", "DOC-3"]
+    assert "Tests" not in fs[0]["text"] and fs[1]["where"].startswith("notes/auth.py")
+
+
+def test_seeded_finding_found_in_grouped_review():
+    c = ctx([("review/x", "docs/r-review.md", GROUPED)], expected=SEEDED)
+    assert GRADERS["seeded_finding_found"](c).passed
+
+
+def test_same_review_file_on_two_refs_is_counted_once():
+    c = ctx([("worktree", "docs/r-review.md", GROUPED), ("review/x", "docs/r-review.md", GROUPED)], expected=SEEDED)
+    assert GRADERS["noise_count"](c).value == 1  # DOC-3 only; not 2
+
+
+ALIASED = {"seeded": [{"id": "missing-test", "file": "notes/auth.py", "file_aliases": ["notes.auth", "auth.check_token"],
+                       "class": "missing-test", "class_words": ["no test"]}]}
+
+
+def _review(title, where):
+    return f"## Findings to fix\n\n### TST-3 \u00b7 medium \u00b7 {title}\n- **Where:** {where}\n"
+
+
+def test_seeded_finding_found_by_module_reference():
+    c = ctx([("r", "docs/x-review.md", _review("`auth.check_token` has no test", "missing: tests/test_auth.py"))], expected=ALIASED)
+    assert GRADERS["seeded_finding_found"](c).passed
+
+
+def test_bare_word_auth_is_not_the_seeded_file():
+    c = ctx([("r", "docs/x-review.md", _review("The auth flow has no test", "missing: tests/"))], expected=ALIASED)
+    assert not GRADERS["seeded_finding_found"](c).passed

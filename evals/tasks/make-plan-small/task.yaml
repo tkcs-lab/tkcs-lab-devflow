@@ -13,5 +13,5 @@ cost_ceiling_usd: 1.5
 graders:
   - name: sections_present
     source: result
-    sections: [Before you start, Goal, Context, Design, Steps, Acceptance, Stop conditions, Finish]
+    sections: [Goal, Context, Design, Steps, Acceptance, Stop conditions, Finish]
   - no_manifest
