@@ -33,6 +33,7 @@ class Command:
     redirects: list[tuple[str, str]] = field(default_factory=list)  # (operator, target)
     stdin_text: str | None = None  # the text a `<<<` herestring or `<<` heredoc feeds to the command
     reads_stdin_shell: bool = False  # a shell that reads its commands from a pipe, a file or the terminal
+    env: dict[str, str] = field(default_factory=dict)  # the leading NAME=value words stripped in front of it
 
 
 class _Seg(str):
@@ -343,8 +344,12 @@ def candidates(words: list[str], redirects: list[tuple[str, str]] | None = None,
         raise ParseError("command nesting is too deep")
     w = list(words)
     out: list[Command] = []
+    env: dict[str, str] = {}
     while w:
         head = w[0]
+        if ASSIGN.match(head):
+            name, _, val = head.partition("=")
+            env[name] = DYN if is_dynamic(val) else val
         if head in RESERVED or ASSIGN.match(head):
             w = w[1:]
             if head == "time":  # `time -p` / `time --`: the flag is not the command
@@ -367,7 +372,7 @@ def candidates(words: list[str], redirects: list[tuple[str, str]] | None = None,
         script = w[c_opts[0] + 1] if c_opts and c_opts[0] + 1 < len(w) else None  # `bash -c` alone runs nothing
         if not c_opts and reads_stdin(w[1:]):
             if stdin_text is None:  # stdin is a pipe, a file or the terminal: iter_items denies it
-                return out + [Command(w, list(redirects or []), None, True)]
+                return out + [Command(w, list(redirects or []), None, True, env)]
             script = stdin_text  # a herestring or heredoc is parsed like a `-c` string
         if script is not None:
             for cmd in split_commands(script, depth + 1):
@@ -379,7 +384,7 @@ def candidates(words: list[str], redirects: list[tuple[str, str]] | None = None,
         for k, tok in enumerate(w[1:], 1):
             if base(tok) in ("git", "gh"):
                 out += candidates(w[k:], None, depth + 1)
-    out.append(Command(w, list(redirects or [])))
+    out.append(Command(w, list(redirects or []), env=env))
     return out
 
 

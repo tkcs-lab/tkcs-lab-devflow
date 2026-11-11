@@ -22,6 +22,9 @@ def deny(what: str) -> str:
 
 def check_push(it: Item) -> str | None:
     push = parse_push(it.git.args)
+    if push.dynamic_option:
+        return deny("an argument that is only known at run time sits where a push option could be, so it cannot "
+                    "be checked for --force")
     if push.force:
         return deny("a force push rewrites remote history (--force, -f, --force-with-lease, --force-if-includes)")
     if push.delete:
