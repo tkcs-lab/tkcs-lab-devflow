@@ -1,0 +1,19 @@
+id: agents-dod-low
+description: /dod with a low security posture must run the required security-reviewer, which writes no threat model.
+command: /tld:dod
+arguments: ""
+fixture:
+  builder: agents_demo
+  params:
+    posture: low
+model: sonnet
+repeats: 3
+timeout_s: 900
+cost_ceiling_usd: 1.5
+requires: [roles/security-reviewer.md]
+graders:
+  - name: result_matches
+    must:
+      - AGENT-REPORT security-reviewer at=dod
+    must_not:
+      - '## Threat model'

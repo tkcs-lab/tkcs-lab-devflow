@@ -1,0 +1,46 @@
+name: mutation
+
+# The mutation check: every hand-written mutant of tests/mutation/mutants.yaml (src/tld/guard,
+# src/tld/profile/validate.py, src/tld/plan/manifest.py) must make its tests fail. Weekly and on demand; it takes
+# tens of minutes, so it is not part of the push workflow. See CONTRIBUTING.md, "Mutation check".
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Mutant ids to run, separated by spaces (empty: all)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.13"
+      - name: Install the test requirements
+        run: python -m pip install -r tests/requirements.txt
+      - name: Run the mutants
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          if [ -n "$ONLY" ]; then
+            # word splitting of the ids is intended; the runner rejects an unknown id
+            python tests/mutation/run_mutants.py --report "$RUNNER_TEMP/mutation-report.txt" --only $ONLY
+          else
+            python tests/mutation/run_mutants.py --report "$RUNNER_TEMP/mutation-report.txt"
+          fi
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/mutation-report.txt" ]; then
+            { echo '```'; cat "$RUNNER_TEMP/mutation-report.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi

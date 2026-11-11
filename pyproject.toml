@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tld"
+version = "1.0.0"
+description = "tkcs-lab-devflow: a project-independent plan, implement and review workflow for coding agents"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+dependencies = ["PyYAML"]
+
+[project.urls]
+Homepage = "https://github.com/tkcs-lab/tkcs-lab-devflow"
+
+[project.scripts]
+tld = "tld.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+tld = ["schema/*.json", "templates/*", "board/web/*"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+markers = [
+    "slow: a long git, server or subprocess test (seconds each); CI runs them all, `-m 'not slow'` skips them locally",
+]
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["tld"]
+parallel = true
+# measure the hook and CLI subprocesses the tests start (bin/tld, the hook scripts): coverage writes a .pth
+# file and passes its config to every child Python through the environment
+patch = ["subprocess"]
+# copies of the plugin that some tests build in their temp directory are not the measured source
+omit = ["*/pytest-of-*/*"]
+
+[tool.coverage.report]
+# branch coverage of src/tld, subprocesses included; measured 91.3% (Python 3.13). CI fails below this floor.
+fail_under = 90
+show_missing = false
+skip_covered = true
+precision = 1

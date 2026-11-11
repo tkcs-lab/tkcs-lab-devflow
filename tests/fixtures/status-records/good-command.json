@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "kind": "command",
+  "command": "deps",
+  "project": "tkcs-lab-devflow",
+  "repo": "tkcs-lab/tkcs-lab-devflow",
+  "plan_slug": null,
+  "plan_url": null,
+  "feature_branch": null,
+  "orchestrator_session": null,
+  "attended": false,
+  "status": "pr_open",
+  "needs_you": true,
+  "needs_you_reason": "Review deps PR #12 (CI red)",
+  "needs_you_since": "2026-11-09T04:20:00Z",
+  "phases": [
+    {
+      "id": "pip-security",
+      "title": "pip: security update group",
+      "depends_on": [],
+      "complexity": null,
+      "state": "running",
+      "session": null,
+      "branch": "chore/deps-pip-20261109",
+      "started_at": "2026-11-09T04:00:00Z",
+      "finished_at": null,
+      "pr": 12
+    }
+  ],
+  "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+  },
+  "last_event": "deps PR #12 opened, CI red",
+  "next_check_at": null,
+  "finished_at": null,
+  "updated_at": "2026-11-09T04:20:00Z"
+}

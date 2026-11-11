@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "tld-board": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/bin/tld",
+        "board",
+        "mcp-stdio"
+      ],
+      "env": {
+        "TLD_BOARD_URL": "${TLD_BOARD_URL:-}",
+        "TLD_BOARD_TOKEN": "${TLD_BOARD_TOKEN:-}"
+      }
+    }
+  }
+}

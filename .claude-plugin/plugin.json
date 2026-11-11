@@ -1,0 +1,26 @@
+{
+  "name": "tld",
+  "version": "1.0.0",
+  "description": "tkcs-lab-devflow: project-independent plan → implement workflow: /setup, /review, /make-plan, /implement, /dod, /board, /deps, /upstream, /land and /docs as thin wrappers over neutral playbooks, plus ten role agents (architect, code-reviewer, debugger, ...), driven by a per-project profile (.tld/toolkit.yaml)",
+  "author": {
+    "name": "tkcs-lab"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/tkcs-lab/tkcs-lab-devflow",
+  "commands": "./adapters/claude/commands/",
+  "skills": "./adapters/claude/skills/",
+  "agents": [
+    "./adapters/claude/agents/architect.md",
+    "./adapters/claude/agents/code-reviewer.md",
+    "./adapters/claude/agents/debugger.md",
+    "./adapters/claude/agents/dependency-auditor.md",
+    "./adapters/claude/agents/refactorer.md",
+    "./adapters/claude/agents/security-reviewer.md",
+    "./adapters/claude/agents/tech-writer.md",
+    "./adapters/claude/agents/test-architect.md",
+    "./adapters/claude/agents/ux-reviewer.md",
+    "./adapters/claude/agents/website-maintainer.md"
+  ],
+  "hooks": "./adapters/claude/hooks/hooks.json",
+  "mcpServers": "./adapters/claude/mcp.json"
+}

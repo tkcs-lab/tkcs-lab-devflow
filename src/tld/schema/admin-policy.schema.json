@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "tld repo-admin policy",
+  "description": "The desired state of a GitHub organisation and its repositories, read by scripts/repo_admin.py. A section that is absent means 'not managed'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["org"],
+  "$defs": {
+    "names": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "yesno": { "type": "boolean" }
+  },
+  "properties": {
+    "org": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$",
+      "description": "The GitHub organisation this policy governs."
+    },
+    "repos": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Which repositories of the organisation the repository-level checks cover.",
+      "properties": {
+        "include": { "$ref": "#/$defs/names", "description": "Repository name globs. Default: all." },
+        "exclude": { "$ref": "#/$defs/names", "description": "Repository name globs to leave out." },
+        "skip_archived": { "type": "boolean", "description": "Default true." },
+        "skip_forks": { "type": "boolean", "description": "Default true." }
+      }
+    },
+    "org_settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Organisation settings. All but two_factor_requirement_enabled are changed through PATCH /orgs/{org}; that one can only be read, so a difference is reported.",
+      "properties": {
+        "default_repository_permission": { "enum": ["read", "write", "admin", "none"] },
+        "members_can_create_repositories": { "$ref": "#/$defs/yesno" },
+        "members_can_create_public_repositories": { "$ref": "#/$defs/yesno" },
+        "members_can_create_private_repositories": { "$ref": "#/$defs/yesno" },
+        "members_can_create_internal_repositories": { "$ref": "#/$defs/yesno" },
+        "members_can_create_pages": { "$ref": "#/$defs/yesno" },
+        "members_can_fork_private_repositories": { "$ref": "#/$defs/yesno" },
+        "web_commit_signoff_required": { "$ref": "#/$defs/yesno" },
+        "has_organization_projects": { "$ref": "#/$defs/yesno" },
+        "has_repository_projects": { "$ref": "#/$defs/yesno" },
+        "two_factor_requirement_enabled": { "$ref": "#/$defs/yesno" }
+      }
+    },
+    "members": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Who is in the organisation. Reported only; the script never adds or removes people.",
+      "properties": {
+        "max_owners": { "type": "integer", "minimum": 1, "description": "Report when the organisation has more owners." },
+        "require_two_factor": { "type": "boolean", "description": "Report members who have two-factor authentication disabled." }
+      }
+    },
+    "apps": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "GitHub Apps installed on the organisation. GitHub exposes no last-used time for an app, so the check compares with an allow list.",
+      "properties": {
+        "allow": { "$ref": "#/$defs/names", "description": "App slugs that may be installed. Any other installed app is reported." }
+      }
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fine_grained": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Fine-grained personal access tokens that were granted access to the organisation.",
+          "properties": {
+            "max_unused_days": { "type": "integer", "minimum": 1, "description": "Revoke a token not used for this many days (a never-used token counts from the day access was granted)." },
+            "revoke_expired": { "type": "boolean", "description": "Revoke expired tokens. Default true." }
+          }
+        }
+      }
+    },
+    "repo_settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Repository settings, changed through PATCH /repos/{owner}/{repo}.",
+      "properties": {
+        "allow_squash_merge": { "$ref": "#/$defs/yesno" },
+        "allow_merge_commit": { "$ref": "#/$defs/yesno" },
+        "allow_rebase_merge": { "$ref": "#/$defs/yesno" },
+        "allow_auto_merge": { "$ref": "#/$defs/yesno" },
+        "allow_update_branch": { "$ref": "#/$defs/yesno" },
+        "delete_branch_on_merge": { "$ref": "#/$defs/yesno" },
+        "allow_forking": { "$ref": "#/$defs/yesno" },
+        "has_issues": { "$ref": "#/$defs/yesno" },
+        "has_wiki": { "$ref": "#/$defs/yesno" },
+        "has_projects": { "$ref": "#/$defs/yesno" },
+        "has_discussions": { "$ref": "#/$defs/yesno" },
+        "web_commit_signoff_required": { "$ref": "#/$defs/yesno" },
+        "squash_merge_commit_title": { "enum": ["PR_TITLE", "COMMIT_OR_PR_TITLE"] },
+        "squash_merge_commit_message": { "enum": ["PR_BODY", "COMMIT_MESSAGES", "BLANK"] },
+        "merge_commit_title": { "enum": ["PR_TITLE", "MERGE_MESSAGE"] },
+        "merge_commit_message": { "enum": ["PR_BODY", "PR_TITLE", "BLANK"] }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-repository security features.",
+      "properties": {
+        "vulnerability_alerts": { "$ref": "#/$defs/yesno" },
+        "automated_security_fixes": { "$ref": "#/$defs/yesno" },
+        "secret_scanning": { "$ref": "#/$defs/yesno" },
+        "secret_push_protection": { "$ref": "#/$defs/yesno" },
+        "private_vulnerability_reporting": { "$ref": "#/$defs/yesno" }
+      }
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-repository GitHub Actions permissions.",
+      "properties": {
+        "enabled": { "$ref": "#/$defs/yesno" },
+        "default_workflow_permissions": { "enum": ["read", "write"] },
+        "can_approve_pull_request_reviews": { "$ref": "#/$defs/yesno" }
+      }
+    },
+    "branch_protection": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Protection of one branch. Added where the branch has neither a protection rule nor an active ruleset; an existing rule that differs is reported, never replaced.",
+      "properties": {
+        "branch": { "type": "string", "minLength": 1, "description": "A branch name, or the word default (the repository's default branch). Default: default." },
+        "require_pull_request": { "type": "boolean", "description": "Default true." },
+        "approvals": { "type": "integer", "minimum": 0, "maximum": 6, "description": "Required approving reviews. Default 1." },
+        "require_status_checks": { "$ref": "#/$defs/names", "description": "Names of the checks that must pass." },
+        "strict": { "type": "boolean", "description": "Require the branch to be up to date before merging (with require_status_checks). Default false." },
+        "enforce_admins": { "type": "boolean", "description": "Default false." },
+        "linear_history": { "type": "boolean", "description": "Default false." },
+        "allow_force_pushes": { "type": "boolean", "description": "Default false." },
+        "allow_deletions": { "type": "boolean", "description": "Default false." }
+      }
+    },
+    "rulesets": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Repository rulesets, the server-side control: the hooks are only a seatbelt. Created with POST and kept in line with PUT /repos/{owner}/{repo}/rulesets; a ruleset of another name is left alone.",
+      "properties": {
+        "default_branch": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The ruleset tld-main on ~DEFAULT_BRANCH: a pull request with one approval (stale approvals dismissed, the last push approved by someone else), no force push, no deletion. While it is set, branch_protection of the default branch stands down.",
+          "properties": {
+            "required_status_checks": { "$ref": "#/$defs/names", "description": "Names of the checks that must pass. Empty: no required checks rule." },
+            "admin_bypass": { "type": "boolean", "description": "Let the repository admin role bypass it, through a pull request only. Default false: no bypass actor." }
+          }
+        },
+        "tags": { "type": "boolean", "description": "The ruleset tld-tags on every tag: creation, update and deletion are blocked for everyone but the repository admin role; no workflow token may tag. The release workflow tags with TLD_RELEASE_TOKEN from the environment of the release section." }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_login"],
+      "description": "The account sessions push as, and the environment tld-agent that holds TLD_AGENT_TOKEN.",
+      "properties": {
+        "agent_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$", "description": "GitHub login of the agent account. A role above write (maintain, admin) is lowered to write; a role below write is reported." },
+        "branch_policy": { "enum": ["default_branch", "protected_branches"], "description": "Which branches may use the environment tld-agent. Default default_branch (a custom policy naming only the default branch)." }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer_login"],
+      "description": "The environment the release workflow runs in: only the default branch may use it, the owner is its one required reviewer, and it holds TLD_RELEASE_TOKEN (an owner token).",
+      "properties": {
+        "reviewer_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$", "description": "GitHub login of the owner, the one required reviewer of every release run." },
+        "environment": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "description": "Name of the environment. Default tld-release; the release workflow template is rendered with it." }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Actions and Dependabot secrets, by name (values can never be read).",
+      "properties": {
+        "required": { "$ref": "#/$defs/names", "description": "Secrets every selected repository must have, as its own or from the organisation. A missing one is reported." },
+        "keep": { "$ref": "#/$defs/names", "description": "Secrets never reported as unused." },
+        "delete_unused": { "type": "boolean", "description": "Delete a secret no workflow refers to. Default false: report only." },
+        "kinds": { "type": "array", "items": { "enum": ["actions", "dependabot"] }, "description": "Default: both." }
+      }
+    },
+    "variables": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Actions variables, by name.",
+      "properties": {
+        "required": { "$ref": "#/$defs/names" },
+        "keep": { "$ref": "#/$defs/names" },
+        "delete_unused": { "type": "boolean", "description": "Delete a variable no workflow refers to. Default false: report only." }
+      }
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Issue and pull request labels.",
+      "properties": {
+        "sync": {
+          "type": "array",
+          "description": "Labels every selected repository must have.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "color": { "type": "string", "pattern": "^#?[0-9A-Fa-f]{6}$" },
+              "description": { "type": "string" },
+              "aliases": { "$ref": "#/$defs/names", "description": "Old names, renamed to this one so issues keep the label." }
+            }
+          }
+        },
+        "keep": { "$ref": "#/$defs/names", "description": "Labels outside sync that are left alone." },
+        "delete_unused": { "type": "boolean", "description": "Delete a label that is not in sync and is on no issue or pull request." },
+        "delete_unlisted": { "type": "boolean", "description": "Delete every label not in sync or keep, even one in use." }
+      }
+    },
+    "webhooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Repository and organisation webhooks. Delivery URLs are shown with their path removed.",
+      "properties": {
+        "delete": { "type": "array", "items": { "enum": ["inactive", "failing"] }, "description": "Delete a hook that is switched off (inactive) or whose last delivery failed (failing). Empty or absent: report only." },
+        "keep_urls": { "$ref": "#/$defs/names", "description": "Hooks whose URL starts with one of these are never reported." }
+      }
+    },
+    "deploy_keys": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_unused_days": { "type": "integer", "minimum": 1, "description": "Report a key not used for this many days (never used: counted from creation)." },
+        "delete_unused": { "type": "boolean", "description": "Delete such a key. Default false." }
+      }
+    },
+    "branches": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Branches already merged into the default branch.",
+      "properties": {
+        "delete_merged": { "type": "boolean", "description": "Delete a branch whose every commit is in the default branch, that has no open pull request and is not protected. Default false: report only." },
+        "min_age_days": { "type": "integer", "minimum": 0, "description": "Only branches whose last commit is older than this. Default 14; it keeps a branch that was just cut and has no commit of its own." },
+        "keep": { "$ref": "#/$defs/names", "description": "Branch name globs never reported, for example release/*." }
+      }
+    },
+    "config_dirs": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Files and directories committed to the repositories.",
+      "properties": {
+        "forbid": { "$ref": "#/$defs/names", "description": "Paths or globs (root-relative) that must not exist, for example .archon. * matches within one path segment. Removed through a pull request." },
+        "require": { "$ref": "#/$defs/names", "description": "Files every repository must have, as root-relative paths (for example SECURITY.md, .github/CODEOWNERS, LICENSE). A missing one is reported." },
+        "known": { "$ref": "#/$defs/names", "description": "Top-level dot directories that are expected, in addition to the built-in list (.github .claude .tld .devcontainer .vscode .husky .config .changeset .githooks). Any other is reported." }
+      }
+    },
+    "workflow_lint": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Read-only hygiene checks on the workflow files of the default branch. Nothing is changed: a finding says what to fix by hand.",
+      "properties": {
+        "pin_actions": { "enum": ["third_party", "all"], "description": "Report actions not pinned to a full commit SHA: third_party leaves actions/* and github/* alone, all reports every one." },
+        "require_permissions": { "type": "boolean", "description": "Report a workflow without a top-level permissions block." },
+        "forbid_pull_request_target": { "type": "boolean", "description": "Report a workflow that runs on pull_request_target." }
+      }
+    },
+    "workflows": {
+      "type": "array",
+      "description": "Workflow files to install, keep up to date or remove, through a pull request.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "template": { "enum": ["release", "land"], "description": "A template shipped with tld." },
+          "path": { "type": "string", "minLength": 1, "description": "A template file of your own, below the directory of the policy file (no absolute path, no ..)." },
+          "dest": { "type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9._-]+\\.ya?ml$", "description": "Where it goes. Default: .github/workflows/ plus the template's file name." },
+          "params": { "type": "object", "description": "Values for the template's __UPPER_CASE__ placeholders, as strings of letters, digits and . _ / -. main_branch defaults to the repository's default branch." },
+          "repos": { "$ref": "#/$defs/names", "description": "Repository name globs this entry applies to. Default: all selected." },
+          "remove": { "type": "boolean", "description": "Delete the destination file instead of installing it." }
+        }
+      }
+    }
+  }
+}

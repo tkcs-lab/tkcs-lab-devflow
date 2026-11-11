@@ -1,0 +1,179 @@
+name: tld-git-ops
+run-name: "git-ops ${{ inputs.action }} ${{ inputs.name }} in ${{ inputs.repo }}${{ inputs.dry_run && ' (dry run)' || '' }}"
+
+# Deletes a branch in another repository, for sessions that cannot delete remote branches. It never creates,
+# moves or deletes a tag: tags are cut only by the release workflow (tld-release).
+# Install this file as .github/workflows/tld-git-ops.yml and git-ops-allowlist.json at the root of the
+# central repository. The secret GIT_OPS_TOKEN lives in the environment git-ops, whose deployment branches are
+# limited to the default branch: a run from any other branch never receives the token. The job condition and
+# the allowlist being read from the default branch are defence in depth. It starts as a dry run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Target repository as owner/name"
+        required: true
+        type: string
+      action:
+        description: "What to do"
+        required: true
+        type: choice
+        options: [delete-branch]
+      name:
+        description: "Branch name"
+        required: true
+        type: string
+      dry_run:
+        description: "Only show what would happen; untick to do it"
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: tld-git-ops-${{ inputs.repo }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  git-ops:
+    name: tld-git-ops
+    runs-on: ubuntu-latest
+    environment: git-ops
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    steps:
+      - name: Validate the inputs
+        env:
+          REPO: ${{ inputs.repo }}
+          ACTION: ${{ inputs.action }}
+          NAME: ${{ inputs.name }}
+        run: |
+          set -euo pipefail
+          valid_ref_name() {
+            local n=$1
+            [[ $n =~ ^[A-Za-z0-9._/-]{1,200}$ ]] || return 1
+            case $n in
+              -*|/*|.*|refs/*) return 1 ;;
+              */|*.|*.lock) return 1 ;;
+              *..*|*//*|*/.*|*.lock/*) return 1 ;;
+              HEAD) return 1 ;;
+            esac
+            return 0
+          }
+          if ! [[ $REPO =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || [[ ${REPO#*/} == .* ]]; then
+            echo "::error::repo must look like owner/name (got: $REPO)"
+            exit 1
+          fi
+          if [ "$ACTION" != "delete-branch" ]; then
+            echo "::error::action must be delete-branch (tags are cut only by the release workflow)"
+            exit 1
+          fi
+          if ! valid_ref_name "$NAME"; then
+            echo "::error::name is not a valid branch name (got: $NAME)"
+            exit 1
+          fi
+
+      - name: Check the allowlist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SELF: ${{ github.repository }}
+          SELF_DEFAULT: ${{ github.event.repository.default_branch }}
+          REPO: ${{ inputs.repo }}
+        run: |
+          set -euo pipefail
+          allow="$RUNNER_TEMP/allowlist.json"
+          # The allowlist comes from the default branch of this repository, never from the dispatched ref.
+          shape='(.owner | type == "string" and length > 0)
+            and (.repos | type == "array" and length > 0 and all(.[]; type == "string" and length > 0))
+            and ((has("protected_branches") | not) or (.protected_branches | type == "array" and all(.[]; type == "string")))'
+          if ! gh api -H "Accept: application/vnd.github.raw+json" "repos/$SELF/contents/git-ops-allowlist.json?ref=$SELF_DEFAULT" > "$allow" 2> /dev/null \
+            || ! jq -e "$shape" "$allow" > /dev/null 2>&1; then
+            echo "::error::git-ops-allowlist.json is missing or invalid on $SELF_DEFAULT"
+            exit 1
+          fi
+          owner=${REPO%%/*}
+          name=${REPO#*/}
+          allowed=false
+          if [ "$owner" = "$(jq -r .owner "$allow")" ]; then
+            while IFS= read -r glob; do
+              if [[ $name == $glob ]]; then
+                allowed=true
+              fi
+            done < <(jq -r '.repos[]' "$allow")
+          fi
+          if [ "$allowed" != "true" ]; then
+            echo "::error::repository $REPO is not allowed by git-ops-allowlist.json"
+            exit 1
+          fi
+
+      - name: Look at the target
+        id: target
+        env:
+          GH_TOKEN: ${{ secrets.GIT_OPS_TOKEN }}
+          REPO: ${{ inputs.repo }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::secret GIT_OPS_TOKEN is not set for the git-ops environment"
+            exit 1
+          fi
+          if ! info=$(gh api "repos/$REPO" --jq '[.default_branch, .archived] | @tsv'); then
+            echo "::error::the token cannot see $REPO"
+            exit 1
+          fi
+          read -r default archived <<< "$info"
+          if [ "$archived" = "true" ]; then
+            echo "::error::$REPO is archived"
+            exit 1
+          fi
+          echo "default_branch=$default" >> "$GITHUB_OUTPUT"
+
+      - name: Delete the branch
+        if: inputs.action == 'delete-branch'
+        env:
+          GH_TOKEN: ${{ secrets.GIT_OPS_TOKEN }}
+          REPO: ${{ inputs.repo }}
+          NAME: ${{ inputs.name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          DEFAULT: ${{ steps.target.outputs.default_branch }}
+        run: |
+          set -euo pipefail
+          export NAME
+          allow="$RUNNER_TEMP/allowlist.json"
+          if [ "$NAME" = "$DEFAULT" ]; then
+            echo "::error::$NAME is the default branch"
+            exit 1
+          fi
+          # Globs come from the allowlist file. Bash * matches /, so release/* also covers release/a/b.
+          while IFS= read -r glob; do
+            if [[ $NAME == $glob ]]; then
+              echo "::error::$NAME is protected by git-ops-allowlist.json"
+              exit 1
+            fi
+          done < <(jq -r '.protected_branches[]?' "$allow")
+          if ! sha=$(gh api "repos/$REPO/git/ref/heads/$NAME" --jq .object.sha 2> /dev/null); then
+            echo "::error::branch $NAME does not exist"
+            exit 1
+          fi
+          # Sees classic branch protection only; a ruleset that forbids the deletion is refused by the API below.
+          protected=$(gh api "repos/$REPO/branches/$NAME" --jq .protected)
+          if [ "$protected" != "false" ]; then
+            echo "::error::$NAME is protected on GitHub"
+            exit 1
+          fi
+          PRS=$(gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --jq '.[] | select(.head.ref == env.NAME or .base.ref == env.NAME) | "#\(.number)"' | tr '\n' ' ')
+          PRS=${PRS% }
+          if [ -n "$PRS" ]; then
+            echo "::error::branch $NAME is used by open pull requests: $PRS"
+            exit 1
+          fi
+          if [ "$DRY_RUN" != "false" ]; then
+            line="Dry run: would delete branch $NAME ($sha) in $REPO"
+            echo "$line" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh api -X DELETE "repos/$REPO/git/refs/heads/$NAME"
+          line="Deleted branch $NAME in $REPO. Restore: gh api -X POST repos/$REPO/git/refs -f ref=refs/heads/$NAME -f sha=$sha"
+          echo "$line" | tee -a "$GITHUB_STEP_SUMMARY"

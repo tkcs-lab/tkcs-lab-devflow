@@ -1,0 +1,42 @@
+# Profile of the tkcs-lab-devflow repository itself (read by the playbooks make-plan, implement, dod, review).
+# Reference: docs/reference/profile-reference.md
+
+tld:
+  version: ">=1.0,<2"
+
+project:
+  name: tkcs-lab-devflow
+
+docs:
+  must_read:
+    - README.md
+  index: docs/README.md
+  plan_dir: docs/plans/
+
+git:
+  main_branch: main
+  branch_pattern: "<type>/<kebab-case>"
+  branch_types: [feature, fix, chore]
+  merge_style: merge-commit
+  owner_login: andras-tkcs
+  bot_login: andras-tkcs-agent
+  codeowners: [andras-tkcs]
+
+verify:
+  fast:
+    - "python3 -m venv --upgrade-deps .venv && .venv/bin/python -m pip install -q -r tests/requirements.txt && .venv/bin/python -m pytest tests -q"
+  dod:
+    - "python3 -m venv --upgrade-deps .venv && .venv/bin/python -m pip install -q -r tests/requirements.txt && .venv/bin/python -m pytest tests -q"
+    - ".venv/bin/python bin/tld profile validate src/tld/templates/toolkit.yaml --no-file-checks"
+    - ".venv/bin/python bin/tld profile validate .tld/toolkit.yaml"
+    - ".venv/bin/python bin/tld ops repo-admin validate-policy src/tld/templates/admin-policy.yaml"
+    - ".venv/bin/python bin/tld ops repo-admin validate-policy .tld/admin-policy.yaml"
+    - 'for m in tests/fixtures/privacyfence-*-manifest.yaml; do .venv/bin/python bin/tld plan validate-manifest "$m" --profile tests/fixtures/privacyfence-toolkit.yaml || exit 1; done'
+  dod_manual:
+    - "Every tld command a playbook or adapter names parses with the real CLI, and every behaviour it promises of a script is covered by a test that runs the script (tests/core/test_contracts.py)."
+    - "No project-specific word was added to src/, bin/, adapters/, .claude-plugin/, playbooks/, roles/, checklists/ or stacks/ (tests/core/test_no_project_words.py)."
+
+stacks: [python]
+
+admin:
+  policy: .tld/admin-policy.yaml

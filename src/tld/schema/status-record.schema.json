@@ -1,0 +1,393 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "tld status record",
+  "description": "One database document per project and command (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an implement orchestration, keyed by the project slug; a command record (kind 'command') belongs to every other command (setup, review, make-plan, deps, upstream, land, docs, migrate) and is keyed '<project>--<command>'. The project slug is derived from the repository name (tld board project-slug). 'attended' says whether a person started the command and can answer; the final states are done, failed and pr_open. Schema version 1 gained the optional phase field 'scope' without a bump. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, the project slug) are checked by src/tld/board/record.py. No secrets, file contents or commit messages belong in a record.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "kind",
+    "command",
+    "project",
+    "repo",
+    "plan_slug",
+    "plan_url",
+    "feature_branch",
+    "orchestrator_session",
+    "attended",
+    "status",
+    "needs_you",
+    "needs_you_reason",
+    "needs_you_since",
+    "phases",
+    "pr",
+    "last_event",
+    "next_check_at",
+    "finished_at",
+    "updated_at"
+  ],
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "description": "UTC, YYYY-MM-DDTHH:MM:SSZ"
+    },
+    "timestampOrNull": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "depends_on",
+        "complexity",
+        "state",
+        "session",
+        "branch",
+        "started_at",
+        "finished_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "complexity": {
+          "enum": [
+            "S",
+            "M",
+            null
+          ]
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "running",
+            "merged",
+            "done",
+            "failed",
+            "gate"
+          ],
+          "description": "run: pending, running, merged, failed, gate. command: pending, running, done, failed, gate."
+        },
+        "session": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "started_at": {
+          "$ref": "#/$defs/timestampOrNull"
+        },
+        "finished_at": {
+          "$ref": "#/$defs/timestampOrNull"
+        },
+        "pr": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        }
+      }
+    },
+    "scope": {
+      "description": "Optional, run records only: the scope-drift result of the phase's merge (written by /implement from scope_check.py). Absent means not checked. Counts and paths only: a path is a repository-relative file path, never contents, a diff or a commit message. Overwritten with the record, so the durable history is the pull request's Scope section.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "check",
+        "in_scope",
+        "out_of_scope_count",
+        "collision_count",
+        "paths",
+        "disposition"
+      ],
+      "properties": {
+        "check": {
+          "enum": [
+            "ok",
+            "unavailable"
+          ],
+          "description": "'unavailable' when the check itself failed; the merge went ahead."
+        },
+        "in_scope": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Changed files inside the phase's touches; null when unavailable."
+        },
+        "out_of_scope_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Changed files outside touches that no scope.ignore glob names; null when unavailable."
+        },
+        "collision_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "How many of those fall inside another phase's touches."
+        },
+        "paths": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "description": "Out-of-scope paths, collisions first, at most 20; the count above is the full number."
+        },
+        "disposition": {
+          "enum": [
+            "accepted",
+            "partly_reverted",
+            "reverted",
+            null
+          ],
+          "description": "What happened to the drift: accepted (merged as is), or reverted by a later commit (decided from the feature branch's final diff). null when there is no drift or the check was unavailable."
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema": {
+      "const": 1,
+      "description": "Schema version."
+    },
+    "kind": {
+      "enum": [
+        "run",
+        "command"
+      ],
+      "description": "'run' is an implement orchestration; 'command' is the record of any other command (setup, review, make-plan, deps, upstream, land, docs, migrate)."
+    },
+    "command": {
+      "enum": [
+        null,
+        "deps",
+        "upstream",
+        "land",
+        "setup",
+        "docs",
+        "review",
+        "make-plan",
+        "migrate"
+      ],
+      "description": "null when kind is 'run', else the command."
+    },
+    "project": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Project slug: the repository name in lower case, every run of other characters one hyphen (tld board project-slug); never contains a double hyphen."
+    },
+    "repo": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+      "description": "owner/name"
+    },
+    "plan_slug": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "null for a command record."
+    },
+    "plan_url": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "null for a command record."
+    },
+    "feature_branch": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "null for a command record."
+    },
+    "orchestrator_session": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "description": "The session id; null when the session cannot read its own id (an unattended run). Never the literal 'scheduled'."
+    },
+    "attended": {
+      "type": "boolean",
+      "description": "true when a person started the command and can answer it; false for a scheduled, unattended run."
+    },
+    "status": {
+      "enum": [
+        "starting",
+        "running",
+        "waiting_user",
+        "reviewing",
+        "pr_open",
+        "done",
+        "failed"
+      ],
+      "description": "Final states: done, failed and pr_open (the run ended with a pull request waiting for the owner)."
+    },
+    "needs_you": {
+      "type": "boolean"
+    },
+    "needs_you_reason": {
+      "type": "string",
+      "maxLength": 140,
+      "description": "One line starting with the verb the owner must do; empty when needs_you is false."
+    },
+    "needs_you_since": {
+      "$ref": "#/$defs/timestampOrNull"
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item"
+      },
+      "description": "Phases of a run, work items of a command record."
+    },
+    "pr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "number",
+        "url",
+        "state",
+        "ci",
+        "awaiting"
+      ],
+      "properties": {
+        "number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "enum": [
+            "open",
+            "merged",
+            "closed",
+            null
+          ]
+        },
+        "ci": {
+          "enum": [
+            "pending",
+            "success",
+            "failure",
+            null
+          ]
+        },
+        "awaiting": {
+          "enum": [
+            "ci",
+            "codeowner",
+            "none",
+            null
+          ]
+        }
+      }
+    },
+    "last_event": {
+      "type": "string"
+    },
+    "next_check_at": {
+      "$ref": "#/$defs/timestampOrNull"
+    },
+    "finished_at": {
+      "$ref": "#/$defs/timestampOrNull",
+      "description": "Set for done and failed, may be set for pr_open, null otherwise."
+    },
+    "updated_at": {
+      "$ref": "#/$defs/timestamp"
+    }
+  },
+  "examples": [
+    {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "tkcs-lab-devflow",
+      "repo": "tkcs-lab/tkcs-lab-devflow",
+      "plan_slug": "example-plan",
+      "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/plan/example-plan/docs/plans/example-plan-plan.md",
+      "feature_branch": "feature/example-plan",
+      "orchestrator_session": "session_01...",
+      "attended": true,
+      "status": "running",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [
+        {
+          "id": "p1-wake",
+          "title": "Child tells parent when done",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "merged",
+          "session": "session_01...",
+          "branch": "feature/example-plan--p1-wake",
+          "started_at": "2026-11-08T20:00:00Z",
+          "finished_at": "2026-11-08T20:06:10Z"
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "p1-wake merged",
+      "next_check_at": "2026-11-08T20:30:00Z",
+      "finished_at": null,
+      "updated_at": "2026-11-08T20:06:40Z"
+    }
+  ]
+}

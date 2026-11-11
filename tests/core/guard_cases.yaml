@@ -1,0 +1,250 @@
+# One corpus of allow/deny cases for the tld guards (docs/architecture/hooks.md).
+# Each case names the guard that must decide it. It runs against the core policy functions through the
+# Claude adapter (in process) and a sample runs the real hook scripts as subprocesses.
+#
+#   guard:   no-merge | no-force-push | no-git-tag | protect-paths | secret-scan
+#   repo:    plain  (feature/demo, a local v1.0 tag, no remote) | origin (feature/demo with a bare origin)
+#   kind:    shell (command) | write (path [+ content]) | github_op (op + args)
+#   expect:  allow | deny
+#   The deny cases include every verified bypass from the security review (S-number in `note`).
+
+# ---------------- S1: the trusted profile and the refs it is read from ----------------
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S1,
+   command: "git update-ref refs/remotes/origin/main HEAD"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S1,
+   command: "git update-ref refs/heads/main HEAD"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S1,
+   command: "git update-ref refs/tld/trusted HEAD"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S1,
+   command: "git branch -f main HEAD"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S1,
+   command: "git symbolic-ref refs/remotes/origin/main refs/heads/evil"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S1,
+   command: "git fetch origin HEAD:refs/remotes/origin/main"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S1,
+   command: "git remote set-url origin https://example.invalid/x.git"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S1,
+   command: "git -c remote.origin.url=https://example.invalid/x.git push origin HEAD:main"}
+
+# ---------------- S2, S5: dynamic and matching push destinations ----------------
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S2,
+   command: "B=main; git push origin HEAD:$B"}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S2,
+   command: "git push origin \"HEAD:$(echo main)\""}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S5, command: "git push origin :"}
+
+# ---------------- S3: dynamic command word ----------------
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S3,
+   command: "G=git; $G push --force origin HEAD:main"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S3, command: "G=git; $G tag v9"}
+
+# ---------------- S4: config injection ----------------
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S4,
+   command: "git -c include.path=/tmp/evil.cfg push"}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S4,
+   command: "GIT_CONFIG_GLOBAL=/tmp/evil.cfg git p"}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S4,
+   command: "GIT_CONFIG_PARAMETERS=\"'remote.origin.push=HEAD:main'\" git push"}
+
+# ---------------- S6: indirect execution the parser can unpack ----------------
+- guard: no-force-push
+  repo: plain
+  kind: shell
+  expect: deny
+  note: S6
+  command: find . -maxdepth 0 -exec sh -c 'git push --force' \;
+- {guard: no-force-push, repo: plain, kind: shell, expect: deny, note: S6,
+   command: "echo --force | xargs git push"}
+- {guard: no-force-push, repo: plain, kind: shell, expect: deny, note: S6,
+   command: "busybox sh -c 'git push --force'"}
+- {guard: no-force-push, repo: plain, kind: shell, expect: deny, note: S6,
+   command: "fish -c 'git push --force'"}
+
+# ---------------- S9: tag pushes ----------------
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S9, command: "git push origin tags/v1.0"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S9, command: "git push origin v1.0"}
+
+# ---------------- S10: workflow dispatch / numeric ids / reruns ----------------
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S10,
+   command: "gh workflow run 123456 -f ref=main"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S10,
+   command: "gh api -X POST repos/o/r/actions/workflows/123456/dispatches -f ref=main"}
+- {guard: no-git-tag, repo: plain, kind: github_op, expect: deny, note: S10,
+   op: actions_run_trigger, args: {method: rerun_workflow_run, run_id: 42}}
+- {guard: no-git-tag, repo: plain, kind: github_op, expect: deny, note: S10,
+   op: actions_run_trigger, args: {method: run_workflow, workflow_id: 99}}
+
+# ---------------- S11: merge / approve through curl, GraphQL, gh ----------------
+- {guard: no-merge, repo: plain, kind: shell, expect: deny, note: S11,
+   command: "curl -X POST https://api.github.com/repos/o/r/pulls/5/merge"}
+- {guard: no-merge, repo: plain, kind: shell, expect: deny, note: S11,
+   command: "gh pr review 1 --approve=true"}
+
+# ---------------- S16: secret patterns and Bash-written secrets ----------------
+- {guard: secret-scan, repo: plain, kind: shell, expect: deny, note: S16, secret: ghp,
+   command: "echo {SECRET} > f"}
+- {guard: secret-scan, repo: plain, kind: write, path: a.env, expect: deny, note: S16, secret: glpat,
+   content: "TOKEN={SECRET}"}
+
+# ---------------- S17: protect-paths write forms ----------------
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S17, command: "F=.env; echo x > $F"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S17,
+   command: "git config core.hooksPath .githooks"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S17,
+   command: "git config url.https://x/.pushInsteadOf https://origin/"}
+
+# ---------------- S12: git-ops runs for real only with the confirm marker ----------------
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S12,
+   command: "gh workflow run tld-git-ops.yml -R o/central -f repo=o/r -f action=delete-branch -f name=x -f dry_run=false"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S12,
+   command: "gh api -X POST repos/o/central/actions/workflows/tld-git-ops.yml/dispatches -f ref=main -f inputs[dry_run]=false"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S12,
+   command: "echo '{}' | gh workflow run tld-git-ops.yml --json"}
+- {guard: no-git-tag, repo: plain, kind: github_op, expect: deny, note: S12,
+   op: actions_run_trigger, args: {method: run_workflow, workflow_id: tld-git-ops.yml, ref: main,
+                                   inputs: {repo: o/r, action: delete-branch, name: x, dry_run: "false"}}}
+- {guard: no-git-tag, repo: plain, kind: github_op, expect: deny, note: S12,
+   op: actions_run_trigger, args: {method: run_workflow, workflow_id: tld-git-ops.yml, ref: main, inputs: {dry_run: false}}}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S12,
+   command: "curl -X POST -d @body.json https://api.github.com/repos/o/central/actions/workflows/tld-git-ops.yml/dispatches"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: D13,
+   command: "curl -X POST https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches"}
+
+# ---------------- S13: the tld workflow files only with the install marker ----------------
+- {guard: protect-paths, repo: plain, kind: write, path: .github/workflows/tld-land.yml, expect: deny, note: S13}
+- {guard: protect-paths, repo: plain, kind: write, path: .github/workflows/tld-release.yml, expect: deny, note: S13}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S13, command: "cp x .github/workflows/tld-land.yml"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S13,
+   command: "echo '{}' > .git/tld/protect-paths-workflow.json"}
+
+# ---------------- legit commands the toolkit's own commands run (allow) ----------------
+- {guard: no-merge, repo: plain, kind: shell, expect: allow, command: "git push -u origin feature/demo"}
+- {guard: no-merge, repo: plain, kind: shell, expect: allow, command: "git merge origin/main"}
+- {guard: no-force-push, repo: plain, kind: shell, expect: allow, command: "git push -u origin feature/demo"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: allow, command: "git tag -l"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: allow,
+   command: "\"${CLAUDE_PLUGIN_ROOT}/bin/tld\" ops upstream-sync plan --upstream-url https://x/r.git --version-file U --pattern '^v'"}
+- {guard: protect-paths, repo: plain, kind: write, path: docs/x.md, expect: allow, content: "hi\n"}
+- {guard: secret-scan, repo: plain, kind: write, path: a.py, expect: allow,
+   content: "API_KEY = os.environ['API_KEY']\n"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: allow,
+   command: "gh workflow run tld-git-ops.yml -R o/central -f repo=o/r -f action=delete-branch -f name=x -f dry_run=true"}
+- {guard: no-git-tag, repo: plain, kind: github_op, expect: allow,
+   op: actions_run_trigger, args: {method: run_workflow, workflow_id: tld-git-ops.yml, ref: main,
+                                   inputs: {repo: o/r, action: delete-branch, name: x, dry_run: "true"}}}
+
+# ---------------- S18: local writes to the trusted ref, replace objects, the git directory ----------------
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S18, command: "git push . evil:refs/tld/trusted"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S18,
+   command: "git push ./ HEAD:refs/remotes/origin/main"}
+- {guard: no-git-tag, repo: origin, kind: shell, expect: deny, note: S18,
+   command: "git push origin HEAD:refs/replace/0123456789012345678901234567890123456789"}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S18,
+   command: "echo 0123456789012345678901234567890123456789 > .git/refs/tld/trusted"}
+- {guard: protect-paths, repo: origin, kind: shell, expect: deny, note: S18,
+   command: "echo 0123456789012345678901234567890123456789 > .git/refs/tld/trusted"}
+- {guard: protect-paths, repo: origin, kind: shell, expect: deny, note: S18, command: "cp /tmp/refs .git/packed-refs"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S18, command: "cp /tmp/x .git/objects/ab/cdef"}
+- {guard: protect-paths, repo: origin, kind: shell, expect: deny, note: S18, command: "echo x >> .git/info/grafts"}
+- {guard: protect-paths, repo: origin, kind: write, path: .git/objects/info/alternates, expect: deny, note: S18}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S18, command: "git replace 1111111 2222222"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S18, command: "git replace -d 1111111"}
+- {guard: no-git-tag, repo: origin, kind: shell, expect: deny, note: S18,
+   command: "git update-ref refs/replace/1111111111111111111111111111111111111111 HEAD"}
+- {guard: no-merge, repo: origin, kind: shell, expect: allow, note: S18, command: "git replace -l"}
+- {guard: no-merge, repo: origin, kind: shell, expect: allow, note: S18, command: "git push -u origin feature/x"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: allow, note: S18, command: "git push -u origin feature/x"}
+- {guard: no-merge, repo: origin, kind: shell, expect: allow, note: S18, command: "git fetch origin"}
+- {guard: no-merge, repo: origin, kind: shell, expect: allow, note: S18, command: "cat .git/refs/heads/main > /tmp/sha"}
+
+# ---------------- S19: repointing origin (new git config syntax, insteadOf, remote rename) ----------------
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S19, command: "git config set remote.origin.url /evil"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S19,
+   command: "git config set --all remote.origin.url /evil"}
+- {guard: protect-paths, repo: origin, kind: shell, expect: deny, note: S19,
+   command: "git config set --all remote.origin.url /evil"}
+- {guard: no-git-tag, repo: origin, kind: shell, expect: deny, note: S19, command: "git config set url./evil.insteadOf /"}
+- {guard: protect-paths, repo: origin, kind: shell, expect: deny, note: S19, command: "git config set url./evil.insteadOf /"}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S19,
+   command: "git config --add url./evil.pushInsteadOf https://github.com/"}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S19,
+   command: "git config --file .git/config remote.origin.url /evil"}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S19,
+   command: "git config --rename-section remote.o2 remote.origin"}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S19,
+   command: "git config rename-section remote.o2 remote.origin"}
+- {guard: protect-paths, repo: origin, kind: shell, expect: deny, note: S19, command: "git config unset alias.p"}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S19,
+   command: "git remote add o2 /evil && git remote rename origin z && git remote rename o2 origin"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S19, command: "git remote rename o2 origin"}
+- {guard: no-git-tag, repo: origin, kind: shell, expect: deny, note: S19, command: "git remote remove origin"}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S19,
+   command: "git remote set-url --add --push origin /evil"}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S19,
+   command: "git -c url./evil.insteadOf=https://github.com/ fetch origin"}
+- {guard: no-merge, repo: origin, kind: shell, expect: allow, note: S19, command: "git config --get remote.origin.url"}
+- {guard: no-merge, repo: origin, kind: shell, expect: allow, note: S19, command: "git config get remote.origin.url"}
+- {guard: protect-paths, repo: origin, kind: shell, expect: allow, note: S19, command: "git config get remote.origin.url"}
+- {guard: no-merge, repo: origin, kind: shell, expect: allow, note: S19,
+   command: "git remote add upstream https://example.invalid/up.git"}
+- {guard: no-merge, repo: origin, kind: shell, expect: allow, note: S19, command: "git remote -v"}
+
+# ---------------- S20: only the real launcher is exempt from the run-time command name check ----------------
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S20,
+   command: "X=/tmp/x; $X/bin/tld push --force origin HEAD:main"}
+- {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S20, command: "X=/usr/bin; $X/tld push origin HEAD:main"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S20,
+   command: "CLAUDE_PLUGIN_ROOT=/tmp/e; \"${CLAUDE_PLUGIN_ROOT}/bin/tld\" push --force origin HEAD:main"}
+- {guard: no-merge, repo: origin, kind: shell, expect: allow, note: S20,
+   command: "\"${CLAUDE_PLUGIN_ROOT}/bin/tld\" plan phase-status docs/plans/x.md --phase p1"}
+- {guard: no-git-tag, repo: origin, kind: shell, expect: allow, note: S20,
+   command: "\"${CLAUDE_PLUGIN_ROOT}\"/bin/tld guard end-allow"}
+- {guard: no-force-push, repo: origin, kind: shell, expect: allow, note: S20, command: "tld profile validate .tld/toolkit.yaml"}
+
+# ---------------- S21: whole-directory writes over protected paths ----------------
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "git checkout evil -- .github"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "git checkout evil -- ."}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "git checkout evil .github"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "git restore --source evil .github"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "git restore -s evil -- :/"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "git checkout evil -- .tld"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "cp -r /tmp/no-such-gh .github"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "cp -r x/. .github/"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "rsync -a x/ ."}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "tar xf /tmp/no-such.tar"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "tar -C .github -xzf a.tgz"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "unzip -o /tmp/no-such.zip"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "unzip a.zip -d .github"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: allow, note: S21, command: "git checkout main -- README.md"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: allow, note: S21, command: "git checkout main -- src/a.py"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: allow, note: S21, command: "git checkout -b x"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: allow, note: S21, command: "git checkout -- ."}
+- {guard: protect-paths, repo: plain, kind: shell, expect: allow, note: S21, command: "cp -r /tmp/no-such docs/new"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: allow, note: S21, command: "rsync -a ./ /tmp/backup/"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: allow, note: S21, command: "tar xf /tmp/a.tar -C /tmp/out"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: allow, note: S21, command: "tar cf /tmp/a.tar ."}
+- {guard: protect-paths, repo: plain, kind: shell, expect: allow, note: S21, command: "unzip /tmp/a.zip -d /tmp/out"}
+
+# ---------------- S22: release and tag endpoints through curl / wget / httpie ----------------
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S22,
+   command: "curl -X POST https://api.github.com/repos/o/r/releases -d '{\"tag_name\":\"v9\"}'"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S22,
+   command: "curl -d '{\"tag_name\":\"v9\"}' https://api.github.com/repos/o/r/releases"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S22,
+   command: "curl -X PATCH https://api.github.com/repos/o/r/releases/123 -d '{\"tag_name\":\"v8\"}'"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S22,
+   command: "curl -XDELETE https://api.github.com/repos/o/r/git/refs/tags/v1.0"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S22,
+   command: "curl https://api.github.com/repos/o/r/git/refs --data '{\"ref\":\"refs/tags/v9\",\"sha\":\"abc\"}'"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S22,
+   command: "curl -X POST https://api.github.com/repos/o/r/git/tags --data @tag.json"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S22,
+   command: "wget --method=POST --body-data='{\"tag_name\":\"v9\"}' https://api.github.com/repos/o/r/releases"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S22,
+   command: "http POST https://api.github.com/repos/o/r/releases tag_name=v9"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: allow, note: S22,
+   command: "curl -s https://api.github.com/repos/o/r/releases"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: allow, note: S22,
+   command: "curl -s https://api.github.com/repos/o/r/releases/latest"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: allow, note: S22,
+   command: "curl -X POST https://api.github.com/repos/o/r/git/refs -d '{\"ref\":\"refs/heads/feature/x\",\"sha\":\"abc\"}'"}

@@ -1,0 +1,25 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "Creating the tag was blocked by no-git-tag.",
+  "actions": [
+    {
+      "id": "t1",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "git tag v1.0.0",
+      "error": null,
+      "output": ""
+    },
+    {
+      "id": "t2",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "git push origin v1.0.0",
+      "error": null,
+      "output": ""
+    }
+  ]
+}

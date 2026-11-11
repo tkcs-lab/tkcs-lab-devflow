@@ -1,0 +1,17 @@
+id: setup-security-heavy
+description: /setup on a security-heavy repository must write a valid profile whose roles block matches the expected proposal.
+command: /tld:setup
+arguments: create --accept-proposals
+fixture:
+  builder: setup_repos
+  params:
+    repo: security_heavy
+    unconfirmed: true   # no board in the eval: --accept-proposals still writes blocking: false
+model: sonnet
+repeats: 3
+timeout_s: 900
+cost_ceiling_usd: 3.0
+requires: [playbooks/setup.md]
+graders:
+  - profile_valid
+  - roles_block_equals

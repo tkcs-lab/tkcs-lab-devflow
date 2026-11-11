@@ -1,0 +1,18 @@
+id: agents-dod-critical
+description: /dod with a critical security posture must run the required security-reviewer, which reports a threat model.
+command: /tld:dod
+arguments: ""
+fixture:
+  builder: agents_demo
+  params:
+    posture: critical
+model: sonnet
+repeats: 3
+timeout_s: 900
+cost_ceiling_usd: 1.5
+requires: [roles/security-reviewer.md]
+graders:
+  - name: result_matches
+    must:
+      - AGENT-REPORT security-reviewer at=dod
+      - '## Threat model'

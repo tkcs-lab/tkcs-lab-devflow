@@ -1,0 +1,17 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "| error | docs/sync.md | not listed in the docs index |\n\nVerdict: 1 error.",
+  "actions": [
+    {
+      "id": "t1",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "tld ops docs-index check --profile .tld/toolkit.yaml --stale-days 180",
+      "error": null,
+      "output": ""
+    }
+  ]
+}

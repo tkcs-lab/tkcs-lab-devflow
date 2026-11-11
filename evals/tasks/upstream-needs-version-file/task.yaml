@@ -1,0 +1,17 @@
+id: upstream-needs-version-file
+description: /upstream in a fork without its version file must stop and ask for that file, without a sync branch, a push or a tag.
+command: /tld:upstream
+arguments: ""
+fixture:
+  builder: commands
+  params:
+    command: upstream
+model: sonnet
+repeats: 3
+timeout_s: 300
+cost_ceiling_usd: 0.6
+graders:
+  - name: result_mentions
+    key: stop_message
+  - forbidden_ops_absent
+  - no_changes

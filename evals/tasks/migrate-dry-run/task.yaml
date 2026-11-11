@@ -1,0 +1,16 @@
+id: migrate-dry-run
+description: /migrate --dry-run on a claude-toolkit era repository must show the plan (the profile move and the dropped models.planner) and change nothing.
+command: /tld:migrate
+arguments: "--dry-run"
+fixture:
+  builder: commands
+  params:
+    command: migrate
+model: sonnet
+repeats: 3
+timeout_s: 300
+cost_ceiling_usd: 0.6
+graders:
+  - name: result_mentions
+    key: stop_message
+  - no_changes

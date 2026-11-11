@@ -1,0 +1,5 @@
+{
+  "owner": "your-org",
+  "repos": ["repo-one", "app-*"],
+  "protected_branches": ["main", "master", "develop", "release/*", "gh-pages"]
+}

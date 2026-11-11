@@ -1,0 +1,595 @@
+[
+  {
+    "id": "f-starting",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-starting",
+      "repo": "example-org/f-starting",
+      "plan_slug": "plan-f-starting",
+      "plan_url": "https://example.com/example-org/f-starting/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-starting",
+      "orchestrator_session": "session_f-starting",
+      "attended": true,
+      "status": "starting",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "pending",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "starting",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-09T12:00:00Z"
+    }
+  },
+  {
+    "id": "f-running-ok",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-running-ok",
+      "repo": "example-org/f-running-ok",
+      "plan_slug": "plan-f-running-ok",
+      "plan_url": "https://example.com/example-org/f-running-ok/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-running-ok",
+      "orchestrator_session": "session_f-running-ok",
+      "attended": true,
+      "status": "running",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [
+        {
+          "id": "p0",
+          "title": "Phase zero",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "merged",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null,
+          "scope": {
+            "check": "ok",
+            "in_scope": 4,
+            "out_of_scope_count": 3,
+            "collision_count": 1,
+            "paths": [
+              "src/shared.py",
+              "docs/a.md",
+              "docs/b.md"
+            ],
+            "disposition": "accepted"
+          }
+        },
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [
+            "p0"
+          ],
+          "complexity": "S",
+          "state": "running",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "running",
+      "next_check_at": "2026-11-09T12:15:00Z",
+      "finished_at": null,
+      "updated_at": "2026-11-09T11:58:00Z"
+    }
+  },
+  {
+    "id": "f-running-silent",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-running-silent",
+      "repo": "example-org/f-running-silent",
+      "plan_slug": "plan-f-running-silent",
+      "plan_url": "https://example.com/example-org/f-running-silent/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-running-silent",
+      "orchestrator_session": "session_f-running-silent",
+      "attended": true,
+      "status": "running",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "running",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "running",
+      "next_check_at": "2026-11-09T09:15:00Z",
+      "finished_at": null,
+      "updated_at": "2026-11-09T09:00:00Z"
+    }
+  },
+  {
+    "id": "f-running-nocheck",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-running-nocheck",
+      "repo": "example-org/f-running-nocheck",
+      "plan_slug": "plan-f-running-nocheck",
+      "plan_url": "https://example.com/example-org/f-running-nocheck/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-running-nocheck",
+      "orchestrator_session": "session_f-running-nocheck",
+      "attended": true,
+      "status": "running",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "running",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "running",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-09T09:00:00Z"
+    }
+  },
+  {
+    "id": "f-waiting",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-waiting",
+      "repo": "example-org/f-waiting",
+      "plan_slug": "plan-f-waiting",
+      "plan_url": "https://example.com/example-org/f-waiting/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-waiting",
+      "orchestrator_session": "session_f-waiting",
+      "attended": true,
+      "status": "waiting_user",
+      "needs_you": true,
+      "needs_you_reason": "Answer the open question about scope",
+      "needs_you_since": "2026-11-09T09:00:00Z",
+      "phases": [
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "running",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "waiting_user",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-09T09:00:00Z"
+    }
+  },
+  {
+    "id": "f-reviewing",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-reviewing",
+      "repo": "example-org/f-reviewing",
+      "plan_slug": "plan-f-reviewing",
+      "plan_url": "https://example.com/example-org/f-reviewing/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-reviewing",
+      "orchestrator_session": "session_f-reviewing",
+      "attended": true,
+      "status": "reviewing",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "running",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null,
+          "scope": {
+            "check": "unavailable",
+            "in_scope": null,
+            "out_of_scope_count": null,
+            "collision_count": null,
+            "paths": [],
+            "disposition": null
+          }
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "reviewing",
+      "next_check_at": "2026-11-09T12:30:00Z",
+      "finished_at": null,
+      "updated_at": "2026-11-09T11:59:00Z"
+    }
+  },
+  {
+    "id": "f-pr-open",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-pr-open",
+      "repo": "example-org/f-pr-open",
+      "plan_slug": "plan-f-pr-open",
+      "plan_url": "https://example.com/example-org/f-pr-open/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-pr-open",
+      "orchestrator_session": "session_f-pr-open",
+      "attended": true,
+      "status": "pr_open",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "merged",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null
+        }
+      ],
+      "pr": {
+        "number": 7,
+        "url": "https://example.com/example-org/f-pr-open/pull/7",
+        "state": "open",
+        "ci": "success",
+        "awaiting": "codeowner"
+      },
+      "last_event": "pr_open",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-09T11:00:00Z"
+    }
+  },
+  {
+    "id": "f-done-recent",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-done-recent",
+      "repo": "example-org/f-done-recent",
+      "plan_slug": "plan-f-done-recent",
+      "plan_url": "https://example.com/example-org/f-done-recent/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-done-recent",
+      "orchestrator_session": "session_f-done-recent",
+      "attended": true,
+      "status": "done",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "merged",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "done",
+      "next_check_at": null,
+      "finished_at": "2026-11-06T12:00:00Z",
+      "updated_at": "2026-11-06T12:00:00Z"
+    }
+  },
+  {
+    "id": "f-done-old",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-done-old",
+      "repo": "example-org/f-done-old",
+      "plan_slug": "plan-f-done-old",
+      "plan_url": "https://example.com/example-org/f-done-old/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-done-old",
+      "orchestrator_session": "session_f-done-old",
+      "attended": true,
+      "status": "done",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "merged",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "done",
+      "next_check_at": null,
+      "finished_at": "2026-11-01T12:00:00Z",
+      "updated_at": "2026-11-01T12:00:00Z"
+    }
+  },
+  {
+    "id": "f-failed",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-failed",
+      "repo": "example-org/f-failed",
+      "plan_slug": "plan-f-failed",
+      "plan_url": "https://example.com/example-org/f-failed/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-failed",
+      "orchestrator_session": "session_f-failed",
+      "attended": true,
+      "status": "failed",
+      "needs_you": true,
+      "needs_you_reason": "Decide what to do with the failed phase",
+      "needs_you_since": "2026-11-08T12:00:00Z",
+      "phases": [
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "failed",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "failed",
+      "next_check_at": null,
+      "finished_at": "2026-11-08T12:00:00Z",
+      "updated_at": "2026-11-08T12:00:00Z"
+    }
+  },
+  {
+    "id": "f-stale-quiet",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-stale-quiet",
+      "repo": "example-org/f-stale-quiet",
+      "plan_slug": "plan-f-stale-quiet",
+      "plan_url": "https://example.com/example-org/f-stale-quiet/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-stale-quiet",
+      "orchestrator_session": "session_f-stale-quiet",
+      "attended": true,
+      "status": "running",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "running",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "running",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-01T12:00:00Z"
+    }
+  },
+  {
+    "id": "f-stale-needs",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-stale-needs",
+      "repo": "example-org/f-stale-needs",
+      "plan_slug": "plan-f-stale-needs",
+      "plan_url": "https://example.com/example-org/f-stale-needs/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-stale-needs",
+      "orchestrator_session": "session_f-stale-needs",
+      "attended": true,
+      "status": "waiting_user",
+      "needs_you": true,
+      "needs_you_reason": "Answer the open question about scope",
+      "needs_you_since": "2026-11-01T12:00:00Z",
+      "phases": [
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "running",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "waiting_user",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-01T12:00:00Z"
+    }
+  },
+  {
+    "id": "f-maint-deps--deps",
+    "data": {
+      "schema": 1,
+      "kind": "command",
+      "command": "deps",
+      "project": "f-maint-deps",
+      "repo": "example-org/f-maint-deps",
+      "plan_slug": null,
+      "plan_url": null,
+      "feature_branch": null,
+      "orchestrator_session": null,
+      "attended": false,
+      "status": "pr_open",
+      "needs_you": true,
+      "needs_you_reason": "Review deps PR #12 (CI red)",
+      "needs_you_since": "2026-11-09T04:20:00Z",
+      "phases": [
+        {
+          "id": "pip-security",
+          "title": "pip: security update group",
+          "depends_on": [],
+          "complexity": null,
+          "state": "running",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null,
+          "pr": 12
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "pr_open",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-09T04:20:00Z"
+    }
+  }
+]

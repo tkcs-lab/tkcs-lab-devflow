@@ -1,0 +1,637 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tkcs-lab/tkcs-lab-devflow/src/tld/schema/profile.schema.json",
+  "title": "tld project profile (.tld/toolkit.yaml)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "docs",
+    "git",
+    "verify",
+    "stacks"
+  ],
+  "$defs": {
+    "command": {
+      "description": "A shell command, or a mapping with options.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "run"
+          ],
+          "properties": {
+            "run": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Directory, relative to the repo root, to run in."
+            },
+            "narrow": {
+              "type": "string",
+              "description": "Replacement command when /dod got arguments; {args} is substituted."
+            },
+            "skip_when_narrowed": {
+              "type": "boolean",
+              "description": "Report n/a (partial run) when /dod got arguments."
+            }
+          }
+        }
+      ]
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "properties": {
+    "tld": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The tld release this profile is written for.",
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\s*(==|!=|>=|<=|>|<)\\s*\\d+(\\.\\d+)*\\s*(,\\s*(==|!=|>=|<=|>|<)\\s*\\d+(\\.\\d+)*\\s*)*$",
+          "description": "A version specifier such as '>=1.0,<2', checked by tld profile validate against the running tld version."
+        }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "must_read"
+      ],
+      "properties": {
+        "must_read": {
+          "$ref": "#/$defs/stringList",
+          "description": "Files the planner, workers and reviewer read first. May be empty."
+        },
+        "plan_dir": {
+          "type": "string",
+          "minLength": 1,
+          "default": "docs/plans/"
+        },
+        "index": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The docs index: the one entry-level file that CLAUDE.md / AGENTS.md point to and sessions read first (playbooks/policies/docs.md)."
+        },
+        "adr_dir": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Present means ADRs are used."
+        },
+        "adr_index": {
+          "type": "string",
+          "minLength": 1
+        },
+        "adr_bar": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where the criteria for needing an ADR are written (path or path#anchor)."
+        },
+        "changelog": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "section"
+          ],
+          "properties": {
+            "file": {
+              "type": "string",
+              "minLength": 1
+            },
+            "section": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Heading user-visible changes go under, for example '## [Unreleased]'."
+            }
+          }
+        },
+        "website": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "dir",
+            "build"
+          ],
+          "description": "The project's website. Present means the website-maintainer role can run.",
+          "properties": {
+            "dir": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Directory relative to the repo root; . for the root."
+            },
+            "build": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Command run from dir."
+            },
+            "links": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Link-check command run from dir."
+            }
+          }
+        }
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "main_branch",
+        "branch_pattern"
+      ],
+      "properties": {
+        "main_branch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "branch_pattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "branch_types": {
+          "$ref": "#/$defs/stringList"
+        },
+        "merge_style": {
+          "enum": [
+            "merge-commit",
+            "squash"
+          ]
+        },
+        "codeowners": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "GitHub logins of the code owners; /implement requests their review on the pull request it opens."
+        },
+        "owner_login": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$",
+          "description": "GitHub login of the owner: the board fallback (an issue comment when the board cannot be reached) mentions it. Default: the repository owner."
+        },
+        "bot_login": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Login of the second GitHub user the agent acts as; /implement stops when get_me returns another login."
+        }
+      }
+    },
+    "verify": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fast",
+        "dod"
+      ],
+      "properties": {
+        "fast": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/command"
+          }
+        },
+        "dod": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/command"
+          }
+        },
+        "dod_conditional": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "when",
+              "do"
+            ],
+            "properties": {
+              "when": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Globs matched against the changed files."
+              },
+              "do": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "dod_manual": {
+          "$ref": "#/$defs/stringList"
+        },
+        "dod_doc": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ci": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dispatchable": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "workflow",
+              "use_when"
+            ],
+            "properties": {
+              "workflow": {
+                "type": "string",
+                "minLength": 1
+              },
+              "use_when": {
+                "type": "string",
+                "minLength": 1
+              },
+              "notes": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "stacks": {
+      "$ref": "#/$defs/stringList",
+      "description": "Stack guides to load (stacks/<name>.md). May be empty."
+    },
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Levels of the workers the playbooks start: strong, standard or fast. The adapter maps a level to a model (Claude: the tld:runtime skill).",
+      "properties": {
+        "worker": {
+          "enum": [
+            "strong",
+            "standard",
+            "fast"
+          ],
+          "default": "standard",
+          "description": "Phase workers, fix and conflict workers of implement."
+        },
+        "reviewer": {
+          "enum": [
+            "strong",
+            "standard",
+            "fast"
+          ],
+          "default": "strong",
+          "description": "The final reviewer of implement, the plan reviewer of make-plan and the review and verifier workers of review."
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ignore": {
+          "$ref": "#/$defs/stringList",
+          "description": "Globs of paths /implement does not count as scope drift, for files every phase may touch (lockfiles, generated files). Default: none. The changelog file (docs.changelog.file) is always ignored when the profile has docs.changelog."
+        }
+      }
+    },
+    "deps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cooldown_days",
+        "time_budget_minutes"
+      ],
+      "properties": {
+        "cooldown_days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30,
+          "description": "Dependabot cooldown (days) the project's .github/dependabot.yml must set."
+        },
+        "time_budget_minutes": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 480,
+          "description": "/deps starts no new update group after 80% of this."
+        },
+        "audit": {
+          "type": "array",
+          "description": "Commands that list vulnerable packages: exit 0 = nothing found, non-zero = findings in the output.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ecosystem",
+              "run"
+            ],
+            "properties": {
+              "ecosystem": {
+                "type": "string",
+                "minLength": 1
+              },
+              "run": {
+                "type": "string",
+                "minLength": 1
+              },
+              "cwd": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Directory, relative to the repo root."
+              }
+            }
+          }
+        },
+        "lock_freshness": {
+          "type": "array",
+          "description": "Run after a manifest change so lockfiles stay consistent.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "when",
+              "run",
+              "lockfiles"
+            ],
+            "properties": {
+              "when": {
+                "$ref": "#/$defs/stringList",
+                "description": "Globs matched against changed files."
+              },
+              "run": {
+                "type": "string",
+                "minLength": 1
+              },
+              "lockfiles": {
+                "$ref": "#/$defs/stringList",
+                "description": "The only files the command may change besides the matched ones."
+              }
+            }
+          }
+        }
+      }
+    },
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repo",
+        "tag_pattern",
+        "version_file"
+      ],
+      "properties": {
+        "repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+          "description": "The upstream repository, owner/name."
+        },
+        "tag_pattern": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Regular expression a release tag must match."
+        },
+        "version_file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "File in the fork that records the synced tag."
+        }
+      }
+    },
+    "land": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_prs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Most pull requests one /land run orders."
+        }
+      }
+    },
+    "admin": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policy": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path of the repo-admin policy file (schema/admin-policy.schema.json), relative to the repo root."
+        }
+      }
+    },
+    "git_ops": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repo"
+      ],
+      "properties": {
+        "repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+          "description": "owner/name of the central repository that holds the tld-git-ops workflow."
+        },
+        "workflow": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+\\.ya?ml$",
+          "description": "File name of the workflow in that repository. Default tld-git-ops.yml (applied by the git-ops skill, not by the schema)."
+        }
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Settings of the guardrail hooks the tld plugin ships (docs/architecture/hooks.md). Every key is optional; the hooks apply the defaults in 'x-hook-default' themselves, they are not part of --resolved.",
+      "properties": {
+        "disable": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "no-merge",
+              "no-force-push",
+              "no-git-tag",
+              "secret-scan",
+              "protect-paths",
+              "dod-gate"
+            ]
+          },
+          "x-hook-default": [],
+          "description": "Escape hatch: names of hooks to switch off in this repository. Off by default (no hook is disabled)."
+        },
+        "protect_paths": {
+          "$ref": "#/$defs/stringList",
+          "x-hook-default": [
+            ".tld/toolkit.yaml",
+            ".env",
+            ".env.*",
+            "*.lock",
+            "package-lock.json",
+            "go.sum",
+            ".github/workflows/**"
+          ],
+          "description": "Globs of repo-relative paths protect-paths refuses to edit. A pattern without a slash matches the file name at any depth; ** crosses directories. A list here replaces the default."
+        },
+        "protect_paths_allow": {
+          "$ref": "#/$defs/stringList",
+          "x-hook-default": [],
+          "description": "Globs exempt from protect_paths, added to the built-in exceptions (.env.example, .env.sample, .env.template, .env.dist and the workflow files the toolkit's own commands install)."
+        },
+        "dod_gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "x-hook-default": false,
+              "description": "Opt in: block stopping until verify.dod passes."
+            },
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10,
+              "x-hook-default": 3,
+              "description": "Failed attempts after which the gate lets the session stop and says why."
+            }
+          }
+        }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Which roles are mandatory and how they run (roles/<role>.md). Defaults are applied by tld roles, not by the schema.",
+      "properties": {
+        "posture": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "security": {
+              "enum": [
+                "critical",
+                "standard",
+                "low"
+              ],
+              "description": "Missing means standard."
+            }
+          }
+        },
+        "disable": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "architect",
+              "code-reviewer",
+              "security-reviewer",
+              "test-architect",
+              "ux-reviewer",
+              "dependency-auditor",
+              "tech-writer",
+              "website-maintainer",
+              "debugger",
+              "refactorer"
+            ]
+          },
+          "description": "Roles that are never run. Missing means none."
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "role",
+              "at"
+            ],
+            "properties": {
+              "role": {
+                "enum": [
+                  "architect",
+                  "code-reviewer",
+                  "security-reviewer",
+                  "test-architect",
+                  "ux-reviewer",
+                  "dependency-auditor",
+                  "tech-writer",
+                  "website-maintainer",
+                  "debugger",
+                  "refactorer"
+                ]
+              },
+              "at": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "enum": [
+                    "make_plan",
+                    "implement_phase",
+                    "implement_final",
+                    "review",
+                    "dod"
+                  ]
+                }
+              },
+              "blocking": {
+                "type": "boolean",
+                "description": "Missing means false."
+              },
+              "when": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Globs matched against the changed files."
+              }
+            }
+          }
+        },
+        "extra_context": {
+          "$ref": "#/$defs/stringList",
+          "description": "Lines added to every role's context."
+        }
+      }
+    },
+    "project_steward": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to a project skill with policy that fits no other key."
+    }
+  }
+}

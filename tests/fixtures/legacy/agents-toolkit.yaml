@@ -1,0 +1,32 @@
+# Fixture: a valid profile with the agents block of the plan's worked example.
+docs:
+  must_read: []
+  website:
+    dir: site
+    build: "npm run build"
+    links: "npm run check-links"
+
+git:
+  main_branch: main
+  branch_pattern: "<type>/<kebab-case>"
+
+verify:
+  fast:
+    - make lint
+  dod:
+    - make test
+
+stacks: []
+
+agents:
+  posture:
+    security: critical
+  disable: [dependency-auditor]
+  required:
+    - {agent: security-reviewer, at: [implement_phase, implement_final], blocking: true}
+    - {agent: ux-reviewer, at: [implement_final], when: ["app/views/**"], blocking: false}
+    - {agent: test-architect, at: [make_plan]}
+    - {agent: tech-writer, at: [dod, review]}
+    - {agent: website-maintainer, at: [dod], when: ["site/**", "docs/**"]}
+  extra_context:
+    - "Every outbound request must pass the approval gate."

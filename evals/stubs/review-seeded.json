@@ -1,0 +1,11 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "branch": "review/whole-repo",
+  "commit_message": "review: whole repository",
+  "files": {
+    "docs/whole-repo-review.md": "# Review\n\n## Findings to fix\n\n### SEC-1 \u00b7 high \u00b7 Shell injection in export\n\n- **Where:** `notes/export.py:6`\n- **Evidence:** `os.system` with the archive name.\n- **Why:** command injection.\n\n### TST-1 \u00b7 medium \u00b7 No test for the token check\n\n- **Where:** `notes/auth.py:3`\n- **Evidence:** missing test: nothing under tests/ covers notes.auth.\n"
+  },
+  "result_text": "Review written."
+}

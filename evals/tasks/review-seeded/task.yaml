@@ -1,0 +1,17 @@
+id: review-seeded
+description: A review of a fixture with a planted command-injection flaw and a planted missing test must name both, by file and class; noise is reported.
+command: /tld:review
+arguments: >-
+  the whole repository. Nobody is available to answer the decisions ask: write the review document, list any
+  open items in it, and stop.
+fixture:
+  builder: review_seeded
+repeats: 3
+timeout_s: 1800
+cost_ceiling_usd: 8.0
+graders:
+  - name: seeded_finding_found
+    id: injection
+  - name: seeded_finding_found
+    id: missing-test
+  - name: noise_count

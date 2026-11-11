@@ -1,0 +1,17 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "Stopped: Create UPSTREAM_VERSION with the tag the fork is based on.",
+  "actions": [
+    {
+      "id": "t1",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "tld ops upstream-sync plan --version-file UPSTREAM_VERSION --pattern '^v[0-9.]+$'",
+      "error": null,
+      "output": ""
+    }
+  ]
+}
