@@ -26,11 +26,11 @@ same ten agents and differ only in their profile.
   the cross-key rules. Only `docs.plan_dir` and `models` have defaults (`validate_profile.py:112`).
 - `/implement` runs a Sonnet worker per phase (child brief, `commands/implement.md:136`), merges after an
   adversarial diff review (`:200`), and runs one Opus final review whose prompt ends with
-  `REVIEW-REPORT` (`:272`). `/dod` reports a table and "does not fix anything" (`commands/dod.md:43`).
+  `REVIEW-REPORT` (`:272`). `/dod` reports a table and "does not fix anything" (`commands/dod.md:44`).
   `/review` runs one subagent per dimension (`commands/review.md:123`). `/make-plan` is this command.
 - The `protect-paths` hook denies every edit of `.claude/toolkit.yaml`
-  (`hooks/protect_paths.py:87`, default list in `hooks/_common.py:21`). The `dod-gate` hook shows the
-  marker pattern commands use to mark a session (`hooks/dod_gate.py:50-70`).
+  (`hooks/protect_paths.py:88`, default list in `hooks/_common.py:21`). The `dod-gate` hook shows the
+  marker pattern commands use to mark a session (`hooks/dod_gate.py:45-75`, the `--exempt` handling at `:215-227`).
 - `tests/test_no_project_words.py` forbids the words `privacyfence`, `ruff`, `pytest`,
   `src/privacyfence` and `connector` under `plugins/devflow`, `plugins/stack-*`, `templates` and
   `.claude-plugin`. `tests/test_structure.py:28` requires all five `plugin.json` versions to be equal
@@ -52,7 +52,7 @@ Files: `plugins/devflow/agents/<name>.md`, one per agent. Front matter, exactly 
 ```
 ---
 name: <name>                 # equals the file name without .md
-description: <one sentence of at least 40 characters: what it does and when to use it>
+description: <one sentence of more than 40 characters: what it does and when to use it>
 tools: <comma separated, see below>
 model: opus | sonnet
 ---
@@ -87,7 +87,8 @@ says so in its report and continues with the default.
 
 **Report** section ends with the exact line format of D3 and the finding format
 `<n>. blocking|non-blocking · path:line · what is wrong · the fix` (the `review-checklist` format
-without the phase id).
+without the phase id). The Report section replaces the wrapped skill's own `Output` or `Finding format` section,
+and says the report line is printed bare on its own line, never quoted or in backticks.
 
 **Per-agent method points** (each is a sentence or bullet in Method):
 
@@ -145,7 +146,8 @@ Semantic errors added to `semantic_checks` (exact texts, `{i}` is the index, `{a
 
 - `'agents.required[{i}]': '{agent}' is listed in 'agents.disable'`
 - `'agents.required[{i}]': 'website-maintainer' needs 'docs.website'`
-- `'agents.required[{i}].when': needs a diff, but 'at' is only 'make_plan'`
+- `'agents.required[{i}].when': needs a diff, but 'at' has no point with a diff (only 'make_plan' and 'review' have none)`
+- `'agents.required[{i}]': '{agent}' cannot run at 'review' (it has no review dimension; allowed: security-reviewer, dependency-auditor, test-architect, tech-writer, website-maintainer)`
 
 Defaults are applied by `scripts/agents.py` (D4), the way the hooks apply theirs: `--resolved` output of
 a profile without these keys does not change. A profile without `agents` means all agents are available and
@@ -173,13 +175,19 @@ agents:
 | Point | Who dispatches | Mode | Failure of a required agent |
 |---|---|---|---|
 | `make_plan` | the planner session, with the `Agent` tool | review | a blocking finding is resolved in the plan before it is pushed; a non-blocking one goes to the plan's Risks |
-| `implement_phase` | the phase's worker session (child brief rule 3b) | edit | the orchestrator sends the phase back; it is not merged |
+| `implement_phase` | the phase's worker session (child brief rule 3b) | edit for the four edit agents, review for the others | the orchestrator sends the phase back; it is not merged |
 | `implement_final` | the final review session | review | a blocking finding is a blocking finding of the review (`verdict=changes`) |
-| `review` | the `/review` session, alongside the dimension subagents | review | its findings join the triage; a blocking-required agent's findings are at least `high` |
+| `review` | the `/review` session, alongside the dimension subagents | review | its findings join the triage; `blocking` findings become severity `high`, `non-blocking` ones `medium` |
 | `dod` | the `/dod` session | review | row `FAIL` |
 
-`edit` mode is only ever used inside a worker session or when the user asks an agent directly; at every
-other point an edit-capable agent is dispatched in `review` mode and reports only.
+`edit` mode exists only for the four edit agents (tech-writer, website-maintainer, debugger, refactorer) and is used
+only inside a worker session or when the user asks one of them directly. Every other agent, and every agent at every
+other point, runs in `review` mode and reports only.
+
+**Fixing a blocking finding.** A read-only agent's blocking finding is fixed by the dispatching session (the worker at
+`implement_phase`, the planner at `make_plan`) and the same agent is then dispatched again at the same point; its new
+report line is the one that counts, because `agents.py verify` reads the last line per agent and point. An edit agent
+fixes its own findings in `edit` mode and ends with a report line that already reflects the fixed state.
 
 Every agent ends its answer with exactly one line (the report line):
 
@@ -194,7 +202,8 @@ run (the reason is on the lines before it). A required agent whose line says `n/
 Dispatch prompt (the `agent-dispatch` skill holds this text; fields as in D1):
 
 ```
-You are the <agent> agent, running at <point> in <review|edit> mode.
+You are the <agent> agent, running at <point>.
+Mode: <review|edit>
 Scope: <diff range or paths>
 Security posture: <critical|standard|low>
 Extra context:
@@ -233,14 +242,20 @@ JSON on stdout:
 
 Rules: an entry applies when its `at` contains the point and (it has no `when`, or some changed file
 matches some `when` glob; `matched` then lists the matching globs, otherwise `["always"]`). Several applicable
-entries for one agent merge into one item, `blocking` is the OR, `matched` the union. An entry for a point whose `at` matches but whose `when`
-matches nothing goes to `not_applicable`. An unknown point, an unreadable profile, or an applicable entry with
-`when` and no `--changed` is an error: stderr `agents.py: <message>`, exit 1 (the last case's message is
-`--changed is needed: agents.required has entries with 'when'`).
+entries for one agent merge into one item, `blocking` is the OR, `matched` the union. An entry whose `at` contains the
+point but whose `when` matches nothing goes to `not_applicable` (`why`: `no changed file matches 'when'`). The points
+`make_plan` and `review` have no diff: an entry with `when` at one of them always goes to `not_applicable` with `why`
+`no diff at this point`, and `--changed` is not needed there. At `implement_phase`, `implement_final` and `dod` an
+applicable entry with `when` and no `--changed` is an error.
+
+Errors go to stderr as `agents.py: <message>` with exit 1: `unknown point '<x>' (one of make_plan, implement_phase,
+implement_final, review, dod)`; `cannot read '<path>': <reason>`; the validator's own messages for an invalid profile
+(`required` validates with `root_dir=None`, so listed files are not checked); and
+`--changed is needed: agents.required has entries with 'when'`.
 
 `verify` reads the JSON of `required` and the report text, finds lines matching
-`^AGENT-REPORT (?P<agent>[a-z-]+) at=(?P<at>[a-z_]+) verdict=(?P<verdict>pass|findings|n/a) blocking=(?P<b>\d+) non_blocking=(?P<nb>\d+)$`
-(multi-line search; when an agent has several lines for the same point the last one counts), and prints one
+`^[>\s`]*AGENT-REPORT (?P<agent>[a-z-]+) at=(?P<at>[a-z_]+) verdict=(?P<verdict>pass|findings|n/a) blocking=(?P<b>\d+) non_blocking=(?P<nb>\d+)[\s`]*$`
+(multi-line search, tolerant of a leading `>`, spaces or a backtick; when an agent has several lines for the same point the last one counts), and prints one
 line per required item and a summary:
 
 ```
@@ -255,7 +270,7 @@ Exit 0 when no `MISSING` and no `BLOCKED`, else 1. Python functions the tests ca
 `verify(required: dict, report: str) -> tuple[list[str], bool]`.
 
 The skill `agent-dispatch` (`plugins/devflow/skills/agent-dispatch/SKILL.md`, front matter `name`,
-`description` of at least 40 characters, `user-invocable: false`) has the headings `## Resolve` (run
+`description` of more than 40 characters, `user-invocable: false`) has the headings `## Resolve` (run
 `agents.py required`), `## Dispatch` (the D3 prompt and the `Agent` call), `## Modes` (the D3 mode table),
 `## Report` (the report line and finding format), `## Gate` (run `agents.py verify`; the D3 failure table),
 `## Not required` (a non-required, non-disabled agent may be dispatched on judgement and no failure rule applies to it).
@@ -267,7 +282,7 @@ insertions are in the briefs of `p5-wire-plan-dod-review` and `p6-wire-implement
 
 - `/make-plan`: for a large scope, dispatch `architect` (unless it is in `disabled`) before writing the
   Design, then every other required agent at `make_plan`; final reply gets an `Agents:` line.
-- `/implement`: the child brief gets rule 3b (workers dispatch required agents at `implement_phase` in edit mode
+- `/implement`: the child brief gets rule 3b (workers dispatch required agents at `implement_phase` (the four edit agents in edit mode, the rest in review mode)
   and put their report lines into the `PHASE-REPORT`); the orchestrator re-checks them at merge with
   `agents.py verify`; the final review prompt requires the `implement_final` agents.
 - `/review`: required agents at `review` run in parallel with the dimension subagents; findings get the id prefix `AGT`.
@@ -275,7 +290,7 @@ insertions are in the briefs of `p5-wire-plan-dod-review` and `p6-wire-implement
 
 ### D6. The `/setup` command and the `profile-setup` skill
 
-`plugins/devflow/commands/setup.md` (front matter: `description`, `argument-hint: "[optional: create | update]"`,
+`plugins/devflow/commands/setup.md` (front matter: `description`, `argument-hint: "[optional: create | update] [--accept-proposals]"`,
 `model: sonnet`). It must contain the words `project-profile` and `never substitute` (an existing test checks
 every command for both). Headings, in order: `## Profile`, `## Guardrail hooks`, `## 1. Survey`, `## 2. Decide`,
 `## 3. Ask`, `## 4. Write`, `## 5. Check`, `## 6. Deliver`, `## Status board`.
@@ -287,16 +302,21 @@ every command for both). Headings, in order: `## Profile`, `## Guardrail hooks`,
 - **Guardrail hooks**: run `python3 "<devflow root>/hooks/dod_gate.py" --exempt` once, and
   `python3 "<devflow root>/hooks/protect_paths.py" --allow-profile` before the first write of the profile and
   `python3 "<devflow root>/hooks/protect_paths.py" --end-allow` after the last one, also when a step failed.
-- **1. Survey**: `python3 "<devflow root>/scripts/profile_survey.py" . > <scratchpad>/survey.json`.
+- **1. Survey**: `python3 "<devflow root>/scripts/profile_survey.py" .`, saved as `survey.json` in the scratchpad directory.
 - **2. Decide**: load the `profile-setup` skill; build one table `key | proposed value | evidence`.
   `verify.fast` and `verify.dod` are chosen from `evidence.verify_evidence` by the skill's rules.
 - **3. Ask**: one `AskUserQuestion` call, at most four questions: the security posture (always asked, with the
   proposal as the recommended option), every entry the proposal marks `blocking: true`, and whatever the survey could
-  not determine (no test command, no main branch). Nothing else is asked.
+  not determine (no test command, no main branch). Nothing else is asked. **When `AskUserQuestion` is unavailable or
+  refused:** with the argument `--accept-proposals` the proposals count as confirmed and are listed under
+  `Decisions for a human` in the pull request; without it every `blocking` is written as `false`, the posture is
+  the proposal, and each such entry is listed under `Decisions for a human` as unconfirmed. A value the survey could not
+  determine is left out of the profile and listed under `Not verified`.
 - **4. Write**: *create*: copy `<devflow root>/templates/toolkit.yaml` (the starter, see D6a) to
   `.claude/toolkit.yaml` and fill it in from the table of step 2 with the Edit tool, uncommenting only the blocks
   that have a value. *update*: `profile_patch.py diff` first, show the new, changed and stale keys, then
-  `profile_patch.py set-block` for `agents` and `docs.website`, and the Edit tool for single other keys.
+  `profile_patch.py set-block` for `agents` and `docs.website` (both take `survey.json` itself as the value file,
+  D9), and the Edit tool for single other keys.
 - **5. Check**: `validate_profile.py .claude/toolkit.yaml` with file checks, then each `verify.fast` command once
   (one retry never); list what was not verified and why.
 - **6. Deliver**: branch `chore/toolkit-profile` from `origin/<main>` (a session that cannot push that name uses
@@ -323,7 +343,8 @@ The skill `plugins/devflow/skills/profile-setup/SKILL.md` (`name: profile-setup`
   `evidence.git.branch_prefixes` with at least three branches, else the default `[feature, fix, chore]`;
   `docs.must_read` from the proposal; `hooks`, `deps`, `upstream`, `admin`, `git_ops`, `land` are never written.
 - *Questions*: the posture question offers `critical`, `standard`, `low` with the proposal first and
-  "(Recommended)" on it.
+  "(Recommended)" on it. The skill repeats the rule for when `AskUserQuestion` is unavailable or refused (command
+  section 3: `--accept-proposals`, otherwise `blocking: false` and a note).
 - *Pull request body*: title `chore: add .claude/toolkit.yaml` (create) or `chore: update .claude/toolkit.yaml`;
   sections `## What this changes`, `## Inferred values` (the table with evidence), `## Decisions for a human`
   (security posture and every `blocking: true` entry, each with the evidence that led to it), `## Not verified`.
@@ -364,8 +385,9 @@ not read. Lists of paths in outputs are sorted and cut to 20 entries (counts are
 - A category **fires** when `count >= 2` (`policy_docs`: `count >= 1`). `firing` lists the firing names in the order
   auth, crypto, credentials, egress, user_data, policy_docs; `score` is `len(firing)`.
 - UI files (not test paths): `.swift` files that contain `import SwiftUI` or `import UIKit`, and files with extension
-  `.tsx .jsx .vue .svelte .xib .storyboard`. `globs`: take the directory of each UI file (a file at the repo root
-  contributes its own file name), drop every directory that has an ancestor in the set, and emit `<dir>/**`, sorted.
+  `.tsx .jsx .vue .svelte .xib .storyboard`. `globs`: take the directory of each UI file, drop every directory that
+  has an ancestor in the set, and emit `<dir>/**`, sorted; a UI file at the repo root is emitted as its own file name
+  (no `/**`).
 - `levels.e2e`: any path component in `{e2e, end-to-end, playwright, cypress}` or ending in `UITests`.
   `levels.integration`: any component in `{integration, integrations, contract, contracts}`. `levels.unit`: at
   least one test path that is neither e2e nor integration. `evidence` holds up to 5 paths per level.
@@ -423,11 +445,15 @@ not read. Lists of paths in outputs are sorted and cut to 20 entries (counts are
 - `dispatchable`: workflows with the trigger `workflow_dispatch` whose `runs-on` labels contain `macos` or `windows`
   (case-insensitive). `use_when`: `Build or test on <macOS|Windows> (runs-on: <label>)`; `notes`: `No inputs.` or
   `Inputs: <names joined by ", ">`.
-- `git`: `main_branch` from `git symbolic-ref --short refs/remotes/origin/HEAD` with `origin/` removed, else from
-  `git rev-parse --abbrev-ref HEAD`, else null; `has_history` when `git rev-list --count HEAD` is at least 1;
-  `branch_prefixes` counts the part before the first `/` of every branch name from
-  `git branch --all --format=%(refname:short)` (a leading `origin/` removed, `HEAD` ignored). Outside a git repository:
-  `{"main_branch": null, "has_history": false, "branch_prefixes": {}}`.
+- `git`: `main_branch`, first match of: (1) `git symbolic-ref --short refs/remotes/origin/HEAD` with `origin/` removed;
+  (2) the `ref: refs/heads/<name>` line of `git ls-remote --symref origin HEAD`; (3) `main`, then `master`, when
+  `refs/remotes/origin/<name>` exists; (4) when the repository has no remote at all, `git rev-parse --abbrev-ref HEAD`;
+  otherwise null (`/setup` then asks). The session branch of a cloud checkout is therefore never proposed.
+  `has_history` when `git rev-list --count HEAD` is at least 1. `branch_prefixes` counts the part before the first
+  `/` over the distinct branch names of `git branch --all --format=%(refname:short)` after removing a leading `origin/`,
+  skipping `HEAD`, a bare `origin` and names without a `/` (a branch that exists locally and on `origin` counts once).
+  Outside a git repository: `{"main_branch": null, "has_history": false, "branch_prefixes": {}}`. (Call git with an
+  argument list, never through a shell.)
 
 ### D8. The proposal
 
@@ -463,24 +489,31 @@ profile_patch.py set-block PROFILE KEY VALUE.json [--write]
 profile_patch.py diff PROFILE PROPOSAL.json [--root DIR]
 ```
 
-`set-block`: `KEY` is `agents` (top-level) or `docs.website` (a child of `docs`, two-space indent). `VALUE.json` holds the
-value. It renders `yaml.safe_dump({<last key part>: value}, sort_keys=False, default_flow_style=False)` at the right
-indent and replaces the existing active block (the key line and all following lines that are blank-then-indented or
-indented, up to but not including the next line that is non-blank, not a comment and at an indent not deeper than the key;
-comment lines directly above the key are kept) or, when there is none, appends it: a top-level key at the end of the file
-after one blank line, `docs.website` as the last child of the `docs:` block. Without `docs:` it exits 1 with
-`profile_patch: no 'docs' block to add 'website' to`. Prints the new text on stdout, or writes the file with `--write`. Applying the same
-value twice gives the same text.
+`set-block`: `KEY` is `agents` (top-level) or `docs.website` (a child of `docs`, two-space indent). `VALUE.json` is either the
+value itself or the whole output of `profile_survey.py` (recognised by a top-level `proposal` key; the value is then
+`proposal.profile` at the key path, `agents` or `docs.website`, and a missing path exits 1 with
+`profile_patch: the proposal has no 'agents'`). It renders `yaml.safe_dump({<last key part>: value}, sort_keys=False,
+default_flow_style=False)` at the right indent and replaces the existing active block, or when there is none appends it.
 
-`diff`: compares `PROPOSAL.json` (the `profile` object of D8) with the profile's parsed YAML and prints JSON
+**The block rule (one rule, used for replacing and for appending).** The block is the key line plus the following lines
+up to and including the last non-blank line that is indented deeper than the key line and is not a comment. Everything
+after that line belongs to the next block: blank lines and comment lines (at any indent) that follow it, and the
+commented-out examples of the starter profile, are untouched. Comment lines directly above the key line stay. A new
+top-level block is appended at the end of the file after one blank line; a new `docs.website` is inserted directly after
+the last line of the `docs:` block (by the same rule). Without a `docs:` block it exits 1 with
+`profile_patch: no 'docs' block to add 'website' to`. The new text goes to stdout, or into the file with `--write`.
+Applying the same value twice gives the same text.
+
+`diff`: `PROPOSAL.json` is the `profile` object of D8 or the whole survey output (same recognition as above). It is compared with the profile's parsed YAML and prints JSON
 `{"new": [dotted keys], "changed": [{"key", "from", "to"}], "same": [dotted keys], "stale": [{"key", "value", "why"}]}`.
 Compared keys: `stacks`, `git.main_branch`, `docs.must_read`, `docs.adr_dir`, `docs.adr_index`, `docs.changelog`,
 `docs.website`, `ci.dispatchable`, `agents`. `stale` is computed from the existing profile only, against `--root`
 (default: the repository root two levels above the profile): each path-valued key whose path does not exist
 (`docs.must_read[]`, `docs.adr_dir`, `docs.adr_index`, `docs.adr_bar` before `#`, `docs.changelog.file`,
 `docs.website.dir`, `verify.dod_doc` before `#`, `project_steward`, `admin.policy`, `.github/workflows/<workflow>` for each
-`ci.dispatchable[].workflow`), and each `agents.required[].when` glob that matches no tracked or untracked file
-(matched with `validate_manifest.path_matches`); `why` is `path not found` or `no file matches`.
+`ci.dispatchable[].workflow`), and each `agents.required[].when` glob that matches no file (the file list is `os.walk`
+of `--root` with the skip list and the 5000-file cap of D7, as repo-relative paths; matched with
+`validate_manifest.path_matches`; no git is used); `why` is `path not found` or `no file matches`.
 
 ### D10. The `protect-paths` exemption for `/setup`
 
@@ -505,8 +538,9 @@ Alerts follow the existing rule for maintenance records (push only, never a rena
 
 `evals/fixtures/setup_repos.py` has `REPOS = ("security_heavy", "ios_ui_app", "docs_website", "bare")` and
 `build(dest, repo="security_heavy", with_profile=False) -> dict` using `init_repo` (branch `main`). The returned dict
-holds `main_branch`, `repo`, `stacks`, `agents` (the expected `proposal.profile.agents`), `website` (expected
-`proposal.profile.docs.website` or `None`) and `dispatchable` (expected workflow names). `with_profile=True` also writes
+holds nine keys: `main_branch`, `repo`, `stacks`, `agents` (the expected `proposal.profile.agents`), `website` (expected
+`proposal.profile.docs.website` or `None`), `dispatchable` (expected workflow names), `adr_dir`, `adr_index` and
+`changelog` (the expected values; `None` except for `docs_website`). `with_profile=True` also writes
 a minimal valid `.claude/toolkit.yaml` (main branch `main`, `verify` echo commands, `stacks: []`).
 
 | repo | files | expected |
@@ -525,14 +559,23 @@ a minimal valid `.claude/toolkit.yaml` (main branch `main`, `verify` echo comman
 New grader `agents_block_equals` (compares the `agents` key of the profile the run left in the work tree with
 `expected["agents"]` of the fixture) and `result_matches` (`must` and `must_not` lists of strings searched in the final
 result text). Builder `evals/fixtures/agents_demo.py`: `build(dest, posture="critical")` is the `tiny_app` repository with a
-profile whose `agents` block is `posture.security: <posture>` and `required: [{agent: security-reviewer, at: [dod], blocking: false}]`.
+profile whose `agents` block is `posture.security: <posture>` and `required: [{agent: security-reviewer, at: [dod], blocking: false}]`, on the
+feature branch described below.
 Tasks (all `model: sonnet`, `repeats: 3`):
 
-- `setup-security-heavy`: `/devflow:setup`, builder `setup_repos`, params `{repo: security_heavy}`, argument text says nobody can
-  answer, accept every proposal, and the pull request cannot be opened; graders `profile_valid`, `agents_block_equals`.
-- `agents-dod-critical`: `/devflow:dod`, builder `agents_demo` (posture `critical`); `result_matches` must contain
-  `AGENT-REPORT security-reviewer at=dod` and `Threat model`.
-- `agents-dod-low`: same with posture `low`; must contain `AGENT-REPORT security-reviewer at=dod`, must not contain `Threat model`.
+The harness runs the agent without `AskUserQuestion` (`evals/harness/agents.py` allows a fixed tool list), so the setup task
+passes `--accept-proposals`.
+
+- `setup-security-heavy`: `/devflow:setup`, builder `setup_repos`, params `{repo: security_heavy}`, argument text `create
+  --accept-proposals`; nobody can answer and the pull request cannot be opened (no GitHub access), so the profile stays
+  committed on `chore/toolkit-profile`; graders `profile_valid`, `agents_block_equals`.
+- `agents-dod-critical`: `/devflow:dod`, builder `agents_demo` (posture `critical`); `result_matches` (case-sensitive
+  substrings) must contain `AGENT-REPORT security-reviewer at=dod` and `## Threat model`.
+- `agents-dod-low`: same with posture `low`; must contain `AGENT-REPORT security-reviewer at=dod`, must not contain `## Threat model`.
+
+`agents_demo` leaves the checkout on a branch `feature/agents-demo` that has one commit on top of `main` changing
+`notes/store.py`, so the `/dod` diff against `origin/main` is not empty (read `evals/fixtures/guardrail.py`, which
+already builds a feature branch with an `origin` remote).
 
 ### D14. Constraints for every phase
 
@@ -543,6 +586,12 @@ Tasks (all `model: sonnet`, `repeats: 3`):
 - New tests use the `.venv/bin/python -m pytest` environment `verify.fast` creates; shared helpers live next to
   `conftest.py` in `tests/`.
 - All five `plugin.json` versions stay equal (`tests/test_structure.py:28`); the bump is only in the last phase.
+- `tests/test_hooks_compat.py` sweeps every backticked span that starts with `git ` or `gh ` in `commands/*.md` and
+  `skills/*/SKILL.md`: such a span may use only the placeholders `<path> <ref> <main> <slug> <feature_branch> <branch>
+  <phase branch> <base> <yyyymmdd-hhmm> <owner>/<repo>`, must be allowed by the guardrail hooks, and must not contain
+  characters a shell would treat as syntax (no unquoted `(`, `)` or `%(...)`). A new command file also needs a row
+  set in that test's `COMPAT` table (`test_every_command_file_is_covered`).
+- A skill `description` has more than 40 characters (`tests/test_structure.py:69`).
 
 ## Manual steps
 
@@ -616,11 +665,14 @@ phases:
       1. In profile.schema.json add `docs.website` and the top-level `agents` object exactly as D2 says: the ten agent
          names in an `enum` for `agents.disable` items and `agents.required[].agent`, the five points in an `enum` for
          `agents.required[].at` items, `additionalProperties: false` everywhere, and NO `default` keys.
-      2. In validate_profile.py `semantic_checks` add the three errors of D2 with the exact texts. They run on the
-         resolved profile; a profile without `agents` produces no new output of any kind.
-      3. Add a commented `agents:` block and a commented `docs.website` example to templates/toolkit.yaml (comments only,
-         same style as the other optional blocks, using the D2 worked example). Then copy the file byte for byte to
-         plugins/devflow/templates/toolkit.yaml.
+      2. In validate_profile.py `semantic_checks` add the four errors of D2 with the exact texts (disabled-and-required,
+         website-maintainer without docs.website, `when` without a diff point, an agent that cannot run at `review`). They run
+         on the resolved profile; a profile without `agents` produces no new output of any kind.
+      3. Add a commented `agents:` block to templates/toolkit.yaml (comments only, same style as the other optional blocks,
+         using the D2 worked example) placed BEFORE the `# hooks:` block and separated from it by a blank line, and a commented
+         `docs.website` example (`#   website:` with its three keys) inside the `docs:` section after the changelog comment.
+         `tests/test_hooks_config.py:114` parses from `# hooks:` to the first line that does not start with `#`; do not
+         break it. Then copy the file byte for byte to plugins/devflow/templates/toolkit.yaml.
       4. In docs/profile-reference.md add table rows with the backticked dotted names `docs.website`, `docs.website.dir`,
          `docs.website.build`, `docs.website.links`, `agents`, `agents.posture`, `agents.posture.security`,
          `agents.disable`, `agents.required`, `agents.extra_context`; add a short `### agents` section (the points, the
@@ -630,7 +682,8 @@ phases:
          build: "npm run build", links: "npm run check-links"}, git, verify, stacks: []) plus the agents block of the D2 worked example.
       6. Create tests/test_profile_agents.py: the fixture validates (`vp.validate(yaml.safe_load(...))`, no errors, with
          `root_dir=None`); a profile without the keys gives a resolved dict with no `agents` and no `docs.website`;
-         one test per error text of D2; an unknown agent name, an unknown `at` value, a non-boolean `blocking`, a posture
+         one test per error text of D2 (the fixture's `tech-writer` at `review` and `website-maintainer` are allowed there;
+         `ux-reviewer` at `review` is the error case); an unknown agent name, an unknown `at` value, a non-boolean `blocking`, a posture
          other than the three, and an empty `when` are rejected; `website-maintainer` required with `docs.website` set is
          valid; tests/fixtures/privacyfence-toolkit.yaml still validates; plugins/devflow/templates/toolkit.yaml equals
          templates/toolkit.yaml byte for byte.
@@ -648,6 +701,7 @@ phases:
     touches:
       - plugins/devflow/scripts/agents.py
       - plugins/devflow/skills/agent-dispatch/SKILL.md
+      - plugins/devflow/skills/project-profile/SKILL.md
       - tests/test_agents_dispatch.py
       - tests/test_structure.py
     brief: |
@@ -662,10 +716,18 @@ phases:
          `## Modes`, `## Report`, `## Gate`, `## Not required`), the dispatch prompt of D3 verbatim, the mode table and the
          failure table of D3, and the report line.
       3. In tests/test_structure.py:63 add `agent-dispatch` to the expected set of skill names. Change nothing else there.
-      4. Write tests/test_agents_dispatch.py: `required` for every point on the fixture profile (which agents, `blocking`,
-         `matched`); `when` matching and not matching (goes to `not_applicable`); `blocking` OR-merge of two entries;
-         a profile without `agents` returns empty `required`; the three error cases; `verify` for ok, missing line,
-         `verdict=n/a`, blocked, non-blocking entry with findings (ok), last line wins; a CLI round trip through
+         Every backticked `git ` span you write in the skill must follow the D14 rule about `tests/test_hooks_compat.py`.
+      4. In plugins/devflow/skills/project-profile/SKILL.md: change "the only place defaults are applied" (line ~43) to say
+         the `--resolved` defaults are `docs.plan_dir` and `models` and that the `agents` defaults are applied by
+         `scripts/agents.py`; add rows `agents.*` (which agents are required at which point, posture) and `docs.website` to the
+         key table.
+      5. Write tests/test_agents_dispatch.py: `required` for every point on the fixture profile (which agents, `blocking`,
+         `matched`); `when` matching and not matching (goes to `not_applicable`); `when` at `make_plan` or `review` goes to
+         `not_applicable` with `no diff at this point` and needs no `--changed`; `blocking` OR-merge of two entries;
+         a profile without `agents` returns empty `required`; the error cases (unknown point, unreadable profile, invalid
+         profile, `--changed` missing at `dod`); `verify` for ok, missing line,
+         `verdict=n/a`, blocked, non-blocking entry with findings (ok), last line wins, a line quoted with `> ` or in
+         backticks still counts; a CLI round trip through
          `subprocess` for both subcommands with the exit codes; the skill file has every heading of D4 and the strings
          `AGENT-REPORT` and `agents.py required`.
       Stop with status=blocked if importing validate_profile or validate_manifest from the script needs a different
@@ -695,14 +757,17 @@ phases:
          D1 table), then `# <Title>` and the `## Role`, `## Inputs`, `## Method`, `## Report`, `## Limits` sections. Inputs lists
          the fields of D1; Report states the finding format and ends with the AGENT-REPORT line format of D3 with the
          agent's own name; Method carries the per-agent points of D1 (for security-reviewer the three posture rules, with
-         the literal heading name `## Threat model` for critical); Limits says what the agent never does (read-only: no
+         the heading text `## Threat model` for critical written inline in backticks, and for low the sentence that no threat
+         model section is written and the report says "posture low" without using that heading); Limits says what the agent never does (read-only: no
          Edit, no Write; no network calls beyond what the prompt's commands do).
       2. Write tests/agents_support.py with the constants ALLOWED_TOOLS = {Read, Grep, Glob, Bash, Skill, Edit, Write},
          EDIT_AGENTS = {tech-writer, website-maintainer, debugger, refactorer}, EXPECTED = a dict of all ten agent names to
          (model, wrapped skill or None) from the D1 table, and `check_agent_file(path)` which asserts: the file has front
-         matter with exactly the keys name, description, tools, model; name equals the file stem; description has at least
+         matter with exactly the keys name, description, tools, model; name equals the file stem; description has more than
          40 characters; model equals EXPECTED; tools are a comma separated subset of ALLOWED_TOOLS containing Read, Grep,
-         Glob, Bash and Skill; Edit and Write are present exactly for EDIT_AGENTS; the five `##` sections appear in order;
+         Glob, Bash and Skill; Edit and Write are present exactly for EDIT_AGENTS; the five `##` section headings appear in
+         order (other `##` text must only occur inside inline code, as `## Threat model` does in security-reviewer.md; check
+         headings with a line-start regex outside code fences);
          the AGENT-REPORT format line with the agent's name is present; when the agent wraps a skill the text
          `Load the \`<skill>\` skill` is present.
       3. Write tests/test_agents_review.py: `check_agent_file` on each of the six files; security-reviewer contains
@@ -756,22 +821,28 @@ phases:
          `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at make_plan`. For a large scope,
          dispatch the `architect` agent first (unless it is in `disabled`) with the ask, your research notes and the must-read
          docs, and use its options when you write the Design section. Dispatch every agent in `required`, each in review mode,
-         as the agent-dispatch skill says. A blocking finding must be resolved in the plan before you push; a non-blocking one
-         goes into the plan's Risks. Before the final reply run `agents.py verify` on the agents' reports; exit 1 stops you
+         as the agent-dispatch skill says. A blocking finding must be resolved in the plan before you push; dispatch the same
+         agent again afterwards, its new report line is the one that counts; a non-blocking finding goes into the plan's
+         Risks. Before the final reply run `agents.py verify` on the agents' reports; exit 1 stops you
          until the missing agent has run or the finding is resolved. Name each agent that ran, with its AGENT-REPORT line,
          under `Agents:` in the final reply." In the small-scope paragraph, add that step 5 of section 0 still applies and
          the agents that ran are named in one line before the prompt.
       2. dod.md: add after the manual-items paragraph: "**Required agents.** Run `python3 <devflow root>/scripts/agents.py
          required --profile .claude/toolkit.yaml --at dod --changed <file with the output of git diff --name-only
          origin/<main>...HEAD>`. Dispatch each agent in `required`, in review mode, as the agent-dispatch skill says. Each gives
-         one row `agent: <name>`: `PASS`; `FAIL` when the item is blocking and its report has blocking findings, or when it did
-         not run (`required agent did not run`); `needs attention (<n>)` when only non-blocking findings exist. After the table,
-         one subsection per agent with its full report verbatim, ending in its AGENT-REPORT line." Extend the final verdict
-         sentence: a `FAIL` agent row means the branch is not ready. Add `agent-dispatch` to the Profile paragraph's skill list.
+         one row `agent: <name>`: `PASS` when it reported no findings; `FAIL` when the item is blocking and its report has
+         blocking findings, or when it did not run (`required agent did not run`); `needs attention (<blocking plus
+         non-blocking>)` in every other case with findings. After the table, one subsection per agent with its full report
+         verbatim, ending in its AGENT-REPORT line." Extend the final verdict sentence: a `FAIL` agent row means the branch is
+         not ready. In the Profile paragraph, after the sentence that starts "Skill names:", add the sentence "The
+         `agent-dispatch` skill is loaded in the Required agents step below, under the same naming."
       3. review.md: add this row to the dimension table in section 3: `| Required agents | AGT | the agent's own file (see the agent-dispatch skill) | one per agent in \`agents.py required --at review\`; run alongside the other subagents |`;
-         below the table add one paragraph: required agents at `review` are dispatched in review mode with the same scope; their
-         findings use the block format with ids `AGT-<n>`; an agent whose entry is `blocking: true` has every blocking finding
-         graded at least `high`; run `agents.py verify` on their reports before section 4 and treat a `MISSING` line as an open
+         below the table add one paragraph: required agents at `review` are dispatched in review mode with the same scope
+         (a whole-repository review has no diff, so no `--changed` is passed); the /review session itself converts each
+         agent finding into the block format with the id `AGT-<n>`, severity `blocking` to `high` and `non-blocking` to
+         `medium`, and the dimension by agent: `security-reviewer` and `dependency-auditor` to `security`, `test-architect` to
+         `tests`, `tech-writer` to `docs`, `website-maintainer` to `website` (the profile validation of p1 allows no other
+         agent at `review`); run `agents.py verify` on their reports before section 4 and treat a `MISSING` line as an open
          item in the document.
       4. Write tests/test_wire_plan_dod_review.py: each file contains `agent-dispatch` and `agents.py required`; make-plan has
          `--at make_plan`, `architect`, `Agents:`; dod has `--at dod`, `AGENT-REPORT`, `required agent did not run`; review has
@@ -792,12 +863,13 @@ phases:
          skill.` and in the "Models" paragraph add one sentence: the orchestrator never runs an agent that has edit tools; it
          only computes who is required and checks the reports.
       2. Child brief (section 3): after rule 3 add rule `3b`: "Required agents. Write the names of the files you changed
-         (`git diff --name-only <feature_branch>...HEAD`) to a temporary file, run `python3 <devflow root>/scripts/agents.py
-         required --profile .claude/toolkit.yaml --at implement_phase --changed <that file>`, and dispatch every agent it lists in
-         edit mode as the agent-dispatch skill says, before your last push. Fix every blocking finding. Put each agent's
-         `AGENT-REPORT` line into your PHASE-REPORT after the `/dod` table. Save the JSON and the report text and run `agents.py
-         verify --required <json> --report <text>`; it must exit 0." In rule 5 add that the AGENT-REPORT lines follow the `/dod`
-         table.
+         (`git diff --name-only origin/<feature_branch>...HEAD`) to a temporary file, run `python3 <devflow root>/scripts/agents.py
+         required --profile .claude/toolkit.yaml --at implement_phase --changed <that file>`, and dispatch every agent it lists as
+         the agent-dispatch skill says, before your last push: the four edit agents (tech-writer, website-maintainer, debugger,
+         refactorer) in edit mode, every other agent in review mode. Fix every blocking finding yourself and dispatch that agent
+         again; its new report line is the one that counts. Print each agent's `AGENT-REPORT` line bare into your PHASE-REPORT
+         after the `/dod` table. Save the JSON and the report text and run `agents.py verify --required <json> --report <text>`;
+         it must exit 0." In rule 5 add that the AGENT-REPORT lines follow the `/dod` table.
       3. Merge (section 4): after step 2 insert step `2b`: "Required agents. Save the names of the files in
          `git diff --name-only <base>...origin/<phase branch>` to a file, run `agents.py required ... --at implement_phase
          --changed <file>` and `agents.py verify --required <json> --report <the child's PHASE-REPORT text>`. Exit 1 goes back to
@@ -807,8 +879,10 @@ phases:
          .claude/toolkit.yaml --at implement_final --changed <the files of git diff --name-only origin/<main>...HEAD>` and dispatch
          every agent it lists in review mode as the agent-dispatch skill says. Put their AGENT-REPORT lines before the
          REVIEW-REPORT line. A blocking finding of an agent whose item is blocking is a blocking finding of yours. Run `agents.py
-         verify`; if it exits 1 your verdict is `changes`." After reading the report the orchestrator runs `agents.py verify`
-         itself on the review text; exit 1 counts as `changes` and the findings go to a fix session as for any blocking finding.
+         verify`; if it exits 1 your verdict is `changes`." After reading the report the orchestrator first runs `agents.py
+         required --profile .claude/toolkit.yaml --at implement_final --changed <the files of git diff --name-only
+         origin/<main>...HEAD>` itself, saves the JSON, and runs `agents.py verify --required <json> --report <the review
+         text>`; exit 1 counts as `changes` and the findings go to a fix session as for any blocking finding.
       5. Write tests/test_wire_implement.py: the file contains `3b`, `--at implement_phase`, `--at implement_final`, `agents.py
          verify`, `AGENT-REPORT`, `agent-dispatch`; the orchestrator sentence about never running edit agents is present; and
          the existing guarantee still holds that the file contains `never substitute`.
@@ -823,7 +897,7 @@ phases:
       - plugins/devflow/hooks/protect_paths.py
       - tests/test_hook_protect_paths_setup.py
     brief: |
-      Implement Design D10. Read plugins/devflow/hooks/protect_paths.py, plugins/devflow/hooks/dod_gate.py lines 36-70 and
+      Implement Design D10. Read plugins/devflow/hooks/protect_paths.py, plugins/devflow/hooks/dod_gate.py lines 36-75 and
       200-227 (`state_dir`, `mark_exempt`, `--exempt` handling) and tests/test_hook_protect_paths.py plus tests/hooks_helpers.py.
       1. In protect_paths.py add the constants of D10 and import `state_dir` from `dod_gate` (the hooks directory is on
          `sys.path` when the script runs; check that importing dod_gate has no side effect).
@@ -836,7 +910,11 @@ phases:
          after `--allow-profile` (run with `run_script` or by calling the function in a temp repo) it is allowed, while `.env`,
          `uv.lock` and `.github/workflows/ci.yml` are still denied; a marker with `written_at` three hours ago denies again;
          `--end-allow` denies again; a Bash `sed -i` on the profile follows the same rule; a marker in one repository does not
-         allow the profile in another. Use `make_repo`/`fresh_repo` helpers.
+         allow the profile in another. Use only the function-scoped `fresh_repo` fixture or `make_repo(tmp_path / ...)`, never
+         the session-scoped `feature_repo` or `main_repo` (a marker there would leak into later tests), and run the CLI
+         with `cwd` set to the temporary repository so no marker is written into the real checkout.
+      5. In `violation()` call `profile_allowed` only when the repo-relative path equals `.claude/toolkit.yaml` (it starts a
+         `git` process; every other path must stay as cheap as today).
     acceptance:
       - ".venv/bin/python -m pytest tests/test_hook_protect_paths_setup.py tests/test_hook_protect_paths.py tests/test_hooks_compat.py -q passes"
       - "`grep -n 'changed by people' plugins/devflow/hooks/protect_paths.py` matches"
@@ -854,8 +932,8 @@ phases:
       1. Write evals/fixtures/setup_repos.py with `REPOS`, one dict of files per repository with exactly the files of the D12
          table (file contents are short but contain the words the table names; the Markdown files of docs_website have at
          least one heading line; the workflow files are valid YAML), and `build(dest, repo="security_heavy",
-         with_profile=False)` returning the dict of D12 (`main_branch`, `repo`, `stacks`, `agents`, `website`, `dispatchable`
-         and also `adr_dir`, `adr_index`, `changelog`, which are None except for docs_website).
+         with_profile=False)` returning the dict of D12 with its nine keys (`main_branch`, `repo`, `stacks`, `agents`,
+         `website`, `dispatchable`, `adr_dir`, `adr_index`, `changelog`; the last three are None except for docs_website).
       2. In tests/test_evals_fixtures.py add `setup_repos` to the `BUILDERS` list and change nothing else.
       3. Write tests/test_setup_fixtures.py: for each repo the build succeeds in `tmp_path`; the listed files exist; the
          returned dict has the keys of D12; `with_profile=True` writes `.claude/toolkit.yaml` and it passes
@@ -883,7 +961,7 @@ phases:
         `levels.e2e` true, `levels.integration` false.
       - docs_website: `score` is 0, `markdown_files` is 11, `levels` is unit only.
       - bare: `source_files` is 0, everything empty or false.
-      - unit tests on tmp files for: a category with one file does not fire; `policy_docs` fires with one file; node_modules
+      - unit tests on tmp files for: a UI file at the repo root gives its own file name as the glob (no `/**`); a category with one file does not fire; `policy_docs` fires with one file; node_modules
         and `.git` are skipped; a file over 200000 bytes is not read; the 20-entry cut leaves `count` intact.
     acceptance:
       - ".venv/bin/python -m pytest tests/test_survey_signals.py -q passes"
@@ -930,7 +1008,10 @@ phases:
       - tmp-path tests: a root `package.json` with scripts gives `package_scripts` and `other_stacks`; a root Makefile gives
         only the whitelisted `make_targets`; a directory that is not a git repository gives the empty `git` object; a workflow
         with `on: workflow_dispatch` and inputs `a` and `b` on `windows-latest` gives notes `Inputs: a, b`; a workflow whose
-        `on` is a list.
+        `on` is a list; `main_branch` in a repository with a remote `origin` and `refs/remotes/origin/main` (made with
+        `git update-ref`) while HEAD is on `claude/x` is `main`, and with a remote but no `origin/main`, `origin/master` or
+        `origin/HEAD` it is null; `branch_prefixes` counts a branch that exists locally and as `origin/<name>` once and
+        skips `main` and `origin/HEAD`.
       - the CLI run in a subprocess on a fixture prints JSON with the keys `root`, `evidence`, `proposal`.
     acceptance:
       - ".venv/bin/python -m pytest tests/test_profile_survey.py -q passes"
@@ -969,13 +1050,17 @@ phases:
       Implement `profile_patch.py` exactly as Design D9 says (`set-block`, `diff`, the stale rules). Follow D14. Never round-trip
       the profile through a YAML dumper; only the block being replaced is rendered with `yaml.safe_dump`.
       Write tests/test_profile_patch.py on inline profile texts: replacing an existing `agents:` block keeps all other lines,
-      comments included, byte for byte; a comment line directly above the key stays; appending when absent adds one blank line
-      and the block at the end; `docs.website` is added as the last child of `docs:` and replaced when present; `docs.website`
+      comments included, byte for byte; a comment line directly above the key stays; commented-out example lines (at column 0
+      and indented) that follow the replaced block stay untouched, for `agents` and for `docs.website`; appending when absent
+      adds one blank line and the block at the end; `docs.website` is added directly after the last line of the `docs:` block
+      (before any commented lines that follow it) and replaced when present; `set-block` and `diff` accept the whole survey
+      output (`{"proposal": {"profile": ...}}`) as the value file, and a survey without `agents` exits 1 with the exact
+      message; `docs.website`
       without a `docs:` block exits 1 with the exact message; applying the same value twice is idempotent; the result of every
       case still loads with `yaml.safe_load` and validates with `vp.validate`; `diff` reports `new`, `changed`, `same` for a
       small example, and `stale` for a missing `docs.must_read` file, a missing workflow of `ci.dispatchable`, and a `when` glob
-      that matches no file (use `tmp_path` with `git init`-free plain files); the CLI is exercised with `subprocess` for both
-      subcommands, including `--write`.
+      that matches no file (plain files in `tmp_path`, no git; a file under `node_modules` does not count as a match); the CLI
+      is exercised with `subprocess` for both subcommands, including `--write`.
     acceptance:
       - ".venv/bin/python -m pytest tests/test_profile_patch.py -q passes"
       - ".venv/bin/python -m pytest tests/test_no_project_words.py -q passes"
@@ -1011,6 +1096,7 @@ phases:
       - plugins/devflow/commands/setup.md
       - plugins/devflow/skills/profile-setup/SKILL.md
       - tests/test_structure.py
+      - tests/test_hooks_compat.py
       - tests/test_setup_command.py
     brief: |
       Implement Design D6 and D6a. Read plugins/devflow/commands/deps.md (a command with the same Profile/status-board
@@ -1026,9 +1112,16 @@ phases:
       2. Write plugins/devflow/skills/profile-setup/SKILL.md with the five headings of D6 and the rules listed there (verify
          command choice, mapping, questions, pull request body, never).
       3. In tests/test_structure.py:63 add `profile-setup` to the expected skill names (after p2's `agent-dispatch`). Change nothing else.
+      3b. In tests/test_hooks_compat.py read the `COMPAT` table and `normalise` first, then add a `"setup"` entry (a new command file
+         fails `test_every_command_file_is_covered` otherwise) with these rows, whose phrases the command file must contain:
+         `("git checkout -b chore/toolkit-profile origin/main", "chore/toolkit-profile")`,
+         `("git push -u origin chore/toolkit-profile", "git push -u origin chore/toolkit-profile")` and
+         `("git add .claude/toolkit.yaml", "commit only `.claude/toolkit.yaml`")`. Every backticked `git ` span in setup.md and
+         in the skill must follow the D14 rule (placeholders from the sweep's PLACEHOLDERS only; write the branch commands with
+         `<main>`, never with `<scratchpad>`, `<project>` or `<range>`).
       4. Write tests/test_setup_command.py: the command has the front matter keys and `model: sonnet`; every heading of D6 in
          order; every script and flag string above; `chore/toolkit-profile`; `AskUserQuestion`; the skill has its five
-         headings and the strings `Decisions for a human`, `blocking: true` and `Never`; `plugins/devflow/templates/toolkit.yaml`
+         headings and the strings `Decisions for a human`, `blocking: true`, `--accept-proposals` and `Never`; `plugins/devflow/templates/toolkit.yaml`
          exists; running `profile_survey.py` on a fixture and `profile_patch.py set-block` with its `agents` block on a profile
          copy yields a profile that validates (an end-to-end check in `tmp_path`, using `evals.fixtures.setup_repos`).
     acceptance:
@@ -1060,9 +1153,10 @@ phases:
          `agents/` and new scripts lines. Do not rewrite history sections.
       4. docs/hooks.md: in the `protect-paths` section document `--allow-profile`, `--end-allow`, the two-hour TTL, per-checkout
          scope, and that it is a convention. docs/maintenance.md: add the `setup` record to its record list.
-      5. README.md: add `/setup` and the agents bullets to the command list, change "the eight commands" to the right count,
-         make step 1 of "Use it in a project" `/setup` (keeping the manual copy as the fallback), add the scripts and the
-         `agents/` directory to the "What is here" table.
+      5. README.md: add `/setup` and the agents bullets to the command list, change "the eight commands" to "the nine
+         commands", make step 1 of "Use it in a project" `/setup` (keeping the manual copy as the fallback), and in the "What
+         is here" table add the `agents/` directory, the new scripts (`agents.py`, `profile_survey.py`, `survey_signals.py`,
+         `survey_docs.py`, `survey_proposal.py`, `profile_patch.py`) and the new skills `agent-dispatch` and `profile-setup`.
       6. tests/test_docs_agents.py: docs/agents.md names all ten agents and the five points; docs/setup.md names `profile_survey.py`,
          `profile_patch.py` and `chore/toolkit-profile`; README mentions `/setup` and `docs/agents.md`; docs/hooks.md contains
          `--allow-profile`; every relative Markdown link in the four new or changed docs resolves to an existing file.
@@ -1095,8 +1189,8 @@ phases:
       3. Write the three task.yaml files of D13 (ids, descriptions, commands, fixtures with params, graders, `repeats: 3`,
          `timeout_s: 900`, `cost_ceiling_usd` 3.0 for the setup task and 1.5 for the others, `requires` naming
          plugins/devflow/commands/setup.md or plugins/devflow/agents/security-reviewer.md).
-      4. Extend tests/test_evals_graders.py with a case per new grader (pass and fail) and tests/test_evals_tasks.py only if it
-         counts or lists tasks; `python3 evals/run.py validate` must accept the new tasks.
+      4. Extend tests/test_evals_graders.py with a case per new grader (pass and fail); in tests/test_evals_tasks.py add the three
+         new ids to the set in `test_shipped_tasks_are_valid`; `python3 evals/run.py validate` must accept the new tasks.
       5. In docs/evals.md add the three tasks to the task list and the two graders to the grader list.
     acceptance:
       - ".venv/bin/python -m pytest tests/test_evals_graders.py tests/test_evals_tasks.py tests/test_evals_fixtures.py tests/test_evals_runner.py -q passes"
