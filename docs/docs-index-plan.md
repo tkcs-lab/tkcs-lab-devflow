@@ -27,7 +27,7 @@ Delivered by this plan:
 ## 2. Current state
 
 - `CLAUDE.md` does not exist. `README.md` (92 lines) is the only entry point; `docs/` holds 12 flat
-  files plus `docs/design/maintenance-spike.md`, 2037 lines in total, and no index.
+  files plus `docs/design/maintenance-spike.md`, about 2200 lines in total, and no index.
 - `.claude/toolkit.yaml:9-12` lists four docs under `docs.must_read` (`README.md`, `docs/design.md`,
   `docs/profile-reference.md`, `docs/delivery.md`; about 600 lines). `commands/make-plan.md:81-84`
   makes the planner read all of them, the ADR index and every ADR; `commands/implement.md:155` names
@@ -81,7 +81,7 @@ docs/archive/              superseded docs, kept for history, never read by defa
   decision touches the area; never read `archive/` or another change's plan; never read every doc.
 - **`CLAUDE.md`** holds the title with a two-line description, a layout list (at most 8 lines), the
   commands (at most 10), the hard rules (at most 10) and a `## Docs` section linking the index with
-  the sentence "Open the index first, then only the rows that match the task."
+  the sentence "Open [docs/README.md](docs/README.md) first, then only the rows that match your task." (with the profile's index path)
 
 ### D2. `scripts/docs_index.py check` and `inventory`
 
@@ -129,7 +129,9 @@ The prototype implements both; p1 keeps its structure and changes exactly this:
 - **Files scanned**: `git ls-files` (when not a git repository, a walk that skips `.git`) with a suffix in
   `.md .py .yaml .yml .json .html .js .toml .txt .sh`, minus the excludes. `DEFAULT_EXCLUDES` is
   `.git/**`, `tests/fixtures/**`, `evals/fixtures/**`, `.claude/toolkit.yaml` (the profile is the
-  owner's protected file); `--exclude` adds more. Matching uses `validate_manifest.path_matches` (the
+  owner's protected file) and, whatever the directory, every file whose name matches the transient-doc
+  pattern of D1 (`PLAN_NAME`: plans, their manual-steps pages, reviews), so a plan is never rewritten
+  by the move of a doc it mentions; `--exclude` adds more. Matching uses `validate_manifest.path_matches` (the
   toolkit's one glob semantics; import it the way `scope_check.py` does).
 - **Rewritten, in this order, in every scanned file F:**
   1. *Markdown links* in `.md` files (outside fenced code): `[text](target#anchor)` whose target resolves
@@ -270,9 +272,9 @@ exact (without the guillemets).
 - E3. In "Sizing for Sonnet", after the bullet beginning `- **Numbered steps naming files and symbols**`, add the bullet «- **A `Read first:` line (index parts).** A brief's first line is `Read first: <paths>`: the exact docs from the index the phase needs, as paths. A worker opens those and opens the index only when they are not enough.»
 - E4. After the paragraph beginning `Optional per phase, rarely:`, add the paragraph «Index parts: the retirement phase also updates the docs index: one row per doc the plan added, moved or deleted (the plan document and the manual-steps page are never indexed), the ADR-index rows, and the `CLAUDE.md` lines a change made untrue; it then runs `docs_index.py check --profile .claude/toolkit.yaml` until it exits 0. No other phase edits the index or `CLAUDE.md`, so two phases of one wave never share them; a phase that adds, moves or deletes a doc reports it as a `docs-changed:` line and you list the expected rows in the retirement phase's brief.»
 - E5. In the manifest example's `final_checks`, after the changelog line add the line «  - <`python3 <devflow root>/scripts/docs_index.py check --profile .claude/toolkit.yaml` exits 0>   # index parts only».
-- E6. In section 4, in the list the `Plan` subagent reports, add before the final `or would make the manifest fail` clause: «leaves the retirement phase without the index rows for the docs the plan adds, or gives a brief no `Read first:` line (index parts);».
+- E6. In section 4, in the list the `Plan` subagent reports (the clause `or would make` / `the manifest fail` is wrapped over two lines in the file, so search for `or would make`), add before that clause: «leaves the retirement phase without the index rows for the docs the plan adds, or gives a brief no `Read first:` line (index parts);».
 - E7. In section 5 step 3 ("Final reply"), add the bullet «- Without `docs.index`: the line `No docs index: run /docs init to build one (it cuts the tokens every session reads).`»
-- E8. In "Small scope", item 3 (Context) gains «, and the docs the index routes to (index parts)» at its end, and item 5 (Steps) gains «, the docs-index rows the change needs (index parts)» before its final clause.
+- E8. In "Small scope", item 3 (Context) gains «, and the docs the index routes to (index parts)» at its end, and item 5 (Steps) gains «, the docs-index rows the change needs (index parts)» immediately before «, and an ADR if the change meets the bar».
 
 `commands/implement.md`:
 
@@ -413,8 +415,8 @@ Three steps need the owner; the page is https://claude.ai/artifact/MTFUcyWp87zL2
   (manual step `ma2`).
 - **External links.** Anything outside the repository that links `docs/<name>.md` of a moved doc breaks.
   Only `migrating-privacyfence.md` is known to be linked and it stays.
-- **Phase 7 and 8 size.** They change many files, mechanically, by tool. A worker that sees more than
-  about 80 changed files or a test failure it cannot explain after two attempts stops with `status=blocked`.
+- **Phase 7 and 8 size.** They change many files, mechanically, by tool. A worker whose dry run reports
+  more than 60 changed files, or that cannot explain a test failure after two attempts, stops with `status=blocked`.
 
 ## Implementation manifest
 
@@ -491,7 +493,7 @@ phases:
       3. In tests/test_validate_profile.py add tests: `docs.index` accepted by the schema; a missing index file is an error naming it (use the `tmp_path` pattern of `test_listed_files_must_exist`); an existing one passes; 4 `must_read` entries with an index warn and 3 do not; an empty string is rejected.
       4. In docs/profile-reference.md add the table row for `docs.index` (after `docs.plan_dir`) in the style of its neighbours: optional, the index file, `/docs`, and that with it `docs.must_read` should shrink to what every task needs.
       5. In templates/toolkit.yaml add under `docs:` the commented lines `  # index: docs/README.md   # optional. The entry-level docs index: sessions read it first, then only matching rows. /docs init builds it` (keep the template valid for `validate_profile.py templates/toolkit.yaml --no-file-checks`).
-      6. In plugins/devflow/skills/project-profile/SKILL.md add the key-table row `docs.index` ("The entry-level docs index: the planner reads it first and then only matching rows; workers get Read first lists; /docs and docs_index.py use it") and the sentence from D4 to rule 2.
+      6. In plugins/devflow/skills/project-profile/SKILL.md add the key-table row `docs.index` ("The entry-level docs index: the planner reads it first and then only matching rows; workers get Read first lists; /docs and docs_index.py use it") and the sentence from D4 to rule 2 ("A missing optional key means 'not used here'").
       7. Run `.venv/bin/python -m pytest tests/test_validate_profile.py tests/test_structure.py tests/test_no_project_words.py -q`.
     acceptance:
       - .venv/bin/python -m pytest tests/test_validate_profile.py -q passes
@@ -532,7 +534,7 @@ phases:
       Read first: docs/docs-index-plan.md (Design D3), plugins/devflow/scripts/docs_index.py, plugins/devflow/scripts/scope_check.py (how it imports validate_manifest and matches globs), tests/test_docs_index.py.
 
       1. Add the `move` subcommand to plugins/devflow/scripts/docs_index.py exactly as Design D3 specifies: arguments, dry-run default, `--apply`, `--exclude`, `--json`, `DEFAULT_EXCLUDES`, the scanned suffixes, the three rewrite rules in the stated order, the two `unresolved:` kinds, the message texts and the caps (200 `would rewrite` lines, 50 `unresolved` lines). Import `validate_manifest` the way scope_check.py does and use `path_matches` for the excludes. Implement the rules as small functions (`rewrite_links`, `rewrite_root_mentions`, `rewrite_path_expressions`, `find_unresolved`) so they can be tested without a repository.
-      2. Extend tests/test_docs_index.py with tests named for these cases, using git repositories under `tmp_path`: a link in another doc is rewritten (and keeps its anchor); the links inside the moved file are rebased; a root mention in README.md and in a `.py` file is rewritten, also inside a code span; `"docs" / "hooks.md"` becomes `"docs" / "architecture" / "hooks.md"` and `ROOT / ` stays; `plugins/docs/hooks.md` and `docs/hooks.md.bak` are not rewritten; a file under `tests/fixtures/` is not touched; a second `--exclude` is honoured; the dry run changes nothing and prints the `would rewrite` lines and the summary; `--apply` moves with `git mv` (the move shows in `git status --porcelain` as a rename) and removes the emptied source directory; `DST` that exists exits 1 with the message; `SRC` that is not a file exits 1 with the message; a bare `hooks.md` mention is reported `unresolved` but not rewritten; a `https://.../docs/hooks.md` URL is reported `unresolved`; moving a second doc after a first one composes; a directory without `.git` moves with `os.rename`; `--json` parses.
+      2. Extend tests/test_docs_index.py with tests named for these cases, using git repositories under `tmp_path`: a link in another doc is rewritten (and keeps its anchor); the links inside the moved file are rebased; a root mention in README.md and in a `.py` file is rewritten, also inside a code span; `"docs" / "hooks.md"` becomes `"docs" / "architecture" / "hooks.md"` and `ROOT / ` stays; `plugins/docs/hooks.md` and `docs/hooks.md.bak` are not rewritten; a file under `tests/fixtures/` is not touched; a second `--exclude` is honoured; `docs/x-plan.md` and `docs/x-plan-manual-steps.html` that mention the moved path are not touched; the dry run changes nothing and prints the `would rewrite` lines and the summary; `--apply` moves with `git mv` (the move shows in `git status --porcelain` as a rename) and removes the emptied source directory; `DST` that exists exits 1 with the message; `SRC` that is not a file exits 1 with the message; a bare `hooks.md` mention is reported `unresolved` but not rewritten; a `https://.../docs/hooks.md` URL is reported `unresolved`; moving a second doc after a first one composes; a directory without `.git` moves with `os.rename`; `--json` parses.
       3. Run `.venv/bin/python -m pytest tests/test_docs_index.py tests/test_no_project_words.py -q`.
 
       Stop condition: if rule 2 cannot be made to leave `plugins/docs/hooks.md` alone with the stated regular expression, stop with status=blocked and give the failing case.
@@ -558,7 +560,7 @@ phases:
       1. Create plugins/devflow/skills/docs-keeper/SKILL.md from Design D6: the front matter, the nine headings in order, and the content of each section as D6 specifies (all 11 Init steps, the Tidy lists, the Maintain rules). Keep it under 160 lines. Use none of the words in `FORBIDDEN` of tests/test_no_project_words.py.
       2. Create plugins/devflow/commands/docs.md from Design D7: the front matter, the six headings in order, every string in D7 verbatim (usage text, branch names, pull request headings, `needs_you` reasons, `last_event` text, issue title). The profile paragraph is the one in commands/deps.md.
       3. Create tests/test_docs_command.py in the shape of tests/test_deps.py: front matter (description starts with `Check, build or tidy the docs index`, `model: sonnet`), the profile paragraph, headings in order, key words (`docs_index.py`, `docs-keeper`, `kind: maintenance`, `command: docs`, `<project>--docs`, `"scheduled"`, `subscribe_pr_activity`, `Usage: /docs [check | init | tidy]`), the four reasons (`Review docs tidy PR #<n>`, `Decide docs tidy items (issue #<n>)`, `Run /docs init`, `Docs tidy failed: <short cause>`), the five init pull-request headings, no `@` bot command, and the skill file: headings in order, `60`, `150`, `400`, the eleven numbered Init steps, the strings `docs-changed:` and `AskUserQuestion`.
-      4. tests/test_structure.py: add `docs-keeper` to the skill-name set in `test_skills_have_matching_names`. tests/test_hooks_compat.py: add a `docs` entry to `COMPAT` like `deps` (the init and tidy branch, push and `git mv` operations with the phrase the command file contains). tests/test_hooks_config.py: add `("docs", False)` to the exempt-marker table.
+      4. tests/test_structure.py: add `docs-keeper` to the skill-name set in `test_skills_have_matching_names`. tests/test_hooks_compat.py: add a `docs` entry to `COMPAT` like `deps` (the init and tidy branch, push and `git mv` operations with the phrase the command file contains). tests/test_hooks_config.py: add `("docs", False)` to the exempt-marker table. In tests/test_hooks_compat.py also add `"<yyyymmdd>": "20260101"` to `PLACEHOLDERS` (the sweep fails on an unfilled placeholder otherwise).
       5. Run `.venv/bin/python -m pytest tests -q`. Every test must pass, including the sweeps in tests/test_hooks_compat.py over the code spans of the new command.
 
       Stop condition: if a git command span in docs.md is denied by a guardrail hook in the compat sweep and rewording it to an allowed form from COMPAT is not possible, stop with status=blocked and name the span.
@@ -584,7 +586,7 @@ phases:
       2. Create tests/test_docs_workflow.py. For each edit, one test asserts that a distinctive phrase of its text is in the right file (normalise whitespace with `" ".join(text.split())` as tests/test_deps.py does): `"index parts" apply only when the profile has`, `Read first: <paths>`, `docs-changed:`, `Docs changed`, `update the docs index for each`, `docs_index.py check --profile .claude/toolkit.yaml` (in make-plan, implement and dod), `No docs index: run /docs init`, `n/a (docs_index.py not in this devflow version)`, `never FAIL and never part of the verdict`, `at most 60 lines`. Also one test that the retirement paragraph (E4) says that no other phase edits the index.
       3. Run `.venv/bin/python -m pytest tests -q`.
 
-      Stop condition: if the sentence E2 or E10 names to replace or follow is not in the file as D8 describes it, stop with status=blocked and quote what the file says.
+      Stop condition: if the sentence E2, E6 or E10 names to replace or follow is not in the file as D8 describes it, stop with status=blocked and quote what the file says.
     acceptance:
       - .venv/bin/python -m pytest tests/test_docs_workflow.py -q passes
       - .venv/bin/python -m pytest tests -q passes
@@ -603,21 +605,22 @@ phases:
       - tests/*.py
       - evals/*.py
       - evals/harness/**
+      - evals/hook_cases.yaml
     brief: |
       Read first: docs/docs-index-plan.md (Design D3, D9 and Risks), plugins/devflow/scripts/docs_index.py (the move subcommand).
 
       1. Check the profile: `.venv/bin/python plugins/devflow/scripts/validate_profile.py .claude/toolkit.yaml` must exit 0 (the owner shrank `docs.must_read` before this run). If it fails because a listed file is missing, stop with status=blocked: the manual step mb1 is not done.
       2. For each row of the D9 table marked p7, in order: run `python3 plugins/devflow/scripts/docs_index.py move <src> <dst>`, read the whole dry-run output, and only then run it again with `--apply`. After each apply run `.venv/bin/python -m pytest tests -q -x` and fix what fails before the next move.
-      3. Handle every `unresolved:` line by hand: a link or path that points at the moved doc is rewritten; a bare file-name mention in prose stays; a URL stays unless it is a link to this repository's own file on the plan or main branch, which is rewritten. Do not edit `.claude/toolkit.yaml`, `tests/fixtures/**` or `evals/fixtures/**`.
+      3. Handle every `unresolved:` line by hand: a link or path that points at the moved doc is rewritten; a bare file-name mention in prose stays; a URL stays, except a link to this repository's own file under `/blob/main/`, which is rewritten by hand to the new path. Do not edit `.claude/toolkit.yaml`, `tests/fixtures/**` or `evals/fixtures/**`.
       4. `docs/architecture/` and `docs/reference/` now exist; `docs/design/` is gone. Do not create the index, `CLAUDE.md` or any new doc in this phase.
-      5. Run the check that nothing still points at the six old paths: `grep -rnE "docs/(design|hooks|scope-drift|evals|profile-reference)\.md|docs/design/" . --exclude-dir=fixtures --exclude-dir=.git` may print only lines in `.claude/toolkit.yaml` and in `docs/docs-index-plan.md`.
+      5. Run the check that nothing still points at the six old paths: `grep -rnE "docs/(design|hooks|scope-drift|evals|profile-reference)\.md|docs/design/" . --exclude-dir=fixtures --exclude-dir=.git` may print only lines in `.claude/toolkit.yaml` and in the plan files (`docs/docs-index-plan.md`, `docs/docs-index-plan-manual-steps.html`), which the move leaves untouched.
       6. Run `.venv/bin/python -m pytest tests -q`.
 
-      Stop conditions: a dry run that would rewrite more than about 60 files or a rewrite that is clearly wrong (a path inside a synthetic fixture string, a URL to another repository): stop with status=blocked and quote it. A hook denies an edit: stop, never edit the profile.
+      Stop conditions: a dry run whose summary says more than 60 files would change, or a rewrite that is clearly wrong (a path inside a synthetic fixture string, a URL to another repository): stop with status=blocked and quote it. A hook denies an edit: stop, never edit the profile.
     acceptance:
       - for f in design hooks scope-drift evals; do test -f docs/architecture/$f.md; done and test -f docs/architecture/maintenance-spike.md and test -f docs/reference/profile-reference.md
       - test ! -e docs/design.md and test ! -e docs/hooks.md and test ! -e docs/design
-      - the grep of step 5 prints only .claude/toolkit.yaml and docs/docs-index-plan.md lines
+      - the grep of step 5 prints only lines of .claude/toolkit.yaml and of the two plan files
       - .venv/bin/python -m pytest tests -q passes
       - .venv/bin/python plugins/devflow/scripts/validate_profile.py .claude/toolkit.yaml exits 0
 
@@ -633,21 +636,23 @@ phases:
       - tests/*.py
       - evals/*.py
       - evals/harness/**
+      - evals/hook_cases.yaml
     brief: |
       Read first: docs/docs-index-plan.md (Design D3, D9 and Risks), plugins/devflow/scripts/docs_index.py (the move subcommand).
 
       1. For each row of the D9 table marked p8, in order: run `python3 plugins/devflow/scripts/docs_index.py move <src> <dst>`, read the whole dry-run output, then run it again with `--apply`, then `.venv/bin/python -m pytest tests -q -x` and fix what fails before the next move.
       2. Handle every `unresolved:` line as in p7 step 3. `docs/migrating-privacyfence.md` does not move; links to it from the moved docs are rebased by the tool and stay valid.
       3. `docs/guides/` now exists. Do not create the index, `CLAUDE.md` or any new doc in this phase.
-      4. Run the check that nothing points at an old path: `grep -rnE "docs/(delivery|maintenance|board-server|admin|git-ops|review)\.md" . --exclude-dir=fixtures --exclude-dir=.git` may print only lines in `.claude/toolkit.yaml` and `docs/docs-index-plan.md`.
-      5. Check that every relative markdown link under docs/ and in README.md still resolves: write a short Python snippet (do not commit it) that reads those files outside code fences, resolves each `](relative-path)` target against the file's directory and prints the ones that do not exist. It must print nothing.
+      4. Run the check that nothing points at an old path: `grep -rnE "docs/(delivery|maintenance|board-server|admin|git-ops|review)\.md" . --exclude-dir=fixtures --exclude-dir=.git` may print only lines in `.claude/toolkit.yaml` and in the plan files (`docs/docs-index-plan.md`, `docs/docs-index-plan-manual-steps.html`).
+      5. Check that every relative markdown link under docs/ and in README.md still resolves with this command, which must print nothing:
+         `python3 - <<'PY'` / `import re, pathlib` / `for f in [*pathlib.Path("docs").rglob("*.md"), pathlib.Path("README.md")]:` / `    if "-plan" in f.name: continue` / `    for m in re.finditer(r"\]\(([^)#\s]+)", re.sub(r"```.*?```", "", f.read_text(), flags=re.S)):` / `        t = m.group(1)` / `        if not t.startswith(("http", "mailto")) and not (f.parent / t).exists(): print(f, t)` / `PY` (write it as the multi-line script it spells out; do not commit it).
       6. Run `.venv/bin/python -m pytest tests -q`.
 
       Stop conditions as in p7.
     acceptance:
       - for f in delivery maintenance board-server admin git-ops review; do test -f docs/guides/$f.md; done and test -f docs/migrating-privacyfence.md
-      - the grep of step 4 prints only .claude/toolkit.yaml and docs/docs-index-plan.md lines
-      - the link snippet of step 5 prints no broken link
+      - the grep of step 4 prints only lines of .claude/toolkit.yaml and of the two plan files
+      - the command of step 5 prints nothing
       - .venv/bin/python -m pytest tests -q passes
 
   - id: p9-retire-docs-index
@@ -673,9 +678,9 @@ phases:
       1. Create CLAUDE.md with the exact text of D9 and docs/README.md with the exact rows of D9.
       2. Create docs/guides/docs-index.md with the headings listed in D9, at most 150 lines, starting with a summary of at most 3 lines. Content: the structure and numbers of D1, the reading protocol, who updates what (`/make-plan` reads the index and writes `Read first:` lines; `/implement` workers read only that list and the retirement phase updates the index; `/dod` reports a `docs index` row; `/docs tidy` repairs drift), the three `/docs` modes in two lines each, the profile key, `docs_index.py move` in five lines, scheduling `/docs tidy` by linking `maintenance.md` and saying to update the status board first.
       3. docs/guides/maintenance.md: change the intro to name four commands (`/deps`, `/upstream`, `/land`, `/docs tidy`), add a `### /docs tidy` section of at most 12 lines (weekly docs cleanup: mechanical fixes in one pull request or an issue with a checklist; never merges; writes a record with `command: docs`) and add `/docs tidy` to the scheduling section's sentence about the prompt. docs/guides/board-server.md: add `/docs tidy` to the list of commands that write records.
-      4. docs/architecture/design.md: in the Layout block add `commands/docs.md`, `skills/docs-keeper/SKILL.md`, `scripts/docs_index.py` and the docs tree of D1 (the lines that name docs files already carry the new paths); add a short section "Docs structure" of at most 15 lines pointing to `docs/guides/docs-index.md`. docs/architecture/hooks.md: where it says `/deps` and `/upstream` are not exempt, add that `/docs` is not exempt either.
+      4. docs/architecture/design.md: in the Layout block add `commands/docs.md`, `skills/docs-keeper/SKILL.md`, `scripts/docs_index.py` and the docs tree of D1 (the lines that name docs files already carry the new paths); add a short section `## 13. Docs structure` after the last numbered section (`## 12. A self-hosted status board`) of at most 15 lines pointing to `docs/guides/docs-index.md`. docs/architecture/hooks.md: where it says `/deps` and `/upstream` are not exempt, add that `/docs` is not exempt either.
       5. README.md: add a `/docs [check | init | tidy]` bullet to the command list (three lines), change "the eight commands" to "the nine commands", add `docs-keeper` to the skills named in the "What is here" table and `docs_index.py` to its scripts, and add `guides/docs-index.md` to the `docs/` row. Keep the existing links valid.
-      6. Set the version `0.8.0` in the five plugins/*/.claude-plugin/plugin.json and add `/docs` to the devflow description (keep the description a single line).
+      6. Set the version `0.8.0` in the five plugins/*/.claude-plugin/plugin.json, add `/docs` to the devflow description (keep it a single line) and change the sentence `The plugin version is 0.7.0.` at the end of the status-board section of docs/architecture/design.md to `The plugin version is 0.8.0.`
       7. tests/test_docs_index.py: add `test_this_repository_docs_index_is_clean` that runs `docs_index.py check --index docs/README.md --root <repo root>` with `subprocess` and asserts exit 0 and no `error:` line, `test_claude_md_is_thin` (at most 60 lines, contains `docs/README.md`), and `test_all_plugins_are_0_8_0`.
       8. Delete docs/docs-index-plan.md and docs/docs-index-plan-manual-steps.html (`git rm`). Nothing may link to them.
       9. Run `python3 plugins/devflow/scripts/docs_index.py check --index docs/README.md` (must exit 0), `.venv/bin/python -m pytest tests -q`, and the final-checks greps: `grep -rnE "docs/(design|hooks|scope-drift|evals|delivery|maintenance|board-server|admin|git-ops|review|profile-reference)\.md|docs/design/" . --exclude-dir=fixtures --exclude-dir=.git` prints only `.claude/toolkit.yaml` lines; `grep -rn "docs-index-plan" . --exclude-dir=.git` prints nothing.
