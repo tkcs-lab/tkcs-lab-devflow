@@ -20,7 +20,7 @@ SCHEMA = Path(__file__).resolve().parent.parent / "schema" / "profile.schema.jso
 DEFAULT_PROFILE = ".claude/toolkit.yaml"
 REVIEW_AGENTS = ("security-reviewer", "dependency-auditor", "test-architect", "tech-writer", "website-maintainer")
 DIFF_POINTS = ("implement_phase", "implement_final", "dod")
-HELP = "see docs/profile-reference.md in the claude-toolkit repo"
+HELP = "see docs/reference/profile-reference.md in the claude-toolkit repo"
 
 _TYPES = {
     "object": dict,
@@ -168,8 +168,15 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
         if "review" in points and name not in REVIEW_AGENTS:
             errors.append(f"'{where}': '{name}' cannot run at 'review' (it has no review dimension; "
                           f"allowed: {', '.join(REVIEW_AGENTS)})")
+    if docs.get("index") and len(docs.get("must_read", [])) > 3:
+        warnings.append(
+            f"'docs.must_read' lists {len(docs['must_read'])} files while 'docs.index' is set: "
+            "keep only what every task needs, the index routes the rest"
+        )
     if root_dir is not None:
         paths = list(docs.get("must_read", []))
+        if docs.get("index"):
+            paths.append(docs["index"])
         if profile.get("project_steward"):
             paths.append(profile["project_steward"])
         if profile.get("admin", {}).get("policy"):
@@ -186,7 +193,7 @@ def validate(profile, root_dir: Path | None = None) -> tuple[list[str], list[str
     if not isinstance(profile, dict):
         return ["the profile must be a YAML mapping"], [], {}
     if "toolkit" in profile:
-        return (["'toolkit' was removed: the toolkit is delivered only as plugins (docs/delivery.md); "
+        return (["'toolkit' was removed: the toolkit is delivered only as plugins (docs/guides/delivery.md); "
                  "delete the 'toolkit' section"], [], {})
     check(profile, schema, schema, "", errors)
     if errors:

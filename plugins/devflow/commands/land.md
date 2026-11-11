@@ -17,7 +17,7 @@ This command needs the profile key `git.bot_login`; if it is missing, stop with 
 `land.max_prs` is optional. In this file `<main>` is `git.main_branch`, "the gate" is `verify.dod`.
 The scripts and templates named below sit in `<devflow root>` (the project-profile skill's "Find the toolkit scripts" step).
 
-**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command merges pull request branches on an integration branch and does not change code itself. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
+**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/architecture/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command merges pull request branches on an integration branch and does not change code itself. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
 
 ## Rules
 

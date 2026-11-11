@@ -418,7 +418,7 @@ def test_implement_command_calls_the_script_with_real_flags():
 
 
 def test_docs_describe_the_decisions():
-    doc = (DEVFLOW.parent.parent / "docs" / "scope-drift.md").read_text()
+    doc = (DEVFLOW.parent.parent / "docs" / "architecture" / "scope-drift.md").read_text()
     for needle in ("optional property in schema version 1", "pull request description", "scope.ignore",
                    "never blocks", "are not ignored by default", "partly_reverted", "rejected"):
         assert needle in doc, needle

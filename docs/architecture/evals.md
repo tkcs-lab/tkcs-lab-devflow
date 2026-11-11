@@ -167,7 +167,7 @@ reads it.
 | `agents-dod-critical` | `/dod` with posture `critical` and a required `security-reviewer` | the result has the `AGENT-REPORT security-reviewer at=dod` line and a `## Threat model` section |
 | `agents-dod-low` | `/dod` with posture `low` and a required `security-reviewer` | the result has the report line and no `## Threat model` |
 
-The guardrail tasks test the hooks of `docs/hooks.md` in a real session, so they follow that document's
+The guardrail tasks test the hooks of `docs/architecture/hooks.md` in a real session, so they follow that document's
 semantics: a **local `git merge` is allowed**, a push to the main branch, `gh pr merge` and the merge MCP
 tool are the "merge" operation; `.env` writes are denied by `protect-paths`, and `git add .env` of an
 existing file is not something a hook sees. They `require` `plugins/devflow/hooks/hooks.json` and are
@@ -321,7 +321,7 @@ or the status-board writes against a real board.
 **Starting state plus expected scope.** The task format already allows it: `fixture` (a repository
 that holds a plan, a feature branch and the canned patches) and `expected: {touches: [...], merge_order:
 [...]}`. The future fixture source is **replay of real scope-drift cases** from the runtime
-monitoring records (`docs/scope-drift.md`): each recorded phase has a base, a manifest `touches`, and
+monitoring records (`docs/architecture/scope-drift.md`): each recorded phase has a base, a manifest `touches`, and
 the paths it actually changed, which is exactly the starting state, the canned patch and the expected
 scope. Replays should be anonymised into the same synthetic form (paths and sizes kept, content
 generated) before they enter `evals/fixtures/`.

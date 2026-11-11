@@ -7,7 +7,7 @@
     repo_admin.py apply --policy POLICY [--repo NAME]... [--check NAME]... [--only ID]...
                         [--allow-delete] [--yes]
 
-The policy (schema/admin-policy.schema.json, docs/admin.md) says what the organisation and its
+The policy (schema/admin-policy.schema.json, docs/guides/admin.md) says what the organisation and its
 repositories should look like; a section that is absent is not managed. `audit` only reads. `apply`
 recomputes the findings and, without --yes, prints the calls it would make and changes nothing.
 With --yes it makes them, except the irreversible ones (deleting a label, secret, variable, webhook,
@@ -50,7 +50,7 @@ PLUGIN = HERE.parent
 SCHEMA = PLUGIN / "schema" / "admin-policy.schema.json"
 TEMPLATES = PLUGIN / "templates"
 API = "https://api.github.com"
-DOCS_HELP = "see docs/admin.md in the claude-toolkit repo"
+DOCS_HELP = "see docs/guides/admin.md in the claude-toolkit repo"
 
 # Built-in workflow templates: policy name -> (file, default parameters).
 BUILTIN_TEMPLATES = {

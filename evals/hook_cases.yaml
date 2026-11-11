@@ -1,7 +1,7 @@
 # Direct inputs for the guardrail hooks (plugins/devflow/hooks/hooks.json), used by tests/test_evals_hooks.py.
 # expect: deny | allow. No model is involved. The hooks run with cwd = the tiny_app fixture (main branch `main`).
 # `@@GH_TOKEN@@` is replaced at run time by a token-shaped string, so no credential-like literal sits in the repo.
-# A local `git merge` is deliberately allowed (docs/hooks.md); the deny is on PR merges and pushes to main.
+# A local `git merge` is deliberately allowed (docs/architecture/hooks.md); the deny is on PR merges and pushes to main.
 cases:
   - {name: pr-merge-cli, tool: Bash, input: {command: "gh pr merge 12 --squash"}, expect: deny}
   - {name: pr-approve-cli, tool: Bash, input: {command: "gh pr review 12 --approve"}, expect: deny}

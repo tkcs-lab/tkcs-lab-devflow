@@ -122,6 +122,45 @@ def test_listed_files_must_exist(vp, tmp_path):
     assert not any("'README.md'" in x for x in e)
 
 
+def test_docs_index_accepted_by_schema(vp):
+    p = copy.deepcopy(MINIMAL)
+    p["docs"]["index"] = "docs/README.md"
+    assert errs(vp, p) == []
+
+
+def test_docs_index_empty_string_rejected(vp):
+    p = copy.deepcopy(MINIMAL)
+    p["docs"]["index"] = ""
+    assert errs(vp, p)
+
+
+def test_docs_index_file_must_exist(vp, tmp_path):
+    p = copy.deepcopy(MINIMAL)
+    p["docs"]["index"] = "docs/README.md"
+    (tmp_path / "README.md").write_text("x")
+    e = errs(vp, p, tmp_path)
+    assert any("'docs/README.md'" in x for x in e)
+
+
+def test_docs_index_existing_passes(vp, tmp_path):
+    p = copy.deepcopy(MINIMAL)
+    p["docs"]["index"] = "docs/README.md"
+    (tmp_path / "README.md").write_text("x")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "README.md").write_text("x")
+    assert not any("docs/README.md" in x for x in errs(vp, p, tmp_path))
+
+
+def test_must_read_over_three_with_index_warns(vp):
+    p = copy.deepcopy(MINIMAL)
+    p["docs"]["index"] = "docs/README.md"
+    p["docs"]["must_read"] = ["a.md", "b.md", "c.md", "d.md"]
+    w = vp.validate(p)[1]
+    assert any("'docs.must_read' lists 4 files while 'docs.index' is set" in x for x in w)
+    p["docs"]["must_read"] = ["a.md", "b.md", "c.md"]
+    assert not any("'docs.must_read' lists" in x for x in vp.validate(p)[1])
+
+
 def run_cli(*args):
     return subprocess.run([sys.executable, str(DEVFLOW / "scripts" / "validate_profile.py"), *args],
                           capture_output=True, text=True)
@@ -182,7 +221,7 @@ def test_toolkit_section_is_rejected_with_a_migration_message(vp):
     p = copy.deepcopy(MINIMAL)
     p["toolkit"] = {"ref": "v1"}
     assert errs(vp, p) == [
-        "'toolkit' was removed: the toolkit is delivered only as plugins (docs/delivery.md); "
+        "'toolkit' was removed: the toolkit is delivered only as plugins (docs/guides/delivery.md); "
         "delete the 'toolkit' section"
     ]
 

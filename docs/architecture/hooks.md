@@ -4,7 +4,7 @@ The `devflow` plugin ships Claude Code hooks that turn the "never do X" rules in
 checks that run before a tool call (`PreToolUse`) or before a session stops (`Stop`). They live in the
 plugin (`plugins/devflow/hooks/hooks.json`, scripts called through `${CLAUDE_PLUGIN_ROOT}`), so every
 repository that enables the plugin gets them without a per-repository copy. Project facts come from
-[`.claude/toolkit.yaml`](profile-reference.md); the scripts contain none.
+[`.claude/toolkit.yaml`](../reference/profile-reference.md); the scripts contain none.
 
 **Branch protection and CI stay the hard backstop.** A hook is the fast, in-loop layer: it stops the
 agent a minute after the mistake instead of a day later, and it tells the agent what to do instead.
@@ -177,7 +177,7 @@ python3 "<devflow root>/hooks/dod_gate.py" --exempt
   orchestrator that keeps stopping stays exempt, and a marker left in a reused container does not switch the gate off for the
   next session for long.
 - `/deps` and `/upstream` are not exempt: they already require `verify.dod` to pass before they push, so the gate agrees
-  with them.
+  with them. `/docs` is not exempt either.
 
 Why a marker the command writes instead of detecting the command from the transcript: it needs no knowledge of Claude
 Code's transcript format, it is one line to audit, and a command that forgets it fails safe (the gate blocks a few times,
@@ -212,7 +212,7 @@ there, because deciding whether it targets the main branch needs `git.main_branc
 blocks with `toolkit.yaml: missing required key 'git.main_branch'`, the same message the commands give. Plugins are enabled
 per Claude Project, so every repository in a Project that enables `devflow` needs a profile with at least that key.
 
-Reference: [profile-reference.md](profile-reference.md).
+Reference: [profile-reference.md](../reference/profile-reference.md).
 
 ### Disabling a hook
 
@@ -331,7 +331,7 @@ To confirm the hooks are loaded in a session, run `/hooks` and look for the `dev
 `git tag probe`: with `no-git-tag` active the call is denied with `devflow no-git-tag: blocked` and no tag is created.
 
 Loading the hooks from plugins that a Claude Project syncs into a cloud session is **not verified end to end** (see
-[delivery.md](delivery.md)). The tests exercise the scripts directly, not Claude Code's loading of `hooks.json`.
+[delivery.md](../guides/delivery.md)). The tests exercise the scripts directly, not Claude Code's loading of `hooks.json`.
 
 ## Tests
 

@@ -38,6 +38,7 @@
       "properties": {
         "must_read": {"$ref": "#/$defs/stringList", "description": "Files the planner, workers and reviewer read first. May be empty."},
         "plan_dir": {"type": "string", "minLength": 1, "default": "docs/"},
+        "index": {"type": "string", "minLength": 1, "description": "The docs index: the one entry-level file that CLAUDE.md points to and sessions read first (see the docs-keeper skill)."},
         "adr_dir": {"type": "string", "minLength": 1, "description": "Present means ADRs are used."},
         "adr_index": {"type": "string", "minLength": 1},
         "adr_bar": {"type": "string", "minLength": 1, "description": "Where the criteria for needing an ADR are written (path or path#anchor)."},
@@ -218,7 +219,7 @@
     "hooks": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Settings of the guardrail hooks the devflow plugin ships (docs/hooks.md). Every key is optional; the hooks apply the defaults in 'x-hook-default' themselves, they are not part of --resolved.",
+      "description": "Settings of the guardrail hooks the devflow plugin ships (docs/architecture/hooks.md). Every key is optional; the hooks apply the defaults in 'x-hook-default' themselves, they are not part of --resolved.",
       "properties": {
         "disable": {
           "type": "array",

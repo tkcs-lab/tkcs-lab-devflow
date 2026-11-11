@@ -7,13 +7,13 @@ description: Dispatches the central devflow-git-ops workflow to create a tag or 
 
 A cloud session's git proxy refuses `refs/tags/*` pushes and remote branch deletion. This skill gets both done
 by starting one workflow, `devflow-git-ops`, in a central private repository whose environment holds the only
-token. The reference is `docs/git-ops.md` in the claude-toolkit repo.
+token. The reference is `docs/guides/git-ops.md` in the claude-toolkit repo.
 
 ## Before anything
 
 1. Load the `project-profile` skill and follow its "Loading the profile" section. If it reports an error, show
    the message verbatim and stop. This skill needs `git_ops.repo`. When it is absent, stop with
-   `toolkit.yaml: missing required key 'git_ops.repo'` and point to `docs/git-ops.md`; never substitute a
+   `toolkit.yaml: missing required key 'git_ops.repo'` and point to `docs/guides/git-ops.md`; never substitute a
    repository of your own.
 2. The central repository must be attached to the session. When it is not, call `add_repo` with
    `access: "push"` for it. If that is refused, say so, quote the refusal, read the `github.access` page with

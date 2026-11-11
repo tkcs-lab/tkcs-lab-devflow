@@ -31,11 +31,11 @@ endpoint that answered 401, 403 or 404, so you know which permission to grant.
 
 ## Use it in a project
 
-1. Copy [`plugins/devflow/templates/admin-policy.yaml`](../plugins/devflow/templates/admin-policy.yaml)
+1. Copy [`plugins/devflow/templates/admin-policy.yaml`](../../plugins/devflow/templates/admin-policy.yaml)
    to `.claude/admin-policy.yaml` (or anywhere in the repository), set `org` and edit.
-2. Set `admin.policy: .claude/admin-policy.yaml` in `.claude/toolkit.yaml` (see [profile-reference.md](profile-reference.md)).
+2. Set `admin.policy: .claude/admin-policy.yaml` in `.claude/toolkit.yaml` (see [profile-reference.md](../reference/profile-reference.md)).
 3. `repo_admin.py validate-policy <file>` checks the policy against
-   [`schema/admin-policy.schema.json`](../plugins/devflow/schema/admin-policy.schema.json). An unknown key is an error.
+   [`schema/admin-policy.schema.json`](../../plugins/devflow/schema/admin-policy.schema.json). An unknown key is an error.
 4. Run the `repo-admin` skill, or the script yourself.
 
 One policy file governs one organisation. A section you leave out is not managed. To treat some

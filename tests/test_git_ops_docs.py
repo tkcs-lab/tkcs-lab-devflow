@@ -5,7 +5,7 @@ import yaml
 from conftest import DEVFLOW, ROOT
 
 SKILL = DEVFLOW / "skills" / "git-ops" / "SKILL.md"
-DOC = ROOT / "docs" / "git-ops.md"
+DOC = ROOT / "docs" / "guides" / "git-ops.md"
 TEMPLATE = DEVFLOW / "templates" / "devflow-git-ops.yml"
 
 
@@ -67,4 +67,4 @@ def test_steward_names_the_one_route_to_a_tag():
 def test_readme_lists_git_ops():
     text = (ROOT / "README.md").read_text()
     assert "**`git-ops`**" in text
-    assert "docs/git-ops.md" in text
+    assert "docs/guides/git-ops.md" in text

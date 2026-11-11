@@ -48,6 +48,8 @@ End with the AGENT-REPORT line described in your Report section.
 Agent-specific fields, only for the agent that uses them: `Audit commands` (dependency-auditor), `Website build`
 and `Website links` (website-maintainer), `Verify (fast)` (refactorer), `Changelog target` (tech-writer).
 
+Index parts: the `Must-read docs` field holds the profile's must-read docs and, when the profile has `docs.index`, the paths of the docs you read through the index for this task (a worker: its `Read first:` list). Never hand an agent the index and tell it to read everything.
+
 ## Modes
 
 | Point | Who dispatches | Mode | Failure of a required agent |

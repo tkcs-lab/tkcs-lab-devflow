@@ -28,6 +28,7 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
 
 - `<main>` is `git.main_branch`; `<branch pattern>` is `git.branch_pattern`.
 - "the must-read docs" are the files in `docs.must_read`.
+- "the docs index" is `docs.index`; "index parts" apply only when the profile has it.
 - "the fast checks" are the commands in `verify.fast`.
 - "the project's steward file" is `project_steward`, when the profile has one.
 - "the stack skills" are the `stack-<name>` skills for each name in `stacks`; load them now.
@@ -54,7 +55,7 @@ The aliases map to ids: `sonnet` is `claude-sonnet-5-5` and `opus` is `claude-op
 If `create_session` rejects a model id, use the newest Sonnet or Opus id your system prompt lists,
 and say which one in the ledger.
 
-**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command is the orchestrator: it stops at `human_gate` phases and when it halts with a one-line error, and it writes no code itself. Its child phase sessions are not marked, so the gate applies to them. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
+**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/architecture/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command is the orchestrator: it stops at `human_gate` phases and when it halts with a one-line error, and it writes no code itself. Its child phase sessions are not marked, so the gate applies to them. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
 
 ## 0. Load the plan
 
@@ -135,6 +136,8 @@ Call `create_session` with:
   a child to approve a plan.
 - `prompt`: the **child brief** below, filled in.
 
+Index parts: for the retirement phase (the phase whose brief deletes the plan document) append to the brief `Docs changed by earlier phases: <the ledger list Docs changed>; update the docs index for each.`
+
 > You are implementing **one phase** of a multi-phase plan. An orchestrator session will merge your
 > branch; you do not open a pull request, and you do not push to any branch except
 > `<phase branch>`.
@@ -155,7 +158,7 @@ Call `create_session` with:
 >    design. Never do anything the plan lists under `manual_before` or `manual_after`; if a step
 >    needs something from the user, stop with `status=blocked` and say what.
 > 2. Follow <the must-read docs, as a list of paths>, <the project's steward file, if any>, and the
->    `pr-steward` skill. <If the profile has `docs.changelog`: Add user-visible changes under
+>    `pr-steward` skill. <Index parts: Read the docs your brief's `Read first:` line names; open the docs index `<docs.index>` only if they are not enough, and read no other doc. Do not edit the index or `CLAUDE.md` unless your phase is the retirement phase. If you add, move or delete a doc, put one line `docs-changed: <added|moved|deleted> <path>` per doc in your report.> <If the profile has `docs.changelog`: Add user-visible changes under
 >    `<docs.changelog.file>`'s `<docs.changelog.section>`. Never add a version heading.>
 > 3. <If the profile has stacks: also follow the `stack-<name>` skills.> Before your last push, run `/dod`. Every blocking row must pass. Also check every item in
 >    your phase's `acceptance` list, and say how you checked each one.
@@ -270,7 +273,7 @@ On each check-in, for each `running` phase, call `get_session`:
    `archive_session` the child. If the manifest has `screenshots_after_merge`, run it and send the
    user the images (`SendUserFile`) with a one-line caption naming the phase, so they can watch
    the result take shape and object early.
-   Append the phase branch to the ledger list `Branches left on origin`.
+   Append the phase branch to the ledger list `Branches left on origin`. Collect each `docs-changed:` line of the report into the ledger list `Docs changed`.
 7. **Human gate.** If the phase is marked `human_gate: true`, stop scheduling. Send the user the
    phase's review material (its screenshots and its `PHASE-REPORT`), and ask one question:
    approve, or change what. Do not arm a check-in while you wait for their answer; the reply
@@ -296,7 +299,7 @@ start one review session with `create_session`: `source_revision` the feature br
 > seams between phases (a function one phase added and another calls wrongly, duplicated
 > helpers, inconsistent names or strings), missing tests for an acceptance item, a weakened or
 > skipped test, a security or privacy regression, docs that describe something other than what
-> the code does, and every `final_checks` item. Run <the fast checks, as a list of commands>
+> the code does, and every `final_checks` item. Index parts: run `docs_index.py check --profile .claude/toolkit.yaml`; every doc the diff adds, moves or deletes has its index row; `CLAUDE.md` is still at most 60 lines and only points to the index. Run <the fast checks, as a list of commands>
 > yourself. Load the `review-checklist` and `secure-code-review` skills and apply them.
 >
 > Run `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at implement_final --changed <the files of git diff --name-only origin/<main>...HEAD>`
@@ -330,7 +333,7 @@ the PR body.
 
 ## 6. Finishing
 
-1. Run the full `/dod` on the feature branch. Then settle what became of each scope drift:
+1. Run the full `/dod` on the feature branch. Index parts: also run `python3 <devflow root>/scripts/docs_index.py check --profile .claude/toolkit.yaml`; an error goes to a fix session like any failed check. Then settle what became of each scope drift:
    `scope_check.py disposition --results <results> --base origin/<main> --head <feature_branch>` marks each recorded
    out-of-scope path **accepted** while it is still in the feature branch's final diff against
    `<main>` (`git diff --name-only origin/<main>...HEAD`), and a phase **reverted** (or

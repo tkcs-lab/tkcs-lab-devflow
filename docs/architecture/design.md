@@ -2,7 +2,7 @@
 
 Status: review 1 answered; this is the design as built. The three decisions in §8 are resolved.
 
-Since devflow 0.4 the SessionStart-hook route and `toolkit.ref` no longer exist; plugins in the Claude Project are the only delivery route (see delivery.md). Section 3 is kept as the record of the probe that led to the first design.
+Since devflow 0.4 the SessionStart-hook route and `toolkit.ref` no longer exist; plugins in the Claude Project are the only delivery route (see guides/delivery.md). Section 3 is kept as the record of the probe that led to the first design.
 
 ## 1. What this is
 
@@ -23,17 +23,19 @@ Nightshift's runtime is not used. From it I take: the marketplace shape, the `re
 .claude-plugin/marketplace.json         # name: claude-toolkit; plugins: devflow, stack-python, stack-swift, stack-ipados, stack-go
 plugins/devflow/
   .claude-plugin/plugin.json
-  commands/{make-plan,implement,dod,review}.md   # review: see docs/review.md
-  commands/{board,deps,upstream,land}.md         # maintenance commands: see docs/maintenance.md
-  commands/setup.md                     # /setup: survey a repository, create or update the profile: see docs/setup.md
-  agents/<name>.md                      # the ten generic agents (architect ... refactorer): see docs/agents.md
+  commands/{make-plan,implement,dod,review}.md   # review: see docs/guides/review.md
+  commands/{board,deps,upstream,land}.md         # maintenance commands: see docs/guides/maintenance.md
+  commands/docs.md                      # /docs [check | init | tidy]: the docs index, see docs/guides/docs-index.md
+  commands/setup.md                     # /setup: survey a repository, create or update the profile: see docs/guides/setup.md
+  agents/<name>.md                      # the ten generic agents (architect ... refactorer): see docs/architecture/agents.md
   skills/project-profile/SKILL.md       # how every command reads, validates and quotes the profile
   skills/pr-steward/SKILL.md            # generic steward policy; table comes from ci.dispatchable
   skills/review-checklist/SKILL.md      # Nightshift, adapted (no run-ledger / R-AG rules)
   skills/secure-code-review/SKILL.md    # Nightshift, adapted; whole-repository section for /review
   skills/{test-review,docs-review}/SKILL.md   # checklists for /review's test and documentation dimensions
   skills/status-board/SKILL.md          # how a session writes its status record to the board
-  skills/repo-admin/SKILL.md            # audit and update organisation and repository settings: see docs/admin.md
+  skills/repo-admin/SKILL.md            # audit and update organisation and repository settings: see docs/guides/admin.md
+  skills/docs-keeper/SKILL.md           # the docs structure, reading protocol and the init, maintain and tidy procedures
   skills/{agent-dispatch,profile-setup}/SKILL.md   # dispatching the profile's agents; how /setup decides and asks
   scripts/validate_manifest.py          # CLI: validate_manifest.py <plan.md|manifest.yaml> [--profile P]
   scripts/validate_profile.py           # CLI: validate_profile.py [.claude/toolkit.yaml]
@@ -42,6 +44,7 @@ plugins/devflow/
   scripts/agents.py                     # CLI: agents.py required|verify, which agents a point requires and whether they reported
   scripts/profile_survey.py             # CLI: profile_survey.py [ROOT], the survey and proposal behind /setup
   scripts/{survey_signals,survey_docs,survey_proposal}.py   # modules of the survey
+  scripts/docs_index.py                 # CLI: docs_index.py check|inventory|move, the docs index rules and doc moves
   scripts/profile_patch.py              # CLI: profile_patch.py set-block|diff, text-level edits of the profile
   schema/profile.schema.json
   schema/status-record.schema.json
@@ -49,7 +52,7 @@ plugins/devflow/
   .mcp.json                             # declares the board_mcp_stdio.py bridge (the devflow-board MCP server)
   board/                                # the status board page (board.html, rules.js) and its Dockerfile
   board/Dockerfile                      # image of the board server
-  hooks/hooks.json, hooks/*.py          # guardrail hooks: see docs/hooks.md
+  hooks/hooks.json, hooks/*.py          # guardrail hooks: see docs/architecture/hooks.md
   templates/devflow-land.yml            # the workflow /land installs
   templates/devflow-release.yml         # the release (tag) workflow repo-admin installs
   templates/admin-policy.yaml           # starter policy
@@ -59,9 +62,11 @@ plugins/stack-swift/skills/stack-swift/SKILL.md
 plugins/stack-ipados/skills/stack-ipados/SKILL.md
 plugins/stack-go/skills/stack-go/SKILL.md
 templates/toolkit.yaml                  # commented starter profile
-evals/                                  # eval harness (not shipped): see docs/evals.md
-docs/{profile-reference.md,delivery.md,design.md,board-server.md,hooks.md,evals.md,review.md,admin.md,git-ops.md,maintenance.md,scope-drift.md,migrating-privacyfence.md}
-docs/design/maintenance-spike.md        # record of the spike behind the maintenance commands
+evals/                                  # eval harness (not shipped): see docs/architecture/evals.md
+docs/architecture/{design.md,hooks.md,evals.md,scope-drift.md,agents.md}
+docs/architecture/maintenance-spike.md  # record of the spike behind the maintenance commands
+docs/reference/profile-reference.md
+docs/{guides/{delivery,board-server,review,admin,git-ops,maintenance,setup}.md,migrating-privacyfence.md}
 tests/                                  # pytest; fixtures from real PrivacyFence plans
 .github/workflows/test.yml
 ```
@@ -110,7 +115,7 @@ switches to `<project>/.claude/` for people who want it; in that mode the script
 installed path to `.git/info/exclude`, as you asked. (In user scope the exclude is moot, so the script
 does not write it.)
 
-Not tested, and said so in `docs/delivery.md`:
+Not tested, and said so in `docs/guides/delivery.md`:
 
 1. **Route 1 (Claude Project plugins)**: it is a settings-UI feature of claude.ai and cannot be driven
    from a session. The marketplace is validated structurally (`claude plugin validate`, if the CLI is
@@ -127,7 +132,7 @@ The vendoring-script + PR-bot fallback you described is **not needed** and I wil
 ## 4. The profile: `.claude/toolkit.yaml`
 
 Rules: a key marked **required** that is absent makes the command stop with
-`toolkit.yaml: missing required key 'verify.fast' (see docs/profile-reference.md)`, naming the key.
+`toolkit.yaml: missing required key 'verify.fast' (see docs/reference/profile-reference.md)`, naming the key.
 An optional key that is absent means "not used in this project". Only two keys have a stated
 default, both from your brief: `docs.plan_dir` (`docs/`) and `models` (below). Unknown keys are an
 error (typos must not be silent). Commands never fall back to a PrivacyFence value.
@@ -303,8 +308,8 @@ the first two run unattended from a scheduled task, `/land` is run by the owner,
 merges. `/make-plan` and `/implement` now keep a tracking issue for every plan. Profile sections
 `deps`, `upstream`, `land` and the key `git.bot_login` configure the new commands. Delivery is by plugins
 only. How to run and schedule the commands, the profile sections, the board and the secret and setting
-`/land` needs are in [maintenance.md](maintenance.md); what a cloud session can and cannot do, which
-shaped the design, is recorded in [design/maintenance-spike.md](design/maintenance-spike.md).
+`/land` needs are in [maintenance.md](../guides/maintenance.md); what a cloud session can and cannot do, which
+shaped the design, is recorded in [design/maintenance-spike.md](maintenance-spike.md).
 
 ## 11. git-ops
 
@@ -315,12 +320,12 @@ lives in a private repository of its own, not in this one (D1), so that the repo
 with write access to other repositories contains only the workflow and its allowlist. The token is an
 environment secret limited to the default branch (D7), and the workflow starts as a dry run and checks an
 allowlist and a set of guards. Rejected: a copy of the workflow in every repository, and for now a GitHub
-App token instead of a fine-grained one. Setup, use and guards are in [git-ops.md](git-ops.md).
+App token instead of a fine-grained one. Setup, use and guards are in [git-ops.md](../guides/git-ops.md).
 
 ## 12. A self-hosted status board
 
 Why: the board was a private claude.ai Artifact page whose data lived in the Artifact database, so
-everything about it depended on claude.ai. It is now a server you host; see [board-server.md](board-server.md).
+everything about it depended on claude.ai. It is now a server you host; see [board-server.md](../guides/board-server.md).
 
 What was built:
 
@@ -332,7 +337,7 @@ What was built:
 * `.mcp.json`: declares the bridge, so a session with the plugin has `board_get`, `board_list`, `board_set`, `board_delete`.
 * `board.html` polls `api/records` every 15 seconds instead of reading the Artifact database.
 * The `status-board` skill and `/board` use the tools or the client; `/board` checks the connection.
-* `board/Dockerfile` and `docs/board-server.md` for deployment.
+* `board/Dockerfile` and `docs/guides/board-server.md` for deployment.
 * Configuration is `DEVFLOW_BOARD_URL` and `DEVFLOW_BOARD_TOKEN` (and `DEVFLOW_BOARD_READ_TOKEN` on the server).
 
 Rejected:
@@ -350,7 +355,7 @@ validation with `unknown key 'status'`. This breaking change shipped in 0.7.0.
 
 ## 13. Agents and /setup
 
-Ten generic agents and the `/setup` command were added. [agents.md](agents.md) and [setup.md](setup.md) describe what
+Ten generic agents and the `/setup` command were added. [agents.md](agents.md) and [setup.md](../guides/setup.md) describe what
 they do; this section records why.
 
 - **The agents live in devflow, not in a new plugin.** They are wired into `/make-plan`, `/implement`, `/review` and
@@ -370,3 +375,19 @@ they do; this section records why.
   `protect_paths.py --allow-profile`, which writes a marker with a two-hour lifetime inside the git directory (per
   checkout) that lets exactly `.claude/toolkit.yaml` through. Like the `dod-gate` marker it is a convention, not a lock;
   branch protection and the pull request review remain the hard control ([hooks.md](hooks.md#protect-paths)).
+
+## 14. Docs structure
+
+The docs are read through one index. `CLAUDE.md` (at most 60 lines) points to `docs/README.md` (at most
+150 lines, one row per doc), and the index routes to leaf docs under `docs/architecture/`, `docs/guides/`
+and `docs/reference/`. Plans are transient and never indexed.
+
+- **Why.** Every session pays for what it reads. A flat set of docs made each planner and worker read the
+  must-read docs of every phase; the index makes the choice a row match.
+- **Deterministic checks.** `scripts/docs_index.py` checks the limits and links and moves a doc with every
+  reference rewritten; the `docs-keeper` skill and `/docs` carry the procedures.
+- **Same profile, one new key.** `docs.index`; without it every command behaves as before.
+- **No eleventh agent.** The `tech-writer` agent checks the index through `docs-review`.
+- **Rejected:** generating the index from the docs' first lines (the "read when" condition cannot be derived).
+
+The structure, the rules and the procedures are in [guides/docs-index.md](../guides/docs-index.md).

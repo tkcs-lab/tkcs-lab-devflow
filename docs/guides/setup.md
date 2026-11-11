@@ -1,8 +1,8 @@
 # `/setup`
 
 `/setup` surveys a repository and creates or updates `.claude/toolkit.yaml`, including the `agents` block
-([agents.md](agents.md)). It delivers the result as one pull request that it never merges. Reference for the file:
-[profile-reference.md](profile-reference.md).
+([agents.md](../architecture/agents.md)). It delivers the result as one pull request that it never merges. Reference for the file:
+[profile-reference.md](../reference/profile-reference.md).
 
 ## Modes
 
@@ -77,7 +77,7 @@ or an `agents.required[].when` glob matches no file. `set-block` replaces the `a
 
 The `protect-paths` hook normally denies every edit of `.claude/toolkit.yaml`. `/setup` runs `protect_paths.py
 --allow-profile` before its first write and `--end-allow` after the last, also on failure. Details and limits:
-[hooks.md](hooks.md#protect-paths).
+[hooks.md](../architecture/hooks.md#protect-paths).
 
 ## What is never written
 

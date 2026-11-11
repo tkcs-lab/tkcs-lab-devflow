@@ -26,7 +26,7 @@ python3 evals/run.py run --dry-run
 
 ## Plugin versions
 
-The five `plugins/*/.claude-plugin/plugin.json` files must carry the same version; `tests/test_structure.py::test_plugin_versions_agree` enforces it. A plan's retirement phase bumps them together, because a Claude Project caches each plugin per version (see [docs/delivery.md](docs/delivery.md)).
+The five `plugins/*/.claude-plugin/plugin.json` files must carry the same version; `tests/test_structure.py::test_plugin_versions_agree` enforces it. A plan's retirement phase bumps them together, because a Claude Project caches each plugin per version (see [docs/guides/delivery.md](docs/guides/delivery.md)).
 
 ## Adding a hook case
 

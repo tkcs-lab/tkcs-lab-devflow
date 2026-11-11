@@ -19,10 +19,10 @@ Files:
 
 | File | Installed as |
 |---|---|
-| [`plugins/devflow/templates/devflow-git-ops.yml`](../plugins/devflow/templates/devflow-git-ops.yml) | `.github/workflows/devflow-git-ops.yml` in the central repository |
-| [`plugins/devflow/templates/git-ops-allowlist.json`](../plugins/devflow/templates/git-ops-allowlist.json) | `git-ops-allowlist.json` at the root of the central repository |
+| [`plugins/devflow/templates/devflow-git-ops.yml`](../../plugins/devflow/templates/devflow-git-ops.yml) | `.github/workflows/devflow-git-ops.yml` in the central repository |
+| [`plugins/devflow/templates/git-ops-allowlist.json`](../../plugins/devflow/templates/git-ops-allowlist.json) | `git-ops-allowlist.json` at the root of the central repository |
 | the `git-ops` skill | in the `devflow` plugin |
-| `git_ops.repo`, `git_ops.workflow` | in each project's `.claude/toolkit.yaml`, see [profile-reference.md](profile-reference.md) |
+| `git_ops.repo`, `git_ops.workflow` | in each project's `.claude/toolkit.yaml`, see [profile-reference.md](../reference/profile-reference.md) |
 
 The template has no placeholders; copy it as it is. The secret is `GIT_OPS_TOKEN`, the environment is `git-ops`.
 Anyone with write access to the central repository can run the workflow, so keep that group small.

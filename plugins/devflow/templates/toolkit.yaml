@@ -1,7 +1,7 @@
 # .claude/toolkit.yaml — the project profile read by the devflow commands (/review, /make-plan, /implement, /dod).
 # Every command checks this file first and stops, naming the key, if a required key is missing.
 # An optional key you leave out means "this project does not use that".
-# Reference: docs/profile-reference.md in https://github.com/tkcs-lab/claude-toolkit
+# Reference: docs/reference/profile-reference.md in https://github.com/tkcs-lab/claude-toolkit
 
 project:
   name: My Project       # optional; used in prose. Default: the repository name
@@ -10,6 +10,7 @@ docs:
   must_read:             # REQUIRED (may be []). Planner, workers and the final reviewer read these first.
     - README.md
   plan_dir: docs/        # optional, default docs/. Plan documents are <plan_dir>/<slug>-plan.md
+  # index: docs/README.md   # optional. The entry-level docs index: sessions read it first, then only matching rows. /docs init builds it
   # adr_dir: docs/adr    # optional. Set it and the commands use ADRs; leave it out and they never mention them
   # adr_index: docs/adr/README.md
   # adr_bar: CONTRIBUTING.md#decisions-and-adrs   # where "this needs an ADR" is defined
@@ -95,7 +96,7 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 # land:                  # optional: /land works without it
 #   max_prs: 10            # 1..50
 
-# agents:                # optional. Which agents are mandatory and how they run (docs/profile-reference.md).
+# agents:                # optional. Which agents are mandatory and how they run (docs/reference/profile-reference.md).
 #                        # Without this section every agent is available and none is mandatory.
 #   posture:
 #     security: critical  # critical | standard | low; default standard
@@ -109,7 +110,7 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 #   extra_context:       # lines added to every agent prompt
 #     - "Every outbound request must pass the approval gate."
 
-# hooks:                 # optional: settings of the guardrail hooks the devflow plugin ships (docs/hooks.md).
+# hooks:                 # optional: settings of the guardrail hooks the devflow plugin ships (docs/architecture/hooks.md).
 #                        # The values below are the defaults; with no `hooks` section all hooks but dod-gate are on.
 #   disable: []          # escape hatch: names of hooks to switch off here, any of
 #                        #   no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate

@@ -1,10 +1,10 @@
 # Maintenance commands and the status board
 
-Three commands keep a repository up to date and tidy without you doing the work: `/deps`, `/upstream`
-and `/land`. `/deps` and `/upstream` run unattended from a scheduled task; `/land` is run by you. None
+Four commands keep a repository up to date and tidy without you doing the work: `/deps`, `/upstream`,
+`/land` and `/docs tidy`. `/deps`, `/upstream` and `/docs tidy` run unattended from a scheduled task; `/land` is run by you. None
 of them ever merges, approves or enables auto-merge. Each writes a status record to the board (see
 below) when one exists. What the spike found about what a cloud session can and cannot do is in
-[design/maintenance-spike.md](design/maintenance-spike.md).
+[design/maintenance-spike.md](../architecture/maintenance-spike.md).
 
 ## What each command does
 
@@ -44,10 +44,20 @@ closes again, and installs the workflow `.github/workflows/devflow-land.yml`. Af
 workflow updates the next pull request that has auto-merge enabled. You still review and approve every
 pull request and enable auto-merge on each. Run `/land` yourself; no schedule runs it.
 
+### `/docs tidy`
+
+Weekly docs cleanup (`/docs` has two more modes, `check` and `init`; see
+[docs-index.md](docs-index.md)). It runs `docs_index.py check` and applies only mechanical fixes on
+`chore/docs-tidy-<yyyymmdd>`: a row for an unlisted doc, a repointed link, a row for a deleted doc, a
+missing ADR-index row. The result is one pull request, or, when only judgement items remain (stale docs,
+docs over 400 lines, an index over 150 lines), an issue titled `Docs tidy: <n> items to decide` with a
+checklist. It never merges, deletes, moves or edits a doc body. It writes a record with `command: docs`
+and the document id `<project>--docs`; with nothing to fix the record says `docs clean`.
+
 ## Profile sections
 
 All three sections are optional. A command whose section is missing stops with
-`toolkit.yaml: missing required key '<key>'`. Reference: [profile-reference.md](profile-reference.md).
+`toolkit.yaml: missing required key '<key>'`. Reference: [profile-reference.md](../reference/profile-reference.md).
 
 ```yaml
 deps:
@@ -76,11 +86,11 @@ land:
 
 `/land` also needs `git.bot_login`, the login of the account that opens the pull requests.
 
-## Scheduling `/deps` and `/upstream` weekly
+## Scheduling `/deps`, `/upstream` and `/docs tidy` weekly
 
 Create one scheduled task per repository **in the claude.ai UI, with the repository attached to the
-task**, weekly, with the prompt `/deps` or `/upstream`, permission mode **auto**, and an environment
-that has the variables `DEVFLOW_BOARD_URL` and `DEVFLOW_BOARD_TOKEN` (see the next section). Both commands ask nothing and stop
+task**, weekly, with the prompt `/deps`, `/upstream` or `/docs tidy`, permission mode **auto**, and an environment
+that has the variables `DEVFLOW_BOARD_URL` and `DEVFLOW_BOARD_TOKEN` (see the next section). All three commands ask nothing and stop
 cleanly with `needs_you` on the status record when they are unsure. Pick a time outside the hours when
 you work in the repository.
 
@@ -100,9 +110,9 @@ there are; `/board prune` prunes.
 
 A phase chip shows `drift <n>` when the phase changed `n` files outside its `touches` (and `scope ?`
 when the check was unavailable): a count only, the paths are in the pull request's Scope section. What
-is recorded, what is not and why it never blocks: [scope-drift.md](scope-drift.md).
+is recorded, what is not and why it never blocks: [scope-drift.md](../architecture/scope-drift.md).
 
-The records are those of `/implement` runs and of the maintenance commands `deps`, `upstream`, `land` and `setup`.
+The records are those of `/implement` runs and of the maintenance commands `deps`, `upstream`, `land`, `setup` and `docs`.
 `/setup` ([setup.md](setup.md)) writes a `setup` record with the document id `<project>--setup`; unlike the
 scheduled commands its `orchestrator_session` is the real session id, and its items are `survey`, `confirm`, `write`,
 `verify` and `pr`. Alerts are push only.
