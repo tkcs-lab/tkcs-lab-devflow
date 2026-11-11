@@ -13,11 +13,19 @@ who links to it, so a session can build or tidy the index without reading every 
 
 Errors:  CLAUDE.md missing, too long, or not linking to the index; the index missing or too long;
          a broken relative link in CLAUDE.md or an index file; a doc no index file links to
-         (plan documents, the archive directory and the index files themselves excepted); an ADR the
+         (transient docs named *-plan.md, *-plan-manual-steps.md|html and *-review.md, the archive and
+         archived directories, and the index files themselves excepted); an ADR the
          ADR index does not list (when the profile has `docs.adr_dir`).
 Warnings: a broken link in another doc; a doc longer than --max-doc-lines; an index entry with no
          description; an index link listed twice; with --stale-days, a doc not changed in git for that
          many days (the cheapest cleanup signal; never an error).
+
+Messages are one per line, "error: ..." or "warning: ...", and the last line is always
+`docs index: <e> error(s), <w> warning(s)`; --json prints {"errors": [...], "warnings": [...]}.
+`inventory --json` prints a list of objects with the keys path, title, lines, summary, age_days,
+linked_from, in_index and plan; without --json it prints two lines per doc, marking [NOT IN INDEX].
+Without `docs.index` in the profile and without --index both modes print
+"toolkit.yaml: missing required key 'docs.index' (or pass --index)" to stderr and exit 2.
 
 Index files are the index itself plus every README.md reachable from it by links (the ADR index is
 one). Python 3.11+, stdlib and PyYAML, no network. Reads files only; it never writes anything.
@@ -39,7 +47,7 @@ MAX_CLAUDE_LINES = 60
 MAX_INDEX_LINES = 150
 MAX_DOC_LINES = 400
 ARCHIVE_DIRS = {"archive", "archived"}
-PLAN_NAME = re.compile(r"-plan(-manual-steps)?\.(md|html)$")
+PLAN_NAME = re.compile(r"-(plan|review)(-manual-steps)?\.(md|html)$")
 LINK = re.compile(r"\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 FENCE = re.compile(r"^\s*(```|~~~)")
 SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
