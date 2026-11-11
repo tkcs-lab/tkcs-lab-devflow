@@ -15,6 +15,7 @@ Rules:
 - Only two things have defaults, and `validate_profile.py --resolved` is where they are applied:
   `docs.plan_dir` (`docs`) and `models` (`opus / sonnet / sonnet / opus`). The `hooks` section also has
   defaults, but the hook scripts apply those themselves ([hooks.md](hooks.md)); `--resolved` leaves them out.
+  The `agents` defaults are applied by `scripts/agents.py` and are not part of `--resolved`.
 - An unknown key is an error, so a typo is never silent.
 - A file listed in `docs.must_read` or `project_steward` that does not exist is an error.
 
@@ -29,6 +30,10 @@ Rules:
 | `docs.adr_index` | no (needs `adr_dir`) | File that must list every new ADR |
 | `docs.adr_bar` | no (needs `adr_dir`) | Where the criteria for needing an ADR are written (`path` or `path#anchor`) |
 | `docs.changelog.file`, `docs.changelog.section` | no | A user-visible change adds a line under this heading; never a version heading |
+| `docs.website` | no | The project's website; present means the `website-maintainer` agent can run. Keys: `dir`, `build`, `links` |
+| `docs.website.dir` | **yes** (in `docs.website`) | Directory relative to the repo root (`.` for the root); `build` and `links` run from there |
+| `docs.website.build` | **yes** (in `docs.website`) | Command that builds the site |
+| `docs.website.links` | no | Command that checks the site's links |
 | `git.main_branch` | **yes** | Base of plan branches, the merge target and the PR base |
 | `git.branch_pattern` | **yes** | Human-readable branch rule, quoted into prompts, for example `<type>/<kebab-case>` |
 | `git.branch_types` | no | Allowed `<type>` values; `/implement` rejects a manifest whose `feature_branch` uses another |
@@ -61,7 +66,32 @@ Rules:
 | `hooks.dod_gate.enabled` | no (default `false`) | Opt in to the `dod-gate` Stop hook: the session cannot stop while `verify.dod` fails. Not applied to sessions that marked themselves exempt, such as the `/implement` orchestrator |
 | `hooks.dod_gate.max_attempts` | no (default `3`) | Integer 1..10: failed attempts after which the gate lets the session stop and tells the user why |
 | `scope.ignore` | no | List of globs. `/implement` checks at each merge which files the phase changed outside its `touches` and reports them (see [scope-drift.md](scope-drift.md)); paths matching these globs are not counted. Default: none. The changelog file (`docs.changelog.file`) is always ignored when the profile has `docs.changelog`. Same glob semantics as `touches` (`*` and `**` match across `/`; an entry ending in `/` is a directory). The check never blocks a merge |
+| `agents` | no | Which agents are mandatory and how they run; see [`agents`](#agents) below |
+| `agents.posture` | no | Holds `security` |
+| `agents.posture.security` | no (default `standard`) | `critical`, `standard` or `low`: how deep `security-reviewer` goes |
+| `agents.disable` | no (default none) | Agent names that are never dispatched |
+| `agents.required` | no (default none) | List of `{agent, at, blocking?, when?}`: agents that must run at the listed points. `at` is a non-empty list of `make_plan`, `implement_phase`, `implement_final`, `review`, `dod`; `blocking` (default `false`); `when` is a non-empty list of globs matched against the changed files |
+| `agents.extra_context` | no | List of non-empty strings added to every agent prompt |
 | `project_steward` | no | Path to a project skill or doc with policy that fits no other key; read after `pr-steward` and wins where more specific |
+
+### agents
+
+The ten agents are `architect`, `code-reviewer`, `security-reviewer`, `test-architect`, `ux-reviewer`,
+`dependency-auditor`, `tech-writer`, `website-maintainer`, `debugger` and `refactorer`. A profile without
+`agents` means all of them are available and none is mandatory.
+
+- **Points** (the only values `at` accepts): `make_plan`, `implement_phase`, `implement_final`, `review`, `dod`.
+  `make_plan` and `review` have no diff, so `when` has no effect there.
+- **Mandatory** means an entry in `agents.required`: the agent must run at that point, and a required agent
+  that did not run (no report line, or verdict `n/a`) fails the gate.
+- **Blocking** (`blocking: true`) means a finding the agent grades `blocking` fails the gate too: at
+  `implement_phase` the phase is sent back, at `implement_final` the review verdict is `changes`, at `dod`
+  the row is `FAIL`. With `blocking: false` the findings are reported but do not fail the gate.
+- **Defaults** (applied by `scripts/agents.py`): `posture.security` is `standard`, `disable` and `required`
+  are empty, `blocking` is `false`.
+- **Checked by the validator**: an agent is not both disabled and required; `website-maintainer` needs
+  `docs.website`; `when` needs an `at` point with a diff; only `security-reviewer`, `dependency-auditor`,
+  `test-architect`, `tech-writer` and `website-maintainer` can run at `review`.
 
 ### Command entries
 
