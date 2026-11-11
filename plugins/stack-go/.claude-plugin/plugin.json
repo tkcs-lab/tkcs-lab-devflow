@@ -1,6 +1,6 @@
 {
   "name": "stack-go",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Go stack skill for devflow: toolchain, conventions, acceptance and verify_after_merge entries",
   "author": { "name": "andras-tkcs" },
   "license": "Apache-2.0",

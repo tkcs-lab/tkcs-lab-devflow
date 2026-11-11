@@ -35,11 +35,13 @@ plugins/devflow/
   scripts/validate_manifest.py          # CLI: validate_manifest.py <plan.md|manifest.yaml> [--profile P]
   scripts/validate_profile.py           # CLI: validate_profile.py [.claude/toolkit.yaml]
   scripts/review_decisions.{py,html}    # CLI: review_decisions.py <items.json> <out.html>, /review's decisions page
-  scripts/{validate_status_record,build_board,board_stale,pick_release,upstream_sync,land_order,repo_admin,scope_check}.py
+  scripts/{validate_status_record,build_board,board_stale,board_server,board_mcp,board_client,board_mcp_stdio,pick_release,upstream_sync,land_order,repo_admin,scope_check}.py
   schema/profile.schema.json
   schema/status-record.schema.json
   schema/admin-policy.schema.json       # the policy repo_admin.py reads; its own file, referenced by the profile key admin.policy
-  board/                                # the status board page (board.html, rules.js)
+  .mcp.json                             # declares the board_mcp_stdio.py bridge (the devflow-board MCP server)
+  board/                                # the status board page (board.html, rules.js) and its Dockerfile
+  board/Dockerfile                      # image of the board server
   templates/devflow-land.yml            # the workflow /land installs
   templates/devflow-release.yml         # the release (tag) workflow repo-admin installs
   templates/admin-policy.yaml           # starter policy
@@ -221,7 +223,7 @@ manifests on `plan/atlassian-user-names` (7 phases) and `plan/plugin-framework`.
 * **dod**: runs `verify.dod` (honouring `narrow`/`skip_when_narrowed`), then reads `verify.dod_doc`
   and walks its rows against `git diff --stat origin/<main>...HEAD`, then the manual items; if
   `dod_doc` is absent it says so and runs only the gate.
-* **board**: publishes the status board page once; `/board prune` deletes stale records after one confirmation.
+* **board**: checks the connection to the board; `/board prune` deletes stale records after one confirmation.
 * **deps**: weekly unattended dependency triage; fixes red Dependabot and audit groups, opens pull requests, never merges.
 * **upstream**: weekly unattended sync of a patch-carrying fork to the newest upstream release tag, one commit, one pull request.
 * **land**: orders the bot's open pull requests, resolves conflicts before review, runs CI once, installs the land workflow.
@@ -285,8 +287,7 @@ commit, so the final PR diff does not contain it.
 
 ## 10. devflow v2 and the maintenance commands
 
-Version 0.4 added four commands and what they share. `/board` publishes a status board, one private
-page that reads the status records every session writes through the `status-board` skill (format:
+Version 0.4 added four commands and what they share. `/board` checks the connection to the status board, a server that holds the status records every session writes through the `status-board` skill (format:
 `schema/status-record.schema.json`). `/deps`, `/upstream` and `/land` are the maintenance commands:
 the first two run unattended from a scheduled task, `/land` is run by the owner, and none of them
 merges. `/make-plan` and `/implement` now keep a tracking issue for every plan. Profile sections
@@ -305,3 +306,34 @@ with write access to other repositories contains only the workflow and its allow
 environment secret limited to the default branch (D7), and the workflow starts as a dry run and checks an
 allowlist and a set of guards. Rejected: a copy of the workflow in every repository, and for now a GitHub
 App token instead of a fine-grained one. Setup, use and guards are in [git-ops.md](git-ops.md).
+
+## 12. A self-hosted status board
+
+Why: the board was a private claude.ai Artifact page whose data lived in the Artifact database, so
+everything about it depended on claude.ai. It is now a server you host; see [board-server.md](board-server.md).
+
+What was built:
+
+* `board_store.py`: SQLite storage; a write needs the version last read (`if_version`), no version means create only.
+* `board_server.py`: stdlib HTTP server with a JSON API, one write token and an optional read token, and the page.
+* `board_mcp.py`: the same four operations as an MCP endpoint (`POST /mcp`, stateless, JSON only).
+* `board_client.py`: a command-line client, the write path for sessions without the MCP server.
+* `board_mcp_stdio.py`: a stdio bridge to `/mcp` that keeps the token inside our own process.
+* `.mcp.json`: declares the bridge, so a session with the plugin has `board_get`, `board_list`, `board_set`, `board_delete`.
+* `board.html` polls `api/records` every 15 seconds instead of reading the Artifact database.
+* The `status-board` skill and `/board` use the tools or the client; `/board` checks the connection.
+* `board/Dockerfile` and `docs/board-server.md` for deployment.
+* Configuration is `DEVFLOW_BOARD_URL` and `DEVFLOW_BOARD_TOKEN` (and `DEVFLOW_BOARD_READ_TOKEN` on the server).
+
+Rejected:
+
+* Keeping the Artifact board (or both): the point is to not depend on claude.ai.
+* A remote `type: http` entry in `.mcp.json`: credential variables in a remote server's `url` and `headers` are read as empty; a stdio bridge reads the token with `os.environ`.
+* The `mcp` SDK, FastAPI or Flask: the repository is stdlib-only and the MCP subset needed is small.
+* Server-sent events or WebSockets: records change a few times an hour, polling is enough.
+* Per-project tokens and OAuth: a board for one owner does not need them.
+* Automatic expiry of old records on the server: pruning stays a command that asks the owner once.
+* Migrating old records: the next run rewrites them.
+
+Breaking change: the profile key `status.board_url` is removed; a profile that still has `status:` fails
+validation with `unknown key 'status'`. The plugin version is 0.7.0.
