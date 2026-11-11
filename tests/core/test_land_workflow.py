@@ -58,14 +58,16 @@ def script(doc):
 
 def test_triggers_and_settings(doc):
     on = doc[True]  # YAML 1.1: the key `on` loads as boolean True
-    assert on["pull_request"] == {"types": ["closed"], "branches": ["__MAIN_BRANCH__"]}
+    assert on["push"] == {"branches": ["__MAIN_BRANCH__"]}, "the reviewed copy on the main branch runs, never a PR's"
+    assert "pull_request" not in on and "pull_request_target" not in on
     assert "workflow_dispatch" in on
     assert doc["concurrency"] == {"group": "tld-land", "cancel-in-progress": False}
     assert doc["permissions"] == {"contents": "read"}
     jobs = doc["jobs"]
     assert len(jobs) == 1
     job = next(iter(jobs.values()))
-    assert job["if"] == "github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true"
+    assert job["if"] == "github.ref == 'refs/heads/__MAIN_BRANCH__'"
+    assert job["environment"] == "tld-agent", "TLD_AGENT_TOKEN is an environment secret limited to the main branch"
     env = job["steps"][0]["env"]
     assert env == {
         "GH_TOKEN": "${{ secrets.TLD_AGENT_TOKEN }}",

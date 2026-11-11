@@ -122,9 +122,11 @@ never one that needs you) and asks one question before it deletes them.
 
 ## What `/land` needs from GitHub
 
-- The repository **secret** `TLD_AGENT_TOKEN`: a fine-grained token of the agent user. The workflow
-  uses it instead of the default workflow token, because events caused by the default token do not start
-  workflows, and CI must run on the updated branch.
+- The **secret** `TLD_AGENT_TOKEN`: a fine-grained token of the agent user, stored as a secret of the
+  environment `tld-agent`, which only the default branch may use (not as a repository secret). The workflow
+  runs on pushes to the default branch in that environment, and uses the token instead of the default
+  workflow token, because events caused by the default token do not start workflows, and CI must run on the
+  updated branch. The `agent` section of the admin policy sets the environment up ([admin.md](admin.md)).
 - The repository **setting** "Allow auto-merge" (Settings, General, Pull Requests). `/land` cannot read
   secrets or that setting; it tells you to check both.
 - The workflow itself must be merged on the default branch first. If the session's token may not push

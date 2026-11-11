@@ -186,7 +186,25 @@ def test_github_mcp_calls_the_commands_make_are_allowed(feature_repo, tool, phra
 
 def test_files_the_commands_write_are_allowed(feature_repo):
     for path in ("docs/foo-plan.md", "docs/foo-plan-manual-steps.html", "docs/foo-review.md", "docs/foo-review-decisions.html",
-                 ".github/workflows/tld-land.yml", ".github/workflows/tld-release.yml", "CHANGELOG.md"):
+                 "CHANGELOG.md"):
         for hook in ("protect-paths", "secret-scan"):
             r = run(hook, event("Write", feature_repo, file_path=path, content="plain text\n"))
             assert r.code == 0, (path, hook, r.stderr)
+
+
+def test_the_land_install_step_writes_its_workflow_only_with_the_marker(fresh_repo):
+    """S13: /land step 4 runs `tld guard allow-workflow-install tld-land.yml` before it writes the file."""
+    import subprocess
+    import sys
+    from conftest import BIN
+    text = " ".join((COMMANDS / "land.md").read_text().split())
+    assert '"${CLAUDE_PLUGIN_ROOT}/bin/tld" guard allow-workflow-install tld-land.yml' in text
+    assert '"${CLAUDE_PLUGIN_ROOT}/bin/tld" guard end-allow' in text
+    path = ".github/workflows/tld-land.yml"
+    assert run("protect-paths", event("Write", fresh_repo, file_path=path, content="x\n")).code == 2
+    subprocess.run([sys.executable, str(BIN), "guard", "allow-workflow-install", "tld-land.yml"], cwd=fresh_repo, check=True,
+                   capture_output=True)
+    assert run("protect-paths", event("Write", fresh_repo, file_path=path, content="x\n")).code == 0
+    assert run("protect-paths", event("Write", fresh_repo, file_path=".github/workflows/tld-release.yml", content="x\n")).code == 2
+    subprocess.run([sys.executable, str(BIN), "guard", "end-allow"], cwd=fresh_repo, check=True, capture_output=True)
+    assert run("protect-paths", event("Write", fresh_repo, file_path=path, content="x\n")).code == 2

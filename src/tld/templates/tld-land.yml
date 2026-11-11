@@ -1,8 +1,11 @@
 name: tld-land
 
+# After each merge into __MAIN_BRANCH__, update the next open pull request that has auto-merge enabled.
+# TLD_AGENT_TOKEN is a secret of the environment tld-agent, which only __MAIN_BRANCH__ may use: the workflow
+# runs on pushes to __MAIN_BRANCH__ (a merge is one) so the copy that runs is the reviewed one on that branch.
+
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches: [__MAIN_BRANCH__]
   workflow_dispatch:
 
@@ -16,7 +19,8 @@ permissions:
 jobs:
   update-next:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    environment: tld-agent
+    if: github.ref == 'refs/heads/__MAIN_BRANCH__'
     steps:
       - name: Update the next pull request with auto-merge
         env:
@@ -28,7 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::secret TLD_AGENT_TOKEN is not set"
+            echo "::error::secret TLD_AGENT_TOKEN is not set in the environment tld-agent"
             exit 1
           fi
           numbers=$(gh api "repos/$REPO/pulls?state=open&base=$BASE&per_page=100" --jq '.[].number' | sort -n)

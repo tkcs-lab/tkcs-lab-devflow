@@ -8,24 +8,20 @@ one-liner) is not seen; that is why lockfiles are protected from hand edits, not
 """
 from __future__ import annotations
 
-import calendar
 import glob as globmod
-import json
 import os
 import re
 import sys
-import time
 
-from tld.guard import _common
-from tld.guard._common import BUILTIN_PROTECT_ALLOW, DEFAULT_PROTECT_PATHS, Ctx
+from tld.guard import _common, markers
+from tld.guard._common import BUILTIN_PROTECT_ALLOW, DEFAULT_PROTECT_PATHS, GUARDED_WORKFLOWS, Ctx
 from tld.guard._gitgh import Item, iter_items
 from tld.guard._shell import ParseError, base, is_dynamic
-from tld.dod.gate import state_dir
 
 NAME = "protect-paths"
 # Guardrail files: protected whatever the profile says (hooks.protect_paths and protect_paths_allow never remove them).
 # Neutral ones only; the Claude adapter passes its own (`~/.claude/**`, `.mcp.json`) as settings.extra_protected.
-ALWAYS_PROTECTED = [".git/config", ".git/hooks/**"]
+ALWAYS_PROTECTED = [".git/config", ".git/hooks/**", ".git/tld/**"]  # .git/tld: the guards' own markers
 # Protected on their absolute/home path, wherever the write is (S8): git's own configuration.
 ALWAYS_PROTECTED_ABS = ["~/.gitconfig", "~/.config/git/**"]
 CONFIG_PREFIXES = ("alias.", "remote.", "push.", "branch.", "include.", "includeif.", "url.")
@@ -36,8 +32,8 @@ CONFIG_VALUE_OPTS = {"-f", "--file", "--blob", "-t", "--type", "--default", "--c
 BRACE_CAP = 64
 WRITE_OPS = {">", ">>", ">|", "&>", "&>>", ">&", "<>"}
 PROFILE = ".tld/toolkit.yaml"
-PROFILE_MARKER = "protect-paths-profile.json"
-PROFILE_TTL_SECONDS = 7200   # /setup may edit the profile for two hours after --allow-profile
+PROFILE_MARKER = markers.KINDS["profile"][0]
+PROFILE_TTL_SECONDS = markers.KINDS["profile"][1]   # /setup may edit the profile for two hours after --allow-profile
 
 
 # --------------------------------------------------------------------------- patterns
@@ -119,12 +115,20 @@ def relative(ctx: Ctx, path: str, here: str) -> list[str]:
 
 def profile_allowed(project: str) -> bool:
     """True while the /setup marker of this checkout is younger than the TTL."""
-    try:
-        with open(state_dir(project) / PROFILE_MARKER, encoding="utf-8") as f:
-            written = calendar.timegm(time.strptime(json.load(f)["written_at"], "%Y-%m-%dT%H:%M:%SZ"))
-    except (OSError, ValueError, KeyError, TypeError):
-        return False
-    return 0 <= time.time() - written <= PROFILE_TTL_SECONDS
+    return markers.read(project, "profile") is not None
+
+
+def workflow_install_allowed(project: str, rel: str) -> bool:
+    """True while the install marker of this checkout names this workflow file and is younger than its TTL."""
+    data = markers.read(project, "workflow-install") or {}
+    files = data.get("files")
+    return isinstance(files, list) and rel in files
+
+
+def workflow_message(rel: str) -> str:
+    return (f"blocked: `{rel}` is a tld workflow file; it is written only by the step that installs it (`/land`, "
+            "`repo-admin`), after `tld guard allow-workflow-install " + os.path.basename(rel) + "` and until "
+            "`tld guard end-allow`. Describe the change you need in your report instead.")
 
 
 def plugin_root_hit(path: str, here: str) -> str | None:
@@ -152,6 +156,10 @@ def violation(ctx: Ctx, path: str, here: str) -> str | None:
         for pat in always:
             if matches(pat, rel):
                 return message(rel, pat)
+        if rel in GUARDED_WORKFLOWS:
+            if workflow_install_allowed(ctx.project_dir, rel):
+                continue
+            return workflow_message(rel)
         if any(matches(a, rel) for a in allow):
             continue
         if rel == PROFILE and profile_allowed(ctx.project_dir):
@@ -172,7 +180,7 @@ def hard_link_hit(ctx: Ctx, path: str, here: str) -> str | None:
         return None
     if st.st_nlink < 2 or not os.path.isfile(target):
         return None
-    protect = ctx.list_key("protect_paths", DEFAULT_PROTECT_PATHS) + ALWAYS_PROTECTED
+    protect = ctx.list_key("protect_paths", DEFAULT_PROTECT_PATHS) + ALWAYS_PROTECTED + GUARDED_WORKFLOWS
     root = os.path.realpath(ctx.project_dir)
     seen = 0
     for dirpath, dirnames, filenames in os.walk(root):
@@ -437,30 +445,12 @@ def evaluate(ctx: Ctx) -> str | None:
     return None
 
 
-def cli(argv: list[str]) -> int:
-    if argv[:1] == ["--allow-profile"]:
-        project = _common.find_project(os.getcwd())[0]
-        path = state_dir(project) / PROFILE_MARKER
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"written_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}))
-        print(f"protect-paths: {PROFILE} may be edited for the next 2 hours ({path})")
-        return 0
-    if argv[:1] == ["--end-allow"]:
-        project = _common.find_project(os.getcwd())[0]
-        try:
-            (state_dir(project) / PROFILE_MARKER).unlink()
-        except FileNotFoundError:
-            pass
-        print(f"protect-paths: {PROFILE} is protected again")
-        return 0
-    print(__doc__, file=sys.stderr)
-    return 2
-
-
-
 def main(argv: list[str] | None = None) -> int:
-    """The `tld guard allow-profile` / `end-allow` command line (the hook path goes through the adapter)."""
-    return cli(list(sys.argv[1:] if argv is None else argv))
+    """The `tld guard allow-*` / `end-allow` command line (the hook path goes through the adapter)."""
+    return markers.cli(list(sys.argv[1:] if argv is None else argv))
+
+
+cli = markers.cli  # the adapter hands the old flag forms (`protect_paths.py --allow-profile`) to `cli`
 
 
 if __name__ == "__main__":

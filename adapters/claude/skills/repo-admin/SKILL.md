@@ -65,11 +65,15 @@ Run unattended (no user to ask), do only the audit and stop with the report; nev
 
 A release is the maintainer's decision, so this skill installs the workflow and never runs it. The policy entry
 `workflows: [{template: release}]` makes `apply` open a pull request per repository that adds or updates
-`.github/workflows/tld-release.yml`. To cut a release the user opens Actions, `tld-release`, Run workflow
+`.github/workflows/tld-release.yml`. `apply` writes it through the API, so no local file is touched. If the user
+instead wants the file committed from this checkout, the `protect-paths` hook guards it: run
+`"${CLAUDE_PLUGIN_ROOT}/bin/tld" guard allow-workflow-install tld-release.yml` (or `tld-land.yml`) right before the
+write and `"${CLAUDE_PLUGIN_ROOT}/bin/tld" guard end-allow` right after the commit, also when a step failed. To cut a release the user opens Actions, `tld-release`, Run workflow
 on the main branch. The default is a dry run that shows the tag and the notes; unticking `dry_run` makes the tag
 (`<tag_prefix><version>`, an annotated tag on the head of the main branch) and the GitHub release. Never dispatch it
-from a session and never push a tag (see `pr-steward`). The workflow's branch check is not a control; tell the user that a tag ruleset is what restricts who can release.
-Tagging a named commit from a session is a different route, the `git-ops` skill; releases stay with this workflow and the maintainer.
+from a session and never push a tag (see `pr-steward`). The workflow's branch check is not a control; tell the user that the
+`tld-tags` ruleset (`rulesets.tags` in the policy) is what restricts who can tag. This workflow is the only route to a tag:
+the `git-ops` skill deletes branches and makes no tags.
 
 ## Never
 

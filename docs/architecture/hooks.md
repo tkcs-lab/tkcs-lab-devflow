@@ -10,7 +10,7 @@ repository that enables the plugin gets them without a per-repository copy. Proj
 boundary: it stops the agent a minute after the mistake instead of a day later, and it tells the agent
 what to do instead. Anything it cannot read it cannot stop (see
 [what the hooks do not protect](#what-the-hooks-do-not-protect)); the GitHub-side rulesets and an agent
-account without merge or tag rights are what actually hold.
+account without merge or tag rights are what actually hold (`rulesets` and `agent` in [admin.md](../guides/admin.md)).
 
 ## Neutral core, Claude adapter
 
@@ -33,7 +33,7 @@ shims; `CLAUDE_PROJECT_DIR` and `stop_hook_active` are read only here.
 |---|---|---|---|---|
 | `no-merge` | PreToolUse: `Bash`, and the GitHub MCP tools that merge, approve or write to a branch | pull request merges, approvals, auto-merge, any push to the main branch | A human merges; a session opens the pull request and stops | `gh pr merge 12`, `git push origin HEAD:main`; `git push -u origin feature/x`, `git merge origin/main` |
 | `no-force-push` | PreToolUse: `Bash` | `git push` with `--force`, `-f`, `--force-with-lease`, `--force-if-includes`, a `+` refspec; deleting a branch by push | History on origin is append-only; branches are deleted by the owner | `git push -f origin x`, `git push origin :old`; `git push -u origin x`, `git branch -d old` |
-| `no-git-tag` | PreToolUse: `Bash` | creating, moving, deleting or pushing tags | Releases are cut by the release workflow in CI | `git tag v2`, `git push --tags`; `git tag -l`, `git describe`, `git ls-remote --tags` |
+| `no-git-tag` | PreToolUse: `Bash`, GitHub MCP `actions_run_trigger` | creating, moving, deleting or pushing tags; dispatching the release workflow; a real git-ops run without the confirm marker | Tags are cut only by the release workflow, which the owner runs | `git tag v2`, `git push --tags`; `git tag -l`, `git describe`, `git ls-remote --tags` |
 | `secret-scan` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | content that looks like a credential | A secret in a file ends up in history | a GitHub token or a private key block; `API_KEY = os.environ["API_KEY"]` |
 | `protect-paths` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` | edits to paths the profile lists | Some files are changed by people or by tools, not by hand | `echo x > .env`; `echo x > .env.example` |
 | `dod-gate` | Stop | stopping while `verify.dod` is red (opt-in) | Work is not done until the definition of done passes | stop with a failing test; stop after `/dod` is green |
@@ -96,16 +96,17 @@ push only if the repository has such a tag), a push that tags through configurat
 refs/tags/...` and `git update-ref --stdin` (its input cannot be read), `gh release create` / `delete`, `gh release edit
 --tag`, and the API calls that create or move tag refs, tag objects and releases or edit or delete a release.
 
-Releases are cut by the release workflow, so a session may not start it either: `gh workflow run tld-release.yml`, the
-`dispatches` API of that workflow, and the GitHub MCP `actions_run_trigger` with `run_workflow` for it are denied.
+Tags have one route (D13): `tld-release`, which the owner runs by hand; git-ops makes no tags. So a session may not start
+it: `gh workflow run tld-release.yml`, its `dispatches` API (also by `curl`) and MCP `run_workflow` for it are denied.
 A workflow named by a numeric id instead of a file name — `gh workflow run 123456`, `.../workflows/123456/dispatches`,
 or `run_workflow` with a numeric `workflow_id` — is denied too, since it cannot be checked against the release workflow
 (S10), and so is `actions_run_trigger` with `rerun_workflow_run` / `rerun_failed_jobs`, which could re-run a past release
 run. `git push origin tags/v1`, a `refs/tags/` source and a bare name that is a local tag are tag pushes and denied (S9).
 Other workflows, such as those in `ci.dispatchable`, stay allowed. Reading stays allowed: `git tag -l`, `--list`, `-n`,
 `--contains`, `--points-at`, `--merged`, `-v`, `git describe`, `git fetch --tags`, `git ls-remote --tags`, `gh release list`.
-The release workflow itself runs in CI and is not affected; the template (`tld-release.yml`) runs in the `release`
-GitHub environment, so a human approves each run there.
+The release workflow runs in CI in the `release` environment and is not affected. **Real git-ops runs (S12).** A git-ops dispatch (`tld-git-ops.yml` or `git_ops.workflow`; `gh workflow run`, `gh api`
+dispatches, MCP `run_workflow`) with `dry_run` false, or with inputs it cannot read, is denied unless
+`tld guard allow-git-ops` was run in the last 10 minutes; the `git-ops` skill runs it after the user's yes.
 
 ### `secret-scan`
 
@@ -149,15 +150,14 @@ redirect pushes or run commands (S17). A program that writes a file itself (`npm
 is not seen, which is why lockfiles are protected from hand edits and not from tools.
 
 Default list (a list in the profile replaces it): `.tld/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`,
-`go.sum`, `.github/workflows/**`. Always protected, whatever the profile says: `.git/config`, `.git/hooks/**`, and
+`go.sum`, `.github/workflows/**`. Always protected: `.git/config`, `.git/hooks/**`, `.git/tld/**` (the markers), and
 anything under `$CLAUDE_PLUGIN_ROOT` (the installed plugin). Protected on their absolute path, wherever the write lands
 (S8): `~/.gitconfig` and `~/.config/git/**` (git's own configuration), and the files the Claude adapter adds —
 `~/.claude/**`, `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/**` and `.mcp.json`, since a
 session that edits Claude Code's own configuration could switch the hooks off. Always allowed, whatever the profile says: `.env.example`, `.env.sample`,
-`.env.template`, `.env.dist`, and the two workflow files the toolkit's own commands install
-(`.github/workflows/tld-land.yml` from `/land`, `.github/workflows/tld-release.yml` from `repo-admin`). That is how
-"workflow files unless a command explicitly owns them" is decided: the command's file is on the built-in allow list;
-add your own with `hooks.protect_paths_allow`.
+`.env.template`, `.env.dist`; add your own with `hooks.protect_paths_allow`. **The tld workflow files (S13).** `tld-land.yml` (it uses `TLD_AGENT_TOKEN`) and `tld-release.yml` in `.github/workflows/`
+are protected whatever the profile says. `tld guard allow-workflow-install <file>` (run by `/land` step 4) lets that one
+file through for 15 minutes, until `tld guard end-allow`; `repo-admin` installs through the API and needs no marker.
 
 Patterns: one without a slash matches the file name at any depth (`*.lock`); one with a slash is anchored at the
 repository root (`.github/workflows/**`); `**` crosses directories, `*` and `?` do not; a trailing slash means a directory.
@@ -345,7 +345,7 @@ the Bash hooks, fails when a command file stops containing the phrase that docum
 | | "Never push to `<main>`; never approve, merge or enable auto-merge; never rebase or force-push the feature branch" | now enforced for push, merge, approve, auto-merge and force-push; a local `git rebase` is not blocked |
 | | child phase sessions: push `<phase branch>`, run `/dod` | allowed; **gated** by `dod-gate` when enabled |
 | `/land` | `git fetch origin <main>`; create `chore/land-<stamp>` from `origin/<main>`; `git merge --no-ff` of pull request heads in order; `git merge --abort`; normal push of a pull request branch; `git push -u origin chore/land-<stamp>`; `chore/tld-land-workflow` and its push | allowed |
-| | write `.github/workflows/tld-land.yml` | allowed (on the built-in `protect-paths` allow list) |
+| | write `.github/workflows/tld-land.yml` | allowed between `tld guard allow-workflow-install tld-land.yml` and `tld guard end-allow` (S13) |
 | | "Never approve, merge, enable auto-merge, force-push, push to `<main>`, delete a branch or tag" | now enforced |
 | `/deps` | check out a Dependabot branch and push a normal commit to it; `chore/deps-<ecosystem>-<date>` from the default branch and its push; MCP `update_pull_request_branch`; the profile's lock and audit commands | allowed (lockfiles are changed by the lock commands, which `protect-paths` does not see) |
 | | "Never merge, approve, enable auto-merge or force-push" | now enforced |
@@ -366,7 +366,7 @@ What changed in the commands: `/implement`, `/make-plan`, `/review` and `/land` 
 - **Sessions without the plugin.** Hooks exist only where `tld` is enabled. A session that does not load the plugin, a
   person at a terminal, another tool, and a CI job are not covered.
 - **Branch protection and CI remain the hard enforcement.** Require a pull request, required reviews, status checks, no
-  force pushes and no deletions on the main branch, and a release workflow that owns tags, in the repository's rules.
+  force pushes and no deletions on the main branch, and a release workflow that owns tags (`tld-main`, `tld-tags`).
   The hooks make the agent stop early; the rules make sure nothing gets through if the agent, a plugin setting or a
   hook is wrong.
 - **Anything a parser cannot see.** The hooks read the command, they do not run it. Code the parser cannot follow —

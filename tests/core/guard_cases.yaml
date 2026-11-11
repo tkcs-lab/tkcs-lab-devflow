@@ -93,6 +93,30 @@
 - {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S17,
    command: "git config url.https://x/.pushInsteadOf https://origin/"}
 
+# ---------------- S12: git-ops runs for real only with the confirm marker ----------------
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S12,
+   command: "gh workflow run tld-git-ops.yml -R o/central -f repo=o/r -f action=delete-branch -f name=x -f dry_run=false"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S12,
+   command: "gh api -X POST repos/o/central/actions/workflows/tld-git-ops.yml/dispatches -f ref=main -f inputs[dry_run]=false"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S12,
+   command: "echo '{}' | gh workflow run tld-git-ops.yml --json"}
+- {guard: no-git-tag, repo: plain, kind: github_op, expect: deny, note: S12,
+   op: actions_run_trigger, args: {method: run_workflow, workflow_id: tld-git-ops.yml, ref: main,
+                                   inputs: {repo: o/r, action: delete-branch, name: x, dry_run: "false"}}}
+- {guard: no-git-tag, repo: plain, kind: github_op, expect: deny, note: S12,
+   op: actions_run_trigger, args: {method: run_workflow, workflow_id: tld-git-ops.yml, ref: main, inputs: {dry_run: false}}}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: S12,
+   command: "curl -X POST -d @body.json https://api.github.com/repos/o/central/actions/workflows/tld-git-ops.yml/dispatches"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: D13,
+   command: "curl -X POST https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches"}
+
+# ---------------- S13: the tld workflow files only with the install marker ----------------
+- {guard: protect-paths, repo: plain, kind: write, path: .github/workflows/tld-land.yml, expect: deny, note: S13}
+- {guard: protect-paths, repo: plain, kind: write, path: .github/workflows/tld-release.yml, expect: deny, note: S13}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S13, command: "cp x .github/workflows/tld-land.yml"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S13,
+   command: "echo '{}' > .git/tld/protect-paths-workflow.json"}
+
 # ---------------- legit commands the toolkit's own commands run (allow) ----------------
 - {guard: no-merge, repo: plain, kind: shell, expect: allow, command: "git push -u origin feature/demo"}
 - {guard: no-merge, repo: plain, kind: shell, expect: allow, command: "git merge origin/main"}
@@ -103,3 +127,8 @@
 - {guard: protect-paths, repo: plain, kind: write, path: docs/x.md, expect: allow, content: "hi\n"}
 - {guard: secret-scan, repo: plain, kind: write, path: a.py, expect: allow,
    content: "API_KEY = os.environ['API_KEY']\n"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: allow,
+   command: "gh workflow run tld-git-ops.yml -R o/central -f repo=o/r -f action=delete-branch -f name=x -f dry_run=true"}
+- {guard: no-git-tag, repo: plain, kind: github_op, expect: allow,
+   op: actions_run_trigger, args: {method: run_workflow, workflow_id: tld-git-ops.yml, ref: main,
+                                   inputs: {repo: o/r, action: delete-branch, name: x, dry_run: "true"}}}

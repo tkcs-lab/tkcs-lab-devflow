@@ -28,7 +28,9 @@ How to run it:
 | `tld roles verify --required F --report F` | `tld.roles.dispatch` | check a report against `tld roles required` |
 | `tld dod exempt` | `tld.dod.gate` | mark this checkout's session exempt from the dod-gate hook |
 | `tld guard allow-profile` | `tld.guard.protect_paths` | let the session edit the profile for the next 2 hours |
-| `tld guard end-allow` | `tld.guard.protect_paths` | protect the profile again |
+| `tld guard allow-workflow-install FILE...` | `tld.guard.protect_paths` | let the session write `tld-land.yml` / `tld-release.yml` for the next 15 minutes |
+| `tld guard allow-git-ops` | `tld.guard.protect_paths` | let a git-ops dispatch with `dry_run` false through for the next 10 minutes |
+| `tld guard end-allow` | `tld.guard.protect_paths` | end every allow marker: the profile, workflow installs, git-ops |
 | `tld board server [--host H] [--port N] [--db F] ...` | `tld.board.server` | serve the status board |
 | `tld board client health\|list\|get\|set\|delete ...` | `tld.board.client` | talk to the board server |
 | `tld board mcp-stdio` | `tld.board.mcp_stdio` | MCP stdio bridge to the board server (the `tld-board` MCP server) |

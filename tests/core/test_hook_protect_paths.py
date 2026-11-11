@@ -10,7 +10,7 @@ PROTECTED_FILES = [".tld/toolkit.yaml", ".env", ".env.local", ".env.production",
                    "web/package-lock.json", "uv.lock", "deep/er/Cargo.lock", "go.sum", ".github/workflows/ci.yml",
                    ".github/workflows/sub/x.yml", "./.env", "docs/../.env"]
 ALLOWED_FILES = ["src/app.py", "README.md", ".env.example", ".env.sample", ".env.template", ".env.dist",
-                 ".github/workflows/tld-land.yml", ".github/workflows/tld-release.yml", "docs/lock.md",
+                 "docs/lock.md",
                  "lockfile.txt", ".github/CODEOWNERS", ".github/dependabot.yml", "src/tld/templates/toolkit.yaml",
                  "sub/.tld/toolkit.yaml", ".envrc.md", "environment.txt", "go.mod", "package.json"]
 
@@ -69,7 +69,7 @@ ALLOWED_BASH = [
     "sed -i 's/a/b/' src/app.py", "sed 's/a/b/' .env", "sed -n p .env", "sed -n 's/a/b/p' .env > out.txt",
     "rm -rf build", "touch src/x", "git add .env", "git rm src/x.py", "echo x > /dev/null", "ls 2>&1 | tee out.log",
     "ls > files.txt", "echo \">\" .env", "echo 'x > .env'", "git commit -m 'edit .env > nothing'", "npm install", "uv lock",
-    "python3 -m pip install x", "echo x > .env.example", "cp x .github/workflows/tld-land.yml", "diff .env other",
+    "python3 -m pip install x", "echo x > .env.example", "diff .env other",
     "mv x y", "cat <<EOF > notes.md\n.env\nEOF", "rm .envrc.md", "ls .github/workflows", "grep -r x .github/workflows",
     "echo $(cat .env)", "bash -c 'cat .env'", "git status", 'echo x > "$OUT"',
     "git config user.name x", "git config --get alias.p", "git config --list", "git config alias.p",

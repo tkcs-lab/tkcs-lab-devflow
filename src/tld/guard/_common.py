@@ -23,9 +23,12 @@ PROFILE = Path(".tld") / "toolkit.yaml"
 # Defaults of the `hooks` section. They are repeated in schema/profile.schema.json; a test keeps them equal.
 DEFAULT_PROTECT_PATHS = [".tld/toolkit.yaml", ".env", ".env.*", "*.lock", "package-lock.json", "go.sum",
                          ".github/workflows/**"]
-# Always allowed, whatever the profile says: templates and files the toolkit's own commands install.
-BUILTIN_PROTECT_ALLOW = [".env.example", ".env.sample", ".env.template", ".env.dist",
-                         ".github/workflows/tld-land.yml", ".github/workflows/tld-release.yml"]
+# Always allowed, whatever the profile says: templates of environment files.
+BUILTIN_PROTECT_ALLOW = [".env.example", ".env.sample", ".env.template", ".env.dist"]
+# The workflow files the toolkit's own commands install (S13). Protected whatever the profile says, and writable only
+# while `tld guard allow-workflow-install <file>` has set the install marker: the land workflow holds the agent token
+# and the release workflow is the only route to a tag.
+GUARDED_WORKFLOWS = [".github/workflows/tld-land.yml", ".github/workflows/tld-release.yml"]
 DEFAULT_MAX_ATTEMPTS = 3
 HOOK_BUDGET_SECONDS = 15  # below a 20 s runtime timeout, so a slow destructive guard denies instead of being killed
 

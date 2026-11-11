@@ -68,14 +68,17 @@ The toolkit commands and templates named below are found as the project-profile 
 ## 4. Install the workflow
 
 1. Read `${CLAUDE_PLUGIN_ROOT}/src/tld/templates/tld-land.yml` and replace `__MAIN_BRANCH__` with `git.main_branch`.
-2. If `.github/workflows/tld-land.yml` on `origin/<main>` differs from that text (or is missing),
-   commit it on `chore/tld-land-workflow` and open a pull request that adds it. Set `needs_you` with
-   the reason `Review PR #<n>` for that pull request.
+2. If `.github/workflows/tld-land.yml` on `origin/<main>` differs from that text (or is missing): the
+   `protect-paths` hook guards that file, so run `"${CLAUDE_PLUGIN_ROOT}/bin/tld" guard allow-workflow-install tld-land.yml`
+   (it allows that one file for 15 minutes), write it, commit it on `chore/tld-land-workflow`, and run
+   `"${CLAUDE_PLUGIN_ROOT}/bin/tld" guard end-allow` right after the commit, also when a step failed. Open a
+   pull request that adds it. Set `needs_you` with the reason `Review PR #<n>` for that pull request.
 3. If the push is refused because the token lacks the workflows permission, open no pull request and set
    `needs_you` with the reason `Add .github/workflows/tld-land.yml from the tld template`.
-4. Say that the owner must merge the workflow pull request first, and that the secret `TLD_AGENT_TOKEN`
-   and the repository setting `Allow auto-merge` must exist. This command cannot read secrets or that
-   setting.
+4. Say that the owner must merge the workflow pull request first, that `TLD_AGENT_TOKEN` must be a secret
+   of the environment `tld-agent` (limited to `<main>`; `tld ops repo-admin` with the policy's `agent` section
+   sets the environment up), and that the repository setting `Allow auto-merge` must exist. This command
+   cannot read secrets or that setting.
 
 ## 5. Report and record
 

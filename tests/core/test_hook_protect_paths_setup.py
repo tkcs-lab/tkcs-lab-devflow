@@ -55,7 +55,8 @@ def test_garbage_marker_denies(fresh_repo):
 def test_end_allow_denies_again(fresh_repo):
     cli(fresh_repo, "--allow-profile")
     r = cli(fresh_repo, "--end-allow")
-    assert r.returncode == 0 and r.stdout.strip() == "protect-paths: .tld/toolkit.yaml is protected again"
+    assert r.returncode == 0 and r.stdout.strip() == ("protect-paths: .tld/toolkit.yaml is protected again; workflow installs "
+                                                      "and real git-ops runs are off")
     assert write(fresh_repo, PROFILE) == 2
     assert cli(fresh_repo, "--end-allow").returncode == 0  # idempotent
 
