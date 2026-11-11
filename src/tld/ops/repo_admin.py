@@ -688,6 +688,8 @@ def check_protection(ctx: Ctx) -> list[Finding]:
     cfg = ctx.p.get("branch_protection")
     if cfg is None:
         return []
+    if (ctx.p.get("rulesets") or {}).get("default_branch") is not None and cfg.get("branch", "default") == "default":
+        return []  # the ruleset tld-main is the protection of the default branch
 
     def one(repo):
         fn, snap = repo["full_name"], ctx.snapshot(repo)
@@ -742,6 +744,218 @@ def check_protection(ctx: Ctx) -> list[Finding]:
         return out
 
     return per_repo(ctx, "protection", one)
+
+
+# --------------------------------------------------------------------------- rulesets and the agent account
+#
+# The server-side control (docs/guides/admin.md): rulesets on the default branch and on tags, an agent account
+# with the write role and no more, and the agent token in an environment only the default branch can use.
+
+MAIN_RULESET, TAG_RULESET = "tld-main", "tld-tags"
+ACTIONS_APP_ID = 15368     # the GitHub Actions app: a workflow's GITHUB_TOKEN acts as this integration
+ADMIN_ROLE_ID = 5          # the repository role 'admin' as a ruleset bypass actor
+AGENT_ENV, AGENT_SECRET = "tld-agent", "TLD_AGENT_TOKEN"
+ROLE_ABOVE_WRITE = ("admin", "maintain")
+ROLE_BELOW_WRITE = ("triage", "read", "none")
+
+
+def ruleset_bodies(cfg: dict) -> list[dict]:
+    """The rulesets the policy asks for, as request bodies of POST/PUT /repos/{owner}/{repo}/rulesets."""
+    out = []
+    main = cfg.get("default_branch")
+    if main is not None:
+        rules = [{"type": "deletion"}, {"type": "non_fast_forward"},
+                 {"type": "pull_request", "parameters": {
+                     "required_approving_review_count": 1, "dismiss_stale_reviews_on_push": True,
+                     "require_last_push_approval": True, "require_code_owner_review": False,
+                     "required_review_thread_resolution": False}}]
+        checks = main.get("required_status_checks", [])
+        if checks:
+            rules.append({"type": "required_status_checks", "parameters": {
+                "strict_required_status_checks_policy": False,
+                "required_status_checks": [{"context": c} for c in checks]}})
+        bypass = ([{"actor_id": ADMIN_ROLE_ID, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"}]
+                  if main.get("admin_bypass") else [])
+        out.append({"name": MAIN_RULESET, "target": "branch", "enforcement": "active", "bypass_actors": bypass,
+                    "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}}, "rules": rules})
+    if cfg.get("tags"):
+        out.append({"name": TAG_RULESET, "target": "tag", "enforcement": "active",
+                    "bypass_actors": [{"actor_id": ACTIONS_APP_ID, "actor_type": "Integration", "bypass_mode": "always"}],
+                    "conditions": {"ref_name": {"include": ["~ALL"], "exclude": []}},
+                    "rules": [{"type": "creation"}, {"type": "update", "parameters": {"update_allows_fetch_and_merge": False}},
+                              {"type": "deletion"}]})
+    return out
+
+
+def _params_differ(kind: str, want: dict, have: dict) -> bool:
+    if kind == "required_status_checks":
+        contexts = lambda p: sorted(c.get("context") for c in p.get("required_status_checks") or [])  # noqa: E731
+        return (contexts(want) != contexts(have) or bool(have.get("strict_required_status_checks_policy"))
+                != want["strict_required_status_checks_policy"])
+    return any(have.get(k) != v for k, v in want.items())
+
+
+def ruleset_diffs(want: dict, have: dict) -> tuple[list[str], bool]:
+    """(what differs, bypass actors unreadable). A token without admin rights gets a ruleset without its bypass list."""
+    diffs = []
+    if have.get("target") != want["target"]:
+        diffs.append(f"target is {have.get('target')!r}, not {want['target']!r}")
+    if have.get("enforcement") != "active":
+        diffs.append(f"enforcement is {have.get('enforcement')!r}, not 'active'")
+    ref = (have.get("conditions") or {}).get("ref_name") or {}
+    want_ref = want["conditions"]["ref_name"]
+    if sorted(ref.get("include") or []) != sorted(want_ref["include"]) or ref.get("exclude"):
+        diffs.append(f"applies to {ref.get('include') or []} minus {ref.get('exclude') or []}, not {want_ref['include']}")
+    have_rules = {r.get("type"): r.get("parameters") or {} for r in have.get("rules") or []}
+    for rule in want["rules"]:
+        kind = rule["type"]
+        if kind not in have_rules:
+            diffs.append(f"rule {kind} is missing")
+        elif _params_differ(kind, rule.get("parameters") or {}, have_rules[kind]):
+            diffs.append(f"rule {kind} has other parameters")
+    extra = sorted(set(have_rules) - {r["type"] for r in want["rules"]})
+    if extra:
+        diffs.append(f"extra rules {', '.join(map(str, extra))}")
+    if "bypass_actors" not in have:
+        return diffs, True
+    key = lambda a: (a.get("actor_type"), a.get("actor_id"), a.get("bypass_mode"))  # noqa: E731
+    if sorted(map(key, have["bypass_actors"] or []), key=str) != sorted(map(key, want["bypass_actors"]), key=str):
+        diffs.append("bypass actors differ: " + (", ".join(f"{t} {i} ({m})" for t, i, m in map(key, have["bypass_actors"] or []))
+                                                 or "none") + " instead of " + (", ".join(
+                                                     f"{t} {i} ({m})" for t, i, m in map(key, want["bypass_actors"])) or "none"))
+    return diffs, False
+
+
+def check_rulesets(ctx: Ctx) -> list[Finding]:
+    cfg = ctx.p.get("rulesets")
+    if not cfg:
+        return []
+    bodies = ruleset_bodies(cfg)
+    if not bodies:
+        return []
+
+    def one(repo):
+        fn, out = repo["full_name"], []
+        listing = ctx.c.paginate(f"/repos/{fn}/rulesets", {"includes_parents": "false"})
+        mine = {r.get("name"): r for r in listing or [] if r.get("source_type", "Repository") == "Repository"}
+        for want in bodies:
+            name, cur = want["name"], mine.get(want["name"])
+            if cur is None:
+                out.append(Finding("rulesets", fn, name, f"ruleset {name} is missing", "fix",
+                                   api("POST", f"/repos/{fn}/rulesets", want)))
+                continue
+            have = ctx.c.get(f"/repos/{fn}/rulesets/{cur['id']}")
+            diffs, unknown = ruleset_diffs(want, have or {})
+            if diffs:
+                out.append(Finding("rulesets", fn, name, f"ruleset {name}: {'; '.join(diffs)}", "fix",
+                                   api("PUT", f"/repos/{fn}/rulesets/{cur['id']}", want)))
+            elif unknown:
+                out.append(Finding("rulesets", fn, f"{name}:bypass", f"ruleset {name}: its bypass actors cannot be read "
+                                   "(the token needs admin rights on the repository)", "unavailable"))
+        return out
+
+    return per_repo(ctx, "rulesets", one)
+
+
+def _part(check: str, fn: str, out: list, fn_part) -> None:
+    """Run one part of a per-repository check; a failed call becomes a finding and the other parts still run."""
+    try:
+        out += fn_part()
+    except ApiError as exc:
+        out.append(failure(check, fn, exc))
+
+
+def check_agent(ctx: Ctx) -> list[Finding]:
+    cfg = ctx.p.get("agent")
+    if not cfg:
+        return []
+    login = cfg["agent_login"]
+    mode = cfg.get("branch_policy", "default_branch")
+
+    def role(fn):
+        try:
+            perm = ctx.c.get(f"/repos/{fn}/collaborators/{_q(login)}/permission") or {}
+        except ApiError as exc:
+            if exc.status != 404:
+                raise
+            perm = {"role_name": "none"}
+        have = perm.get("role_name") or perm.get("permission") or "none"
+        if have in ROLE_ABOVE_WRITE:
+            return [Finding("agent", fn, f"role:{login}", f"agent account {login} has the {have} role; policy allows write",
+                            "fix", api("PUT", f"/repos/{fn}/collaborators/{_q(login)}", {"permission": "push"}))]
+        if have in ROLE_BELOW_WRITE:
+            return [Finding("agent", fn, f"role:{login}", f"agent account {login} has the {have} role; it needs write to "
+                            "push branches and open pull requests", "warn",
+                            manual=f"invite {login} with the write role at https://github.com/{fn}/settings/access")]
+        return []
+
+    def environment(fn, repo):
+        env_path = f"/repos/{fn}/environments/{AGENT_ENV}"
+        custom = mode == "default_branch"
+        want = {"protected_branches": not custom, "custom_branch_policies": custom}
+        default = ctx.repo(repo)["default_branch"]
+        out = []
+        try:
+            env = ctx.c.get(env_path)
+        except ApiError as exc:
+            if exc.status != 404:
+                raise
+            env = None
+        have = (env or {}).get("deployment_branch_policy")
+        if env is None or not isinstance(have, dict) or any(bool(have.get(k)) != v for k, v in want.items()):
+            what = "is missing" if env is None else ("lets every branch deploy" if not isinstance(have, dict)
+                                                     else "has another deployment branch policy")
+            out.append(Finding("agent", fn, f"environment:{AGENT_ENV}", f"environment {AGENT_ENV} {what}; policy wants "
+                               + ("only the default branch" if custom else "protected branches only"), "fix",
+                               api("PUT", env_path, {"deployment_branch_policy": want})))
+        if custom:
+            policies = []
+            if isinstance(have, dict) and have.get("custom_branch_policies"):
+                policies = ctx.c.paginate(f"{env_path}/deployment-branch-policies", key="branch_policies")
+            if not any(p.get("name") == default and p.get("type", "branch") == "branch" for p in policies):
+                out.append(Finding("agent", fn, f"environment:{AGENT_ENV}:branch:{default}", f"environment {AGENT_ENV} does "
+                                   f"not allow the default branch {default}", "fix",
+                                   api("POST", f"{env_path}/deployment-branch-policies", {"name": default, "type": "branch"})))
+            for p in policies:
+                if p.get("name") == default and p.get("type", "branch") == "branch":
+                    continue
+                out.append(Finding("agent", fn, f"environment:{AGENT_ENV}:extra:{p.get('type', 'branch')}:{p.get('name')}",
+                                   f"environment {AGENT_ENV} also allows the {p.get('type', 'branch')} pattern "
+                                   f"'{p.get('name')}'; policy wants only {default}", "fix",
+                                   api("DELETE", f"{env_path}/deployment-branch-policies/{p['id']}")))
+        return out, env is not None
+
+    def secret(fn, env_exists):
+        out = []
+        set_it = f"gh secret set {AGENT_SECRET} --env {AGENT_ENV} --repo {fn}"
+        for label, where, path in (("repository", "a repository secret", f"/repos/{fn}/actions/secrets"),
+                                   ("organisation", "an organisation secret shared with the repository",
+                                    f"/repos/{fn}/actions/organization-secrets")):
+            if any(s["name"].upper() == AGENT_SECRET for s in ctx.c.paginate(path, key="secrets")):
+                out.append(Finding("agent", fn, f"secret:{label}", f"{AGENT_SECRET} is {where}: every "
+                                   f"workflow on every branch can read it; it belongs in the environment {AGENT_ENV}", "warn",
+                                   manual=f"`{set_it}` (the value is never readable), then delete the other secret"))
+        names = set()
+        if env_exists:
+            names = {s["name"].upper() for s in ctx.c.paginate(f"/repos/{fn}/environments/{AGENT_ENV}/secrets", key="secrets")}
+        if AGENT_SECRET not in names:
+            out.append(Finding("agent", fn, "secret:environment", f"{AGENT_SECRET} is not set in the environment {AGENT_ENV} "
+                               "(the land workflow needs it)", "info", manual=f"`{set_it}`"))
+        return out
+
+    def one(repo):
+        fn, out, exists = repo["full_name"], [], [False]
+        _part("agent", fn, out, lambda: role(fn))
+
+        def env_part():
+            found, exists[0] = environment(fn, repo)
+            return found
+
+        _part("agent", fn, out, env_part)
+        _part("agent", fn, out, lambda: secret(fn, exists[0]))
+        return out
+
+    return per_repo(ctx, "agent", one)
 
 
 # --------------------------------------------------------------------------- secrets and variables
@@ -1211,6 +1425,7 @@ def check_lint(ctx: Ctx) -> list[Finding]:
 CHECKS = {
     "org": check_org, "members": check_members, "apps": check_apps, "tokens": check_tokens,
     "repo": check_repo, "security": check_security, "actions": check_actions, "protection": check_protection,
+    "rulesets": check_rulesets, "agent": check_agent,
     "secrets": check_secrets, "variables": check_variables, "labels": check_labels,
     "webhooks": check_webhooks, "keys": check_keys, "branches": check_branches, "files": check_files,
     "lint": check_lint,

@@ -137,6 +137,33 @@
         "allow_deletions": { "type": "boolean", "description": "Default false." }
       }
     },
+    "rulesets": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Repository rulesets, the server-side control: the hooks are only a seatbelt. Created with POST and kept in line with PUT /repos/{owner}/{repo}/rulesets; a ruleset of another name is left alone.",
+      "properties": {
+        "default_branch": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The ruleset tld-main on ~DEFAULT_BRANCH: a pull request with one approval (stale approvals dismissed, the last push approved by someone else), no force push, no deletion. While it is set, branch_protection of the default branch stands down.",
+          "properties": {
+            "required_status_checks": { "$ref": "#/$defs/names", "description": "Names of the checks that must pass. Empty: no required checks rule." },
+            "admin_bypass": { "type": "boolean", "description": "Let the repository admin role bypass it, through a pull request only. Default false: no bypass actor." }
+          }
+        },
+        "tags": { "type": "boolean", "description": "The ruleset tld-tags on every tag: creation, update and deletion are blocked for everyone but GitHub Actions (the release workflow)." }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_login"],
+      "description": "The account sessions push as, and the environment tld-agent that holds TLD_AGENT_TOKEN.",
+      "properties": {
+        "agent_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$", "description": "GitHub login of the agent account. A role above write (maintain, admin) is lowered to write; a role below write is reported." },
+        "branch_policy": { "enum": ["default_branch", "protected_branches"], "description": "Which branches may use the environment tld-agent. Default default_branch (a custom policy naming only the default branch)." }
+      }
+    },
     "secrets": {
       "type": "object",
       "additionalProperties": false,

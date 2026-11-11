@@ -50,12 +50,13 @@ Run unattended (no user to ask), do only the audit and stop with the report; nev
 ## What the script can and cannot do
 
 - **Can:** organisation settings, repository settings, security features, Actions permissions, a first branch
-  protection, labels (create, update, rename, delete), unused secrets and variables, webhooks, deploy keys,
+  protection, the rulesets `tld-main` (default branch) and `tld-tags` (tags), the agent account's role (lowered to
+  write) and the environment `tld-agent`, labels (create, update, rename, delete), unused secrets and variables, webhooks, deploy keys,
   merged branches, fine-grained tokens, forbidden paths (for example `.archon`), workflow files.
 - **Reports only (`lint`, required files):** actions not pinned to a commit, workflows without `permissions`, `pull_request_target`, missing `SECURITY.md`/`CODEOWNERS`/`LICENSE`.
 - **Cannot, and says so as `warn` or `info`:** uninstall a GitHub App (the report links the settings page; GitHub has
   no "last used" for apps, so an app is judged against `apps.allow`), list OAuth authorisations or classic
-  personal access tokens, read environment or Codespaces secrets, read rulesets, replace an existing branch protection, add or remove people.
+  personal access tokens, read a secret's value or move one into an environment, read Codespaces secrets, manage rulesets other than its own two, replace an existing branch protection, add or remove people.
 - **Heuristic:** a secret or variable is "unused" when no workflow of the repository (any repository, for an
   organisation-level one) names it. The script says nothing is unused when a workflow hides names
   (`secrets: inherit`, a computed name). Only the default branch is read, and an organisation-level name is judged only when the token sees every repository of the organisation. Anything used from elsewhere belongs in `keep`.

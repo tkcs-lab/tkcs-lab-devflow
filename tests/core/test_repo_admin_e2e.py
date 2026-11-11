@@ -24,6 +24,11 @@ class State:
                      "has_wiki": True, "delete_branch_on_merge": True}
         self.labels = [{"name": f"old-{i}", "color": "ededed", "description": None} for i in range(130)] + [{"name": "bug", "color": "000000", "description": None}]
         self.files = {".archon/a.yml": "x\n", ".archon/deep/b.yml": "y\n", "README.md": "# app\n"}
+        self.rulesets = {}  # id -> ruleset, as the rulesets API keeps them
+        self.role = "admin"  # the agent account's role
+        self.environment = None  # the tld-agent environment, once created
+        self.branch_policies = []
+        self.repo_secrets = ["TLD_AGENT_TOKEN"]
 
 
 def make_handler(state):
@@ -89,6 +94,41 @@ def make_handler(state):
                 return self.reply(201, {})
             if m == "POST" and p == "/repos/acme/app/pulls":
                 return self.reply(201, {"html_url": "https://github.com/acme/app/pull/1", "number": 1})
+            if m == "GET" and p == "/repos/acme/app/rulesets":
+                assert q.get("includes_parents") == "false"
+                return self.reply(200, [{"id": i, "name": r["name"], "source_type": "Repository"} for i, r in state.rulesets.items()])
+            if m == "POST" and p == "/repos/acme/app/rulesets":
+                rid = len(state.rulesets) + 1
+                state.rulesets[rid] = {**body, "id": rid, "source_type": "Repository"}
+                return self.reply(201, state.rulesets[rid])
+            mr = re.fullmatch(r"/repos/acme/app/rulesets/(\d+)", p)
+            if mr and int(mr.group(1)) in state.rulesets:
+                rid = int(mr.group(1))
+                if m == "PUT":
+                    state.rulesets[rid] = {**body, "id": rid, "source_type": "Repository"}
+                return self.reply(200, state.rulesets[rid])
+            if m == "GET" and p == "/repos/acme/app/collaborators/bot/permission":
+                return self.reply(200, {"permission": "admin" if state.role == "admin" else "write", "role_name": state.role})
+            if m == "PUT" and p == "/repos/acme/app/collaborators/bot":
+                state.role = {"push": "write"}[body["permission"]]
+                return self.reply(204)
+            env = "/repos/acme/app/environments/tld-agent"
+            if p == env and m == "GET" and state.environment is not None:
+                return self.reply(200, state.environment)
+            if p == env and m == "PUT":
+                state.environment = {"name": "tld-agent", **body}
+                return self.reply(200, state.environment)
+            if p == env + "/deployment-branch-policies" and state.environment is not None:
+                if m == "POST":
+                    state.branch_policies.append({"id": len(state.branch_policies) + 1, **body})
+                    return self.reply(200, state.branch_policies[-1])
+                return self.reply(200, {"total_count": len(state.branch_policies), "branch_policies": state.branch_policies})
+            if m == "GET" and p == env + "/secrets" and state.environment is not None:
+                return self.reply(200, {"total_count": 0, "secrets": []})
+            if m == "GET" and p == "/repos/acme/app/actions/secrets":
+                return self.reply(200, {"total_count": 1, "secrets": [{"name": n} for n in state.repo_secrets]})
+            if m == "GET" and p == "/repos/acme/app/actions/organization-secrets":
+                return self.reply(200, {"total_count": 0, "secrets": []})
             if m == "GET" and p == "/user":
                 return self.reply(200, {"login": "owner"})
             if m == "GET" and p == "/user/memberships/orgs/acme":
@@ -118,9 +158,9 @@ POLICY = {
 }
 
 
-def run(url, tmp_path, *argv, env_extra=None):
+def run(url, tmp_path, *argv, env_extra=None, policy_data=None):
     policy = tmp_path / "policy.yaml"
-    policy.write_text(yaml.safe_dump(POLICY))
+    policy.write_text(yaml.safe_dump(policy_data or POLICY))
     env = {k: v for k, v in os.environ.items() if k not in ("GH_TOKEN", "GITHUB_TOKEN", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy")}
     env.update({"GH_TOKEN": TOKEN, "GITHUB_API_URL": url, "PATH": "/nonexistent", **(env_extra or {})})
     cmd = [sys.executable, "-I", str(BIN), "ops", "repo-admin", argv[0], *(["--policy", str(policy)] if argv[0] in ("audit", "apply") else []), *argv[1:]]
@@ -200,3 +240,59 @@ def test_a_failing_server_is_reported_not_raised(server, tmp_path, status):
 def test_unreachable_server_is_a_clean_error(tmp_path):
     p = run("http://127.0.0.1:9", tmp_path, "audit")
     assert p.returncode == 1 and "Traceback" not in p.stderr and "repo_admin:" in p.stderr
+
+
+# --------------------------------------------------------------------------- rulesets, the agent role, the environment
+
+GUARD_POLICY = {"org": "acme", "rulesets": {"default_branch": {"required_status_checks": ["test"]}, "tags": True},
+                "agent": {"agent_login": "bot"}}
+
+
+def guard_run(url, tmp_path, *argv):
+    return run(url, tmp_path, *argv, policy_data=GUARD_POLICY)
+
+
+def messages(p):
+    return {f["message"]: f for f in json.loads(p.stdout)["findings"]}
+
+
+def test_rulesets_role_and_environment_dry_run_create_and_no_drift(server, tmp_path):
+    state, url = server
+    p = guard_run(url, tmp_path, "audit", "--format", "json")
+    assert p.returncode == 3, p.stderr
+    found = messages(p)
+    for msg in ("ruleset tld-main is missing", "ruleset tld-tags is missing", "agent account bot has the admin role; policy allows write",
+                "environment tld-agent is missing; policy wants only the default branch",
+                "environment tld-agent does not allow the default branch main"):
+        assert found[msg]["severity"] == "fix", msg
+    assert found["TLD_AGENT_TOKEN is a repository secret: every workflow on every branch can read it; it belongs in the "
+                 "environment tld-agent"]["severity"] == "warn"
+    p = guard_run(url, tmp_path, "apply")
+    assert p.returncode == 0 and "Dry run: nothing was changed" in p.stdout and writes(state) == []
+    p = guard_run(url, tmp_path, "apply", "--yes")
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert writes(state) == [("POST", "/repos/acme/app/rulesets"), ("POST", "/repos/acme/app/rulesets"),
+                             ("PUT", "/repos/acme/app/collaborators/bot"), ("PUT", "/repos/acme/app/environments/tld-agent"),
+                             ("POST", "/repos/acme/app/environments/tld-agent/deployment-branch-policies")]
+    tags = next(r for r in state.rulesets.values() if r["name"] == "tld-tags")
+    assert tags["bypass_actors"] == [{"actor_id": 15368, "actor_type": "Integration", "bypass_mode": "always"}]
+    assert state.role == "write" and state.branch_policies[0]["name"] == "main"
+    state.requests.clear()
+    p = guard_run(url, tmp_path, "audit", "--format", "json")
+    left = {f["message"] for f in json.loads(p.stdout)["findings"] if f["severity"] == "fix"}
+    assert left == set(), left
+    assert writes(state) == []
+
+
+def test_a_weakened_ruleset_is_updated_in_place(server, tmp_path):
+    state, url = server
+    assert guard_run(url, tmp_path, "apply", "--yes").returncode == 0
+    main_id = next(i for i, r in state.rulesets.items() if r["name"] == "tld-main")
+    state.rulesets[main_id]["enforcement"] = "disabled"
+    state.rulesets[main_id]["rules"] = [r for r in state.rulesets[main_id]["rules"] if r["type"] != "non_fast_forward"]
+    state.requests.clear()
+    p = guard_run(url, tmp_path, "apply", "--yes", "--check", "rulesets")
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert writes(state) == [("PUT", f"/repos/acme/app/rulesets/{main_id}")]
+    assert state.rulesets[main_id]["enforcement"] == "active"
+    assert "non_fast_forward" in {r["type"] for r in state.rulesets[main_id]["rules"]}
