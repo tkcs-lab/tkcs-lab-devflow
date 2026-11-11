@@ -1,7 +1,7 @@
 # Guardrail hooks
 
 The `tld` plugin ships Claude Code hooks that turn the "never do X" rules in the commands into
-checks that run before a tool call (`PreToolUse`) or before a session stops (`Stop`). They live in the
+checks that run before a tool call (`PreToolUse`), before a session stops (`Stop`) and when a prompt is submitted (`UserPromptSubmit`). They live in the
 plugin (`adapters/claude/hooks/hooks.json`, scripts called through `${CLAUDE_PLUGIN_ROOT}`), so every
 repository that enables the plugin gets them without a per-repository copy. Project facts come from
 [`.tld/toolkit.yaml`](../reference/profile-reference.md); the scripts contain none.
@@ -19,12 +19,12 @@ its own unreviewed change; the hook also stops it from merging a pull request th
 
 The policy is a runtime-neutral core (`src/tld/guard/`), and the Claude hooks are a thin adapter over
 it. The core takes an **`Action`** — `shell` (a command), `write` (a path and the text it would write),
-`github_op` (an operation name and its arguments) or `stop` — and returns a **`Decision`**: `allow`,
+`github_op` (an operation name and its arguments), `stop` or `prompt` (the text the user submitted) — and returns a **`Decision`**: `allow`,
 `deny` (with the reason) or `error` (a non-blocking problem). Pure policy functions, one per guard,
 decide; nothing in the core knows a tool's name.
 
 `adapters/claude/hooks/claude_adapter.py` is the only Claude-specific part. It parses the PreToolUse /
-Stop JSON into an `Action` (mapping `Bash`, `Write`/`Edit`/`MultiEdit`/`NotebookEdit`, and the
+Stop / UserPromptSubmit JSON into an `Action` (mapping `Bash`, `Write`/`Edit`/`MultiEdit`/`NotebookEdit`, and the
 `mcp__…__*` GitHub tools), supplies the Claude-specific extra protected paths (`~/.claude/**`,
 `.claude/settings*.json`, `.claude/hooks/**`, `.mcp.json`) and `CLAUDE_PLUGIN_ROOT` to the core, and
 turns the `Decision` back into exit code 2 / stderr / a `systemMessage`. The entry scripts are one-line
@@ -39,11 +39,11 @@ shims; `CLAUDE_PROJECT_DIR` and `stop_hook_active` are read only here.
 | `no-git-tag` | PreToolUse: `Bash`, GitHub MCP `actions_run_trigger` | creating, moving, deleting or pushing tags; dispatching the release workflow; a real git-ops run without the confirm marker | Tags are cut only by the release workflow, which the owner runs | `git tag v2`, `git push --tags`; `git tag -l`, `git describe`, `git ls-remote --tags` |
 | `secret-scan` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | content that looks like a credential | A secret in a file ends up in history | a GitHub token or a private key block; `API_KEY = os.environ["API_KEY"]` |
 | `protect-paths` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` | edits to paths the profile lists | Some files are changed by people or by tools, not by hand | `echo x > .env`; `echo x > .env.example` |
+| `plan-gate` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, the GitHub MCP content-write tools (`push_files`, `create_or_update_file`, `delete_file`); UserPromptSubmit (opt-in) | writes into the repository from a session no tld command started | A chat message must not start an implementation | `echo x > README.md`; `ls` |
 | `dod-gate` | Stop | stopping while `verify.dod` is red (opt-in) | Work is not done until the definition of done passes | stop with a failing test; stop after `/dod` is green |
 
-A denial is exit code 2 with the reason on stderr, which Claude Code hands back to the agent. Every
-message says what to do instead, for example `Open a pull request from your feature branch and stop;
-a human reviews and merges it.`
+A denial is exit code 2 with the reason on stderr, which Claude Code hands back to the agent. Every message says what to do
+instead, for example `Open a pull request from your feature branch and stop; a human reviews and merges it.`
 
 ### `no-merge`
 
@@ -210,6 +210,36 @@ commands and the tail of their output back to the agent. Rules that keep it from
   After the limit (`max_attempts`, or 3 when that value is itself invalid) the gate lets the session stop and shows the
   message in `systemMessage`, so it gives up after the attempt limit also for profile errors.
 
+### `plan-gate`
+
+Opt-in, off by default: set `hooks.plan_gate.enabled` to `true`. A plain chat message must not start an implementation:
+while a session has no plan, a write into the repository is denied and the agent is told to answer or research only and
+to propose `/tld:make-plan` (the `ask` skill, `/tld:ask`, says how).
+
+- **Opens per session, from the prompt hook.** A prompt that starts with `make-plan`, `implement`, `review`, `setup`,
+  `migrate`, `land`, `deps`, `upstream`, `docs` or `repo-admin` (`/tld:<name>` or `/<name>`) opens that session id. Other
+  known commands (`/tld:dod`, `/tld:ask`) neither open it nor add context. A skill the model starts itself does not pass
+  through `UserPromptSubmit`, so it cannot open the gate.
+- **A prompt is never blocked and never erased** (exit 0 always). In a closed session it gets one sentence of context:
+  `tld plan-gate: this session has no plan. Answer or research only; do not edit files or run commands that write. If the
+  message asks for a change, restate it in one or two sentences and propose /tld:make-plan. The tld:ask skill describes
+  how.` A problem shows as a `systemMessage`.
+- **Denied** in a closed session: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, a Bash command that writes inside the
+  repository (targets from the extractor `protect-paths` shares, `src/tld/guard/_writes.py`), and the GitHub MCP tools
+  `push_files`, `create_or_update_file`, `delete_file`. **Not denied:** writes outside the repository or under `.git/`,
+  read-only commands, `create_pull_request`.
+- **Workers.** An `/implement` worker's first prompt is a brief, so its brief tells it to run `tld guard allow-plan`,
+  which writes `plan-gate-open.json` into `<git dir>/tld/` (per checkout, 8 hours; `tld guard end-allow` keeps it). A
+  prompt containing `tld guard allow-plan` gets no context.
+- **Lifetime.** The session record (`<git dir>/tld/plan-gate/`, named by a hash of the session id) lapses 24 hours after
+  last use; every use refreshes it. No session id and no marker: the gate allows. `enabled` is read from the working
+  tree (like `dod-gate`), `hooks.disable` from the trusted copy; a malformed `hooks.plan_gate` fails open with a notice.
+
+Decisions: (1) opens per session from the prompt hook, not from a marker the playbooks write: a skill the model starts
+itself would open it, a marker survives in a reused container, `end-allow` would close it half-way. (2) A prompt is never
+blocked. (3) It shares `write_targets` with `protect-paths`. (4) It covers the GitHub content-write tools. (5) `enabled` from
+the working tree, `disable` from the trusted copy.
+
 ## How the dod-gate recognises a session
 
 The question is which sessions the gate must **not** block. The `/implement` orchestrator legitimately stops at
@@ -260,6 +290,8 @@ hooks:
   dod_gate:
     enabled: false           # opt in
     max_attempts: 3          # 1..10; a value outside that range is a profile error
+  plan_gate:
+    enabled: false           # opt in: no writes into the repository from a session no tld command started
 ```
 
 Project facts the hooks read from elsewhere in the profile: `git.main_branch` (`no-merge` when it sees a `git push` or a
@@ -277,7 +309,7 @@ Reference: [profile-reference.md](../reference/profile-reference.md).
 
 ```yaml
 hooks:
-  disable: [protect-paths]   # any of no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate
+  disable: [protect-paths]   # any of no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate, plan-gate
 ```
 
 `hooks.disable` and the protect lists are read from the **trusted copy** of the profile, not from the working tree, so a
@@ -342,6 +374,11 @@ How a command is parsed, and the commands of the playbooks the guards must allow
 - **The first lookup.** The origin URL is recorded the first time a guard runs in a checkout, so an origin changed
   before that (by a person, or by a program the parser cannot see) is the one trusted. A later hidden change of the
   URL or of `refs/tld/trusted` only makes the trusted copy unavailable, which switches every guard on.
+- **The plan-gate.** Subagent session ids and a scheduled task's stored prompt are unverified: either may be denied
+  writes while the gate is on. Not seen: `tar x`, `unzip` and `rsync` destinations, and commands that change the tree
+  without a visible target (`git stash pop`, `git reset --hard`, `git pull`, `git merge`, `git cherry-pick`, scripts).
+  Accepted false deny: `git checkout <name>` in a closed session. Not covered: `create_pull_request`, `gh api` contents
+  calls. A cloud session may not load plugin hooks.
 - **A hook that has a bug.** The destructive hooks fail closed; the others fail open.
 
 ## Installing and checking

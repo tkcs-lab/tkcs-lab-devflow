@@ -5,6 +5,11 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+### Added
+
+- The opt-in `plan-gate` hook (`hooks.plan_gate.enabled`): a session that no tld command started cannot write into the repository and is told to propose `/tld:make-plan`.
+- The `ask` skill (`/tld:ask`): answers without changing anything and turns a change request into a `/tld:make-plan` proposal.
+
 ### Fixed
 
 - The board client and repo-admin send `User-Agent: tld/<version>` instead of urllib's default, which Cloudflare's
