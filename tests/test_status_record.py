@@ -15,7 +15,7 @@ def run(*args, stdin=None):
     return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], input=stdin, capture_output=True, text=True)
 
 
-@pytest.mark.parametrize("name", ["good-run", "good-run-scope", "good-maintenance"])
+@pytest.mark.parametrize("name", ["good-run", "good-run-scope", "good-maintenance", "good-maintenance-docs"])
 def test_good_fixture_passes(name):
     result = run(RECORDS / f"{name}.json")
     assert result.returncode == 0, result.stdout
@@ -42,6 +42,12 @@ def test_bad_fixture_fails(name, needle):
 def test_doc_id_for_maintenance():
     assert run(RECORDS / "good-maintenance.json", "--doc-id", "claude-toolkit--deps").returncode == 0
     wrong = run(RECORDS / "good-maintenance.json", "--doc-id", "claude-toolkit")
+    assert wrong.returncode == 1 and "--doc-id" in wrong.stdout
+
+
+def test_doc_id_for_docs():
+    assert run(RECORDS / "good-maintenance-docs.json", "--doc-id", "claude-toolkit--docs").returncode == 0
+    wrong = run(RECORDS / "good-maintenance-docs.json", "--doc-id", "claude-toolkit--deps")
     assert wrong.returncode == 1 and "--doc-id" in wrong.stdout
 
 

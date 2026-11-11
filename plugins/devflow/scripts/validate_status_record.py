@@ -31,7 +31,7 @@ CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 PR_FIELDS = ("number", "url", "state", "ci", "awaiting")
 
 KINDS = ("run", "maintenance")
-COMMANDS = ("deps", "upstream", "land", "setup")
+COMMANDS = ("deps", "upstream", "land", "setup", "docs")
 STATUSES = ("starting", "running", "waiting_user", "reviewing", "pr_open", "done", "failed")
 ITEM_STATES = {
     "run": ("pending", "running", "merged", "failed", "gate"),
@@ -187,9 +187,9 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
         if kind == "run" and command is not None:
             errors.append("'command' must be null when 'kind' is 'run'")
         elif kind == "maintenance" and command not in COMMANDS:
-            errors.append("'command' must be 'deps', 'upstream', 'land' or 'setup' when 'kind' is 'maintenance'")
+            errors.append("'command' must be 'deps', 'upstream', 'land', 'setup' or 'docs' when 'kind' is 'maintenance'")
         elif kind is None and command is not None and command not in COMMANDS:
-            errors.append("'command' must be null, 'deps', 'upstream', 'land' or 'setup'")
+            errors.append("'command' must be null, 'deps', 'upstream', 'land', 'setup' or 'docs'")
     project = rec.get("project")
     if "project" in rec:
         if not (isinstance(project, str) and SLUG.match(project)):
