@@ -401,3 +401,12 @@ def test_cli_run_with_stub_dir_and_compare(tmp_path, capsys):
     assert "tasks" in json.loads(base.read_text()) and "transcript" not in base.read_text()
     assert cli.main(["compare", str(res), "--baseline", str(base)]) == 0
     capsys.readouterr()
+
+
+def test_every_subparser_has_help_text(capsys):
+    from evals.harness import cli
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    out = capsys.readouterr().out
+    for name in ("list", "validate", "run", "aggregate", "compare", "baseline"):
+        assert any(line.startswith(f"    {name} ") for line in out.splitlines()), name
