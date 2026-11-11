@@ -42,7 +42,7 @@ language.
   variables, labels, webhooks, deploy keys, unused config directories such as `.archon`, and the
   workflows (for example the release workflow that cuts a tag). Dry run by default; irreversible changes
   need `--allow-delete`; file changes go into a pull request it never merges.
-- **`git-ops`** (a skill) creates a tag or deletes a remote branch, which a cloud session cannot do itself, by starting a central workflow with its own token. Dry run first, an allowlist, no default or protected branch.
+- **`git-ops`** (a skill) deletes a remote branch, which a cloud session cannot do itself, by starting a central workflow with its own token. Dry run first, an allowlist, no default or protected branch. It never makes a tag: the release workflow is the only route to one.
 
 See [docs/guides/review.md](docs/guides/review.md) for the review flow, [docs/guides/maintenance.md](docs/guides/maintenance.md)
 for the maintenance commands and the board, and [docs/guides/admin.md](docs/guides/admin.md) for `repo-admin`.

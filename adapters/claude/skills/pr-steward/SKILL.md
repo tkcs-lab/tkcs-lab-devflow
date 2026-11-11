@@ -36,10 +36,10 @@ Things about dispatching that are true everywhere:
   generated files) gets the same review as anything else: no account identifier, tenant URL, token
   or private content may enter the repository.
 - **Never push a release tag from a session.** The container can push branches but not
-  `refs/tags/*`, and cutting a release is the maintainer's decision. If a release workflow is
-  listed, dispatch its dry run if it has one, report it, and wait to be told. The one route to a tag is the `git-ops`
-  skill, which starts the central workflow, and only for a tag the maintainer named in this session; a
-  release tag still waits to be told.
+  `refs/tags/*`, and cutting a release is the maintainer's decision. There is one route to a tag:
+  the release workflow (`tld-release`), which the owner runs by hand on the main branch. Never
+  dispatch it from a session (the `no-git-tag` hook denies it); say in your report that a release is
+  due. The `git-ops` skill deletes branches only and makes no tag.
 - **A missing credential or capability is not a test failure.** It is a dispatch.
 
 ## Which pull requests to follow

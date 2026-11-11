@@ -22,7 +22,7 @@ Plans (`<slug>-plan.md`) are transient and not listed; a finished plan's decisio
 - [guides/maintenance.md](guides/maintenance.md) - /deps, /upstream, /land and /docs tidy, scheduling them, the status board; read when changing or scheduling them.
 - [guides/board-server.md](guides/board-server.md) - running the self-hosted status board server; read when deploying or changing the board.
 - [guides/admin.md](guides/admin.md) - repo-admin: auditing organisation and repository settings, the rulesets and the agent account; read when changing it.
-- [guides/git-ops.md](guides/git-ops.md) - the central git-ops workflow for tags and branch deletion; read when changing it.
+- [guides/git-ops.md](guides/git-ops.md) - the central git-ops workflow for branch deletion; read when changing it.
 - [migrating-privacyfence.md](migrating-privacyfence.md) - how the first project moved onto the toolkit (pinned: linked from outside this repo); read when migrating another project.
 
 ## Reference

@@ -1,7 +1,8 @@
 name: tld-git-ops
 run-name: "git-ops ${{ inputs.action }} ${{ inputs.name }} in ${{ inputs.repo }}${{ inputs.dry_run && ' (dry run)' || '' }}"
 
-# Creates a tag or deletes a branch in another repository, for sessions that cannot push either.
+# Deletes a branch in another repository, for sessions that cannot delete remote branches. It never creates,
+# moves or deletes a tag: tags are cut only by the release workflow (tld-release).
 # Install this file as .github/workflows/tld-git-ops.yml and git-ops-allowlist.json at the root of the
 # central repository. The secret GIT_OPS_TOKEN lives in the environment git-ops, whose deployment branches are
 # limited to the default branch: a run from any other branch never receives the token. The job condition and
@@ -18,20 +19,10 @@ on:
         description: "What to do"
         required: true
         type: choice
-        options: [create-tag, delete-branch]
+        options: [delete-branch]
       name:
-        description: "Tag name or branch name"
+        description: "Branch name"
         required: true
-        type: string
-      ref:
-        description: "create-tag only: a commit SHA or a branch on the default branch. Empty: the head of the default branch"
-        required: false
-        default: ""
-        type: string
-      message:
-        description: "create-tag only: the tag message. Empty: 'Tag <name>'"
-        required: false
-        default: ""
         type: string
       dry_run:
         description: "Only show what would happen; untick to do it"
@@ -58,8 +49,6 @@ jobs:
           REPO: ${{ inputs.repo }}
           ACTION: ${{ inputs.action }}
           NAME: ${{ inputs.name }}
-          REF: ${{ inputs.ref }}
-          MESSAGE: ${{ inputs.message }}
         run: |
           set -euo pipefail
           valid_ref_name() {
@@ -77,20 +66,12 @@ jobs:
             echo "::error::repo must look like owner/name (got: $REPO)"
             exit 1
           fi
-          if [ "$ACTION" != "create-tag" ] && [ "$ACTION" != "delete-branch" ]; then
-            echo "::error::action must be create-tag or delete-branch"
+          if [ "$ACTION" != "delete-branch" ]; then
+            echo "::error::action must be delete-branch (tags are cut only by the release workflow)"
             exit 1
           fi
           if ! valid_ref_name "$NAME"; then
-            echo "::error::name is not a valid branch or tag name (got: $NAME)"
-            exit 1
-          fi
-          if [ -n "$REF" ] && ! [[ $REF =~ ^[0-9a-f]{40}$ ]] && ! valid_ref_name "$REF"; then
-            echo "::error::ref is not a valid branch name or commit (got: $REF)"
-            exit 1
-          fi
-          if [ "${#MESSAGE}" -gt 500 ]; then
-            echo "::error::message is longer than 500 characters"
+            echo "::error::name is not a valid branch name (got: $NAME)"
             exit 1
           fi
 
@@ -106,8 +87,7 @@ jobs:
           # The allowlist comes from the default branch of this repository, never from the dispatched ref.
           shape='(.owner | type == "string" and length > 0)
             and (.repos | type == "array" and length > 0 and all(.[]; type == "string" and length > 0))
-            and ((has("protected_branches") | not) or (.protected_branches | type == "array" and all(.[]; type == "string")))
-            and ((has("tag_pattern") | not) or (.tag_pattern | type == "string"))'
+            and ((has("protected_branches") | not) or (.protected_branches | type == "array" and all(.[]; type == "string")))'
           if ! gh api -H "Accept: application/vnd.github.raw+json" "repos/$SELF/contents/git-ops-allowlist.json?ref=$SELF_DEFAULT" > "$allow" 2> /dev/null \
             || ! jq -e "$shape" "$allow" > /dev/null 2>&1; then
             echo "::error::git-ops-allowlist.json is missing or invalid on $SELF_DEFAULT"
@@ -149,46 +129,6 @@ jobs:
             exit 1
           fi
           echo "default_branch=$default" >> "$GITHUB_OUTPUT"
-
-      - name: Create the tag
-        if: inputs.action == 'create-tag'
-        env:
-          GH_TOKEN: ${{ secrets.GIT_OPS_TOKEN }}
-          REPO: ${{ inputs.repo }}
-          NAME: ${{ inputs.name }}
-          REF: ${{ inputs.ref }}
-          MESSAGE: ${{ inputs.message }}
-          DRY_RUN: ${{ inputs.dry_run }}
-          DEFAULT: ${{ steps.target.outputs.default_branch }}
-        run: |
-          set -euo pipefail
-          allow="$RUNNER_TEMP/allowlist.json"
-          if jq -e 'has("tag_pattern")' "$allow" > /dev/null; then
-            if ! jq -e --arg n "$NAME" '(.tag_pattern // empty) as $p | $n | test($p)' "$allow" > /dev/null 2>&1; then
-              echo "::error::tag $NAME does not match tag_pattern"
-              exit 1
-            fi
-          fi
-          target=${REF:-$DEFAULT}
-          sha=$(gh api "repos/$REPO/commits/$target" --jq .sha)
-          status=$(gh api "repos/$REPO/compare/$DEFAULT...$sha" --jq .status)
-          if [ "$status" != "identical" ] && [ "$status" != "behind" ]; then
-            echo "::error::$target is not on the default branch $DEFAULT"
-            exit 1
-          fi
-          if gh api "repos/$REPO/git/ref/tags/$NAME" > /dev/null 2>&1; then
-            echo "::error::tag $NAME already exists; this workflow never moves a tag"
-            exit 1
-          fi
-          if [ "$DRY_RUN" != "false" ]; then
-            line="Dry run: would create annotated tag $NAME on $sha in $REPO"
-            echo "$line" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          object=$(gh api -X POST "repos/$REPO/git/tags" -f tag="$NAME" -f message="${MESSAGE:-Tag $NAME}" -f object="$sha" -f type=commit --jq .sha)
-          gh api -X POST "repos/$REPO/git/refs" -f ref="refs/tags/$NAME" -f sha="$object" > /dev/null
-          line="Created annotated tag $NAME on $sha in $REPO"
-          echo "$line" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Delete the branch
         if: inputs.action == 'delete-branch'

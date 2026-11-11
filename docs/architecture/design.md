@@ -307,14 +307,15 @@ shaped the design, is recorded in [design/maintenance-spike.md](maintenance-spik
 
 ## 11. git-ops
 
-A cloud session cannot push a tag or delete a remote branch: the session's git proxy refuses both. The
-toolkit therefore ships a template for a central workflow, `tld-git-ops`, a skill (`git-ops`) that
+A cloud session cannot delete a remote branch: the session's git proxy refuses it. The toolkit therefore
+ships a template for a central workflow, `tld-git-ops`, a skill (`git-ops`) that
 starts it, and the profile key `git_ops.repo` that names the central repository. The running instance
 lives in a private repository of its own, not in this one (D1), so that the repository holding a token
 with write access to other repositories contains only the workflow and its allowlist. The token is an
 environment secret limited to the default branch (D7), and the workflow starts as a dry run and checks an
 allowlist and a set of guards. Rejected: a copy of the workflow in every repository, and for now a GitHub
-App token instead of a fine-grained one. Setup, use and guards are in [git-ops.md](../guides/git-ops.md).
+App token instead of a fine-grained one. It used to create tags too; since D13 tags have one route, the release
+workflow, and git-ops only deletes branches. Setup, use and guards are in [git-ops.md](../guides/git-ops.md).
 
 ## 12. A self-hosted status board
 

@@ -146,7 +146,7 @@ RELEASE_DENIED = [
 ]
 RELEASE_ALLOWED = [
     "gh workflow run test.yml",
-    "gh workflow run tld-git-ops.yml -R org/central -f repo=org/x -f action=create-tag -f name=v1.0.0",
+    "gh workflow run tld-git-ops.yml -R org/central -f repo=org/x -f action=delete-branch -f name=old",
     "gh release view v1", "gh release edit v1 --notes hi",
 ]
 
