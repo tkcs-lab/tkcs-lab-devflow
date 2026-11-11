@@ -1,6 +1,6 @@
 id: review-seeded
 description: A review of a fixture with a planted command-injection flaw and a planted missing test must name both, by file and class; noise is reported.
-command: /devflow:review
+command: /tld:review
 arguments: >-
   the whole repository. Nobody is available for the decisions page: write the review document, list any
   open items in it, and stop.

@@ -1,6 +1,6 @@
 ---
 name: stack-ipados
-description: iPadOS app conventions for devflow plans and phases, on top of stack-swift — a repository layout that keeps most code testable in the Linux container, iPad-specific behaviour every UI phase must handle (resizable windows, multiple scenes, keyboard, pointer, Pencil, drag and drop), and tests on an iPad simulator dispatched to a macOS runner. Loaded when the profile lists the ipados stack (list swift too).
+description: iPadOS app conventions for tld plans and phases, on top of stack-swift — a repository layout that keeps most code testable in the Linux container, iPad-specific behaviour every UI phase must handle (resizable windows, multiple scenes, keyboard, pointer, Pencil, drag and drop), and tests on an iPad simulator dispatched to a macOS runner. Loaded when the profile lists the ipados stack (list swift too).
 user-invocable: false
 ---
 

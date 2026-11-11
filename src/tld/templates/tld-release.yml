@@ -1,7 +1,7 @@
-name: devflow-release
+name: tld-release
 
 # Cuts a release: an annotated tag on the head of __MAIN_BRANCH__ and a GitHub release with generated notes.
-# Run it by hand (Actions, devflow-release, Run workflow). It starts as a dry run.
+# Run it by hand (Actions, tld-release, Run workflow). It starts as a dry run.
 
 on:
   workflow_dispatch:
@@ -34,7 +34,7 @@ on:
         type: boolean
 
 concurrency:
-  group: devflow-release
+  group: tld-release
   cancel-in-progress: false
 
 permissions:
@@ -44,7 +44,7 @@ permissions:
 
 jobs:
   release:
-    name: devflow-release
+    name: tld-release
     runs-on: ubuntu-latest
     environment: release
     if: github.ref == 'refs/heads/__MAIN_BRANCH__'
@@ -52,9 +52,9 @@ jobs:
       - name: Decide the tag
         id: tag
         env:
-          # DEVFLOW_RELEASE_TOKEN is optional. Tags and releases made with the default token do not start
+          # TLD_RELEASE_TOKEN is optional. Tags and releases made with the default token do not start
           # other workflows; set the secret (a token that may write contents) when a workflow must run on the tag.
-          GH_TOKEN: ${{ secrets.DEVFLOW_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN || github.token }}
           REPO: ${{ github.repository }}
           PREFIX: "__TAG_PREFIX__"
           VERSION: ${{ inputs.version }}
@@ -96,10 +96,10 @@ jobs:
       - name: Check that the commit is green
         if: inputs.skip_checks == false
         env:
-          GH_TOKEN: ${{ secrets.DEVFLOW_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN || github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
-          SELF: devflow-release
+          SELF: tld-release
         run: |
           set -euo pipefail
           bad=$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[]
@@ -121,7 +121,7 @@ jobs:
 
       - name: Show the release notes
         env:
-          GH_TOKEN: ${{ secrets.DEVFLOW_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN || github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
           TAG: ${{ steps.tag.outputs.tag }}
@@ -135,7 +135,7 @@ jobs:
       - name: Publish the tag and the release
         if: inputs.dry_run == false
         env:
-          GH_TOKEN: ${{ secrets.DEVFLOW_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN || github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
           TAG: ${{ steps.tag.outputs.tag }}

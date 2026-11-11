@@ -1,9 +1,9 @@
-# Profile reference: `.claude/toolkit.yaml`
+# Profile reference: `.tld/toolkit.yaml`
 
 The profile is the only place a project's facts live. The commands read it through the
-`project-profile` skill, which runs `validate_profile.py` first. The schema is
-[`plugins/devflow/schema/profile.schema.json`](../../plugins/devflow/schema/profile.schema.json); a
-commented starter is [`templates/toolkit.yaml`](../../templates/toolkit.yaml); a complete worked example
+`project-profile` skill, which runs `tld profile validate` first. The schema is
+[`src/tld/schema/profile.schema.json`](../../src/tld/schema/profile.schema.json); a
+commented starter is [`src/tld/templates/toolkit.yaml`](../../src/tld/templates/toolkit.yaml); a complete worked example
 for a real project is PrivacyFence's profile, [`tests/fixtures/privacyfence-toolkit.yaml`](../../tests/fixtures/privacyfence-toolkit.yaml) (see [`migrating-privacyfence.md`](../migrating-privacyfence.md)).
 
 Rules:
@@ -12,10 +12,10 @@ Rules:
   `toolkit.yaml: missing required key 'verify.fast'`. The commands never fall back to a value of
   their own.
 - An **optional** key that is missing means "not used in this project".
-- Only two things have defaults, and `validate_profile.py --resolved` is where they are applied:
+- Only two things have defaults, and `tld profile validate --resolved` is where they are applied:
   `docs.plan_dir` (`docs`) and `models` (`opus / sonnet / sonnet / opus`). The `hooks` section also has
   defaults, but the hook scripts apply those themselves ([hooks.md](../architecture/hooks.md)); `--resolved` leaves them out.
-  The `agents` defaults are applied by `scripts/agents.py` and are not part of `--resolved`.
+  The `agents` defaults are applied by `tld roles` and are not part of `--resolved`.
 - An unknown key is an error, so a typo is never silent.
 - A file listed in `docs.must_read` or `project_steward` that does not exist is an error.
 
@@ -58,10 +58,10 @@ Rules:
 | `upstream.version_file` | **yes** (in `upstream`) | File in the fork that records the synced tag |
 | `land.max_prs` | no | Integer 1..50: most pull requests one `/land` run orders. `/land` works without the `land` section |
 | `admin.policy` | **yes** (in `admin`) | Path, relative to the repo root, of the policy file the `repo-admin` skill audits and applies (see [admin.md](../guides/admin.md)). The file must exist. The skill needs the `admin` section and stops with a missing-key message when it is absent |
-| `git_ops.repo` | **yes** (in `git_ops`) | Owner/name of the central repository that holds the `devflow-git-ops` workflow. The `git-ops` skill needs the section and stops with a missing-key message when it is absent; see [git-ops.md](../guides/git-ops.md) |
-| `git_ops.workflow` | no | File name of the workflow in that repository. Default `devflow-git-ops.yml` |
+| `git_ops.repo` | **yes** (in `git_ops`) | Owner/name of the central repository that holds the `tld-git-ops` workflow. The `git-ops` skill needs the section and stops with a missing-key message when it is absent; see [git-ops.md](../guides/git-ops.md) |
+| `git_ops.workflow` | no | File name of the workflow in that repository. Default `tld-git-ops.yml` |
 | `hooks.disable` | no (default none) | Names of guardrail hooks to switch off in this repository: any of `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths`, `dod-gate`. Read from the committed `<main>` profile, so a branch cannot switch a hook off for itself; it must be a list. The escape hatch; see [hooks.md](../architecture/hooks.md) |
-| `hooks.protect_paths` | no | Globs of repo-relative paths `protect-paths` refuses to edit. Default `.claude/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`, `go.sum`, `.github/workflows/**`. A list here replaces the default. A pattern without a slash matches the file name at any depth; `**` crosses directories. `*` and `?` do **not** cross `/` (unlike `touches` and `scope.ignore`) |
+| `hooks.protect_paths` | no | Globs of repo-relative paths `protect-paths` refuses to edit. Default `.tld/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`, `go.sum`, `.github/workflows/**`. A list here replaces the default. A pattern without a slash matches the file name at any depth; `**` crosses directories. `*` and `?` do **not** cross `/` (unlike `touches` and `scope.ignore`) |
 | `hooks.protect_paths_allow` | no | Globs exempt from `protect_paths`, on top of the built-in exceptions (`.env.example`, `.env.sample`, `.env.template`, `.env.dist`, the workflow files `/land` and `repo-admin` install) |
 | `hooks.dod_gate.enabled` | no (default `false`) | Opt in to the `dod-gate` Stop hook: the session cannot stop while `verify.dod` fails. Not applied to sessions that marked themselves exempt, such as the `/implement` orchestrator |
 | `hooks.dod_gate.max_attempts` | no (default `3`) | Integer 1..10: failed attempts after which the gate lets the session stop and tells the user why |
@@ -87,7 +87,7 @@ The ten agents are `architect`, `code-reviewer`, `security-reviewer`, `test-arch
 - **Blocking** (`blocking: true`) means a finding the agent grades `blocking` fails the gate too: at
   `implement_phase` the phase is sent back, at `implement_final` the review verdict is `changes`, at `dod`
   the row is `FAIL`. With `blocking: false` the findings are reported but do not fail the gate.
-- **Defaults** (applied by `scripts/agents.py`): `posture.security` is `standard`, `disable` and `required`
+- **Defaults** (applied by `tld roles`): `posture.security` is `standard`, `disable` and `required`
   are empty, `blocking` is `false`.
 - **Checked by the validator**: an agent is not both disabled and required; `website-maintainer` needs
   `docs.website`; `when` needs an `at` point with a diff; only `security-reviewer`, `dependency-auditor`,
@@ -166,7 +166,7 @@ All three keys are required; `when`, `run` and `lockfiles` entries are non-empty
 
 ## The manifest
 
-`/make-plan` and `/implement` run `scripts/validate_manifest.py <plan.md> --profile .claude/toolkit.yaml`.
+`/make-plan` and `/implement` run `tld plan validate-manifest <plan.md> --profile .tld/toolkit.yaml`.
 The manifest format is the one described in `commands/make-plan.md`; the validator checks required
 keys, unique phase ids, known `depends_on`, no cycles, `brief` and `acceptance` on every phase,
 `complexity` of `S` or `M`, `worker_model_reason` for `worker_model: opus`, honest manual-step

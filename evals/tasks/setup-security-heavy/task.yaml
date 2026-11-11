@@ -1,6 +1,6 @@
 id: setup-security-heavy
 description: /setup on a security-heavy repository must write a valid profile whose agents block matches the expected proposal.
-command: /devflow:setup
+command: /tld:setup
 arguments: create --accept-proposals
 fixture:
   builder: setup_repos

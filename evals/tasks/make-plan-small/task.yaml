@@ -1,6 +1,6 @@
 id: make-plan-small
 description: A small request must yield a single-session prompt, with all its sections and no plan manifest.
-command: /devflow:make-plan
+command: /tld:make-plan
 arguments: >-
   Add a --limit N option to the `list` command of the notes CLI so it prints at most N notes.
   This is a small change that one session can do. Decide every open question yourself; nobody can answer.

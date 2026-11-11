@@ -45,9 +45,9 @@ def _git(project: str, *args: str) -> str | None:
 def state_dir(project: str) -> Path:
     git_dir = _git(project, "rev-parse", "--absolute-git-dir")
     if git_dir and git_dir.strip():
-        d = Path(git_dir.strip()) / "devflow"
+        d = Path(git_dir.strip()) / "tld"
     else:
-        d = Path(tempfile.gettempdir()) / ("devflow-hooks-" + hashlib.sha1(project.encode()).hexdigest()[:12])
+        d = Path(tempfile.gettempdir()) / ("tld-hooks-" + hashlib.sha1(project.encode()).hexdigest()[:12])
     return d
 
 

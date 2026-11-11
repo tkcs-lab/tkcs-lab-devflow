@@ -2,7 +2,7 @@
 
 - Date: 2026-11-09 (runs between 07:30 and 07:50 UTC)
 - Agent login (`get_me`): `andras-tkcs-agent`
-- Scratch repository: `tkcs-lab/devflow-scratch` (code owner `andras-tkcs`, `.github/CODEOWNERS` is the single line `* @andras-tkcs`)
+- Scratch repository: `<org>/<scratch-repo>` (code owner `andras-tkcs`, `.github/CODEOWNERS` is the single line `* @andras-tkcs`)
 - Forks and upstreams: the two forks are not named in the task, and the fork repositories were not read. The user confirmed the upstreams as `PrivacyFence/peek` (for the peek fork) and `PrivacyFence/grist-core` (for the grist-core fork).
 
 Session limits that shaped the evidence:
@@ -16,8 +16,8 @@ Setup checks before the experiments (all matched the task): `requirements.txt` p
 
 **Method**
 1. Searched the tool list for a tool whose name mentions `dependabot` (`ToolSearch` query `dependabot`).
-2. `gh api "repos/tkcs-lab/devflow-scratch/dependabot/alerts?state=open"`
-3. `curl -s -w '\nHTTP %{http_code}\n' "https://api.github.com/repos/tkcs-lab/devflow-scratch/dependabot/alerts?state=open"` through the session proxy.
+2. `gh api "repos/<org>/<scratch-repo>/dependabot/alerts?state=open"`
+3. `curl -s -w '\nHTTP %{http_code}\n' "https://api.github.com/repos/<org>/<scratch-repo>/dependabot/alerts?state=open"` through the session proxy.
 
 The scratch repository was attached with `add_repo` (access `push`) before routes 2 and 3.
 
@@ -25,7 +25,7 @@ The scratch repository was attached with `add_repo` (access `push`) before route
 - Route 1: `No matching deferred tools found`.
 - Route 2: `{"message":"Resource not accessible by integration", ... "status":"403"}`, `gh: Resource not accessible by integration (HTTP 403)`.
 - Route 3: same JSON body, `HTTP 403`.
-- Side evidence, not a list of alerts: the push output of (b) said "GitHub found 2 vulnerabilities on tkcs-lab/devflow-scratch's default branch (2 critical)".
+- Side evidence, not a list of alerts: the push output of (b) said "GitHub found 2 vulnerabilities on <org>/<scratch-repo>'s default branch (2 critical)".
 
 **Result** Alerts are not readable from a session with the integration used here. **[V]**
 
@@ -34,8 +34,8 @@ The scratch repository was attached with `add_repo` (access `push`) before route
 **Method**
 1. `git -C "$SCRATCH" fetch --depth=2 origin dependabot/pip/pyyaml-6.0.3`, checked out as `spike-b`.
 2. Added `spike-b.txt`, committed with author `andras-tkcs-agent` (commit `c6d3646`), `git -C "$SCRATCH" push origin HEAD:dependabot/pip/pyyaml-6.0.3`.
-3. `gh api repos/tkcs-lab/devflow-scratch/commits/c6d3646` for attribution.
-4. Commented on pull request #1 with the first line `@dependabot rebase` and the footer, via the GitHub MCP tool `add_issue_comment`. Tried to repair the comment with `gh api -X PATCH repos/tkcs-lab/devflow-scratch/issues/comments/6734690202`.
+3. `gh api repos/<org>/<scratch-repo>/commits/c6d3646` for attribution.
+4. Commented on pull request #1 with the first line `@dependabot rebase` and the footer, via the GitHub MCP tool `add_issue_comment`. Tried to repair the comment with `gh api -X PATCH repos/<org>/<scratch-repo>/issues/comments/6734690202`.
 5. At 07:42:57 UTC (about 12 minutes later) read the comments of pull request #1, the branch head and the branch contents.
 
 **Evidence**
@@ -49,8 +49,8 @@ The scratch repository was attached with `add_repo` (access `push`) before route
 ### (c) Does a push or update-branch made with the agent's token start CI?
 
 **Method**
-1. After the push of (b), listed workflow runs for the head branch: `gh api "repos/tkcs-lab/devflow-scratch/actions/runs?branch=dependabot/pip/pyyaml-6.0.3"`.
-2. After the update-branch of (d), listed runs for `spike/d-a`, and `gh api repos/tkcs-lab/devflow-scratch/commits/8a19d0b/check-runs`.
+1. After the push of (b), listed workflow runs for the head branch: `gh api "repos/<org>/<scratch-repo>/actions/runs?branch=dependabot/pip/pyyaml-6.0.3"`.
+2. After the update-branch of (d), listed runs for `spike/d-a`, and `gh api repos/<org>/<scratch-repo>/commits/8a19d0b/check-runs`.
 3. The default workflow token was not tested.
 
 **Evidence**
@@ -64,9 +64,9 @@ The scratch repository was attached with `add_repo` (access `push`) before route
 
 **Method**
 1. Before: REST reads of pull request #3 (`/pulls/3`, `/pulls/3/reviews`, `/compare/main...spike/d-a`). `gh pr view 3 --json reviewDecision,...` is not usable here (GraphQL blocked), so `mergeable_state` and the review list stand in for `reviewDecision`.
-2. GitHub MCP tool `update_pull_request_branch` as the agent, owner `tkcs-lab`, repo `devflow-scratch`, pullNumber 3, expectedHeadSha `224941449c9ebbb190196159e575e261a189d7a3`, at 07:39:53 UTC.
+2. GitHub MCP tool `update_pull_request_branch` as the agent, owner `tkcs-lab`, repo `<scratch-repo>`, pullNumber 3, expectedHeadSha `224941449c9ebbb190196159e575e261a189d7a3`, at 07:39:53 UTC.
 3. After (07:43:16, a little over 3 minutes): the same REST reads, plus the workflow runs of `spike/d-a`.
-4. Read the branch rules (read only): `gh api repos/tkcs-lab/devflow-scratch/rules/branches/main`.
+4. Read the branch rules (read only): `gh api repos/<org>/<scratch-repo>/rules/branches/main`.
 
 **Evidence**
 - Before: head `2249414...`, `mergeable_state: clean`, one review `APPROVED` by `andras-tkcs` with `commit_id` `2249414...`; `compare`: diverged, ahead 1, behind 1.
@@ -113,8 +113,8 @@ For each upstream, with no credentials:
 Round 1 (item (d)) ran with `dismiss_stale_reviews_on_push`, `require_last_push_approval` and `require_code_owner_review` all false and kept the approval; it said nothing about the stricter ruleset, so this round repeats it with those flags on.
 
 **Method**
-1. Setup check (07:58 UTC): `gh api repos/tkcs-lab/devflow-scratch/rules/branches/main`; open pull requests from `gh api "repos/tkcs-lab/devflow-scratch/pulls?state=open"`; on pull request #5 "spike d2: approval test": `GET /pulls/5`, `GET /pulls/5/reviews`, `GET /compare/main...<head>`, `GET /actions/runs`.
-2. GitHub MCP tool `update_pull_request_branch` as the agent, owner `tkcs-lab`, repo `devflow-scratch`, pullNumber 5, expectedHeadSha `ef77a59c7e8fd874908c1d8c86b348d6ddcce365`, at about 07:59 UTC.
+1. Setup check (07:58 UTC): `gh api repos/<org>/<scratch-repo>/rules/branches/main`; open pull requests from `gh api "repos/<org>/<scratch-repo>/pulls?state=open"`; on pull request #5 "spike d2: approval test": `GET /pulls/5`, `GET /pulls/5/reviews`, `GET /compare/main...<head>`, `GET /actions/runs`.
+2. GitHub MCP tool `update_pull_request_branch` as the agent, owner `tkcs-lab`, repo `<scratch-repo>`, pullNumber 5, expectedHeadSha `ef77a59c7e8fd874908c1d8c86b348d6ddcce365`, at about 07:59 UTC.
 3. About 6 minutes later (08:04:57 UTC; the 3 minute wait was exceeded because the reminder fired after 5 minutes): the same REST reads of the pull request, its reviews, the rules and the workflow runs.
 
 **Evidence**
@@ -129,12 +129,12 @@ Round 1 (item (d)) ran with `dismiss_stale_reviews_on_push`, `require_last_push_
 ### (g) Can a scheduled session open a pull request?
 
 **Method**
-1. `create_trigger` (task `trig_01VQJ1YwJNrvMEpRSGFhyyKm`), `create_new_session_on_fire: true`, `run_once_at` 2026-11-09T08:08:00Z, `initiation: human_request`. The prompt told the fired session to list the open pull requests of `tkcs-lab/devflow-scratch` (REST or a GitHub MCP tool), attach the repository with `add_repo` if needed, push the branch `spike/g-20261109` with `spike-g.txt` and open a pull request titled `spike g: unattended pr`, and end with a line naming the tools used and failed steps. The result warned that the task stores no connectors.
+1. `create_trigger` (task `trig_01VQJ1YwJNrvMEpRSGFhyyKm`), `create_new_session_on_fire: true`, `run_once_at` 2026-11-09T08:08:00Z, `initiation: human_request`. The prompt told the fired session to list the open pull requests of `<org>/<scratch-repo>` (REST or a GitHub MCP tool), attach the repository with `add_repo` if needed, push the branch `spike/g-20261109` with `spike-g.txt` and open a pull request titled `spike g: unattended pr`, and end with a line naming the tools used and failed steps. The result warned that the task stores no connectors.
 2. After it fired: `get_trigger` (`last_run.session_id`), `list_events` of the fired session, and REST reads of the pull requests and branches of the scratch repository (08:21 UTC).
 
 **Evidence**
 - Fired at 08:13:35 (scheduled 08:08:00), run status `ROUTINE_RUN_STATUS_SUCCEEDED`, finished 08:14:02; fired session `cse_013HAf784sFGLfmedXRPvRrb`, `stop_reason: end_turn`, `permission_denials: []`.
-- Step 1 (`gh api repos/tkcs-lab/devflow-scratch/pulls?state=open`): `GitHub access to this repository is not enabled for this session. Use add_repo to request access. ... (HTTP 403)`; exit 1. REST failed; no GitHub MCP tool was available.
+- Step 1 (`gh api repos/<org>/<scratch-repo>/pulls?state=open`): `GitHub access to this repository is not enabled for this session. Use add_repo to request access. ... (HTTP 403)`; exit 1. REST failed; no GitHub MCP tool was available.
 - `ToolSearch` for `add_repo` and for `select:add_repo,mcp__github__add_repo`: `No matching deferred tools found`; a third query (`github repo attach access`) listed only unrelated tools. The fired session therefore could not attach the repository.
 - The fired session stopped there, sent a `PushNotification` reporting the failure, and its last line read: "Tools used: Bash (`gh api` REST, failed with 403), ToolSearch (no `add_repo` or GitHub MCP tool found), PushNotification. Steps 1–4 failed or were not run because the repo isn't attached and `add_repo` isn't available."
 - Afterwards the scratch repository has no pull request titled `spike g: unattended pr` and no branch `spike/g-20261109` (branches: `dependabot/pip/pyyaml-6.0.3`, `main`, `spike/d-a`, `spike/d-a2`, `spike/d-move`, `spike/d-move2`). I did not wait the extra 10 minutes because the fired session had already ended and said why nothing was created.
@@ -144,21 +144,21 @@ Round 1 (item (d)) ran with `dismiss_stale_reviews_on_push`, `require_last_push_
 ### (g3) Round 3: a scheduled task created in the UI with the repository attached
 
 **Method**
-1. The owner created a scheduled task in the claude.ai UI on `tkcs-lab/devflow-scratch` and ran it once. In `list_triggers` it shows as `trig_011nS5b8tRDzjdSSiDWSogLP`, created via `http_api` at 08:31:26 UTC, weekly schedule (Sundays 09:00 Europe/Budapest), push notifications on, connectors Claude-Docs, PF-TKCS and visualize. Its name there is `deps test`, not `spike g3`, but its stored prompt begins "Spike g3, unattended check" and is the g3 prompt (list open pull requests; push `spike/g3-<yyyymmdd>` with `spike-g3.txt` and open `spike g3: unattended pr`; check the five tools and `DEVFLOW_BOARD_URL`; write the document `spike-g3`; send `PushNotification`; end with one line of tools and failed steps).
-2. Read-only afterwards: `get`/`list_triggers` (`last_run`), `list_events` of the fired session `cse_013HAf7AKkVzSdjq6qSvmiFF`, `gh api repos/tkcs-lab/devflow-scratch/pulls?state=all` and `.../branches`, and `ArtifactData` `get` of the document. I changed nothing in the scratch repository.
+1. The owner created a scheduled task in the claude.ai UI on `<org>/<scratch-repo>` and ran it once. In `list_triggers` it shows as `trig_011nS5b8tRDzjdSSiDWSogLP`, created via `http_api` at 08:31:26 UTC, weekly schedule (Sundays 09:00 Europe/Budapest), push notifications on, connectors Claude-Docs, PF-TKCS and visualize. Its name there is `deps test`, not `spike g3`, but its stored prompt begins "Spike g3, unattended check" and is the g3 prompt (list open pull requests; push `spike/g3-<yyyymmdd>` with `spike-g3.txt` and open `spike g3: unattended pr`; check the five tools and `TLD_BOARD_URL`; write the document `spike-g3`; send `PushNotification`; end with one line of tools and failed steps).
+2. Read-only afterwards: `get`/`list_triggers` (`last_run`), `list_events` of the fired session `cse_013HAf7AKkVzSdjq6qSvmiFF`, `gh api repos/<org>/<scratch-repo>/pulls?state=all` and `.../branches`, and `ArtifactData` `get` of the document. I changed nothing in the scratch repository.
 
 **Evidence**
 - Run: `client_platform: force_run_trigger`, fired 08:33:10, finished 08:33:39 UTC, status `ROUTINE_RUN_STATUS_SUCCEEDED`. The run ended with a final summary line, asked no question, and its first event is the task prompt.
-- Step 1: the GitHub MCP tool `list_pull_requests` worked (the run did not try `gh api`). The run had a clone of the repository (`/home/user/devflow-scratch`), and so GitHub tools, which the round 2 task did not.
+- Step 1: the GitHub MCP tool `list_pull_requests` worked (the run did not try `gh api`). The run had a clone of the repository (`/home/user/<scratch-repo>`), and so GitHub tools, which the round 2 task did not.
 - Step 2: pull request #7 "spike g3: unattended pr", author `andras-tkcs-agent`, created 2026-11-09T08:33:33Z (inside the run window), state open, head `spike/g3-20261109`; that branch is in the branch list. The run pushed with `git` and opened the pull request with `create_pull_request`.
-- Step 3: `DEVFLOW_BOARD_URL` was unset (`unset` in the run's Bash output). Tools the run had: ArtifactData, PushNotification, add_repo. Tools it lacked: get_session, list_sessions.
+- Step 3: `TLD_BOARD_URL` was unset (`unset` in the run's Bash output). Tools the run had: ArtifactData, PushNotification, add_repo. Tools it lacked: get_session, list_sessions.
 - Step 4: document `spike-g3` in collection `spike-g3` of the throwaway artifact: `at` 2026-11-09T08:33:21Z, `env` unset, `tools` ["ArtifactData","PushNotification","add_repo"], version 1 (the run's write committed at 08:33:35 without an approval prompt). `at` is inside the run window. The run wrote it into a collection named `spike-g3`, not `spike` where `spike-e` is.
 - Step 5: the `PushNotification` result in the run's events was `Mobile push requested.` The owner answered that the phone buzzed for "spike g3 unattended" ("yes and yes"); the owner gave no time, and the run's call was at 08:33:33-08:33:35 UTC.
 - Final line of the run: "All six steps ran and none failed." followed by the per-step list above.
 - Owner's answers (quoted): "yes and yes" to "created the task and ran it once" and to "did your phone buzz".
 - Round 1 and round 2 values for comparison: round 1 (`create_trigger` task) had `e.board-write` failed by the missing `get_session` and later counted ok by the owner; round 2 (`create_trigger` task, item (g)) gave `g.pr` failed because the fired session had no repository, no `add_repo` and no GitHub tools.
 
-**Result** A task created by the owner in the UI with the repository attached runs unattended to its end, opens a pull request as `andras-tkcs-agent`, writes the board and sends a phone push; `DEVFLOW_BOARD_URL` is unset there. Scheduled commands may rely on ArtifactData, PushNotification, add_repo and the repository clone; they must not rely on get_session or list_sessions. Only tasks created in the UI with the repository attached have these; a task made with `create_trigger` from a session does not (round 2). **[V]** (that the push reached the phone is the owner's report; the time was not given)
+**Result** A task created by the owner in the UI with the repository attached runs unattended to its end, opens a pull request as `andras-tkcs-agent`, writes the board and sends a phone push; `TLD_BOARD_URL` is unset there. Scheduled commands may rely on ArtifactData, PushNotification, add_repo and the repository clone; they must not rely on get_session or list_sessions. Only tasks created in the UI with the repository attached have these; a task made with `create_trigger` from a session does not (round 2). **[V]** (that the push reached the phone is the owner's report; the time was not given)
 
 ## Conclusions
 

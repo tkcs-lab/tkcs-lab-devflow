@@ -1,6 +1,6 @@
 ---
 name: stack-python
-description: Python conventions for devflow plans and phases — virtualenv setup, lint and test conventions, and how to write acceptance and verify_after_merge entries for Python phases. Loaded when the profile lists the python stack.
+description: Python conventions for tld plans and phases — virtualenv setup, lint and test conventions, and how to write acceptance and verify_after_merge entries for Python phases. Loaded when the profile lists the python stack.
 user-invocable: false
 ---
 

@@ -1,26 +1,26 @@
 ---
 name: status-board
-description: How a devflow session writes its status record to the status board — where the board is (the board_* tools or board_client.py), how to write a record, when to write, and what must never go into one. Read before the first record and whenever a command says to follow it.
+description: How a tld session writes its status record to the status board — where the board is (the board_* tools or tld board client), how to write a record, when to write, and what must never go into one. Read before the first record and whenever a command says to follow it.
 user-invocable: false
 ---
 
 # Writing to the status board
 
 The record format and its rules are in
-`plugins/devflow/schema/status-record.schema.json`. This skill says where and how to write one.
+`src/tld/schema/status-record.schema.json`. This skill says where and how to write one.
 
 ## Where the board is
 
 The board is reached through the tools `board_get`, `board_list`, `board_set` and `board_delete` of
-the `devflow-board` MCP server, whichever prefix the tool list shows, when the tool list has them.
-When it has none and both `DEVFLOW_BOARD_URL` and `DEVFLOW_BOARD_TOKEN` are set, use
-`board_client.py` (same operations; it sits next to the `project-profile` skill's scripts, see its
-"Find the toolkit scripts" step). When neither works there is no board: skip every board step
+the `tld-board` MCP server, whichever prefix the tool list shows, when the tool list has them.
+When it has none and both `TLD_BOARD_URL` and `TLD_BOARD_TOKEN` are set, use
+`"${CLAUDE_PLUGIN_ROOT}/bin/tld" board client` (same operations; see the `project-profile` skill's
+"Find the toolkit" step). When neither works there is no board: skip every board step
 silently and carry on (alerts, when they exist, still go out).
 
 ## Writing a record
 
-Write with `board_set` (or `board_client.py set ID - [--if-version N]` with the JSON on stdin),
+Write with `board_set` (or `tld board client set ID - [--if-version N]` with the JSON on stdin),
 passing the whole document, with `if_version` set to the version you last read (omit it only for
 the very first write). The document id is the project slug for a `run` record, and
 `<project>--<command>` for a `maintenance` record. The server validates the record: on `invalid`,

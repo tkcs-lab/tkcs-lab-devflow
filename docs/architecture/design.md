@@ -1,13 +1,13 @@
-# Design: devflow, a plan → implement toolkit for Claude Code on the web
+# Design: tld, a plan → implement toolkit for Claude Code on the web
 
 Status: review 1 answered; this is the design as built. The three decisions in §8 are resolved.
 
-Since devflow 0.4 the SessionStart-hook route and `toolkit.ref` no longer exist; plugins in the Claude Project are the only delivery route (see guides/delivery.md). Section 3 is kept as the record of the probe that led to the first design.
+Since tld 0.4 the SessionStart-hook route and `toolkit.ref` no longer exist; plugins in the Claude Project are the only delivery route (see guides/delivery.md). Section 3 is kept as the record of the probe that led to the first design.
 
 ## 1. What this is
 
 PrivacyFence's `/make-plan`, `/implement` and `/dod` (plus the generic half of its `steward` skill)
-moved into a plugin marketplace, with every project fact lifted into `.claude/toolkit.yaml`. The
+moved into a plugin marketplace, with every project fact lifted into `.tld/toolkit.yaml`. The
 commands keep their structure and wording; each hard-coded path or command becomes a lookup through
 one skill, `project-profile`.
 
@@ -20,9 +20,23 @@ Nightshift's runtime is not used. From it I take: the marketplace shape, the `re
 ## 2. Layout
 
 ```
-.claude-plugin/marketplace.json         # name: claude-toolkit; plugins: devflow, stack-python, stack-swift, stack-ipados, stack-go
-plugins/devflow/
-  .claude-plugin/plugin.json
+.claude-plugin/marketplace.json         # name: tkcs-lab-devflow; one plugin, tld, with source "./"
+.claude-plugin/plugin.json              # component paths point into adapters/claude/
+pyproject.toml                          # package "tld", console script "tld"
+bin/tld                                 # the CLI launcher (puts src/ on sys.path): see docs/reference/cli.md
+src/tld/
+  cli.py                                # tld <group> <command>
+  profile/{validate,patch,survey,survey_docs,survey_signals,survey_proposal}.py   # the profile and /setup's survey
+  plan/{manifest,scope}.py              # manifest validation, scope-drift checks
+  roles/dispatch.py                     # tld roles required|verify, which agents a point requires and whether they reported
+  dod/gate.py                           # the dod-gate hook policy
+  guard/                                # the guardrail hook policies and their shell, git and gh parsing: see docs/architecture/hooks.md
+  board/{store,server,client,mcp,mcp_stdio,stale,build,record}.py, board/web/{board.html,rules.js}   # the status board
+  ops/{land_order,pick_release,upstream_sync,repo_admin,docs_index}.py
+  review/decisions.{py,html}            # tld review decisions <items.json> <out.html>, /review's decisions page
+  schema/{profile,status-record,admin-policy}.schema.json
+  templates/{toolkit.yaml,tld-land.yml,tld-release.yml,tld-git-ops.yml,admin-policy.yaml,git-ops-allowlist.json}
+adapters/claude/
   commands/{make-plan,implement,dod,review}.md   # review: see docs/guides/review.md
   commands/{board,deps,upstream,land}.md         # maintenance commands: see docs/guides/maintenance.md
   commands/docs.md                      # /docs [check | init | tidy]: the docs index, see docs/guides/docs-index.md
@@ -37,37 +51,17 @@ plugins/devflow/
   skills/repo-admin/SKILL.md            # audit and update organisation and repository settings: see docs/guides/admin.md
   skills/docs-keeper/SKILL.md           # the docs structure, reading protocol and the init, maintain and tidy procedures
   skills/{agent-dispatch,profile-setup}/SKILL.md   # dispatching the profile's agents; how /setup decides and asks
-  scripts/validate_manifest.py          # CLI: validate_manifest.py <plan.md|manifest.yaml> [--profile P]
-  scripts/validate_profile.py           # CLI: validate_profile.py [.claude/toolkit.yaml]
-  scripts/review_decisions.{py,html}    # CLI: review_decisions.py <items.json> <out.html>, /review's decisions page
-  scripts/{validate_status_record,build_board,board_stale,board_server,board_mcp,board_client,board_mcp_stdio,pick_release,upstream_sync,land_order,repo_admin,scope_check}.py
-  scripts/agents.py                     # CLI: agents.py required|verify, which agents a point requires and whether they reported
-  scripts/profile_survey.py             # CLI: profile_survey.py [ROOT], the survey and proposal behind /setup
-  scripts/{survey_signals,survey_docs,survey_proposal}.py   # modules of the survey
-  scripts/docs_index.py                 # CLI: docs_index.py check|inventory|move, the docs index rules and doc moves
-  scripts/profile_patch.py              # CLI: profile_patch.py set-block|diff, text-level edits of the profile
-  schema/profile.schema.json
-  schema/status-record.schema.json
-  schema/admin-policy.schema.json       # the policy repo_admin.py reads; its own file, referenced by the profile key admin.policy
-  .mcp.json                             # declares the board_mcp_stdio.py bridge (the devflow-board MCP server)
-  board/                                # the status board page (board.html, rules.js) and its Dockerfile
-  board/Dockerfile                      # image of the board server
-  hooks/hooks.json, hooks/*.py          # guardrail hooks: see docs/architecture/hooks.md
-  templates/devflow-land.yml            # the workflow /land installs
-  templates/devflow-release.yml         # the release (tag) workflow repo-admin installs
-  templates/admin-policy.yaml           # starter policy
-  templates/toolkit.yaml                # copy of the starter profile, which /setup create copies
-plugins/stack-python/skills/stack-python/SKILL.md
-plugins/stack-swift/skills/stack-swift/SKILL.md
-plugins/stack-ipados/skills/stack-ipados/SKILL.md
-plugins/stack-go/skills/stack-go/SKILL.md
-templates/toolkit.yaml                  # commented starter profile
+  skills/stack-{python,swift,ipados,go}/SKILL.md   # the stack skills the profile's `stacks` selects
+  hooks/hooks.json, hooks/*.py          # the hook entries: thin shims over src/tld/guard and src/tld/dod
+  mcp.json                              # declares the tld board mcp-stdio bridge (the tld-board MCP server)
+deploy/board/Dockerfile                 # image of the board server
 evals/                                  # eval harness (not shipped): see docs/architecture/evals.md
 docs/architecture/{design.md,hooks.md,evals.md,scope-drift.md,agents.md}
 docs/architecture/maintenance-spike.md  # record of the spike behind the maintenance commands
-docs/reference/profile-reference.md
+docs/reference/{profile-reference.md,cli.md}
 docs/{guides/{delivery,board-server,review,admin,git-ops,maintenance,setup}.md,migrating-privacyfence.md}
-tests/                                  # pytest; fixtures from real PrivacyFence plans
+tests/core, tests/adapters/claude       # pytest; fixtures from real PrivacyFence plans
+.tld/toolkit.yaml                       # this repository's own profile
 .github/workflows/test.yml
 ```
 
@@ -77,7 +71,7 @@ I did not add `test-strategy` and `adr` as skills: `test-strategy` is Nightshift
 shipping a competing template. Say so if you want a generic `adr` skill anyway.
 
 Scripts are standard library plus PyYAML; the schema is checked by a small hand-rolled validator in
-`validate_profile.py` (no `jsonschema` dependency), with `profile.schema.json` as the documented,
+`tld profile validate` (no `jsonschema` dependency), with `profile.schema.json` as the documented,
 editor-friendly source of truth that a test keeps in sync with the code.
 
 ## 3. Delivery test result (real cloud session)
@@ -109,8 +103,8 @@ Two further facts from that run:
 * `CLAUDE_CODE_REMOTE=true`, `HOME=/root`, `CLAUDE_PROJECT_DIR=/home/user/<repo>` were set in the hook.
 
 **Decision: install into `~/.claude/` by default** (`commands/`, `skills/`, and the scripts under
-`~/.claude/devflow/`). It cannot collide with the project's own `.claude/commands/` or `skills/`
-(a project `steward` skill stays untouched), and it cannot be committed. `DEVFLOW_SCOPE=project`
+`~/.claude/tld/`). It cannot collide with the project's own `.claude/commands/` or `skills/`
+(a project `steward` skill stays untouched), and it cannot be committed. `TLD_SCOPE=project`
 switches to `<project>/.claude/` for people who want it; in that mode the script appends every
 installed path to `.git/info/exclude`, as you asked. (In user scope the exclude is moot, so the script
 does not write it.)
@@ -123,13 +117,13 @@ Not tested, and said so in `docs/guides/delivery.md`:
 2. **Typing `/probe-user-cmd` in the web UI.** The `Skill` tool resolved the command names, which is
    the same registry; I did not drive the UI.
 3. **Fetching the pinned tag from a PrivacyFence session**: from this container
-   `git ls-remote https://github.com/andras-tkcs/claude-toolkit` and `codeload.github.com` both work.
+   `git ls-remote https://github.com/tkcs-lab/tkcs-lab-devflow` and `codeload.github.com` both work.
    Whether a *private* toolkit repo is reachable from a project's session depends on the session's
    repo access. Decision 2 below.
 
 The vendoring-script + PR-bot fallback you described is **not needed** and I will not build it.
 
-## 4. The profile: `.claude/toolkit.yaml`
+## 4. The profile: `.tld/toolkit.yaml`
 
 Rules: a key marked **required** that is absent makes the command stop with
 `toolkit.yaml: missing required key 'verify.fast' (see docs/reference/profile-reference.md)`, naming the key.
@@ -214,7 +208,7 @@ against it; `worker` and `reviewer` drive `create_session`.
 
 ### Manifest compatibility
 
-Same fields as today, unchanged. `validate_manifest.py` checks exactly what `implement.md` §0.3 and
+Same fields as today, unchanged. `tld plan validate-manifest` checks exactly what `implement.md` §0.3 and
 `make-plan.md` §4 list: YAML parses; required top-level keys; phase `id` unique; every `depends_on`
 exists; no cycle; `brief` and `acceptance` present and non-empty; `complexity` ∈ {S, M} if present;
 `worker_model: opus` needs `worker_model_reason`; same-wave (neither reaches the other) phases have
@@ -229,11 +223,11 @@ manifests on `plan/atlassian-user-names` (7 phases) and `plan/plugin-framework`.
 * **make-plan**: same sections and wording. Section 0.2 reads `docs.must_read` + the stack skills +
   `project_steward`. ADR bullets conditional on `docs.adr_dir`. Plan path from `docs.plan_dir`. The
   "can the steward table dispatch it?" check reads `ci.dispatchable`. The manifest example uses
-  `<verify command from the stack skill>`. Inline Python in §4 → `validate_manifest.py`.
-* **implement**: same. Section 0.3 → `validate_manifest.py`. Post-merge verification runs
+  `<verify command from the stack skill>`. Inline Python in §4 → `tld plan validate-manifest`.
+* **implement**: same. Section 0.3 → `tld plan validate-manifest`. Post-merge verification runs
   `verify.fast` + the manifest's `verify_after_merge`. The child brief's read list is `docs.must_read`.
   Final reviewer runs `verify.fast` and reads the same list. The PR is driven to green via `pr-steward`.
-  Each merge is preceded by a monitoring-only scope check (`scope_check.py`, key `scope.ignore`) that
+  Each merge is preceded by a monitoring-only scope check (`tld plan scope-check`, key `scope.ignore`) that
   feeds the status record and the PR's Scope section: [scope-drift.md](scope-drift.md).
 * **dod**: runs `verify.dod` (honouring `narrow`/`skip_when_narrowed`), then reads `verify.dod_doc`
   and walks its rows against `git diff --stat origin/<main>...HEAD`, then the manual items; if
@@ -242,9 +236,9 @@ manifests on `plan/atlassian-user-names` (7 phases) and `plan/plugin-framework`.
 * **deps**: weekly unattended dependency triage; fixes red Dependabot and audit groups, opens pull requests, never merges.
 * **upstream**: weekly unattended sync of a patch-carrying fork to the newest upstream release tag, one commit, one pull request.
 * **land**: orders the bot's open pull requests, resolves conflicts before review, runs CI once, installs the land workflow.
-* Every command starts with the same two lines: load `project-profile`, run `validate_profile.py`;
+* Every command starts with the same two lines: load `project-profile`, run `tld profile validate`;
   a failure message is shown verbatim and the command stops.
-* Finding the scripts: `project-profile` documents one resolution order (plugin root → `~/.claude/devflow`)
+* Finding the scripts: `project-profile` documents one resolution order (plugin root → `~/.claude/tld`)
   so the same command text works under both delivery routes.
 
 ## 6. Stack skills
@@ -259,7 +253,7 @@ Foundation only, no UIKit/AppKit/SwiftUI); `xcodebuild`, simulators, signing do 
 code and tests; iOS/macOS verification is a `ci.dispatchable` macOS workflow, and the planner must put
 it in `verify_after_merge` as `dispatch <workflow> on <branch>`, not as a shell command. A starter
 workflow snippet goes in the skill. The profile key `ci.dispatchable` must contain a workflow whose
-`use_when` mentions the macOS runner; `validate_profile.py` warns (not errors) when `stacks`
+`use_when` mentions the macOS runner; `tld profile validate` warns (not errors) when `stacks`
 includes `swift` and `ci.dispatchable` is empty.
 
 `stack-ipados` (added later): layered on `stack-swift`, never alone (the validator warns). A layout
@@ -278,9 +272,9 @@ conventions, table-driven tests with `httptest`, acceptance as `go test <pkg> -r
 pytest, stdlib + PyYAML: manifest (good; missing field; unknown `depends_on`; cycle; overlapping
 `touches` in a wave; `worker_model: opus` without reason; real PrivacyFence manifests from git history
 stored under `tests/fixtures/`), profile (good; each missing required key named; unknown key; bad
-types; PrivacyFence profile), a **no-project-words test** that greps `plugins/devflow`,
-`plugins/stack-swift`, `plugins/stack-ipados`, `plugins/stack-go` and `templates/` for `privacyfence|ruff|pytest|src/privacyfence|connector`
-(case-insensitive; `stack-python` and `docs/` exempt), plus marketplace/plugin JSON structure. Workflow `.github/workflows/test.yml` runs it all on Python 3.11 and 3.13.
+types; PrivacyFence profile), a **no-project-words test** that greps `src/`, `bin/`, `adapters/`
+and `.claude-plugin/` (and `playbooks/` once it exists) for `privacyfence|ruff|pytest|src/privacyfence|connector`
+(case-insensitive; the `stack-python` skill and `docs/` exempt), plus marketplace/plugin JSON structure. Workflow `.github/workflows/test.yml` runs it all on Python 3.11 and 3.13.
 
 Note the string check also catches the word `connector` in the generic text: I will phrase
 "live connector credentials" as "live external-service credentials".
@@ -300,7 +294,7 @@ Note the string check also catches the word `connector` in the generic text: I w
 The probe commit (`WIP delivery probe`) is in this branch's history and removed again in the next
 commit, so the final PR diff does not contain it.
 
-## 10. devflow v2 and the maintenance commands
+## 10. tld v2 and the maintenance commands
 
 Version 0.4 added four commands and what they share. `/board` checks the connection to the status board, a server that holds the status records every session writes through the `status-board` skill (format:
 `schema/status-record.schema.json`). `/deps`, `/upstream` and `/land` are the maintenance commands:
@@ -314,7 +308,7 @@ shaped the design, is recorded in [design/maintenance-spike.md](maintenance-spik
 ## 11. git-ops
 
 A cloud session cannot push a tag or delete a remote branch: the session's git proxy refuses both. The
-toolkit therefore ships a template for a central workflow, `devflow-git-ops`, a skill (`git-ops`) that
+toolkit therefore ships a template for a central workflow, `tld-git-ops`, a skill (`git-ops`) that
 starts it, and the profile key `git_ops.repo` that names the central repository. The running instance
 lives in a private repository of its own, not in this one (D1), so that the repository holding a token
 with write access to other repositories contains only the workflow and its allowlist. The token is an
@@ -329,16 +323,16 @@ everything about it depended on claude.ai. It is now a server you host; see [boa
 
 What was built:
 
-* `board_store.py`: SQLite storage; a write needs the version last read (`if_version`), no version means create only.
-* `board_server.py`: stdlib HTTP server with a JSON API, one write token and an optional read token, and the page.
-* `board_mcp.py`: the same four operations as an MCP endpoint (`POST /mcp`, stateless, JSON only).
-* `board_client.py`: a command-line client, the write path for sessions without the MCP server.
-* `board_mcp_stdio.py`: a stdio bridge to `/mcp` that keeps the token inside our own process.
+* `src/tld/board/store.py`: SQLite storage; a write needs the version last read (`if_version`), no version means create only.
+* `tld board server`: stdlib HTTP server with a JSON API, one write token and an optional read token, and the page.
+* `src/tld/board/mcp.py`: the same four operations as an MCP endpoint (`POST /mcp`, stateless, JSON only).
+* `tld board client`: a command-line client, the write path for sessions without the MCP server.
+* `tld board mcp-stdio`: a stdio bridge to `/mcp` that keeps the token inside our own process.
 * `.mcp.json`: declares the bridge, so a session with the plugin has `board_get`, `board_list`, `board_set`, `board_delete`.
 * `board.html` polls `api/records` every 15 seconds instead of reading the Artifact database.
 * The `status-board` skill and `/board` use the tools or the client; `/board` checks the connection.
 * `board/Dockerfile` and `docs/guides/board-server.md` for deployment.
-* Configuration is `DEVFLOW_BOARD_URL` and `DEVFLOW_BOARD_TOKEN` (and `DEVFLOW_BOARD_READ_TOKEN` on the server).
+* Configuration is `TLD_BOARD_URL` and `TLD_BOARD_TOKEN` (and `TLD_BOARD_READ_TOKEN` on the server).
 
 Rejected:
 
@@ -358,22 +352,22 @@ validation with `unknown key 'status'`. This breaking change shipped in 0.7.0.
 Ten generic agents and the `/setup` command were added. [agents.md](agents.md) and [setup.md](../guides/setup.md) describe what
 they do; this section records why.
 
-- **The agents live in devflow, not in a new plugin.** They are wired into `/make-plan`, `/implement`, `/review` and
+- **The agents live in tld, not in a new plugin.** They are wired into `/make-plan`, `/implement`, `/review` and
   `/dod`, use the profile and the checklist skills, and must stay in step with those commands, so one plugin and one
   version is simpler than a second plugin that depends on the first. Rejected: a separate `agents` plugin.
 - **Posture is profile-driven.** The agents contain nothing about a project. Whether the security reviewer is strict,
   which agents are mandatory where and whether they block is the `agents` block of the profile. The schema carries no
-  defaults for it; `scripts/agents.py` applies them, so a profile without the block resolves exactly as before.
+  defaults for it; `tld roles` applies them, so a profile without the block resolves exactly as before.
 - **A required agent that did not run fails visibly.** Every agent ends with one `AGENT-REPORT` line and
-  `agents.py verify` reads it, rather than trusting that the dispatching session remembered to run the agent.
-- **`/setup` patches the profile at text level.** `profile_patch.py` replaces or appends a block and keeps every other
+  `tld roles verify` reads it, rather than trusting that the dispatching session remembered to run the agent.
+- **`/setup` patches the profile at text level.** `tld profile patch` replaces or appends a block and keeps every other
   byte. Round-tripping the file through a YAML library would drop the comments that make the starter profile readable.
 - **The survey proposes, a person decides.** The heuristics (security score, UI globs, test levels) can be wrong, so the
   posture is always asked about, `blocking: true` is written only after confirmation, and the pull request lists the
   evidence. `/setup` never merges.
 - **The `protect-paths` convention.** The profile is protected from hand edits. `/setup` has to write it, so it runs
-  `protect_paths.py --allow-profile`, which writes a marker with a two-hour lifetime inside the git directory (per
-  checkout) that lets exactly `.claude/toolkit.yaml` through. Like the `dod-gate` marker it is a convention, not a lock;
+  `tld guard allow-profile`, which writes a marker with a two-hour lifetime inside the git directory (per
+  checkout) that lets exactly `.tld/toolkit.yaml` through. Like the `dod-gate` marker it is a convention, not a lock;
   branch protection and the pull request review remain the hard control ([hooks.md](hooks.md#protect-paths)).
 
 ## 14. Docs structure
@@ -384,7 +378,7 @@ and `docs/reference/`. Plans are transient and never indexed.
 
 - **Why.** Every session pays for what it reads. A flat set of docs made each planner and worker read the
   must-read docs of every phase; the index makes the choice a row match.
-- **Deterministic checks.** `scripts/docs_index.py` checks the limits and links and moves a doc with every
+- **Deterministic checks.** `tld ops docs-index` checks the limits and links and moves a doc with every
   reference rewritten; the `docs-keeper` skill and `/docs` carry the procedures.
 - **Same profile, one new key.** `docs.index`; without it every command behaves as before.
 - **No eleventh agent.** The `tech-writer` agent checks the index through `docs-review`.

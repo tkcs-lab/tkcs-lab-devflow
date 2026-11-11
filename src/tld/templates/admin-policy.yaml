@@ -1,7 +1,7 @@
 # Starter policy for scripts/repo_admin.py (the repo-admin skill). Copy it next to your profile, for
-# example to .claude/admin-policy.yaml, set `admin.policy` in .claude/toolkit.yaml, and edit.
+# example to .claude/admin-policy.yaml, set `admin.policy` in .tld/toolkit.yaml, and edit.
 # A section you leave out is not managed. Everything irreversible is off here; turn it on once an
-# audit shows only what you expect. Reference: docs/guides/admin.md in https://github.com/tkcs-lab/claude-toolkit
+# audit shows only what you expect. Reference: docs/guides/admin.md in https://github.com/tkcs-lab/tkcs-lab-devflow
 
 org: your-org                      # REQUIRED: the GitHub organisation
 
@@ -57,7 +57,7 @@ branch_protection:                 # added where the branch has no rule and no r
   allow_deletions: false
 
 secrets:
-  required: []                     # e.g. ["DEVFLOW_AGENT_TOKEN"]: a repository without it, own or from the organisation, is reported
+  required: []                     # e.g. ["TLD_AGENT_TOKEN"]: a repository without it, own or from the organisation, is reported
   keep: []                         # never reported as unused
   delete_unused: false             # true: delete a secret no workflow refers to (needs --allow-delete)
 

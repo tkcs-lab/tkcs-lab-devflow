@@ -23,7 +23,7 @@ The dispatching session fills these fields in the prompt:
 - `Stack skills`: names of the stack skills to load.
 - `Verify (fast)`: the command that runs the fast checks; run it before and after.
 
-A field missing from the prompt is read from `.claude/toolkit.yaml` through the `project-profile` skill. When it is not there either, say so in the report and continue with the default.
+A field missing from the prompt is read from `.tld/toolkit.yaml` through the `project-profile` skill. When it is not there either, say so in the report and continue with the default.
 
 ## Method
 

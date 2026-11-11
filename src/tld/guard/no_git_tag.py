@@ -89,7 +89,7 @@ def check_tag(args: list[str]) -> str | None:
     return None
 
 
-RELEASE_WORKFLOW = "devflow-release.yml"
+RELEASE_WORKFLOW = "tld-release.yml"
 REL_EDIT = re.compile(r"^repos/[^/]+/[^/]+/releases/[^/]+$")
 DISPATCH = re.compile(r"^repos/[^/]+/[^/]+/actions/workflows/([^/]+)/dispatches$")
 PUSH_KEY = re.compile(r"^remote\.[^=]*\.(push|mirror)$", re.I)
@@ -97,7 +97,7 @@ PUSH_KEY = re.compile(r"^remote\.[^=]*\.(push|mirror)$", re.I)
 
 def is_release_workflow(name: str) -> bool:
     base = os.path.basename(name.strip())
-    return base in (RELEASE_WORKFLOW, "devflow-release")
+    return base in (RELEASE_WORKFLOW, "tld-release")
 
 
 def check_push_config(it: Item, push) -> str | None:

@@ -1,7 +1,7 @@
-# .claude/toolkit.yaml — the project profile read by the devflow commands (/review, /make-plan, /implement, /dod).
+# .tld/toolkit.yaml — the project profile read by the tld commands (/review, /make-plan, /implement, /dod).
 # Every command checks this file first and stops, naming the key, if a required key is missing.
 # An optional key you leave out means "this project does not use that".
-# Reference: docs/reference/profile-reference.md in https://github.com/tkcs-lab/claude-toolkit
+# Reference: docs/reference/profile-reference.md in https://github.com/tkcs-lab/tkcs-lab-devflow
 
 project:
   name: My Project       # optional; used in prose. Default: the repository name
@@ -87,11 +87,11 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 #   version_file: "<file recording the synced tag>"
 
 # admin:                 # optional: the repo-admin skill stops with a missing-key message when absent
-#   policy: .claude/admin-policy.yaml   # starter: plugins/devflow/templates/admin-policy.yaml
+#   policy: .claude/admin-policy.yaml   # starter: src/tld/templates/admin-policy.yaml
 
 # git_ops:               # optional: the git-ops skill stops with a missing-key message when absent
-#   repo: owner/name       # the central repository that holds the devflow-git-ops workflow
-#   workflow: devflow-git-ops.yml   # optional, this is the default
+#   repo: owner/name       # the central repository that holds the tld-git-ops workflow
+#   workflow: tld-git-ops.yml   # optional, this is the default
 
 # land:                  # optional: /land works without it
 #   max_prs: 10            # 1..50
@@ -110,12 +110,12 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 #   extra_context:       # lines added to every agent prompt
 #     - "Every outbound request must pass the approval gate."
 
-# hooks:                 # optional: settings of the guardrail hooks the devflow plugin ships (docs/architecture/hooks.md).
+# hooks:                 # optional: settings of the guardrail hooks the tld plugin ships (docs/architecture/hooks.md).
 #                        # The values below are the defaults; with no `hooks` section all hooks but dod-gate are on.
 #   disable: []          # escape hatch: names of hooks to switch off here, any of
 #                        #   no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate
 #   protect_paths:       # paths protect-paths refuses to edit (replaces this default list when set)
-#     - .claude/toolkit.yaml
+#     - .tld/toolkit.yaml
 #     - .env
 #     - ".env.*"
 #     - "*.lock"

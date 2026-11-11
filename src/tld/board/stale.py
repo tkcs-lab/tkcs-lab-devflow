@@ -5,7 +5,7 @@
 
 Reads a JSON list of {"id", "data"} documents (FILE, or stdin for - or no argument) and prints one
 id per line for every record whose board section is `hidden`. The rule is the one in
-plugins/devflow/board/rules.js, re-implemented here; a record with needs_you true is never printed.
+src/tld/board/web/rules.js, re-implemented here; a record with needs_you true is never printed.
 Python 3.11+, stdlib only.
 """
 from __future__ import annotations

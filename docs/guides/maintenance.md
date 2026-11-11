@@ -40,14 +40,14 @@ resolve by hand after you approve. It orders them (a pull request stacked on ano
 otherwise the lowest number first), merges them in that order on a throwaway branch
 `chore/land-<yyyymmdd-hhmm>`, resolves mechanical conflicts early (the same resolution is pushed to the
 later pull request's own branch), runs CI once on the combined set through a draft pull request that it
-closes again, and installs the workflow `.github/workflows/devflow-land.yml`. After each merge that
+closes again, and installs the workflow `.github/workflows/tld-land.yml`. After each merge that
 workflow updates the next pull request that has auto-merge enabled. You still review and approve every
 pull request and enable auto-merge on each. Run `/land` yourself; no schedule runs it.
 
 ### `/docs tidy`
 
 Weekly docs cleanup (`/docs` has two more modes, `check` and `init`; see
-[docs-index.md](docs-index.md)). It runs `docs_index.py check` and applies only mechanical fixes on
+[docs-index.md](docs-index.md)). It runs `tld ops docs-index check` and applies only mechanical fixes on
 `chore/docs-tidy-<yyyymmdd>`: a row for an unlisted doc, a repointed link, a row for a deleted doc, a
 missing ADR-index row. The result is one pull request, or, when only judgement items remain (stale docs,
 docs over 400 lines, an index over 150 lines), an issue titled `Docs tidy: <n> items to decide` with a
@@ -90,7 +90,7 @@ land:
 
 Create one scheduled task per repository **in the claude.ai UI, with the repository attached to the
 task**, weekly, with the prompt `/deps`, `/upstream` or `/docs tidy`, permission mode **auto**, and an environment
-that has the variables `DEVFLOW_BOARD_URL` and `DEVFLOW_BOARD_TOKEN` (see the next section). All three commands ask nothing and stop
+that has the variables `TLD_BOARD_URL` and `TLD_BOARD_TOKEN` (see the next section). All three commands ask nothing and stop
 cleanly with `needs_you` on the status record when they are unsure. Pick a time outside the hours when
 you work in the repository.
 
@@ -103,8 +103,8 @@ work.
 
 The board is the self-hosted server described in [board-server.md](board-server.md): it stores the
 status record of every project (`/implement` runs and the three maintenance commands) and serves a page
-that shows them. Set two variables in every environment that should write to it: `DEVFLOW_BOARD_URL`
-(not a secret) and `DEVFLOW_BOARD_TOKEN` (a secret you type into the environment settings). Without
+that shows them. Set two variables in every environment that should write to it: `TLD_BOARD_URL`
+(not a secret) and `TLD_BOARD_TOKEN` (a secret you type into the environment settings). Without
 them the commands skip every board step. `/board` checks the connection and reports how many records
 there are; `/board prune` prunes.
 
@@ -122,11 +122,11 @@ never one that needs you) and asks one question before it deletes them.
 
 ## What `/land` needs from GitHub
 
-- The repository **secret** `DEVFLOW_AGENT_TOKEN`: a fine-grained token of the agent user. The workflow
+- The repository **secret** `TLD_AGENT_TOKEN`: a fine-grained token of the agent user. The workflow
   uses it instead of the default workflow token, because events caused by the default token do not start
   workflows, and CI must run on the updated branch.
 - The repository **setting** "Allow auto-merge" (Settings, General, Pull Requests). `/land` cannot read
   secrets or that setting; it tells you to check both.
 - The workflow itself must be merged on the default branch first. If the session's token may not push
   workflow files, `/land` opens no pull request and asks you to add
-  `.github/workflows/devflow-land.yml` from the devflow template yourself.
+  `.github/workflows/tld-land.yml` from the tld template yourself.

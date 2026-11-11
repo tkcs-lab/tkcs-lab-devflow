@@ -1,6 +1,6 @@
 id: make-plan-large
 description: A request that needs several phases must yield a plan whose manifest validates, has no cycle, disjoint touches per wave and mechanical acceptance.
-command: /devflow:make-plan
+command: /tld:make-plan
 arguments: >-
   Plan this as a large, phased change with a plan document and manifest: add tags to notes (tags per note,
   `list --tag` filtering, rename and delete tags), then export notes to markdown grouped by tag, a new

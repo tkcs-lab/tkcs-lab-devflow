@@ -1,6 +1,6 @@
 {
   "name": "tld",
-  "version": "1.0.0-dev",
+  "version": "1.0.0-dev0",
   "description": "tkcs-lab-devflow: project-independent plan → implement workflow: /setup, /review, /make-plan, /implement, /dod, /board, /deps, /upstream, /land and /docs, plus ten specialist agents (architect, code-reviewer, debugger, ...), driven by a per-project profile (.tld/toolkit.yaml)",
   "author": {
     "name": "tkcs-lab"

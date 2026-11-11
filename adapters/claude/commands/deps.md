@@ -9,7 +9,7 @@ task, with nobody watching.
 ## Profile
 
 Load the `project-profile` skill and follow its "Loading the profile" section. If it reports an error, show the message verbatim and stop; never substitute a value of your own for a missing key.
-Skill names carry a plugin prefix (`devflow:project-profile`, `devflow:status-board`, `devflow:pr-steward`); use whichever form the skill list shows.
+Skill names carry a plugin prefix (`tld:project-profile`, `tld:status-board`, `tld:pr-steward`); use whichever form the skill list shows.
 This command needs the profile section `deps` with `deps.cooldown_days` and `deps.time_budget_minutes`.
 A missing one stops the run with `toolkit.yaml: missing required key '<key>'`; when a board exists, first
 write a `failed` record with `needs_you` (see "Record" in section 4).

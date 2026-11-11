@@ -24,7 +24,7 @@ The dispatching session fills these fields in the prompt:
 - `Website build`: the command that builds the site, run from the website directory.
 - `Website links`: the command that checks the site links, run from the website directory.
 
-A field missing from the prompt is read from `.claude/toolkit.yaml` through the `project-profile` skill. When it is not there either, say so in the report and continue with the default.
+A field missing from the prompt is read from `.tld/toolkit.yaml` through the `project-profile` skill. When it is not there either, say so in the report and continue with the default.
 
 ## Method
 

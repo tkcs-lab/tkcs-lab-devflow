@@ -1,4 +1,4 @@
-"""Shared plumbing of the devflow guardrail hooks (Python 3.11, standard library plus PyYAML).
+"""Shared plumbing of the tld guardrail hooks (Python 3.11, standard library plus PyYAML).
 
 Contract with Claude Code (see docs/architecture/hooks.md): the event JSON arrives on stdin; exit 0 allows;
 exit 2 blocks and the stderr text goes back to the agent; any other exit code is a non-blocking
@@ -17,14 +17,14 @@ from pathlib import Path
 from typing import Callable, NamedTuple
 
 HOOK_NAMES = ("no-merge", "no-force-push", "no-git-tag", "secret-scan", "protect-paths", "dod-gate")
-PROFILE = Path(".claude") / "toolkit.yaml"
+PROFILE = Path(".tld") / "toolkit.yaml"
 
 # Defaults of the `hooks` section. They are repeated in schema/profile.schema.json; a test keeps them equal.
-DEFAULT_PROTECT_PATHS = [".claude/toolkit.yaml", ".env", ".env.*", "*.lock", "package-lock.json", "go.sum",
+DEFAULT_PROTECT_PATHS = [".tld/toolkit.yaml", ".env", ".env.*", "*.lock", "package-lock.json", "go.sum",
                          ".github/workflows/**"]
 # Always allowed, whatever the profile says: templates and files the toolkit's own commands install.
 BUILTIN_PROTECT_ALLOW = [".env.example", ".env.sample", ".env.template", ".env.dist",
-                         ".github/workflows/devflow-land.yml", ".github/workflows/devflow-release.yml"]
+                         ".github/workflows/tld-land.yml", ".github/workflows/tld-release.yml"]
 DEFAULT_MAX_ATTEMPTS = 3
 HOOK_BUDGET_SECONDS = 15  # below the 20 s hook timeout, so a slow destructive hook denies instead of being killed
 
@@ -36,7 +36,7 @@ class HookBudgetExceeded(BaseException):
 
 def exit_import_error(name: str, exc: BaseException) -> None:
     """A destructive hook could not load its helpers: deny (exit 2) instead of crashing with status 1."""
-    print(f"devflow {name}: internal error while loading ({type(exc).__name__}: {exc}).", file=sys.stderr)
+    print(f"tld {name}: internal error while loading ({type(exc).__name__}: {exc}).", file=sys.stderr)
     sys.exit(2)
 
 
@@ -77,8 +77,8 @@ class Ctx:
         value = git.get("main_branch") if isinstance(git, dict) else None
         if not isinstance(value, str) or not value:
             why = f" ({self.profile_problem})" if self.profile_problem else ""
-            raise ProfileError(f"toolkit.yaml: missing required key 'git.main_branch'{why}. The devflow "
-                               "guardrail hooks need it; see docs/reference/profile-reference.md in the claude-toolkit repo.")
+            raise ProfileError(f"toolkit.yaml: missing required key 'git.main_branch'{why}. The tld "
+                               "guardrail hooks need it; see docs/reference/profile-reference.md in the tkcs-lab-devflow repo.")
         return value
 
     def disabled(self, name: str) -> bool:
@@ -215,7 +215,7 @@ def _disarm_budget(armed) -> None:
 
 def execute(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: bool, stdin_text: str) -> Result:
     """Run one hook on the raw stdin text."""
-    prefix = f"devflow {name}: "
+    prefix = f"tld {name}: "
     problem_code = 2 if fail_closed else 1
     try:
         payload = json.loads(stdin_text)

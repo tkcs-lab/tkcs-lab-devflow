@@ -1,6 +1,6 @@
 # Auditing and updating organisation and repository settings
 
-`plugins/devflow/scripts/repo_admin.py` compares a GitHub organisation and its repositories with a
+`src/tld/ops/repo_admin.py` compares a GitHub organisation and its repositories with a
 **policy file** and either lists the differences (`audit`) or removes them (`apply`). The
 `repo-admin` skill drives it with you: it audits, tells you what it found in words, asks what to apply,
 shows a dry run, applies, and audits again. The script also works on its own, from a terminal or from a
@@ -18,8 +18,8 @@ token is available:
 
 ```
 gh auth login                      # or: export GH_TOKEN=...
-python3 plugins/devflow/scripts/repo_admin.py whoami --org your-org
-python3 plugins/devflow/scripts/repo_admin.py audit --policy .claude/admin-policy.yaml
+bin/tld ops repo-admin whoami --org your-org
+bin/tld ops repo-admin audit --policy .claude/admin-policy.yaml
 ```
 
 The token comes from `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token`, in that order. It is sent only to
@@ -31,11 +31,11 @@ endpoint that answered 401, 403 or 404, so you know which permission to grant.
 
 ## Use it in a project
 
-1. Copy [`plugins/devflow/templates/admin-policy.yaml`](../../plugins/devflow/templates/admin-policy.yaml)
+1. Copy [`src/tld/templates/admin-policy.yaml`](../../src/tld/templates/admin-policy.yaml)
    to `.claude/admin-policy.yaml` (or anywhere in the repository), set `org` and edit.
-2. Set `admin.policy: .claude/admin-policy.yaml` in `.claude/toolkit.yaml` (see [profile-reference.md](../reference/profile-reference.md)).
-3. `repo_admin.py validate-policy <file>` checks the policy against
-   [`schema/admin-policy.schema.json`](../../plugins/devflow/schema/admin-policy.schema.json). An unknown key is an error.
+2. Set `admin.policy: .claude/admin-policy.yaml` in `.tld/toolkit.yaml` (see [profile-reference.md](../reference/profile-reference.md)).
+3. `tld ops repo-admin validate-policy <file>` checks the policy against
+   [`schema/admin-policy.schema.json`](../../src/tld/schema/admin-policy.schema.json). An unknown key is an error.
 4. Run the `repo-admin` skill, or the script yourself.
 
 One policy file governs one organisation. A section you leave out is not managed. To treat some
@@ -155,16 +155,16 @@ rendered template is left alone; one that differs is updated, so editing the tem
 
 ## The release workflow
 
-`template: release` installs `.github/workflows/devflow-release.yml`. Parameter: `tag_prefix` (default `v`).
+`template: release` installs `.github/workflows/tld-release.yml`. Parameter: `tag_prefix` (default `v`).
 
-- Run it by hand: Actions, `devflow-release`, Run workflow, on the main branch. The branch check is a convenience, not a control: anyone who can push a branch can run an edited copy of the workflow. What stops a release is a tag ruleset (or branch protection) that only your release roles may bypass.
+- Run it by hand: Actions, `tld-release`, Run workflow, on the main branch. The branch check is a convenience, not a control: anyone who can push a branch can run an edited copy of the workflow. What stops a release is a tag ruleset (or branch protection) that only your release roles may bypass.
 - Inputs: `version` (for example `1.4.0`; empty bumps the newest `<tag_prefix>x.y.z` tag by `bump`: `patch`, `minor`, `major`),
   `prerelease`, `skip_checks`, and `dry_run`, which is ticked by default. A dry run shows the tag and the generated notes in the run summary.
 - Unticked, it checks that every check run on the head commit succeeded (and the commit status is neither failing nor pending), creates an
   annotated tag on that commit and a GitHub release with generated notes. It stops if the tag exists.
 - Tags and releases made with the default workflow token do not start other workflows. If one must run on the tag
-  (a build, a publish), add the secret `DEVFLOW_RELEASE_TOKEN`, a token that may write contents; the workflow uses it
-  when it is set. It is separate from `DEVFLOW_AGENT_TOKEN` so the release does not run as the agent.
+  (a build, a publish), add the secret `TLD_RELEASE_TOKEN`, a token that may write contents; the workflow uses it
+  when it is set. It is separate from `TLD_AGENT_TOKEN` so the release does not run as the agent.
 - It uses no third-party action and passes inputs to the shell only through environment variables.
 
 ## Not covered

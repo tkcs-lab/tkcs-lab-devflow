@@ -1,7 +1,7 @@
 # Agents
 
-devflow ships ten generic agents in `plugins/devflow/agents/`. They are the same for every project. What differs
-is the profile: the `agents` block of `.claude/toolkit.yaml` says which of them are **mandatory** at which point of
+tld ships ten generic agents in `adapters/claude/agents/`. They are the same for every project. What differs
+is the profile: the `agents` block of `.tld/toolkit.yaml` says which of them are **mandatory** at which point of
 the workflow, whether a finding from them **blocks**, and how strict the security reviewer is. A required agent that
 did not run fails visibly. Key reference: [profile-reference.md](../reference/profile-reference.md). To have the block written for
 you, run `/setup` ([setup.md](../guides/setup.md)).
@@ -48,7 +48,7 @@ agents:
   disabled, `when` at points that have no diff, and an agent at `review` that has no review dimension
   (allowed there: `security-reviewer`, `dependency-auditor`, `test-architect`, `tech-writer`, `website-maintainer`).
 - A profile without `agents` means every agent is available and none is mandatory. The defaults are applied by
-  `scripts/agents.py`, not by the schema, so `--resolved` output of such a profile does not change.
+  `tld roles`, not by the schema, so `--resolved` output of such a profile does not change.
 
 ## Points, modes and failure rules
 
@@ -89,13 +89,13 @@ unreachable; `standard` applies the checklist as written; `low` applies only the
 - **Blocking** (`blocking: true`): the agent ran, but a line with `blocking=<n>` and `n > 0` also fails the point.
   Without it, findings are reported and triaged but do not fail anything.
 
-## `agents.py`
+## `tld roles`
 
 Two sub-commands, used by the `agent-dispatch` skill:
 
 ```
-python3 plugins/devflow/scripts/agents.py required --profile .claude/toolkit.yaml --at dod --changed changed.txt
-python3 plugins/devflow/scripts/agents.py verify --required required.json --report report.txt
+bin/tld roles required --profile .tld/toolkit.yaml --at dod --changed changed.txt
+bin/tld roles verify --required required.json --report report.txt
 ```
 
 `required` validates the profile and prints JSON: the agents required at the point (with the globs that matched), the

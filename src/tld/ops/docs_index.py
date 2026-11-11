@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Check and inventory a repository's docs index: the thin CLAUDE.md -> docs index -> leaf docs chain.
 
-    docs_index.py check     [--profile .claude/toolkit.yaml] [--root .] [--index PATH] [--stale-days N]
+    docs_index.py check     [--profile .tld/toolkit.yaml] [--root .] [--index PATH] [--stale-days N]
                             [--max-claude-lines 60] [--max-index-lines 150] [--max-doc-lines 400]
                             [--strict] [--json]
-    docs_index.py inventory [--profile .claude/toolkit.yaml] [--root .] [--index PATH] [--json]
+    docs_index.py inventory [--profile .tld/toolkit.yaml] [--root .] [--index PATH] [--json]
     docs_index.py move SRC DST [--root .] [--apply] [--exclude GLOB]... [--json]
 
 `move` renames one file and rewrites every reference to it (markdown links, root path mentions, quoted
@@ -51,7 +51,7 @@ import yaml
 
 from tld.plan import manifest as vm  # noqa: E402
 
-DEFAULT_PROFILE = ".claude/toolkit.yaml"
+DEFAULT_PROFILE = ".tld/toolkit.yaml"
 MAX_CLAUDE_LINES = 60
 MAX_INDEX_LINES = 150
 MAX_DOC_LINES = 400
@@ -61,7 +61,7 @@ LINK = re.compile(r"\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 FENCE = re.compile(r"^\s*(```|~~~)")
 SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 SCAN_SUFFIXES = (".md", ".py", ".yaml", ".yml", ".json", ".html", ".js", ".toml", ".txt", ".sh")
-DEFAULT_EXCLUDES = (".git/**", "tests/fixtures/**", "evals/fixtures/**", ".claude/toolkit.yaml")
+DEFAULT_EXCLUDES = (".git/**", "tests/fixtures/**", "evals/fixtures/**", ".tld/toolkit.yaml")
 MAX_CHANGE_LINES = 200
 MAX_UNRESOLVED_LINES = 50
 MIN_DESCRIPTION = 12  # characters outside the link text on an index line

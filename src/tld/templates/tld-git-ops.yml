@@ -1,8 +1,8 @@
-name: devflow-git-ops
+name: tld-git-ops
 run-name: "git-ops ${{ inputs.action }} ${{ inputs.name }} in ${{ inputs.repo }}${{ inputs.dry_run && ' (dry run)' || '' }}"
 
 # Creates a tag or deletes a branch in another repository, for sessions that cannot push either.
-# Install this file as .github/workflows/devflow-git-ops.yml and git-ops-allowlist.json at the root of the
+# Install this file as .github/workflows/tld-git-ops.yml and git-ops-allowlist.json at the root of the
 # central repository. The secret GIT_OPS_TOKEN lives in the environment git-ops, whose deployment branches are
 # limited to the default branch: a run from any other branch never receives the token. The job condition and
 # the allowlist being read from the default branch are defence in depth. It starts as a dry run.
@@ -40,7 +40,7 @@ on:
         type: boolean
 
 concurrency:
-  group: devflow-git-ops-${{ inputs.repo }}
+  group: tld-git-ops-${{ inputs.repo }}
   cancel-in-progress: false
 
 permissions:
@@ -48,7 +48,7 @@ permissions:
 
 jobs:
   git-ops:
-    name: devflow-git-ops
+    name: tld-git-ops
     runs-on: ubuntu-latest
     environment: git-ops
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)

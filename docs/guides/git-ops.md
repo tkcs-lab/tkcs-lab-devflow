@@ -2,7 +2,7 @@
 
 A Claude Code session on the web cannot push a tag and cannot delete a remote branch: its git proxy refuses
 both, and a token saved on the environment is never used for GitHub hosts. The toolkit therefore ships one
-GitHub Actions workflow, `devflow-git-ops`, to run in a central private repository. A session starts it, and it
+GitHub Actions workflow, `tld-git-ops`, to run in a central private repository. A session starts it, and it
 creates the tag or deletes the branch with a fine-grained token that only that repository's `git-ops` environment
 holds. The `git-ops` skill drives it; the profile key `git_ops.repo` names the central repository.
 
@@ -19,10 +19,10 @@ Files:
 
 | File | Installed as |
 |---|---|
-| [`plugins/devflow/templates/devflow-git-ops.yml`](../../plugins/devflow/templates/devflow-git-ops.yml) | `.github/workflows/devflow-git-ops.yml` in the central repository |
-| [`plugins/devflow/templates/git-ops-allowlist.json`](../../plugins/devflow/templates/git-ops-allowlist.json) | `git-ops-allowlist.json` at the root of the central repository |
-| the `git-ops` skill | in the `devflow` plugin |
-| `git_ops.repo`, `git_ops.workflow` | in each project's `.claude/toolkit.yaml`, see [profile-reference.md](../reference/profile-reference.md) |
+| [`src/tld/templates/tld-git-ops.yml`](../../src/tld/templates/tld-git-ops.yml) | `.github/workflows/tld-git-ops.yml` in the central repository |
+| [`src/tld/templates/git-ops-allowlist.json`](../../src/tld/templates/git-ops-allowlist.json) | `git-ops-allowlist.json` at the root of the central repository |
+| the `git-ops` skill | in the `tld` plugin |
+| `git_ops.repo`, `git_ops.workflow` | in each project's `.tld/toolkit.yaml`, see [profile-reference.md](../reference/profile-reference.md) |
 
 The template has no placeholders; copy it as it is. The secret is `GIT_OPS_TOKEN`, the environment is `git-ops`.
 Anyone with write access to the central repository can run the workflow, so keep that group small.
@@ -42,7 +42,7 @@ rule for `.github/workflows/` and `git-ops-allowlist.json`. Keep the group with 
   "Selected branches" with only `main`, and add the environment secret `GIT_OPS_TOKEN` (an environment secret,
   not a repository secret).
 
-**3. Install the workflow and the allowlist.** Copy `devflow-git-ops.yml` to `.github/workflows/` and
+**3. Install the workflow and the allowlist.** Copy `tld-git-ops.yml` to `.github/workflows/` and
 `git-ops-allowlist.json` to the root of the central repository through a pull request into `main` (GitHub offers
 "Run workflow" only for a file on the default branch). Edit the allowlist:
 
@@ -60,24 +60,24 @@ rule for `.github/workflows/` and `git-ops-allowlist.json`. Keep the group with 
 regular expression every new tag name must match. The workflow reads this file from the central repository's
 default branch, never from the dispatched ref.
 
-**4. The first real run.** From the Actions tab run `devflow-git-ops` with a harmless branch, for example
+**4. The first real run.** From the Actions tab run `tld-git-ops` with a harmless branch, for example
 `action=delete-branch`, `name=chore/git-ops-test`, `dry_run` ticked; read the summary; then untick `dry_run`.
 This proves the token works and that a branch name with a slash is handled.
 
-**5. In each project,** after the plugin is updated, add to `.claude/toolkit.yaml`:
+**5. In each project,** after the plugin is updated, add to `.tld/toolkit.yaml`:
 
 ```yaml
 git_ops:
   repo: your-org/git-ops           # required inside the section
-  workflow: devflow-git-ops.yml    # optional; this is the default
+  workflow: tld-git-ops.yml    # optional; this is the default
 ```
 
 ## Use it
 
 - **Through Claude:** ask for a named tag or named branches; the `git-ops` skill lists the items, dry-runs each,
   shows the result, and runs it for real only after your yes.
-- **By hand:** Actions tab, `devflow-git-ops`, Run workflow, on `main`.
-- **With the CLI:** `gh workflow run devflow-git-ops.yml -R <owner>/<central> -f repo=<owner>/<target> -f action=create-tag -f name=v1.2.3 -f dry_run=true`
+- **By hand:** Actions tab, `tld-git-ops`, Run workflow, on `main`.
+- **With the CLI:** `gh workflow run tld-git-ops.yml -R <owner>/<central> -f repo=<owner>/<target> -f action=create-tag -f name=v1.2.3 -f dry_run=true`
   (add `-f ref=<sha>` or `-f message=...` for a tag; use `-f dry_run=false` to do it).
 
 Tags made with a personal token start other workflows, unlike tags made with the default workflow token. This is
@@ -142,8 +142,8 @@ that a session never merges or approves its own pull request (see the `pr-stewar
 
 ## Alternatives
 
-- `devflow-release` cuts a release tag in the repository itself with the default workflow token.
-- `repo_admin.py` with `branches.delete_merged` cleans up merged branches in bulk, with an organisation owner's
+- `tld-release` cuts a release tag in the repository itself with the default workflow token.
+- `tld ops repo-admin` with `branches.delete_merged` cleans up merged branches in bulk, with an organisation owner's
   token (see [admin.md](admin.md)).
 - A GitHub App token instead of a personal token removes the 90-day renewal, at the price of an app, a private
   key and a token-minting step. It is the upgrade path.

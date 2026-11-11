@@ -1,6 +1,6 @@
 ---
 name: stack-go
-description: Go conventions for devflow plans and phases — toolchain setup, the gofmt / vet / test / race / staticcheck / govulncheck checks, test conventions, and how to write acceptance and verify_after_merge entries for Go phases. Loaded when the profile lists the go stack.
+description: Go conventions for tld plans and phases — toolchain setup, the gofmt / vet / test / race / staticcheck / govulncheck checks, test conventions, and how to write acceptance and verify_after_merge entries for Go phases. Loaded when the profile lists the go stack.
 user-invocable: false
 ---
 

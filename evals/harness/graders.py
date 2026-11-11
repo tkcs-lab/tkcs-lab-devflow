@@ -95,7 +95,7 @@ def manifest_valid(ctx: GradeContext) -> GradeResult:
     if manifest is None:
         return GradeResult(False, err)
     profile = None
-    prof = ctx.docs(".claude/toolkit.yaml")
+    prof = ctx.docs(".tld/toolkit.yaml")
     if prof:
         profile = yaml.safe_load(prof[0].text)
     errors, _ = vm.validate(manifest, profile)
@@ -238,7 +238,7 @@ def no_manifest(ctx: GradeContext) -> GradeResult:
 @grader("profile_valid")
 def profile_valid(ctx: GradeContext) -> GradeResult:
     vp = plugin_script("validate_profile")
-    path = ctx.params.get("path", ".claude/toolkit.yaml")
+    path = ctx.params.get("path", ".tld/toolkit.yaml")
     wt = [d for d in ctx.docs(path) if d.ref == "worktree"]
     if not wt:
         return GradeResult(False, f"{path} is missing from the final working tree")
@@ -255,7 +255,7 @@ def profile_valid(ctx: GradeContext) -> GradeResult:
 @grader("agents_block_equals")
 def agents_block_equals(ctx: GradeContext) -> GradeResult:
     """The `agents` key of the profile in the final work tree equals expected["agents"] (the fixture's expectation)."""
-    path = ctx.params.get("path", ".claude/toolkit.yaml")
+    path = ctx.params.get("path", ".tld/toolkit.yaml")
     if "agents" not in ctx.expected:
         return GradeResult(False, "grader misconfigured: no expected agents block")
     wt = [d for d in ctx.docs(path) if d.ref == "worktree"]
@@ -313,7 +313,7 @@ def dod_passes(ctx: GradeContext) -> GradeResult:
     if ctx.workdir is None:
         return GradeResult(False, "no working directory to run the gate in")
     base = ctx.artifacts.base_sha
-    shown = subprocess.run(["git", "show", f"{base}:.claude/toolkit.yaml"], cwd=ctx.workdir, capture_output=True, text=True) if base else None
+    shown = subprocess.run(["git", "show", f"{base}:.tld/toolkit.yaml"], cwd=ctx.workdir, capture_output=True, text=True) if base else None
     if shown is None or shown.returncode != 0:
         return GradeResult(False, "no profile at the base commit to read verify.dod from")
     cmds = ((yaml.safe_load(shown.stdout) or {}).get("verify") or {}).get("dod") or []

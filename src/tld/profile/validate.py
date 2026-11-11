@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate .claude/toolkit.yaml against schema/profile.schema.json.
+"""Validate .tld/toolkit.yaml against schema/profile.schema.json.
 
     validate_profile.py [PROFILE] [--root DIR] [--resolved]
 
@@ -17,10 +17,10 @@ from pathlib import Path
 import yaml
 
 SCHEMA = Path(__file__).resolve().parent.parent / "schema" / "profile.schema.json"
-DEFAULT_PROFILE = ".claude/toolkit.yaml"
+DEFAULT_PROFILE = ".tld/toolkit.yaml"
 REVIEW_AGENTS = ("security-reviewer", "dependency-auditor", "test-architect", "tech-writer", "website-maintainer")
 DIFF_POINTS = ("implement_phase", "implement_final", "dod")
-HELP = "see docs/reference/profile-reference.md in the claude-toolkit repo"
+HELP = "see docs/reference/profile-reference.md in the tkcs-lab-devflow repo"
 
 _TYPES = {
     "object": dict,
@@ -215,7 +215,7 @@ def main(argv: list[str] | None = None) -> int:
     path = Path(args.profile)
     if not path.is_file():
         print(f"toolkit.yaml: no profile at '{path}'. Create one from the starter in "
-              f"templates/toolkit.yaml ({HELP}).", file=sys.stderr)
+              f"src/tld/templates/toolkit.yaml ({HELP}).", file=sys.stderr)
         return 1
     try:
         profile = yaml.safe_load(path.read_text())

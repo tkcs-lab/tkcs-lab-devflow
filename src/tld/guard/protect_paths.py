@@ -31,7 +31,7 @@ CONFIG_WRITE_OPTS = {"--add", "--replace-all", "--unset", "--unset-all", "--rena
 CONFIG_VALUE_OPTS = {"-f", "--file", "--blob", "-t", "--type", "--default", "--comment"}
 BRACE_CAP = 64
 WRITE_OPS = {">", ">>", ">|", "&>", "&>>", ">&", "<>"}
-PROFILE = ".claude/toolkit.yaml"
+PROFILE = ".tld/toolkit.yaml"
 PROFILE_MARKER = "protect-paths-profile.json"
 PROFILE_TTL_SECONDS = 7200   # /setup may edit the profile for two hours after --allow-profile
 
@@ -193,7 +193,7 @@ def expand_braces(word: str) -> list[str] | None:
 
 def message(rel: str, pattern: str) -> str:
     name = os.path.basename(rel)
-    if rel == ".claude/toolkit.yaml":
+    if rel == ".tld/toolkit.yaml":
         hint = "The project profile is changed by people or by /setup, not by a session; tell the user what should change."
     elif name.startswith(".env"):
         hint = "Environment files hold secrets and are never edited by a session; document a variable in .env.example instead."
@@ -205,7 +205,7 @@ def message(rel: str, pattern: str) -> str:
         hint = "Describe the change you need in your report instead."
     return (f"blocked: `{rel}` is a protected path (it matches `{pattern}` in hooks.protect_paths). {hint} "
             "If the task really requires it, ask the user to make the change or to list the path under "
-            "hooks.protect_paths_allow in .claude/toolkit.yaml.")
+            "hooks.protect_paths_allow in .tld/toolkit.yaml.")
 
 
 # --------------------------------------------------------------------------- Bash writes

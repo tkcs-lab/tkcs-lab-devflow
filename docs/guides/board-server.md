@@ -2,21 +2,21 @@
 
 ## What it is
 
-The devflow status board is a small Python server you host yourself. Sessions that run `/implement`, `/deps`, `/upstream`, `/land` and `/docs tidy` write short status records to it; you open the board in a browser to see which runs are going, which wait for you, and which are stale. It replaces the earlier board that lived on claude.ai.
+The tld status board is a small Python server you host yourself. Sessions that run `/implement`, `/deps`, `/upstream`, `/land` and `/docs tidy` write short status records to it; you open the board in a browser to see which runs are going, which wait for you, and which are stale. It replaces the earlier board that lived on claude.ai.
 
-* `board_server.py` stores the records in SQLite, serves the board page, offers a JSON API with optimistic `if_version` concurrency, and exposes the same operations as an MCP endpoint (`POST /mcp`).
-* `board_mcp_stdio.py` is a stdio bridge that the devflow plugin declares in its `.mcp.json`; it gives every session the tools `board_get`, `board_list`, `board_set` and `board_delete`.
-* `board_client.py` is a command-line client, the fallback write path for sessions where the plugin's MCP server is not loaded.
+* `tld board server` stores the records in SQLite, serves the board page, offers a JSON API with optimistic `if_version` concurrency, and exposes the same operations as an MCP endpoint (`POST /mcp`).
+* `tld board mcp-stdio` is a stdio bridge that the tld plugin declares in its `.mcp.json`; it gives every session the tools `board_get`, `board_list`, `board_set` and `board_delete`.
+* `tld board client` is a command-line client, the fallback write path for sessions where the plugin's MCP server is not loaded.
 
 The server uses only the Python standard library (3.11 or newer). It speaks plain HTTP; TLS is the job of a reverse proxy (see below).
 
 ## Run it locally
 
-From a checkout of the claude-toolkit repository:
+From a checkout of the tkcs-lab-devflow repository:
 
 ```bash
-export DEVFLOW_BOARD_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-python3 plugins/devflow/scripts/board_server.py --port 8787
+export TLD_BOARD_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+bin/tld board server --port 8787
 ```
 
 The server prints `board_server: listening on http://127.0.0.1:8787` and keeps running. In a second terminal, with the same variable set, write a sample record. First save this record as `record.json`:
@@ -92,7 +92,7 @@ Then send it (the body wraps the record in `data`; leave out `if_version` for th
 
 ```bash
 (printf '{"data": '; cat record.json; printf '}') | curl -sS -X PUT \
-  -H "Authorization: Bearer $DEVFLOW_BOARD_TOKEN" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TLD_BOARD_TOKEN" -H "Content-Type: application/json" \
   --data-binary @- http://127.0.0.1:8787/api/records/example-project
 ```
 
@@ -104,13 +104,13 @@ Environment variables:
 
 | Variable | Used by | Meaning |
 |---|---|---|
-| `DEVFLOW_BOARD_TOKEN` | server, client, bridge | The write token. Server: required, at least 24 characters. Client and bridge: sent as `Authorization: Bearer <token>`. |
-| `DEVFLOW_BOARD_READ_TOKEN` | server | Optional second token that may only read (for browsers). Must differ from the write token. |
-| `DEVFLOW_BOARD_URL` | client, bridge | Base URL of the server, for example `https://board.example.org`. Not a secret. |
-| `DEVFLOW_BOARD_DB` | server | Default for `--db`. |
-| `DEVFLOW_BOARD_ALLOW_HTTP` | client, bridge | `1` allows a plain `http://` URL for a non-loopback host. |
+| `TLD_BOARD_TOKEN` | server, client, bridge | The write token. Server: required, at least 24 characters. Client and bridge: sent as `Authorization: Bearer <token>`. |
+| `TLD_BOARD_READ_TOKEN` | server | Optional second token that may only read (for browsers). Must differ from the write token. |
+| `TLD_BOARD_URL` | client, bridge | Base URL of the server, for example `https://board.example.org`. Not a secret. |
+| `TLD_BOARD_DB` | server | Default for `--db`. |
+| `TLD_BOARD_ALLOW_HTTP` | client, bridge | `1` allows a plain `http://` URL for a non-loopback host. |
 
-If `DEVFLOW_BOARD_URL` or `DEVFLOW_BOARD_TOKEN` is unset, sessions skip every board step silently.
+If `TLD_BOARD_URL` or `TLD_BOARD_TOKEN` is unset, sessions skip every board step silently.
 
 Server flags (tokens come from the environment only):
 
@@ -118,8 +118,8 @@ Server flags (tokens come from the environment only):
 |---|---|---|
 | `--host` | `127.0.0.1` | Address to bind. |
 | `--port` | `8787` | Port to bind; `0` picks a free port. |
-| `--db` | `$DEVFLOW_BOARD_DB`, else `board.sqlite3` | SQLite file. |
-| `--title` | `Devflow Board` | Title of the page. |
+| `--db` | `$TLD_BOARD_DB`, else `board.sqlite3` | SQLite file. |
+| `--title` | `tld Board` | Title of the page. |
 | `--allow-origin` | none | An `Origin` that may call `POST /mcp`; repeatable. Clients that are not browsers send no `Origin`. |
 
 ## Docker
@@ -127,15 +127,15 @@ Server flags (tokens come from the environment only):
 Build from the repository root (the image holds only the server, its modules and the page):
 
 ```bash
-docker build -f plugins/devflow/board/Dockerfile -t devflow-board plugins/devflow
+docker build -f deploy/board/Dockerfile -t tld-board .
 ```
 
 Run it with a volume for the database:
 
 ```bash
-docker run -d --name devflow-board --restart unless-stopped \
-  -p 127.0.0.1:8787:8787 -v devflow-board-data:/data \
-  -e DEVFLOW_BOARD_TOKEN -e DEVFLOW_BOARD_READ_TOKEN devflow-board
+docker run -d --name tld-board --restart unless-stopped \
+  -p 127.0.0.1:8787:8787 -v tld-board-data:/data \
+  -e TLD_BOARD_TOKEN -e TLD_BOARD_READ_TOKEN tld-board
 ```
 
 `-e NAME` without a value passes the variable from your shell, so the token never appears in the command line. The container runs as an unprivileged user, keeps the database in `/data/board.sqlite3`, and has a health check on `/healthz`.
@@ -154,7 +154,7 @@ nginx needs the same: a `proxy_pass` to `http://127.0.0.1:8787`, TLS on the serv
 
 ## Connect Claude Code sessions
 
-1. Set `DEVFLOW_BOARD_URL` (the https address of the proxy) and `DEVFLOW_BOARD_TOKEN` in the cloud environment's settings. The token is a secret value: you type it into the settings form yourself, never into a chat.
+1. Set `TLD_BOARD_URL` (the https address of the proxy) and `TLD_BOARD_TOKEN` in the cloud environment's settings. The token is a secret value: you type it into the settings form yourself, never into a chat.
 2. Add the host of the board under the environment's allowed network domains; without it every board call fails with a network error and the run continues without a board.
 3. The write token must reach only the environments that write. Anyone who holds it can change every record.
 4. Run `/board` once in a session. It checks the connection and reports which write path the session has.
@@ -187,13 +187,13 @@ A write without `if_version` creates the record and conflicts when it exists; wi
 | `board_set` | `id` (string), `data` (object), `if_version` (integer >= 1, optional) | `{"id", "version"}`; errors `{"error": "version_conflict", "current": <record or null>}` and `{"error": "invalid", "errors": [...]}` |
 | `board_delete` | `ids` (array of 1 to 50 strings) | `{"deleted": [ids that existed], "missing": [ids that did not]}` |
 
-Errors come back as a tool result with `isError` true. The tools appear in a session under the `devflow-board` server; use whichever prefix the tool list shows.
+Errors come back as a tool result with `isError` true. The tools appear in a session under the `tld-board` server; use whichever prefix the tool list shows.
 
 ## Security notes
 
 * One write token and an optional read token; both need 24 or more characters. Generate them with `secrets.token_urlsafe(32)`.
 * There is no rate limiting. Put the server behind a proxy that limits requests.
-* The client and the bridge refuse a plain `http://` URL unless the host is loopback (or `DEVFLOW_BOARD_ALLOW_HTTP=1`).
+* The client and the bridge refuse a plain `http://` URL unless the host is loopback (or `TLD_BOARD_ALLOW_HTTP=1`).
 * The page is served with a Content-Security-Policy that allows only its own inline script and style and requests to its own origin, and with `X-Frame-Options: DENY`.
 * Records must not contain secrets; anyone with the read token can read all of them.
 * The SQLite file is not encrypted. Protect the volume.
@@ -211,14 +211,14 @@ To restore, stop the server, put the copy at the path given by `--db` (inside th
 ## Troubleshooting
 
 * **401 in the browser, again and again**: the password is wrong; type the token, not the user name.
-* **`/board` says no board is configured**: `DEVFLOW_BOARD_URL` or `DEVFLOW_BOARD_TOKEN` is unset in that environment.
+* **`/board` says no board is configured**: `TLD_BOARD_URL` or `TLD_BOARD_TOKEN` is unset in that environment.
 * **Network error from a cloud session**: the host is missing from the environment's allowed network domains.
-* **`DEVFLOW_BOARD_URL must be https`**: the URL is plain `http://` for a remote host; use TLS.
+* **`TLD_BOARD_URL must be https`**: the URL is plain `http://` for a remote host; use TLS.
 * **409 `version_conflict`**: another session wrote first; read the record again, merge your fields, retry once.
 * **422 `invalid`**: the record does not match the status-record format; the `errors` list names the fields.
-* **The board shows "Cannot reach the board server"**: the page keeps what it has and retries every 15 seconds; check the proxy and the container (`docker logs devflow-board`).
+* **The board shows "Cannot reach the board server"**: the page keeps what it has and retries every 15 seconds; check the proxy and the container (`docker logs tld-board`).
 * **The server will not start**: it prints which token is missing, too short, or equal to the other.
 
 ## Replacing the artifact board
 
-There is no migration: records are short-lived and rewritten by the next run, and copying the old ones would need claude.ai. The old board page can be deleted from claude.ai. The profile key `status.board_url` is no longer read, and a profile that still has it fails validation with `unknown key 'status'`; remove the `status:` block from `.claude/toolkit.yaml`.
+There is no migration: records are short-lived and rewritten by the next run, and copying the old ones would need claude.ai. The old board page can be deleted from claude.ai. The profile key `status.board_url` is no longer read, and a profile that still has it fails validation with `unknown key 'status'`; remove the `status:` block from `.tld/toolkit.yaml`.

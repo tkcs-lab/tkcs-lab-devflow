@@ -5,9 +5,9 @@ description: Audit and update a GitHub organisation and its repositories against
 
 # Administering the organisation and its repositories
 
-`scripts/repo_admin.py` compares the organisation with a **policy file** (what it should look like)
+`tld ops repo-admin` compares the organisation with a **policy file** (what it should look like)
 and either reports the differences (`audit`) or removes them (`apply`). This skill is how a session
-drives it with the user. The reference for the policy is `docs/guides/admin.md` in the claude-toolkit repo and
+drives it with the user. The reference for the policy is `docs/guides/admin.md` in the tkcs-lab-devflow repo and
 `schema/admin-policy.schema.json`; a starter is `templates/admin-policy.yaml`.
 
 ## Before anything
@@ -16,9 +16,9 @@ drives it with the user. The reference for the policy is `docs/guides/admin.md` 
    error, show the message verbatim and stop; never substitute a value of your own for a missing key.
    This skill needs `admin.policy`. A missing one stops with `toolkit.yaml: missing required key
    'admin.policy'` and a pointer to the starter; do not write a policy on your own initiative.
-   The script is `<devflow root>/scripts/repo_admin.py` (run it with `python3`).
-2. Validate the policy: `repo_admin.py validate-policy <admin.policy>`. Show every message and stop on failure.
-3. Check the token: `repo_admin.py whoami --org <org from the policy>`. It must print `"can_administer": true`.
+   The script is `"${CLAUDE_PLUGIN_ROOT}/bin/tld" ops repo-admin` (run it with `python3`).
+2. Validate the policy: `tld ops repo-admin validate-policy <admin.policy>`. Show every message and stop on failure.
+3. Check the token: `tld ops repo-admin whoami --org <org from the policy>`. It must print `"can_administer": true`.
    If not, say what is missing and stop before `apply`: most checks need an organisation owner, and a
    Claude Code on the web session's own GitHub access is limited to the repositories attached to it and
    cannot read organisation settings, tokens or secrets. The user runs the script where a suitable token
@@ -28,7 +28,7 @@ drives it with the user. The reference for the policy is `docs/guides/admin.md` 
 
 ## The flow
 
-1. **Audit.** `repo_admin.py audit --policy <file> --format json --out <path outside the repository>`
+1. **Audit.** `tld ops repo-admin audit --policy <file> --format json --out <path outside the repository>`
    (add `--repo owner/name` for one repository, `--check <name>` for one check). Exit 3 means differences, not failure.
 2. **Report in words**, not as a pasted table: how many findings of each severity, what the `fix` ones
    would change, which ones delete something, the `warn` ones with their `manual` instruction, and every
@@ -38,7 +38,7 @@ drives it with the user. The reference for the policy is `docs/guides/admin.md` 
    or nothing. List every deleting finding (a label, secret, variable, webhook, deploy key, branch, token revoked) on its
    own and get a separate yes for those. Pull requests that remove or add files are not deleting: they are
    reviewed before anything changes.
-4. **Dry run.** `repo_admin.py apply --policy <file> --only <id> --only <id> …`. Show the calls it prints.
+4. **Dry run.** `tld ops repo-admin apply --policy <file> --only <id> --only <id> …`. Show the calls it prints.
 5. **Apply.** The same command with `--yes`, and `--allow-delete` only when the user said yes to deleting those
    findings. An id that is no longer found means the situation changed: audit again, do not guess.
 6. **Check.** Run the audit again and report what is left, the `warn` items with their instructions
@@ -64,7 +64,7 @@ Run unattended (no user to ask), do only the audit and stop with the report; nev
 
 A release is the maintainer's decision, so this skill installs the workflow and never runs it. The policy entry
 `workflows: [{template: release}]` makes `apply` open a pull request per repository that adds or updates
-`.github/workflows/devflow-release.yml`. To cut a release the user opens Actions, `devflow-release`, Run workflow
+`.github/workflows/tld-release.yml`. To cut a release the user opens Actions, `tld-release`, Run workflow
 on the main branch. The default is a dry run that shows the tag and the notes; unticking `dry_run` makes the tag
 (`<tag_prefix><version>`, an annotated tag on the head of the main branch) and the GitHub release. Never dispatch it
 from a session and never push a tag (see `pr-steward`). The workflow's branch check is not a control; tell the user that a tag ruleset is what restricts who can release.

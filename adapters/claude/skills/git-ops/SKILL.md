@@ -1,13 +1,13 @@
 ---
 name: git-ops
-description: Dispatches the central devflow-git-ops workflow to create a tag or delete a remote branch, because a cloud session cannot push tags or delete remote branches. Use only when the user asks for a named tag or named branches to be created or deleted.
+description: Dispatches the central tld-git-ops workflow to create a tag or delete a remote branch, because a cloud session cannot push tags or delete remote branches. Use only when the user asks for a named tag or named branches to be created or deleted.
 ---
 
 # Tags and branch deletion through the central workflow
 
 A cloud session's git proxy refuses `refs/tags/*` pushes and remote branch deletion. This skill gets both done
-by starting one workflow, `devflow-git-ops`, in a central private repository whose environment holds the only
-token. The reference is `docs/guides/git-ops.md` in the claude-toolkit repo.
+by starting one workflow, `tld-git-ops`, in a central private repository whose environment holds the only
+token. The reference is `docs/guides/git-ops.md` in the tkcs-lab-devflow repo.
 
 ## Before anything
 
@@ -31,7 +31,7 @@ token. The reference is `docs/guides/git-ops.md` in the claude-toolkit repo.
 ## The call
 
 `mcp__github__actions_run_trigger` with `method: "run_workflow"`, `owner` and `repo` from `git_ops.repo`,
-`workflow_id` from `git_ops.workflow` (default `devflow-git-ops.yml`), `ref` the central repository's default
+`workflow_id` from `git_ops.workflow` (default `tld-git-ops.yml`), `ref` the central repository's default
 branch (normally `main`), and `inputs` an object of strings: `repo` (owner/name of the target), `action`
 (`create-tag` or `delete-branch`), `name`, optional `ref` (create-tag only: a commit on the default branch)
 and `message` (create-tag only), and `dry_run` as the string `"true"` or `"false"`.

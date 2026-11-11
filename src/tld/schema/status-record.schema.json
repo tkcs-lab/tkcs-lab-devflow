@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Devflow status record",
-  "description": "One database document per project (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an /implement orchestration; a maintenance record (kind 'maintenance') belongs to a scheduled command and is keyed '<project>--<command>'. Schema version 1 gained the optional phase field 'scope' without a bump: records without it stay valid. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, maintenance constraints) are checked by plugins/devflow/scripts/validate_status_record.py. No secrets, file contents or commit messages belong in a record.",
+  "title": "tld status record",
+  "description": "One database document per project (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an /implement orchestration; a maintenance record (kind 'maintenance') belongs to a scheduled command and is keyed '<project>--<command>'. Schema version 1 gained the optional phase field 'scope' without a bump: records without it stay valid. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, maintenance constraints) are checked by src/tld/board/record.py. No secrets, file contents or commit messages belong in a record.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -94,10 +94,10 @@
       "schema": 1,
       "kind": "run",
       "command": null,
-      "project": "claude-toolkit",
-      "repo": "andras-tkcs/claude-toolkit",
+      "project": "tkcs-lab-devflow",
+      "repo": "tkcs-lab/tkcs-lab-devflow",
       "plan_slug": "example-plan",
-      "plan_url": "https://github.com/andras-tkcs/claude-toolkit/blob/plan/example-plan/docs/plans/example-plan-plan.md",
+      "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/plan/example-plan/docs/plans/example-plan-plan.md",
       "feature_branch": "feature/example-plan",
       "orchestrator_session": "session_01...",
       "status": "running",

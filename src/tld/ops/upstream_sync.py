@@ -88,7 +88,7 @@ def cmd_prepare(args):
         raise SyncError(f"branch {args.branch} already exists")
     git("checkout", "-b", args.branch, args.base, cwd=root)
 
-    new_ref, old_ref = "refs/devflow/new", "refs/devflow/old"
+    new_ref, old_ref = "refs/tld/new", "refs/tld/old"
     git("fetch", "--no-tags", args.upstream_url, f"+refs/tags/{args.tag}:{new_ref}", cwd=root)
     new_commit = git("rev-parse", f"{new_ref}^{{commit}}", cwd=root).stdout.strip()
     old_commit = old["commit"]

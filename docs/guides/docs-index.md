@@ -2,7 +2,7 @@
 
 A thin `CLAUDE.md` (at most 60 lines) points to one docs index (`docs/README.md`, at most 150 lines), and the
 index routes to leaf docs that a session opens only when a row matches its task.
-`/docs [check | init | tidy]` and `docs_index.py` keep that structure true.
+`/docs [check | init | tidy]` and `tld ops docs-index` keep that structure true.
 
 ## Why
 
@@ -43,7 +43,7 @@ For decisions read the ADR index and only the ADRs whose one-line decision touch
 
 ## /docs
 
-- `check` (default): runs `docs_index.py check` with `--stale-days 180`, reports every error and warning in
+- `check` (default): runs `tld ops docs-index check` with `--stale-days 180`, reports every error and warning in
   a table and changes nothing.
 - `init`: attended; moves docs into `architecture/`, `guides/` and `reference/`, thins `CLAUDE.md`, writes
   the index, edits the profile's `docs` block and opens one pull request (never merged).
@@ -52,13 +52,13 @@ For decisions read the ADR index and only the ADRs whose one-line decision touch
 
 ## The profile key
 
-`docs.index` in `.claude/toolkit.yaml` names the index file. Without it there is no docs index and the
+`docs.index` in `.tld/toolkit.yaml` names the index file. Without it there is no docs index and the
 commands read `docs.must_read` as before. With it, keep `docs.must_read` to what every task needs.
 Reference: [profile-reference.md](../reference/profile-reference.md).
 
 ## Moving a doc
 
-`python3 plugins/devflow/scripts/docs_index.py move SRC DST` is a dry run: it lists every reference it
+`bin/tld ops docs-index move SRC DST` is a dry run: it lists every reference it
 would rewrite and every mention it cannot resolve. Add `--apply` to do the git move and the rewrites.
 It rewrites markdown links, root path mentions and quoted path expressions in `.py` files, and skips
 fixtures, the profile and plan files. Fix each `unresolved:` line by hand.

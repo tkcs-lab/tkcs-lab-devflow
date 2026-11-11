@@ -27,11 +27,11 @@ deleted.
 ## Profile
 
 This command is project-independent; everything specific to the repository comes from its
-profile, `.claude/toolkit.yaml`. Before anything else, load the `project-profile` skill and follow
+profile, `.tld/toolkit.yaml`. Before anything else, load the `project-profile` skill and follow
 its "Loading the profile" section. If it reports an error, show the message verbatim and stop; never
 substitute a value of your own for a missing key.
-Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profile`,
-`devflow:pr-steward`, `stack-python:stack-python`). Use whichever form the skill list shows. In this file:
+Skill names: the toolkit's skills carry a plugin prefix (`tld:project-profile`,
+`tld:pr-steward`, `tld:stack-python`). Use whichever form the skill list shows. In this file:
 
 - `<main>` is `git.main_branch`, `<plan_dir>` is `docs.plan_dir`.
 - "the must-read docs" are the files in `docs.must_read`.
@@ -45,7 +45,7 @@ Also load the `secure-code-review`, `test-review` and `docs-review` skills now: 
 checklists for the three dimensions, and every subagent you start gets told to load the one for
 its dimension.
 
-**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/architecture/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command writes a review document, not code. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
+**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/architecture/hooks.md` in the tkcs-lab-devflow repo) is meant for sessions that change code and stop when they are done. This command writes a review document, not code. Mark this session exempt once, right after the profile is loaded: `"${CLAUDE_PLUGIN_ROOT}/bin/tld" dod exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
 
 ## 0. The ask and the scope
 
@@ -131,14 +131,14 @@ its skill and follow it fully.
 | Security | `SEC` | `secure-code-review` (its "Whole-repository review" section for a repo or path scope) | the scope has more than one component with its own trust boundary: one subagent per component, plus one for CI and the supply chain |
 | Tests | `TST` | `test-review` | more than about 20k lines of source: one per component |
 | Documentation | `DOC` | `docs-review` | there is a website: a separate subagent for it, prefix `WEB` |
-| Required agents | AGT | the agent's own file (see the `agent-dispatch` skill) | one per agent in `agents.py required --at review`; run alongside the other subagents |
+| Required agents | AGT | the agent's own file (see the `agent-dispatch` skill) | one per agent in `tld roles required --at review`; run alongside the other subagents |
 
-Required agents at `review`: run `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at review`
+Required agents at `review`: run `"${CLAUDE_PLUGIN_ROOT}/bin/tld" roles required --profile .tld/toolkit.yaml --at review`
 and dispatch each agent in `required` in review mode with the same scope (a whole-repository review has no diff, so no
 `--changed` is passed). The /review session itself converts each agent finding into the block format below with the id
 `AGT-<n>`, severity `blocking` to `high` and `non-blocking` to `medium`, and the dimension by agent: `security-reviewer`
 and `dependency-auditor` to `security`, `test-architect` to `tests`, `tech-writer` to `docs`, `website-maintainer` to
-`website` (the profile validation allows no other agent at `review`). Run `agents.py verify` on their reports before
+`website` (the profile validation allows no other agent at `review`). Run `tld roles verify` on their reports before
 section 4 and treat a `MISSING` line as an open item in the document.
 
 Each subagent returns its candidate findings, one block per finding, exactly:
@@ -270,11 +270,11 @@ decision back has not done its job.
    ```
 
    (`dimension` is `security`, `tests`, `docs` or `website`; `recommendation` is `plan`, `issue` or
-   `drop`.) Build the page with the toolkit's generator (the `project-profile` skill says where
-   `<devflow root>` is):
+   `drop`.) Build the page with the toolkit's generator (the `project-profile` skill's "Find the toolkit"
+   step):
 
    ```bash
-   python3 "<devflow root>/scripts/review_decisions.py" <items.json> <plan_dir>/<slug>-review-decisions.html
+   "${CLAUDE_PLUGIN_ROOT}/bin/tld" review decisions <items.json> <plan_dir>/<slug>-review-decisions.html
    ```
 
    It validates the items and prints one error per line on failure; fix the JSON, never the HTML.

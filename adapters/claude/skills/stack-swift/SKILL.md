@@ -1,6 +1,6 @@
 ---
 name: stack-swift
-description: Swift conventions for devflow plans and phases — what the Linux cloud container can build (SwiftPM) and what it cannot (xcodebuild, simulators, signing), so iOS/macOS builds and tests are dispatched to a macOS GitHub Actions runner. Loaded when the profile lists the swift stack.
+description: Swift conventions for tld plans and phases — what the Linux cloud container can build (SwiftPM) and what it cannot (xcodebuild, simulators, signing), so iOS/macOS builds and tests are dispatched to a macOS GitHub Actions runner. Loaded when the profile lists the swift stack.
 user-invocable: false
 ---
 

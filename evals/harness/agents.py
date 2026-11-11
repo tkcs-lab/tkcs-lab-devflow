@@ -41,7 +41,7 @@ class AgentError(RuntimeError):
 
 _PROXY_VARS = {"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS",
                "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"}
-_GIT_IDENTITY = {"GIT_AUTHOR_NAME": "devflow-evals", "GIT_COMMITTER_NAME": "devflow-evals",
+_GIT_IDENTITY = {"GIT_AUTHOR_NAME": "tld-evals", "GIT_COMMITTER_NAME": "tld-evals",
                  "GIT_AUTHOR_EMAIL": "evals@example.invalid", "GIT_COMMITTER_EMAIL": "evals@example.invalid"}
 
 
@@ -99,7 +99,7 @@ def parse_stream(lines: list[str]) -> AgentResult:
         if t == "system" and ev.get("subtype") == "init":
             res.model = ev.get("model", res.model)
             names = [p.get("name") for p in ev.get("plugins", [])]
-            if ev.get("plugin_errors") or "devflow" not in names:
+            if ev.get("plugin_errors") or "tld" not in names:
                 res.error = f"plugin did not load: errors={ev.get('plugin_errors')} loaded={names}"
         if t == "assistant" and isinstance(ev.get("message"), dict):
             blocks = ev["message"].get("content")

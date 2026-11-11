@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Self-hosted status board: SQLite store, JSON API and the board page over HTTP.
 
-    DEVFLOW_BOARD_TOKEN=<24+ chars> board_server.py [--host H] [--port N] [--db FILE] [--title T] [--allow-origin URL]
+    TLD_BOARD_TOKEN=<24+ chars> board_server.py [--host H] [--port N] [--db FILE] [--title T] [--allow-origin URL]
 
-Tokens come from the environment only: DEVFLOW_BOARD_TOKEN (write) and the optional
-DEVFLOW_BOARD_READ_TOKEN (read only). The server speaks plain HTTP; put a TLS proxy in front.
+Tokens come from the environment only: TLD_BOARD_TOKEN (write) and the optional
+TLD_BOARD_READ_TOKEN (read only). The server speaks plain HTTP; put a TLS proxy in front.
 Python 3.11+, stdlib only.
 """
 from __future__ import annotations
@@ -65,7 +65,7 @@ class Tokens:
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    server_version = "devflow-board"
+    server_version = "tld-board"
     sys_version = ""
 
     # -- output ---------------------------------------------------------------------------------
@@ -103,7 +103,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _unauthorized(self) -> None:
         self._error(401, "unauthorized",
-                    {"WWW-Authenticate": 'Basic realm="devflow board", charset="UTF-8"'})
+                    {"WWW-Authenticate": 'Basic realm="tld board", charset="UTF-8"'})
 
     def _not_allowed(self, allow: str) -> None:
         self._error(405, "method_not_allowed", {"Allow": allow})
@@ -257,20 +257,20 @@ def make_server(store: Store, tokens: Tokens, title: str, host: str, port: int,
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Serve the devflow status board.")
+    parser = argparse.ArgumentParser(description="Serve the tld status board.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8787, help="0 picks a free port")
-    parser.add_argument("--db", default=os.environ.get("DEVFLOW_BOARD_DB") or "board.sqlite3")
-    parser.add_argument("--title", default="Devflow Board")
+    parser.add_argument("--db", default=os.environ.get("TLD_BOARD_DB") or "board.sqlite3")
+    parser.add_argument("--title", default="tld Board")
     parser.add_argument("--allow-origin", action="append", default=[], dest="allow_origin")
     args = parser.parse_args(argv)
-    write = os.environ.get("DEVFLOW_BOARD_TOKEN", "")
-    read = os.environ.get("DEVFLOW_BOARD_READ_TOKEN") or None
+    write = os.environ.get("TLD_BOARD_TOKEN", "")
+    read = os.environ.get("TLD_BOARD_READ_TOKEN") or None
     if len(write) < MIN_TOKEN:
-        print("board_server: DEVFLOW_BOARD_TOKEN must be set to at least 24 characters", file=sys.stderr)
+        print("board_server: TLD_BOARD_TOKEN must be set to at least 24 characters", file=sys.stderr)
         return 2
     if read is not None and (len(read) < MIN_TOKEN or read == write):
-        print("board_server: DEVFLOW_BOARD_READ_TOKEN must differ from DEVFLOW_BOARD_TOKEN "
+        print("board_server: TLD_BOARD_READ_TOKEN must differ from TLD_BOARD_TOKEN "
               "and have at least 24 characters", file=sys.stderr)
         return 2
     server = make_server(Store(args.db), Tokens(write, read), args.title, args.host, args.port,

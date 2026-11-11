@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Validate a devflow status record (the document the board shows).
+"""Validate a tld status record (the document the board shows).
 
     validate_status_record.py FILE|- [--doc-id ID]
 
 Exit 0 and `status-record: OK`, or exit 1 and one line per error, each starting `status-record: `
 and naming the field in single quotes. The rules are plain Python (no schema interpreter); the schema
-file plugins/devflow/schema/status-record.schema.json documents the shape. Python 3.11+, stdlib only.
+file src/tld/schema/status-record.schema.json documents the shape. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
 
@@ -296,7 +296,7 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Validate a devflow status record.")
+    parser = argparse.ArgumentParser(description="Validate a tld status record.")
     parser.add_argument("file", help="path of the JSON record, or - for stdin")
     parser.add_argument("--doc-id", help="the document id the record is stored under")
     args = parser.parse_args(argv)

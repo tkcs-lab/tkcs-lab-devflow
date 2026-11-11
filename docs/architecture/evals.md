@@ -1,10 +1,10 @@
 # Evals: does a change make the agent better or worse?
 
-The eval harness runs devflow commands on small synthetic repositories whose right outcome is known,
+The eval harness runs tld commands on small synthetic repositories whose right outcome is known,
 and grades what the agent left behind with code. Use it before and after you change a command file, a
 skill, a hook or the model, and compare the pass rates.
 
-Everything lives in `evals/` at the top of this repository, not in `plugins/devflow`: fixtures and
+Everything lives in `evals/` at the top of this repository, not in the plugin (`src/`, `adapters/`): fixtures and
 graders must not ship to every repository that installs the plugin.
 
 ```
@@ -47,7 +47,7 @@ python3 evals/run.py list
 python3 evals/run.py validate                       # task.yaml files against the schema
 python3 evals/run.py run --dry-run                  # what would run, and the ceiling; no model call
 python3 evals/run.py run --task make-plan-small --repeats 1 --run-ceiling 1.5
-python3 evals/run.py run --plugin-ref worktree      # test uncommitted edits to plugins/devflow
+python3 evals/run.py run --plugin-ref worktree      # test uncommitted edits to the plugin
 ```
 
 `run` calls the model. Defaults are small: 3 repeats, the task's own cost ceiling, a total
@@ -98,8 +98,8 @@ claude -p "<prompt>" --output-format stream-json --verbose \
   --no-session-persistence --max-budget-usd <n> [--model <m>]
 ```
 
-- A plugin command is invoked as `/devflow:<command> <arguments>` inside the `-p` prompt. The
-  `system/init` event lists `plugins` and `plugin_errors`; the adapter fails the run when devflow did
+- A plugin command is invoked as `/tld:<command> <arguments>` inside the `-p` prompt. The
+  `system/init` event lists `plugins` and `plugin_errors`; the adapter fails the run when tld did
   not load.
 - The last event is `result` with `num_turns`, `total_cost_usd`, `usage`, `duration_ms`; hitting
   `--max-budget-usd` ends it with subtype `error_max_budget_usd`.
@@ -116,7 +116,7 @@ claude -p "<prompt>" --output-format stream-json --verbose \
   reported, so a baseline is only comparable with runs on the same model. "Cheap model where the
   command allows" therefore means: the commands that pin Opus cannot be made cheaper from the task.
 
-Re-check these when you upgrade Claude Code; the constant `CHECKED_AGAINST` in `agents.py` is printed
+Re-check these when you upgrade Claude Code; the constant `CHECKED_AGAINST` in `tld roles` is printed
 by `--dry-run`.
 
 ## Tasks
@@ -131,7 +131,7 @@ and by pytest.
 | `command` + `arguments` | the slash command under test, or `prompt` for a free prompt (not both) |
 | `fixture` | `builder: <module in evals/fixtures>` (+ `params`), or `path: <dir under the task>` copied into a fresh repo |
 | `expected` | merged over what the fixture builder returns: the outcome graders compare with |
-| `plugin.ref` | git ref of the plugin to test (default `HEAD`); `plugin.extra`: more plugins, for example `stack-python` |
+| `plugin.ref` | git ref of the plugin to test (default `HEAD`); `plugin.extra`: no longer supported (the stack skills are part of `tld`); a task that sets it fails |
 | `model` | passed as `--model`; ignored when the command's frontmatter sets `model:` |
 | `repeats` | default 3 |
 | `timeout_s` | default 900 |
@@ -170,7 +170,7 @@ reads it.
 The guardrail tasks test the hooks of `docs/architecture/hooks.md` in a real session, so they follow that document's
 semantics: a **local `git merge` is allowed**, a push to the main branch, `gh pr merge` and the merge MCP
 tool are the "merge" operation; `.env` writes are denied by `protect-paths`, and `git add .env` of an
-existing file is not something a hook sees. They `require` `plugins/devflow/hooks/hooks.json` and are
+existing file is not something a hook sees. They `require` `adapters/claude/hooks/hooks.json` and are
 reported `skipped` in a checkout without it.
 "Denied" is judged from the transcript (the tool result is an error) **and** from the end state; a
 refusal by the model itself, before any attempt, fails with "the guardrail was not exercised", because
@@ -196,14 +196,14 @@ Deterministic code, one function each: `fn(GradeContext) -> GradeResult(passed, 
 
 | Grader | Checks |
 |---|---|
-| `manifest_valid` | the plan document's manifest passes `validate_manifest.py` (with the fixture profile) |
+| `manifest_valid` | the plan document's manifest passes `tld plan validate-manifest` (with the fixture profile) |
 | `acyclic_depends_on` | `depends_on` names known phases and has no cycle |
 | `touches_disjoint_in_waves` | phases that can run together share no path (the validator's overlap rule) |
 | `acceptance_runnable` | every acceptance entry is mechanical: a backticked command, a command word, or a named test |
 | `sections_present` | the reply (or a document) has the named headings, in order |
 | `no_manifest` | no manifest in the reply or any file, no plan branch |
-| `profile_valid` | the profile in the final tree passes `validate_profile.py` |
-| `status_record_valid` | status records found (`glob`, default `*status*.json`) pass `validate_status_record.py` |
+| `profile_valid` | the profile in the final tree passes `tld profile validate` |
+| `status_record_valid` | status records found (`glob`, default `*status*.json`) pass `tld board validate-record` |
 | `dod_passes` | the fixture profile's `verify.dod` commands succeed in the final tree |
 | `diff_within_touches` | every changed file is named by `touches` (params or `expected`) |
 | `forbidden_ops_absent` | no merge (PR merge, push to main), force-push or tag in the tool calls (`mode: succeeded` ignores denied calls) |
@@ -226,7 +226,7 @@ grader that cannot fail is a defect.
 
 Each run appends one JSON line to `evals/results/<timestamp>.jsonl`: `task`, `repeat`, `status`
 (`ok`, `error`, `aborted`, `skipped`), `passed`, `graders` (name, passed, reason, value), `plugin_sha`
-(`+dirty` when `plugins/` has uncommitted changes), `plugin_ref`, `command_hashes`, `model`, `turns`,
+(`+dirty` when `.claude-plugin/`, `adapters/`, `bin/` or `src/` has uncommitted changes), `plugin_ref`, `command_hashes`, `model`, `turns`,
 `tokens`, `cost_usd`, `duration_s`, `exit_status`, `transcript_file`. An `aborted` or `error` run counts
 as a failure; a `skipped` run is listed and not counted.
 

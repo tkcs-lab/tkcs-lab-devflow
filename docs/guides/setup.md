@@ -1,12 +1,12 @@
 # `/setup`
 
-`/setup` surveys a repository and creates or updates `.claude/toolkit.yaml`, including the `agents` block
+`/setup` surveys a repository and creates or updates `.tld/toolkit.yaml`, including the `agents` block
 ([agents.md](../architecture/agents.md)). It delivers the result as one pull request that it never merges. Reference for the file:
 [profile-reference.md](../reference/profile-reference.md).
 
 ## Modes
 
-- **create**: there is no `.claude/toolkit.yaml`. The command copies the starter profile and fills in the blocks that
+- **create**: there is no `.tld/toolkit.yaml`. The command copies the starter profile and fills in the blocks that
   have a value. It loads no profile and never invents a key.
 - **update**: the file exists. It is validated first (an invalid file stops the command). New and changed values are
   patched in at text level, so every other byte, comments included, stays as it was.
@@ -16,16 +16,16 @@
 
 ## The flow
 
-1. **Survey.** `scripts/profile_survey.py` prints JSON: stacks, CI workflows, verify evidence, git facts, docs and the
+1. **Survey.** `tld profile survey` prints JSON: stacks, CI workflows, verify evidence, git facts, docs and the
    signals below, plus a proposal.
 2. **Decide.** The `profile-setup` skill turns the evidence into a table `key | proposed value | evidence`.
    `verify.fast` is the command that runs the unit tests; `verify.dod` is the de-duplicated commands the CI workflows
    run on `pull_request` or `push`, without deploy or publish steps.
 3. **Ask.** One question call, at most four questions.
-4. **Write.** Create: copy the starter and edit it. Update: `profile_patch.py diff` shows new, changed and stale keys,
-   then `profile_patch.py set-block` replaces the `agents` and `docs.website` blocks.
+4. **Write.** Create: copy the starter and edit it. Update: `tld profile patch diff` shows new, changed and stale keys,
+   then `tld profile patch set-block` replaces the `agents` and `docs.website` blocks.
 5. **Check.** The profile is validated with file checks and each `verify.fast` command runs once.
-6. **Deliver.** Branch `chore/toolkit-profile` from the main branch, one commit with only `.claude/toolkit.yaml`, one
+6. **Deliver.** Branch `chore/toolkit-profile` from the main branch, one commit with only `.tld/toolkit.yaml`, one
    pull request. It follows `pr-steward` afterwards and never merges. Without GitHub access it stops after the commit and
    says what remains.
 
@@ -43,7 +43,7 @@
 | Git | the main branch (never the session branch), branch prefixes with at least three branches | `git.*` |
 
 Heuristics are proposals. That is why the posture is always asked about and the pull request lists the evidence.
-The modules are `survey_signals.py`, `survey_docs.py` and `survey_proposal.py`, driven by `profile_survey.py`.
+The modules are `tld profile survey-signals`, `tld profile survey-docs` and `tld profile survey-proposal`, driven by `tld profile survey`.
 
 ## What is asked
 
@@ -57,15 +57,15 @@ under `Not verified`.
 
 ## The pull request
 
-Title `chore: add .claude/toolkit.yaml` (create) or `chore: update .claude/toolkit.yaml`. Sections: `What this changes`,
+Title `chore: add .tld/toolkit.yaml` (create) or `chore: update .tld/toolkit.yaml`. Sections: `What this changes`,
 `Inferred values` (the table with evidence), `Decisions for a human` (the security posture and every `blocking: true`
 entry) and `Not verified`.
 
-## `profile_patch.py`
+## `tld profile patch`
 
 ```
-python3 plugins/devflow/scripts/profile_patch.py diff .claude/toolkit.yaml survey.json
-python3 plugins/devflow/scripts/profile_patch.py set-block .claude/toolkit.yaml agents survey.json --write
+bin/tld profile patch diff .tld/toolkit.yaml survey.json
+bin/tld profile patch set-block .tld/toolkit.yaml agents survey.json --write
 ```
 
 `diff` prints JSON with `new`, `changed`, `same` and `stale` keys; stale means a path the profile names no longer exists,
@@ -75,13 +75,13 @@ or an `agents.required[].when` glob matches no file. `set-block` replaces the `a
 
 ## The guardrail exemption
 
-The `protect-paths` hook normally denies every edit of `.claude/toolkit.yaml`. `/setup` runs `protect_paths.py
+The `protect-paths` hook normally denies every edit of `.tld/toolkit.yaml`. `/setup` runs `protect_paths.py
 --allow-profile` before its first write and `--end-allow` after the last, also on failure. Details and limits:
 [hooks.md](../architecture/hooks.md#protect-paths).
 
 ## What is never written
 
 `hooks`, `deps`, `upstream`, `admin`, `git_ops` and `land` are never written. `/setup` guesses no value without
-evidence, writes no `blocking: true` without your confirmation, edits no file except `.claude/toolkit.yaml`, never
+evidence, writes no `blocking: true` without your confirmation, edits no file except `.tld/toolkit.yaml`, never
 merges and never enables auto-merge. It records its progress on the status board as the maintenance command `setup`
 ([maintenance.md](maintenance.md)).

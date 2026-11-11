@@ -12,12 +12,12 @@ that updates the next pull request after each merge is installed.
 ## Profile
 
 Load the `project-profile` skill and follow its "Loading the profile" section. If it reports an error, show the message verbatim and stop; never substitute a value of your own for a missing key.
-Skill names carry a plugin prefix (`devflow:project-profile`, `devflow:status-board`, `devflow:pr-steward`); use whichever form the skill list shows.
+Skill names carry a plugin prefix (`tld:project-profile`, `tld:status-board`, `tld:pr-steward`); use whichever form the skill list shows.
 This command needs the profile key `git.bot_login`; if it is missing, stop with `toolkit.yaml: missing required key 'git.bot_login'`.
 `land.max_prs` is optional. In this file `<main>` is `git.main_branch`, "the gate" is `verify.dod`.
-The scripts and templates named below sit in `<devflow root>` (the project-profile skill's "Find the toolkit scripts" step).
+The toolkit commands and templates named below are found as the project-profile skill's "Find the toolkit" step says.
 
-**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/architecture/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command merges pull request branches on an integration branch and does not change code itself. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
+**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/architecture/hooks.md` in the tkcs-lab-devflow repo) is meant for sessions that change code and stop when they are done. This command merges pull request branches on an integration branch and does not change code itself. Mark this session exempt once, right after the profile is loaded: `"${CLAUDE_PLUGIN_ROOT}/bin/tld" dod exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
 
 ## Rules
 
@@ -37,7 +37,7 @@ The scripts and templates named below sit in `<devflow root>` (the project-profi
 2. Build the JSON list of `{"number", "head", "base"}` (`head` and `base` are branch names) and run:
 
    ```bash
-   python3 <devflow root>/scripts/land_order.py - [--max <land.max_prs>] < list.json
+   "${CLAUDE_PLUGIN_ROOT}/bin/tld" ops land-order - [--max <land.max_prs>] < list.json
    ```
 
    Pass `--max` only when `land.max_prs` is set. The output is the order, one number per line. Exit 1
@@ -67,13 +67,13 @@ The scripts and templates named below sit in `<devflow root>` (the project-profi
 
 ## 4. Install the workflow
 
-1. Read `<devflow root>/templates/devflow-land.yml` and replace `__MAIN_BRANCH__` with `git.main_branch`.
-2. If `.github/workflows/devflow-land.yml` on `origin/<main>` differs from that text (or is missing),
-   commit it on `chore/devflow-land-workflow` and open a pull request that adds it. Set `needs_you` with
+1. Read `${CLAUDE_PLUGIN_ROOT}/src/tld/templates/tld-land.yml` and replace `__MAIN_BRANCH__` with `git.main_branch`.
+2. If `.github/workflows/tld-land.yml` on `origin/<main>` differs from that text (or is missing),
+   commit it on `chore/tld-land-workflow` and open a pull request that adds it. Set `needs_you` with
    the reason `Review PR #<n>` for that pull request.
 3. If the push is refused because the token lacks the workflows permission, open no pull request and set
-   `needs_you` with the reason `Add .github/workflows/devflow-land.yml from the devflow template`.
-4. Say that the owner must merge the workflow pull request first, and that the secret `DEVFLOW_AGENT_TOKEN`
+   `needs_you` with the reason `Add .github/workflows/tld-land.yml from the tld template`.
+4. Say that the owner must merge the workflow pull request first, and that the secret `TLD_AGENT_TOKEN`
    and the repository setting `Allow auto-merge` must exist. This command cannot read secrets or that
    setting.
 

@@ -1,4 +1,4 @@
-# Direct inputs for the guardrail hooks (plugins/devflow/hooks/hooks.json), used by tests/test_evals_hooks.py.
+# Direct inputs for the guardrail hooks (adapters/claude/hooks/hooks.json), used by tests/test_evals_hooks.py.
 # expect: deny | allow. No model is involved. The hooks run with cwd = the tiny_app fixture (main branch `main`).
 # `@@GH_TOKEN@@` is replaced at run time by a token-shaped string, so no credential-like literal sits in the repo.
 # A local `git merge` is deliberately allowed (docs/architecture/hooks.md); the deny is on PR merges and pushes to main.

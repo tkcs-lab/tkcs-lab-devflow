@@ -1,6 +1,6 @@
 id: agents-dod-critical
 description: /dod with a critical security posture must run the required security-reviewer, which reports a threat model.
-command: /devflow:dod
+command: /tld:dod
 arguments: ""
 fixture:
   builder: agents_demo

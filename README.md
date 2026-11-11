@@ -1,12 +1,12 @@
-# claude-toolkit
+# tkcs-lab-devflow
 
 A plan → implement workflow for Claude Code on the web (claude.ai/code), for any repository in any
 language.
 
-- **`/setup`** (Sonnet) surveys the repository and creates or updates `.claude/toolkit.yaml`, including the `agents`
+- **`/setup`** (Sonnet) surveys the repository and creates or updates `.tld/toolkit.yaml`, including the `agents`
   block, and delivers it as one pull request that it never merges. See [docs/guides/setup.md](docs/guides/setup.md).
 - **Agents.** Ten generic agents (architect, code-reviewer, security-reviewer, test-architect, tech-writer,
-  website-maintainer, ux-reviewer, debugger, dependency-auditor, refactorer) ship in `devflow`. The profile decides
+  website-maintainer, ux-reviewer, debugger, dependency-auditor, refactorer) ship in `tld`. The profile decides
   which are mandatory at `/make-plan`, each `/implement` phase, the final review, `/review` and `/dod`, whether their
   findings block, and how strict the security reviewer is. See [docs/architecture/agents.md](docs/architecture/agents.md).
 - **`/make-plan <what you want>`** (Opus) researches the repo, then writes either a self-contained
@@ -47,15 +47,15 @@ language.
 See [docs/guides/review.md](docs/guides/review.md) for the review flow, [docs/guides/maintenance.md](docs/guides/maintenance.md)
 for the maintenance commands and the board, and [docs/guides/admin.md](docs/guides/admin.md) for `repo-admin`.
 
-Everything specific to your project lives in one file, `.claude/toolkit.yaml` (docs to read, branch
+Everything specific to your project lives in one file, `.tld/toolkit.yaml` (docs to read, branch
 rules, verify commands, CI workflows a session may dispatch, stacks, models). The commands contain no
 project facts and stop with a message naming the missing key.
 
 ## Guardrails
 
-The `devflow` plugin ships Claude Code hooks (`plugins/devflow/hooks/`) that make the "never do X" rules
+The `tld` plugin ships Claude Code hooks (`adapters/claude/hooks/`, with the policies in `src/tld/guard/`) that make the "never do X" rules
 deterministic. Every repository that enables the plugin gets them without a per-repository copy; project facts
-come from `.claude/toolkit.yaml`.
+come from `.tld/toolkit.yaml`.
 
 | Hook | Denies |
 |---|---|
@@ -70,27 +70,30 @@ A hook that denies tells the agent what to do instead. `hooks.disable` in the pr
 for one repository. **Branch protection and CI remain the hard enforcement**: the hooks are the fast in-loop layer
 and do not cover sessions without the plugin. See [docs/architecture/hooks.md](docs/architecture/hooks.md).
 
-Plugins are enabled per Claude Project, so every repository in a Project that enables `devflow` needs at least
-`git.main_branch` in its `.claude/toolkit.yaml`: without it `no-merge` denies every `git push` there. The hooks need
+Plugins are enabled per Claude Project, so every repository in a Project that enables `tld` needs at least
+`git.main_branch` in its `.tld/toolkit.yaml`: without it `no-merge` denies every `git push` there. The hooks need
 `python3` 3.11+ and PyYAML on the `PATH` of the session; see
 [Installing and checking](docs/architecture/hooks.md#installing-and-checking).
 
 ## Use it in a project
 
-1. Run `/setup` to create `.claude/toolkit.yaml` from what the repository shows (one pull request, never merged).
-   As the fallback, copy [`templates/toolkit.yaml`](templates/toolkit.yaml) to `.claude/toolkit.yaml` and fill it in by
+1. Run `/setup` to create `.tld/toolkit.yaml` from what the repository shows (one pull request, never merged).
+   As the fallback, copy [`src/tld/templates/toolkit.yaml`](src/tld/templates/toolkit.yaml) to `.tld/toolkit.yaml` and fill it in by
    hand. Reference: [docs/reference/profile-reference.md](docs/reference/profile-reference.md).
-2. Add the plugins in your Claude Project's settings (marketplace `tkcs-lab/claude-toolkit`), see
-   [docs/guides/delivery.md](docs/guides/delivery.md). `/setup` needs them, so add them before step 1 when you use it.
+2. Add the plugin `tld` in your Claude Project's settings (marketplace `tkcs-lab/tkcs-lab-devflow`), see
+   [docs/guides/delivery.md](docs/guides/delivery.md). `/setup` needs it, so add it before step 1 when you use it.
 3. Start a session and run `/make-plan <what you want>`.
 
 ## What is here
 
 | Path | |
 |---|---|
-| `plugins/devflow` | the nine commands, the ten agents in `agents/`, the `project-profile`, `agent-dispatch`, `profile-setup`, `pr-steward`, `status-board`, `repo-admin`, `git-ops`, `review-checklist`, `secure-code-review`, `test-review`, `docs-review` and `docs-keeper` skills, the scripts in `scripts/` (manifest, profile and status-record validators, `review_decisions.py` with its page template, `build_board.py`, `board_stale.py`, `board_server.py`, `board_mcp.py`, `board_client.py`, `board_mcp_stdio.py`, `pick_release.py`, `agents.py`, `profile_survey.py`, `survey_signals.py`, `survey_docs.py`, `survey_proposal.py`, `profile_patch.py`, `upstream_sync.py`, `land_order.py`, `repo_admin.py`, `scope_check.py`, `docs_index.py`), `schema/profile.schema.json`, `schema/status-record.schema.json`, `schema/admin-policy.schema.json`, `hooks/` (the guardrail hooks and `hooks.json`), `.mcp.json`, `board/` (the status board page) and `templates/` (the `/land`, release and git-ops workflows, the starter admin policy and the git-ops allowlist example) |
-| `plugins/stack-python`, `plugins/stack-go`, `plugins/stack-swift`, `plugins/stack-ipados` | stack skills the profile selects (`ipados` goes with `swift`) |
-| `templates/toolkit.yaml` | starter profile |
+| `src/tld/` | the core package: profile, plan, roles, dod, guard (the guardrail hook policies), board (store, server, client, MCP, the status board page in `board/web/`), ops (land order, upstream sync, release pick, repo-admin, docs index), `schema/` and `templates/` (the starter profile, the `/land`, release and git-ops workflows, the starter admin policy and the git-ops allowlist example) |
+| `bin/tld` | the `tld` command line, runnable from a checkout; see [docs/reference/cli.md](docs/reference/cli.md) |
+| `adapters/claude/` | the Claude Code plugin `tld`: the ten commands, the ten agents, the skills (including `stack-python`, `stack-go`, `stack-swift`, `stack-ipados`, selected by the profile), the hook entry scripts with `hooks.json`, and `mcp.json` |
+| `.claude-plugin/` | the marketplace `tkcs-lab-devflow` and the plugin manifest; the plugin is sourced from the repository root |
+| `deploy/board/Dockerfile` | the status board server image |
+| `src/tld/templates/toolkit.yaml` | starter profile |
 | `docs/` | [the docs index](docs/README.md), [the docs structure and `/docs`](docs/guides/docs-index.md), profile reference, delivery, design, [the guardrail hooks](docs/architecture/hooks.md), [the review flow](docs/guides/review.md), [the maintenance commands and the board](docs/guides/maintenance.md), [scope-drift monitoring in `/implement`](docs/architecture/scope-drift.md), [auditing and updating organisation and repository settings](docs/guides/admin.md), [the central git-ops workflow](docs/guides/git-ops.md), [the eval harness](docs/architecture/evals.md), [the agents](docs/architecture/agents.md), [`/setup`](docs/guides/setup.md), [how PrivacyFence migrated](docs/migrating-privacyfence.md) |
 | `evals/` | eval harness: `python3 evals/run.py list\|validate\|run --dry-run`; real runs call the model and cost money, see [docs/architecture/evals.md](docs/architecture/evals.md) |
 | `tests/` | `python -m pytest tests -q` (Python 3.11+, PyYAML) |
@@ -105,4 +108,4 @@ python3 -m venv .venv && .venv/bin/pip install -r tests/requirements.txt
 ```
 
 The tests include a check that no project-specific word (a particular project's name, test runner
-or linter) appears in the generic plugin. Stack-specific words belong in the `plugins/stack-*` skills.
+or linter) appears in the generic plugin. Stack-specific words belong in the `adapters/claude/skills/stack-*` skills.

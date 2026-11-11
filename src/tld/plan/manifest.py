@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate a plan's implementation manifest, for /make-plan (before it pushes) and /implement (before it starts).
 
-    validate_manifest.py PLAN.md|MANIFEST.yaml [--profile .claude/toolkit.yaml]
+    validate_manifest.py PLAN.md|MANIFEST.yaml [--profile .tld/toolkit.yaml]
 
 PLAN.md: the first fenced yaml block under the '## Implementation manifest' heading is checked.
 Exit 0 (warnings go to stderr) or 1 with one error per line. Python 3.11+, PyYAML.
@@ -254,7 +254,7 @@ def validate(manifest, profile: dict | None = None) -> tuple[list[str], list[str
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("plan")
-    ap.add_argument("--profile", help="resolved or raw .claude/toolkit.yaml, to check feature_branch against git.branch_types")
+    ap.add_argument("--profile", help="resolved or raw .tld/toolkit.yaml, to check feature_branch against git.branch_types")
     args = ap.parse_args(argv)
 
     path = Path(args.plan)

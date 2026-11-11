@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/andras-tkcs/claude-toolkit/plugins/devflow/schema/profile.schema.json",
-  "title": "devflow project profile (.claude/toolkit.yaml)",
+  "$id": "https://github.com/tkcs-lab/tkcs-lab-devflow/src/tld/schema/profile.schema.json",
+  "title": "tld project profile (.tld/toolkit.yaml)",
   "type": "object",
   "additionalProperties": false,
   "required": ["docs", "git", "verify", "stacks"],
@@ -212,14 +212,14 @@
       "additionalProperties": false,
       "required": ["repo"],
       "properties": {
-        "repo": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "description": "owner/name of the central repository that holds the devflow-git-ops workflow."},
-        "workflow": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+\\.ya?ml$", "description": "File name of the workflow in that repository. Default devflow-git-ops.yml (applied by the git-ops skill, not by the schema)."}
+        "repo": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "description": "owner/name of the central repository that holds the tld-git-ops workflow."},
+        "workflow": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+\\.ya?ml$", "description": "File name of the workflow in that repository. Default tld-git-ops.yml (applied by the git-ops skill, not by the schema)."}
       }
     },
     "hooks": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Settings of the guardrail hooks the devflow plugin ships (docs/architecture/hooks.md). Every key is optional; the hooks apply the defaults in 'x-hook-default' themselves, they are not part of --resolved.",
+      "description": "Settings of the guardrail hooks the tld plugin ships (docs/architecture/hooks.md). Every key is optional; the hooks apply the defaults in 'x-hook-default' themselves, they are not part of --resolved.",
       "properties": {
         "disable": {
           "type": "array",
@@ -229,7 +229,7 @@
         },
         "protect_paths": {
           "$ref": "#/$defs/stringList",
-          "x-hook-default": [".claude/toolkit.yaml", ".env", ".env.*", "*.lock", "package-lock.json", "go.sum", ".github/workflows/**"],
+          "x-hook-default": [".tld/toolkit.yaml", ".env", ".env.*", "*.lock", "package-lock.json", "go.sum", ".github/workflows/**"],
           "description": "Globs of repo-relative paths protect-paths refuses to edit. A pattern without a slash matches the file name at any depth; ** crosses directories. A list here replaces the default."
         },
         "protect_paths_allow": {

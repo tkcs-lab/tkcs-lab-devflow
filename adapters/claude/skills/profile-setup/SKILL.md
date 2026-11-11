@@ -1,12 +1,12 @@
 ---
 name: profile-setup
-description: Rules the /setup command follows to turn a repository survey into .claude/toolkit.yaml values - how to choose the verify commands, which keys come from evidence, what to ask the user, and what the pull request says. Load it in step 2 of /setup.
+description: Rules the /setup command follows to turn a repository survey into .tld/toolkit.yaml values - how to choose the verify commands, which keys come from evidence, what to ask the user, and what the pull request says. Load it in step 2 of /setup.
 user-invocable: false
 ---
 
 # Turning a survey into a profile
 
-Input is `survey.json` from `profile_survey.py`: `evidence` (what was found) and `proposal.profile` (what the survey suggests).
+Input is `survey.json` from `tld profile survey`: `evidence` (what was found) and `proposal.profile` (what the survey suggests).
 
 ## Choosing verify commands
 
@@ -27,7 +27,7 @@ The posture question offers `critical`, `standard` and `low`, with the proposal 
 
 ## Pull request body
 
-Title `chore: add .claude/toolkit.yaml` (create) or `chore: update .claude/toolkit.yaml` (update). Sections:
+Title `chore: add .tld/toolkit.yaml` (create) or `chore: update .tld/toolkit.yaml` (update). Sections:
 
 - `## What this changes`
 - `## Inferred values`: the table with its evidence
@@ -36,4 +36,4 @@ Title `chore: add .claude/toolkit.yaml` (create) or `chore: update .claude/toolk
 
 ## Never
 
-Never guess a value without evidence. Never write `blocking: true` without the user's confirmation. Never edit any file except `.claude/toolkit.yaml`. Never merge, and never enable auto-merge.
+Never guess a value without evidence. Never write `blocking: true` without the user's confirmation. Never edit any file except `.tld/toolkit.yaml`. Never merge, and never enable auto-merge.

@@ -1,6 +1,6 @@
 id: agents-dod-low
 description: /dod with a low security posture must run the required security-reviewer, which writes no threat model.
-command: /devflow:dod
+command: /tld:dod
 arguments: ""
 fixture:
   builder: agents_demo

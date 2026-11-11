@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Command-line client for the devflow status board server.
+"""Command-line client for the tld status board server.
 
     board_client.py health | list | get ID | set ID FILE|- [--if-version N] | delete ID [ID ...]
 
-Reads DEVFLOW_BOARD_URL and DEVFLOW_BOARD_TOKEN (and DEVFLOW_BOARD_ALLOW_HTTP) from the environment.
+Reads TLD_BOARD_URL and TLD_BOARD_TOKEN (and TLD_BOARD_ALLOW_HTTP) from the environment.
 Prints one line of compact JSON on stdout (`health` prints `ok`). Exit codes: 0 success; 1 the server
 answered with an error status, a network error or a bad configuration; 2 usage error; 3 no board
 configured. Python 3.11+, stdlib only.
@@ -34,26 +34,26 @@ class Config(NamedTuple):
 
 def load_url(env: Mapping[str, str] = os.environ) -> str | None:
     """The board URL without a trailing slash, or None when unset or empty."""
-    url = (env.get("DEVFLOW_BOARD_URL") or "").strip()
+    url = (env.get("TLD_BOARD_URL") or "").strip()
     if not url:
         return None
     if url.endswith("/"):
         url = url[:-1]
     parts = urllib.parse.urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
-        raise ConfigError("DEVFLOW_BOARD_URL must be an http(s) URL")
+        raise ConfigError("TLD_BOARD_URL must be an http(s) URL")
     if parts.username is not None or parts.password is not None or "@" in parts.netloc:
-        raise ConfigError("DEVFLOW_BOARD_URL must not contain user info")
+        raise ConfigError("TLD_BOARD_URL must not contain user info")
     if parts.query or parts.fragment or "?" in url or "#" in url:
-        raise ConfigError("DEVFLOW_BOARD_URL must not contain a query or a fragment")
-    if parts.scheme == "http" and parts.hostname not in LOOPBACK and env.get("DEVFLOW_BOARD_ALLOW_HTTP") != "1":
-        raise ConfigError("DEVFLOW_BOARD_URL must be https (set DEVFLOW_BOARD_ALLOW_HTTP=1 to allow plain http)")
+        raise ConfigError("TLD_BOARD_URL must not contain a query or a fragment")
+    if parts.scheme == "http" and parts.hostname not in LOOPBACK and env.get("TLD_BOARD_ALLOW_HTTP") != "1":
+        raise ConfigError("TLD_BOARD_URL must be https (set TLD_BOARD_ALLOW_HTTP=1 to allow plain http)")
     return url
 
 
 def load_config(env: Mapping[str, str] = os.environ) -> Config | None:
     url = load_url(env)
-    token = (env.get("DEVFLOW_BOARD_TOKEN") or "").strip()
+    token = (env.get("TLD_BOARD_TOKEN") or "").strip()
     if url is None or not token:
         return None
     return Config(url, token)
@@ -93,7 +93,7 @@ def _fail(status: int, payload: object | None) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="board_client.py", description="Client for the devflow status board.")
+    parser = argparse.ArgumentParser(prog="board_client.py", description="Client for the tld status board.")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("health", help="GET /healthz (needs only the URL)")
     sub.add_parser("list", help="list every record")

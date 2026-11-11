@@ -1,4 +1,4 @@
-name: devflow-land
+name: tld-land
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: devflow-land
+  group: tld-land
   cancel-in-progress: false
 
 permissions:
@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Update the next pull request with auto-merge
         env:
-          GH_TOKEN: ${{ secrets.DEVFLOW_AGENT_TOKEN }}
+          GH_TOKEN: ${{ secrets.TLD_AGENT_TOKEN }}
           REPO: ${{ github.repository }}
           BASE: __MAIN_BRANCH__
           RETRIES: "6"
@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::secret DEVFLOW_AGENT_TOKEN is not set"
+            echo "::error::secret TLD_AGENT_TOKEN is not set"
             exit 1
           fi
           numbers=$(gh api "repos/$REPO/pulls?state=open&base=$BASE&per_page=100" --jq '.[].number' | sort -n)

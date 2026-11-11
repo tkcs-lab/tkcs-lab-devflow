@@ -17,7 +17,7 @@ from pathlib import Path
 from tld.board.store import Conflict, Invalid, Store  # noqa: E402
 
 PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
-INSTRUCTIONS = ("Devflow status board. Records are status records (collection 'projects'); "
+INSTRUCTIONS = ("tld status board. Records are status records (collection 'projects'); "
                 "write with board_set and the version you read.")
 MAX_DELETE_IDS = 50
 
@@ -141,7 +141,7 @@ def handle(store: Store, message: object) -> dict | None:
         return _result(msg_id, {
             "protocolVersion": asked if asked in PROTOCOLS else PROTOCOLS[0],
             "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": {"name": "devflow-board", "version": "1"},
+            "serverInfo": {"name": "tld-board", "version": "1"},
             "instructions": INSTRUCTIONS,
         })
     if method == "ping":

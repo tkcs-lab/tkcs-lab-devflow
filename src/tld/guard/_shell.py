@@ -1,4 +1,4 @@
-"""Shell-aware command splitting for the devflow guardrail hooks.
+"""Shell-aware command splitting for the tld guardrail hooks.
 
 Python 3.11, standard library only. Words are split by `shlex` (POSIX rules); this module adds what
 shlex does not know: the operators `&&`, `||`, `;`, `|`, `&`, newlines, subshell parentheses,

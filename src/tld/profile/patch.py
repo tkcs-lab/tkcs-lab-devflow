@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Text-level edits of `.claude/toolkit.yaml` for /setup: set one block, or diff a proposal.
+"""Text-level edits of `.tld/toolkit.yaml` for /setup: set one block, or diff a proposal.
 
     profile_patch.py set-block PROFILE KEY VALUE.json [--write]
     profile_patch.py diff PROFILE PROPOSAL.json [--root DIR]

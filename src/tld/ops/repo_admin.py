@@ -49,14 +49,14 @@ PLUGIN = HERE.parent
 SCHEMA = PLUGIN / "schema" / "admin-policy.schema.json"
 TEMPLATES = PLUGIN / "templates"
 API = "https://api.github.com"
-DOCS_HELP = "see docs/guides/admin.md in the claude-toolkit repo"
+DOCS_HELP = "see docs/guides/admin.md in the tkcs-lab-devflow repo"
 
 # Built-in workflow templates: policy name -> (file, default parameters).
 BUILTIN_TEMPLATES = {
-    "release": ("devflow-release.yml", {"tag_prefix": "v"}),
-    "land": ("devflow-land.yml", {}),
+    "release": ("tld-release.yml", {"tag_prefix": "v"}),
+    "land": ("tld-land.yml", {}),
 }
-KNOWN_DOT_DIRS = (".github", ".claude", ".devcontainer", ".vscode", ".husky", ".config", ".changeset", ".githooks")
+KNOWN_DOT_DIRS = (".github", ".claude", ".tld", ".devcontainer", ".vscode", ".husky", ".config", ".changeset", ".githooks")
 SEVERITIES = ("fix", "warn", "info", "unavailable", "error")
 SAFE_PARAM = re.compile(r"^[A-Za-z0-9._/-]*$")
 PLACEHOLDER = re.compile(r"__([A-Z][A-Z0-9_]*)__")
@@ -144,7 +144,7 @@ class Client:
         if params:
             url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
         data = None if body is None else json.dumps(body).encode()
-        headers = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "devflow-repo-admin"}
+        headers = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "tld-repo-admin"}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         if data is not None:

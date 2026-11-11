@@ -8,7 +8,7 @@ Plans (`<slug>-plan.md`) are transient and not listed; a finished plan's decisio
 - [architecture/design.md](architecture/design.md) - design record: layout, decisions, what was probed and rejected; read before changing the architecture.
 - [architecture/hooks.md](architecture/hooks.md) - the guardrail hooks, their configuration and the commands' compatibility; read when changing a hook.
 - [architecture/agents.md](architecture/agents.md) - the ten generic agents, the profile's agents block and the points they run at; read when changing an agent or the agents block.
-- [architecture/scope-drift.md](architecture/scope-drift.md) - scope-drift monitoring at each /implement merge; read when changing scope_check.py.
+- [architecture/scope-drift.md](architecture/scope-drift.md) - scope-drift monitoring at each /implement merge; read when changing tld plan scope-check.
 - [architecture/evals.md](architecture/evals.md) - the eval harness in evals/, tasks, graders, baselines; read when measuring a change to a command, skill or hook.
 - [architecture/maintenance-spike.md](architecture/maintenance-spike.md) - what a cloud session can and cannot do; read before changing how the maintenance commands push or comment.
 
@@ -27,4 +27,5 @@ Plans (`<slug>-plan.md`) are transient and not listed; a finished plan's decisio
 
 ## Reference
 
-- [reference/profile-reference.md](reference/profile-reference.md) - every .claude/toolkit.yaml key, defaults and command entries; read when adding or changing a profile key.
+- [reference/profile-reference.md](reference/profile-reference.md) - every .tld/toolkit.yaml key, defaults and command entries; read when adding or changing a profile key.
+- [reference/cli.md](reference/cli.md) - the `tld` command line: every command, its module, and the old script each one replaces; read when calling or adding a toolkit command.

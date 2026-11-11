@@ -20,11 +20,11 @@ Plans for this command are written by `/make-plan`, which also defines the manif
 ## Profile
 
 This command is project-independent; everything specific to the repository comes from its
-profile, `.claude/toolkit.yaml`. Before anything else, load the `project-profile` skill and follow
+profile, `.tld/toolkit.yaml`. Before anything else, load the `project-profile` skill and follow
 its "Loading the profile" section. If it reports an error, show the message verbatim and stop; never
 substitute a value of your own for a missing key.
-Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profile`,
-`devflow:pr-steward`, `stack-python:stack-python`). Use whichever form the skill list shows. In this file:
+Skill names: the toolkit's skills carry a plugin prefix (`tld:project-profile`,
+`tld:pr-steward`, `tld:stack-python`). Use whichever form the skill list shows. In this file:
 
 - `<main>` is `git.main_branch`; `<branch pattern>` is `git.branch_pattern`.
 - "the must-read docs" are the files in `docs.must_read`.
@@ -55,7 +55,7 @@ The aliases map to ids: `sonnet` is `claude-sonnet-5-5` and `opus` is `claude-op
 If `create_session` rejects a model id, use the newest Sonnet or Opus id your system prompt lists,
 and say which one in the ledger.
 
-**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/architecture/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command is the orchestrator: it stops at `human_gate` phases and when it halts with a one-line error, and it writes no code itself. Its child phase sessions are not marked, so the gate applies to them. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
+**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/architecture/hooks.md` in the tkcs-lab-devflow repo) is meant for sessions that change code and stop when they are done. This command is the orchestrator: it stops at `human_gate` phases and when it halts with a one-line error, and it writes no code itself. Its child phase sessions are not marked, so the gate applies to them. Mark this session exempt once, right after the profile is loaded: `"${CLAUDE_PLUGIN_ROOT}/bin/tld" dod exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
 
 ## 0. Load the plan
 
@@ -65,8 +65,8 @@ and say which one in the ledger.
    parse it. If there is no manifest, stop and tell the user: this command only runs plans that
    have one. Do not invent phases from prose.
 3. Validate the manifest before starting anything: save the plan file to a temporary path and run
-   `python3 <devflow root>/scripts/validate_manifest.py <file> --profile .claude/toolkit.yaml`
-   (the `project-profile` skill says where `<devflow root>` is). It checks that every `depends_on`
+   `"${CLAUDE_PLUGIN_ROOT}/bin/tld" plan validate-manifest <file> --profile .tld/toolkit.yaml`
+   (the `project-profile` skill's "Find the toolkit" step). It checks that every `depends_on`
    names an existing phase id, that the graph has no cycles, that every phase has `brief` and
    `acceptance`, that `complexity`, when present, is `S` or `M`, that a `worker_model: opus` phase
    has a `worker_model_reason`, and that two phases that could run at the same time (neither
@@ -164,13 +164,13 @@ Index parts: for the retirement phase (the phase whose brief deletes the plan do
 >    your phase's `acceptance` list, and say how you checked each one.
 > 3b. **Required agents.** Write the names of the files you changed
 >    (`git diff --name-only origin/<feature_branch>...HEAD`) to a temporary file, run
->    `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at implement_phase --changed <that file>`,
+>    `"${CLAUDE_PLUGIN_ROOT}/bin/tld" roles required --profile .tld/toolkit.yaml --at implement_phase --changed <that file>`,
 >    and dispatch every agent it lists as the `agent-dispatch` skill says, before your last push: the
 >    four edit agents (tech-writer, website-maintainer, debugger, refactorer) in edit mode, every
 >    other agent in review mode. Fix every blocking finding yourself and dispatch that agent again;
 >    its new report line is the one that counts. Print each agent's `AGENT-REPORT` line bare into
 >    your PHASE-REPORT after the `/dod` table. Save the JSON and the report text and run
->    `agents.py verify --required <json> --report <text>`; it must exit 0.
+>    `tld roles verify --required <json> --report <text>`; it must exit 0.
 > 4. Your final commit message ends with the trailer `Plan-Phase: <plan slug>/<phase id>`.
 > 5. End your last turn with a report in exactly this shape, which the orchestrator reads:
 >    `PHASE-REPORT <phase id> status=<done|blocked> head=<sha>` on its own line, then the `/dod`
@@ -224,8 +224,8 @@ On each check-in, for each `running` phase, call `get_session`:
    skipped a test, has it deleted an `xfail` that belongs to a different phase? Anything wrong
    goes back to the child, as above.
 2b. **Required agents.** Save the names of the files in `git diff --name-only <base>...origin/<phase branch>`
-   to a file, run `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at implement_phase --changed <file>`
-   (save its JSON) and `agents.py verify --required <json> --report <the child's PHASE-REPORT text>`.
+   to a file, run `"${CLAUDE_PLUGIN_ROOT}/bin/tld" roles required --profile .tld/toolkit.yaml --at implement_phase --changed <file>`
+   (save its JSON) and `tld roles verify --required <json> --report <the child's PHASE-REPORT text>`.
    Exit 1 goes back to the child like any other defect, with the output of `verify` as the
    instruction.
 3. **Scope check (monitoring only, never a gate).** Before the merge, with `<feature_branch>` checked
@@ -233,14 +233,14 @@ On each check-in, for each `running` phase, call `get_session`:
    `<results>` is `scope-results.json` in your scratchpad directory):
 
    ```
-   python3 <devflow root>/scripts/scope_check.py check --plan <plan file> --phase <phase id> \
-     --base <feature_branch> --head origin/<phase branch> --profile .claude/toolkit.yaml \
+   "${CLAUDE_PLUGIN_ROOT}/bin/tld" plan scope-check check --plan <plan file> --phase <phase id> \
+     --base <feature_branch> --head origin/<phase branch> --profile .tld/toolkit.yaml \
      --plan-slug <plan slug> --feature <feature_branch> --results <results>
    ```
 
    It compares the files the phase branch changed since its merge base with `<feature_branch>` against
    the phase's `touches` (renames count as the old path deleted and the new path added), with the same
-   glob matching as `validate_manifest.py`. A path no `touches` entry of this phase names, and that no
+   glob matching as `tld plan validate-manifest`. A path no `touches` entry of this phase names, and that no
    scope ignore glob names, is **out of scope**; it is a **collision** when another phase's `touches`
    names it. The changelog file (`docs.changelog.file`) is always ignored, because the worker brief
    demands that line from every phase. It reads paths only, never file contents, diffs or commit
@@ -299,13 +299,13 @@ start one review session with `create_session`: `source_revision` the feature br
 > seams between phases (a function one phase added and another calls wrongly, duplicated
 > helpers, inconsistent names or strings), missing tests for an acceptance item, a weakened or
 > skipped test, a security or privacy regression, docs that describe something other than what
-> the code does, and every `final_checks` item. Index parts: run `docs_index.py check --profile .claude/toolkit.yaml`; every doc the diff adds, moves or deletes has its index row; `CLAUDE.md` is still at most 60 lines and only points to the index. Run <the fast checks, as a list of commands>
+> the code does, and every `final_checks` item. Index parts: run `tld ops docs-index check --profile .tld/toolkit.yaml`; every doc the diff adds, moves or deletes has its index row; `CLAUDE.md` is still at most 60 lines and only points to the index. Run <the fast checks, as a list of commands>
 > yourself. Load the `review-checklist` and `secure-code-review` skills and apply them.
 >
-> Run `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at implement_final --changed <the files of git diff --name-only origin/<main>...HEAD>`
+> Run `"${CLAUDE_PLUGIN_ROOT}/bin/tld" roles required --profile .tld/toolkit.yaml --at implement_final --changed <the files of git diff --name-only origin/<main>...HEAD>`
 > and dispatch every agent it lists in review mode as the `agent-dispatch` skill says. Put their
 > `AGENT-REPORT` lines before the `REVIEW-REPORT` line. A blocking finding of an agent whose item is
-> blocking is a blocking finding of yours. Run `agents.py verify`; if it exits 1 your verdict is
+> blocking is a blocking finding of yours. Run `tld roles verify`; if it exits 1 your verdict is
 > `changes`.
 >
 > End with `REVIEW-REPORT verdict=<approve|changes>` on its own line, then one numbered finding per
@@ -314,8 +314,8 @@ start one review session with `create_session`: `source_revision` the feature br
 > merge is blocking.
 
 Wait for it with check-ins as in section 4. After reading the report, first run
-`python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at implement_final --changed <the files of git diff --name-only origin/<main>...HEAD>`
-yourself, save the JSON, and run `agents.py verify --required <json> --report <the review text>`; exit 1
+`"${CLAUDE_PLUGIN_ROOT}/bin/tld" roles required --profile .tld/toolkit.yaml --at implement_final --changed <the files of git diff --name-only origin/<main>...HEAD>`
+yourself, save the JSON, and run `tld roles verify --required <json> --report <the review text>`; exit 1
 counts as `changes`, and the findings go to a fix session as for any blocking finding. Then:
 
 - `approve`: post `Final review: approve.` on the tracking issue (if any) and go to Finishing.
@@ -333,8 +333,8 @@ the PR body.
 
 ## 6. Finishing
 
-1. Run the full `/dod` on the feature branch. Index parts: also run `python3 <devflow root>/scripts/docs_index.py check --profile .claude/toolkit.yaml`; an error goes to a fix session like any failed check. Then settle what became of each scope drift:
-   `scope_check.py disposition --results <results> --base origin/<main> --head <feature_branch>` marks each recorded
+1. Run the full `/dod` on the feature branch. Index parts: also run `"${CLAUDE_PLUGIN_ROOT}/bin/tld" ops docs-index check --profile .tld/toolkit.yaml`; an error goes to a fix session like any failed check. Then settle what became of each scope drift:
+   `tld plan scope-check disposition --results <results> --base origin/<main> --head <feature_branch>` marks each recorded
    out-of-scope path **accepted** while it is still in the feature branch's final diff against
    `<main>` (`git diff --name-only origin/<main>...HEAD`), and a phase **reverted** (or
    **partly reverted**) when a later commit removed all (or some) of them. It changes only the results
@@ -347,7 +347,7 @@ the PR body.
    of the manifest's `closes`, before the phase list (no such lines without `tracking_issue`). It lists each phase with its merge commit, the combined acceptance
    checklist, the final review's verdict and its non-blocking findings, every out-of-scope
    finding the children reported, a **Scope** section (the output of
-   `scope_check.py section --results <results>`, pasted as is: per phase the out-of-scope paths and collisions or `none`, at most 20
+   `tld plan scope-check section --results <results>`, pasted as is: per phase the out-of-scope paths and collisions or `none`, at most 20
    paths each, then `and n more`; paths only), and a **Manual verification** section: each `manual_after`
    item as an unchecked box, with the `manual_steps_artifact` link.
    After opening it, post `PR opened: <url>.` on the tracking issue (if any).
@@ -383,7 +383,7 @@ board error never stops the run. `/implement` writes a record as follows.
   `reviewing`, `pr_open`, `done`, `failed`); `needs_you` is true exactly when you have asked the owner
   something or stopped on a failure, with a one-line reason.
 - Each phase item gets the optional field `scope` at its Merge (step 3 of section 4):
-  `scope_check.py record --results <results> --label <phase id>` prints it; paste that object as is. It
+  `tld plan scope-check record --results <results> --label <phase id>` prints it; paste that object as is. It
   is `check`, `in_scope`, `out_of_scope_count`, `collision_count`, `paths` (at most 20) and
   `disposition`; `check: unavailable` when the check failed, and no `scope` field when it printed
   `null` (skipped on a resumed run). After the dispositions are settled (Finishing, step 1) write the

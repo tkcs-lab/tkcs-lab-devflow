@@ -1,4 +1,4 @@
-"""Parsing of `git` and `gh` command lines for the devflow guardrail hooks (stdlib only).
+"""Parsing of `git` and `gh` command lines for the tld guardrail hooks (stdlib only).
 
 The hooks ask questions such as "does this push force?", "which refs does it update?" or "does this
 `gh api` call merge?". Nothing here runs a network command; the few `git` lookups (current branch,

@@ -34,7 +34,7 @@ stacks: []
 """
 
 FILES = {
-    ".claude/toolkit.yaml": PROFILE,
+    ".tld/toolkit.yaml": PROFILE,
     "README.md": "# notes-demo\n\nA tiny note store.\n\n    python3 -m notes.cli add 'buy milk'\n    python3 -m notes.cli list\n",
     "docs/design.md": "# Design\n\nNotes live in `notes.json`. `notes/store.py` owns reads and writes; `notes/cli.py` parses arguments.\n",
     "notes/__init__.py": "",

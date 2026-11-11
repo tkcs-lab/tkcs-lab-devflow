@@ -146,7 +146,7 @@ def build(dest: Path, repo: str = "security_heavy", with_profile: bool = False) 
         raise ValueError(f"unknown repo {repo!r}; expected one of {REPOS}")
     files = dict(FILES[repo])
     if with_profile:
-        files[".claude/toolkit.yaml"] = PROFILE
+        files[".tld/toolkit.yaml"] = PROFILE
     init_repo(dest, files)
     docs = repo == "docs_website"
     return {

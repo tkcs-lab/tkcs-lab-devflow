@@ -1,10 +1,10 @@
 # Guardrail hooks
 
-The `devflow` plugin ships Claude Code hooks that turn the "never do X" rules in the commands into
+The `tld` plugin ships Claude Code hooks that turn the "never do X" rules in the commands into
 checks that run before a tool call (`PreToolUse`) or before a session stops (`Stop`). They live in the
-plugin (`plugins/devflow/hooks/hooks.json`, scripts called through `${CLAUDE_PLUGIN_ROOT}`), so every
+plugin (`adapters/claude/hooks/hooks.json`, scripts called through `${CLAUDE_PLUGIN_ROOT}`), so every
 repository that enables the plugin gets them without a per-repository copy. Project facts come from
-[`.claude/toolkit.yaml`](../reference/profile-reference.md); the scripts contain none.
+[`.tld/toolkit.yaml`](../reference/profile-reference.md); the scripts contain none.
 
 **Branch protection and CI stay the hard backstop.** A hook is the fast, in-loop layer: it stops the
 agent a minute after the mistake instead of a day later, and it tells the agent what to do instead.
@@ -72,12 +72,12 @@ push only if the repository has such a tag), a push that tags through configurat
 refs/tags/...` and `git update-ref --stdin` (its input cannot be read), `gh release create` / `delete`, `gh release edit
 --tag`, and the API calls that create or move tag refs, tag objects and releases or edit or delete a release.
 
-Releases are cut by the release workflow, so a session may not start it either: `gh workflow run devflow-release.yml`, the
+Releases are cut by the release workflow, so a session may not start it either: `gh workflow run tld-release.yml`, the
 `dispatches` API of that workflow, and the GitHub MCP `actions_run_trigger` with `run_workflow` for it are denied
 (`run_workflow` with a workflow id instead of a file name is denied too, since it cannot be checked). Other workflows,
 such as those in `ci.dispatchable`, stay allowed. Reading stays allowed: `git tag -l`, `--list`, `-n`,
 `--contains`, `--points-at`, `--merged`, `-v`, `git describe`, `git fetch --tags`, `git ls-remote --tags`, `gh release list`.
-The release workflow itself runs in CI and is not affected; the template (`devflow-release.yml`) runs in the `release`
+The release workflow itself runs in CI and is not affected; the template (`tld-release.yml`) runs in the `release`
 GitHub environment, so a human approves each run there.
 
 ### `secret-scan`
@@ -92,7 +92,7 @@ It also matches credentials in a URL (`scheme://user:password@host`), `Bearer` t
 tokens. The message names the pattern and the line, never the value:
 
 ```
-devflow secret-scan: blocked: line 12 of the new file content for src/cfg.py looks like a GitHub token (pattern: github-token).
+tld secret-scan: blocked: line 12 of the new file content for src/cfg.py looks like a GitHub token (pattern: github-token).
 The value is not shown. Do not write a credential into a file: read it from the environment or a secret store ...
 ```
 
@@ -110,12 +110,12 @@ is `ln` with a protected file as its source, since a link would let a later writ
 `alias.*`, `remote.*`, `push.*`, `branch.*` and `include*` keys are denied, because they can redirect pushes or run commands. A program that writes a file itself (`npm install` updating its lockfile, a Python one-liner)
 is not seen, which is why lockfiles are protected from hand edits and not from tools.
 
-Default list (a list in the profile replaces it): `.claude/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`,
+Default list (a list in the profile replaces it): `.tld/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`,
 `go.sum`, `.github/workflows/**`. Always protected, whatever the profile says: `.claude/settings.json`,
 `.claude/settings.local.json`, `.git/config`, `.git/hooks/**`, and anything under `$CLAUDE_PLUGIN_ROOT` (the installed
 plugin). Always allowed, whatever the profile says: `.env.example`, `.env.sample`,
 `.env.template`, `.env.dist`, and the two workflow files the toolkit's own commands install
-(`.github/workflows/devflow-land.yml` from `/land`, `.github/workflows/devflow-release.yml` from `repo-admin`). That is how
+(`.github/workflows/tld-land.yml` from `/land`, `.github/workflows/tld-release.yml` from `repo-admin`). That is how
 "workflow files unless a command explicitly owns them" is decided: the command's file is on the built-in allow list;
 add your own with `hooks.protect_paths_allow`.
 
@@ -123,10 +123,10 @@ Patterns: one without a slash matches the file name at any depth (`*.lock`); one
 repository root (`.github/workflows/**`); `**` crosses directories, `*` and `?` do not; a trailing slash means a directory.
 Paths outside the repository are not this hook's business.
 
-**The `/setup` exemption.** `/setup` has to write `.claude/toolkit.yaml`. Before its first write it runs
-`python3 "<devflow root>/hooks/protect_paths.py" --allow-profile`, which writes the marker
-`protect-paths-profile.json` into `<git dir>/devflow/` (so it is per checkout and never committed). For two hours from
-that moment the hook lets the path `.claude/toolkit.yaml` (exactly) through and nothing else: `.env*`, lockfiles and
+**The `/setup` exemption.** `/setup` has to write `.tld/toolkit.yaml`. Before its first write it runs
+`"${CLAUDE_PLUGIN_ROOT}/bin/tld" guard allow-profile`, which writes the marker
+`protect-paths-profile.json` into `<git dir>/tld/` (so it is per checkout and never committed). For two hours from
+that moment the hook lets the path `.tld/toolkit.yaml` (exactly) through and nothing else: `.env*`, lockfiles and
 workflow files stay denied. After its last write `/setup` runs `--end-allow`, which removes the marker; a marker that
 is forgotten lapses after the two-hour TTL. The deny message for the profile says it is changed by people or by
 `/setup`. This is a convention like the `dod-gate` marker below: any session that can run a command can write the
@@ -164,10 +164,10 @@ Decision: **a session is gated unless it marked itself exempt.** A command that 
 profile is loaded:
 
 ```
-python3 "<devflow root>/hooks/dod_gate.py" --exempt
+"${CLAUDE_PLUGIN_ROOT}/bin/tld" dod exempt
 ```
 
-`dod_gate.py --exempt` writes `<git dir>/devflow/dod-gate-exempt.json` (inside `.git`, so it is never committed). The marker is per checkout:
+`tld dod exempt` writes `<git dir>/tld/dod-gate-exempt.json` (inside `.git`, so it is never committed). The marker is per checkout:
 
 - `/implement` (the orchestrator), `/make-plan`, `/review` and `/land` write it. Each says so in its "Guardrail hooks"
   paragraph.
@@ -186,13 +186,13 @@ then gives up). Not marking is the default, so work done outside any command is 
 ## Configuration
 
 All hook settings are optional and live in the profile's `hooks` section. The scripts apply the defaults themselves
-(they are not part of `validate_profile.py --resolved`).
+(they are not part of `tld profile validate --resolved`).
 
 ```yaml
 hooks:
   disable: []                # names of hooks to switch off in this repository
   protect_paths:             # replaces the default list when set
-    - .claude/toolkit.yaml
+    - .tld/toolkit.yaml
     - .env
     - ".env.*"
     - "*.lock"
@@ -210,7 +210,7 @@ call that could write to the main branch, and `dod-gate`), and `verify.dod` (`do
 it needs the fact: `gh pr merge` is denied in a repository with no profile. A `git push` (any branch) is also denied
 there, because deciding whether it targets the main branch needs `git.main_branch`. When the key is missing the hook
 blocks with `toolkit.yaml: missing required key 'git.main_branch'`, the same message the commands give. Plugins are enabled
-per Claude Project, so every repository in a Project that enables `devflow` needs a profile with at least that key.
+per Claude Project, so every repository in a Project that enables `tld` needs a profile with at least that key.
 
 Reference: [profile-reference.md](../reference/profile-reference.md).
 
@@ -231,7 +231,7 @@ error (see Parsing) even though only the committed list is applied. Two gaps are
 `git.main_branch`, and the committed copy is read from local refs (`origin/<main>`, then `<main>`), which a session can
 rewrite, for example with `git update-ref refs/remotes/origin/main <sha>`. Branch protection stays the backstop.
 
-It is a profile change, and `.claude/toolkit.yaml` is protected from edits by sessions, so a person does it. Prefer a narrower tool
+It is a profile change, and `.tld/toolkit.yaml` is protected from edits by sessions, so a person does it. Prefer a narrower tool
 first: `hooks.protect_paths_allow` for one more allowed path, a `secret-scan:allow` line mark for one false positive.
 `no-merge`, `no-force-push` and `no-git-tag` have no narrower switch on purpose.
 
@@ -286,12 +286,12 @@ the Bash hooks, fails when a command file stops containing the phrase that docum
 | | MCP: `create_pull_request`, `update_pull_request` (reviewers), `actions_run_trigger` (the `ci.dispatchable` workflows), `add_issue_comment`, `create_branch` | allowed; dispatching the release workflow is denied by `no-git-tag` |
 | | "Never push to `<main>`; never approve, merge or enable auto-merge; never rebase or force-push the feature branch" | now enforced for push, merge, approve, auto-merge and force-push; a local `git rebase` is not blocked |
 | | child phase sessions: push `<phase branch>`, run `/dod` | allowed; **gated** by `dod-gate` when enabled |
-| `/land` | `git fetch origin <main>`; create `chore/land-<stamp>` from `origin/<main>`; `git merge --no-ff` of pull request heads in order; `git merge --abort`; normal push of a pull request branch; `git push -u origin chore/land-<stamp>`; `chore/devflow-land-workflow` and its push | allowed |
-| | write `.github/workflows/devflow-land.yml` | allowed (on the built-in `protect-paths` allow list) |
+| `/land` | `git fetch origin <main>`; create `chore/land-<stamp>` from `origin/<main>`; `git merge --no-ff` of pull request heads in order; `git merge --abort`; normal push of a pull request branch; `git push -u origin chore/land-<stamp>`; `chore/tld-land-workflow` and its push | allowed |
+| | write `.github/workflows/tld-land.yml` | allowed (on the built-in `protect-paths` allow list) |
 | | "Never approve, merge, enable auto-merge, force-push, push to `<main>`, delete a branch or tag" | now enforced |
 | `/deps` | check out a Dependabot branch and push a normal commit to it; `chore/deps-<ecosystem>-<date>` from the default branch and its push; MCP `update_pull_request_branch`; the profile's lock and audit commands | allowed (lockfiles are changed by the lock commands, which `protect-paths` does not see) |
 | | "Never merge, approve, enable auto-merge or force-push" | now enforced |
-| `/upstream` | `git ls-remote --tags <url>` (via `upstream_sync.py plan`), `git fetch`, `upstream_sync.py prepare` (runs git itself), one commit, `git push -u origin chore/upstream-<tag>` | allowed (reading tags is allowed; the script's own git calls are not hook-visible) |
+| `/upstream` | `git ls-remote --tags <url>` (via `tld ops upstream-sync plan`), `git fetch`, `tld ops upstream-sync prepare` (runs git itself), one commit, `git push -u origin chore/upstream-<tag>` | allowed (reading tags is allowed; the script's own git calls are not hook-visible) |
 | | "Never merge, approve or enable auto-merge; never force-push; no prerelease or branch as target" | now enforced for the first two |
 | `/review` | `git fetch origin <main>`, `git log -p --all`, `git show FETCH_HEAD:<path>`, `git push -u origin review/<slug>` and later pushes to it | allowed |
 | | "Never run anything that pushes a tag" | now enforced |
@@ -305,7 +305,7 @@ What changed in the commands: `/implement`, `/make-plan`, `/review` and `/land` 
 
 ## What the hooks do not protect
 
-- **Sessions without the plugin.** Hooks exist only where `devflow` is enabled. A session that does not load the plugin, a
+- **Sessions without the plugin.** Hooks exist only where `tld` is enabled. A session that does not load the plugin, a
   person at a terminal, another tool, and a CI job are not covered.
 - **Branch protection and CI remain the hard enforcement.** Require a pull request, required reviews, status checks, no
   force pushes and no deletions on the main branch, and a release workflow that owns tags, in the repository's rules.
@@ -327,8 +327,8 @@ Requirements: `python3` 3.11 or newer and PyYAML on the session's `PATH`; the ho
 hooks behave as if there were no profile (the reason is `PyYAML is not installed`), so the destructive hooks deny every
 `git push` that needs `git.main_branch`, while `protect-paths` and `dod-gate` fall back to their defaults or do nothing.
 
-To confirm the hooks are loaded in a session, run `/hooks` and look for the `devflow` entries, or run
-`git tag probe`: with `no-git-tag` active the call is denied with `devflow no-git-tag: blocked` and no tag is created.
+To confirm the hooks are loaded in a session, run `/hooks` and look for the `tld` entries, or run
+`git tag probe`: with `no-git-tag` active the call is denied with `tld no-git-tag: blocked` and no tag is created.
 
 Loading the hooks from plugins that a Claude Project syncs into a cloud session is **not verified end to end** (see
 [delivery.md](../guides/delivery.md)). The tests exercise the scripts directly, not Claude Code's loading of `hooks.json`.

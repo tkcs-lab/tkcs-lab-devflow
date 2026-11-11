@@ -1,5 +1,5 @@
 ---
-description: Run the project's definition-of-done gate (from .claude/toolkit.yaml) and report a pass/fail table
+description: Run the project's definition-of-done gate (from .tld/toolkit.yaml) and report a pass/fail table
 argument-hint: "[optional: narrows the test run, for example a test path]"
 ---
 
@@ -12,8 +12,8 @@ $ARGUMENTS
 
 Load the `project-profile` skill and follow its "Loading the profile" section. If it reports an
 error, show the message verbatim and stop; never substitute a command of your own.
-Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profile`,
-`devflow:pr-steward`, `stack-python:stack-python`). Use whichever form the skill list shows. The
+Skill names: the toolkit's skills carry a plugin prefix (`tld:project-profile`,
+`tld:pr-steward`, `tld:stack-python`). Use whichever form the skill list shows. The
 `agent-dispatch` skill is loaded in the Required agents step below, under the same naming. The definition
 of done is the profile's `verify` section:
 
@@ -41,9 +41,9 @@ operating system) is satisfied by dispatching the workflow in `ci.dispatchable` 
 **Manual review items.** Read the diff for each `verify.dod_manual` row and report it as `ok`,
 `needs attention` (with the file and line) or `n/a`, never PASS, since nothing was run.
 
-**Docs index (only when the profile has `docs.index`).** Run `python3 <devflow root>/scripts/docs_index.py check --profile .claude/toolkit.yaml` and report one row `docs index`: `ok` for exit 0 with no warning, `needs attention` with the quoted messages otherwise, and `n/a (docs_index.py not in this devflow version)` when the script is missing. This row is never FAIL and never part of the verdict.
+**Docs index (only when the profile has `docs.index`).** Run `"${CLAUDE_PLUGIN_ROOT}/bin/tld" ops docs-index check --profile .tld/toolkit.yaml` and report one row `docs index`: `ok` for exit 0 with no warning, `needs attention` with the quoted messages otherwise, and `n/a (tld ops docs-index not in this tld version)` when the script is missing. This row is never FAIL and never part of the verdict.
 
-**Required agents.** Run `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at dod --changed <file with the output of git diff --name-only origin/<main>...HEAD>`. Dispatch each agent in `required`, in review mode, as the `agent-dispatch` skill says. Each gives one row `agent: <name>`: `PASS` when it reported no findings; `FAIL` when the item is blocking and its report has blocking findings, or when it did not run (`required agent did not run`); `needs attention (<blocking plus non-blocking>)` in every other case with findings. After the table, one subsection per agent with its full report verbatim, ending in its AGENT-REPORT line.
+**Required agents.** Run `"${CLAUDE_PLUGIN_ROOT}/bin/tld" roles required --profile .tld/toolkit.yaml --at dod --changed <file with the output of git diff --name-only origin/<main>...HEAD>`. Dispatch each agent in `required`, in review mode, as the `agent-dispatch` skill says. Each gives one row `agent: <name>`: `PASS` when it reported no findings; `FAIL` when the item is blocking and its report has blocking findings, or when it did not run (`required agent did not run`); `needs attention (<blocking plus non-blocking>)` in every other case with findings. After the table, one subsection per agent with its full report verbatim, ending in its AGENT-REPORT line.
 
 **Report** one row per check: the command (or the manual item), PASS/FAIL/`n/a` (`ok`/`needs
 attention`/`n/a` for a manual item), and for a failure the actual error, not a paraphrase. Do not

@@ -8,12 +8,12 @@ when it merges it and **records and reports** what it finds. It never blocks.
 ## What happens at each merge
 
 Before `git merge --no-ff`, `/implement` runs
-[`scripts/scope_check.py`](../../plugins/devflow/scripts/scope_check.py) `check`. The script:
+[`tld plan scope-check`](../../src/tld/plan/scope.py) `check`. The script:
 
 1. Lists the files the phase branch changed since its merge base with the feature branch
    (`git diff --name-only --no-renames`). A rename counts as the old path deleted and the new path
    added, so both are checked.
-2. Matches each path against the phase's `touches` with `path_matches` from `validate_manifest.py`,
+2. Matches each path against the phase's `touches` with `path_matches` from `tld plan validate-manifest`,
    the same function the manifest validator's overlap check uses. A `touches` entry is a literal
    path, a directory ending in `/`, or an fnmatch glob. `*` and `**` both match across `/`; note that
    `src/**/x.py` needs at least one directory between `src/` and `x.py`, so it does not match
@@ -81,7 +81,7 @@ and the field holds no content to scan); the path rules are what keep the field 
 **Durable history is the pull request description.** The board record is overwritten at every write
 and pruned after a week, so it is a status display, not a history. A separate board collection was
 considered and rejected: the board page reads only the `projects` collection, `/board prune` and
-`board_stale.py` only know that collection, and a second document type would need its own schema,
+`tld board stale` only know that collection, and a second document type would need its own schema,
 validator, key scheme and retention rule, which is new infrastructure. The pull request section is
 written once per run, sits next to the review, and is versioned by GitHub. If a later eval set needs
 the cases, it can read them from merged pull requests.
@@ -89,7 +89,7 @@ the cases, it can read them from merged pull requests.
 ### The `disposition`
 
 `accepted` means the drift was merged as it is. After the last phase merges, before the pull request is
-opened, `scope_check.py disposition` compares the recorded out-of-scope paths with the final diff of
+opened, `tld plan scope-check disposition` compares the recorded out-of-scope paths with the final diff of
 the feature branch against the main branch (`git diff --name-only origin/<main>...HEAD`): a phase's
 disposition becomes `reverted` when none of its out-of-scope paths is in that diff any more,
 `partly_reverted` when some are, and stays `accepted` when all are. A path that is in the final diff

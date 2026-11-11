@@ -24,7 +24,7 @@ that `/make-plan` turns into a plan.
 | a branch name | the branch's diff against `<main>` |
 | `apply <review URL>` | no review: reads the decisions from the page and applies them (for a new session) |
 
-It needs the project profile (`.claude/toolkit.yaml`), like every devflow command. It runs on Opus
+It needs the project profile (`.tld/toolkit.yaml`), like every tld command. It runs on Opus
 and starts Opus subagents for the dimensions and for verification, so a whole-repository review of a
 large codebase takes a while and a fair number of tokens.
 

@@ -25,7 +25,7 @@ def _profile(posture: str) -> str:
 
 def build(dest: Path, posture: str = "critical") -> dict:
     files = dict(tiny_app.FILES)
-    files[".claude/toolkit.yaml"] = _profile(posture)
+    files[".tld/toolkit.yaml"] = _profile(posture)
     init_repo(dest, files)
     git("checkout", "-q", "-b", BRANCH, cwd=dest)
     store = dest / "notes" / "store.py"

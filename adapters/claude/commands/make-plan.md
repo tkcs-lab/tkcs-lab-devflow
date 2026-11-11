@@ -29,11 +29,11 @@ in the feature PR. That is the only way a plan lands.
 ## Profile
 
 This command is project-independent; everything specific to the repository comes from its
-profile, `.claude/toolkit.yaml`. Before anything else, load the `project-profile` skill and follow
+profile, `.tld/toolkit.yaml`. Before anything else, load the `project-profile` skill and follow
 its "Loading the profile" section. If it reports an error, show the message verbatim and stop; never
 substitute a value of your own for a missing key.
-Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profile`,
-`devflow:pr-steward`, `stack-python:stack-python`). Use whichever form the skill list shows. In this file:
+Skill names: the toolkit's skills carry a plugin prefix (`tld:project-profile`,
+`tld:pr-steward`, `tld:stack-python`). Use whichever form the skill list shows. In this file:
 
 - `<main>` is `git.main_branch`, `<plan_dir>` is `docs.plan_dir`, `<branch pattern>` is
   `git.branch_pattern`.
@@ -47,7 +47,7 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
   how to write `acceptance` and `verify_after_merge` entries for that stack.
 - "the agent rules" are the profile's agents section, read through the `agent-dispatch` skill; load it now.
 
-**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/architecture/hooks.md` in the claude-toolkit repo) is meant for sessions that change code and stop when they are done. This command writes a plan or a prompt, not code. Mark this session exempt once, right after the profile is loaded: `python3 "<devflow root>/hooks/dod_gate.py" --exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
+**Guardrail hooks.** The plugin's `dod-gate` hook (off unless the profile turns it on, see `docs/architecture/hooks.md` in the tkcs-lab-devflow repo) is meant for sessions that change code and stop when they are done. This command writes a plan or a prompt, not code. Mark this session exempt once, right after the profile is loaded: `"${CLAUDE_PLUGIN_ROOT}/bin/tld" dod exempt` (it writes a marker under the checkout's git directory and prints one line; a failure does not stop the run).
 
 ## 0. Understand the ask
 
@@ -92,12 +92,12 @@ Skill names: the toolkit's skills carry a plugin prefix (`devflow:project-profil
    reviewed in stages. A typical bug-fix issue or a contained feature is small. Otherwise it is
    **large**. If the user said which they want, do that. When in doubt between the two, prefer
    small: an orchestrated plan costs several sessions and a review round.
-5. **Agents.** Run `python3 <devflow root>/scripts/agents.py required --profile .claude/toolkit.yaml --at make_plan`.
+5. **Agents.** Run `"${CLAUDE_PLUGIN_ROOT}/bin/tld" roles required --profile .tld/toolkit.yaml --at make_plan`.
    For a large scope, dispatch the `architect` agent first (unless it is in `disabled`) with the ask, your research
    notes and the must-read docs (index parts: and the paths of the docs you read through the index), and use its options when you write the Design section. Dispatch every agent in
    `required`, each in review mode, as the `agent-dispatch` skill says. A blocking finding must be resolved in the
    plan before you push; dispatch the same agent again afterwards, its new report line is the one that counts; a
-   non-blocking finding goes into the plan's Risks. Before the final reply run `agents.py verify` on the agents'
+   non-blocking finding goes into the plan's Risks. Before the final reply run `tld roles verify` on the agents'
    reports; exit 1 stops you until the missing agent has run or the finding is resolved. Name each agent that ran,
    with its AGENT-REPORT line, under `Agents:` in the final reply.
 
@@ -207,7 +207,7 @@ final_checks:                           # checked before the PR opens
   - <plan_dir>/<slug>-plan.md and <plan_dir>/<slug>-plan-manual-steps.html are deleted and nothing links to them
   - <each ADR from the ADRs section exists, is Accepted, and is in docs.adr_index>   # ADR parts only
   - <the changelog has entries under docs.changelog.section and no version heading>   # changelog parts only
-  - <`python3 <devflow root>/scripts/docs_index.py check --profile .claude/toolkit.yaml` exits 0>   # index parts only
+  - <`"${CLAUDE_PLUGIN_ROOT}/bin/tld" ops docs-index check --profile .tld/toolkit.yaml` exits 0>   # index parts only
 phases:
   - id: p1-<kebab>
     title: <one line>
@@ -228,7 +228,7 @@ ADRs (ADR parts), updates the reference docs, deletes the plan document and `man
 the changelog entry if earlier phases did not (changelog parts only), and does only the parts of
 that list that apply to this project (ADR parts, reference docs).
 
-Index parts: the retirement phase also updates the docs index: one row per doc the plan added, moved or deleted (the plan document and the manual-steps page are never indexed), the ADR-index rows, and the `CLAUDE.md` lines a change made untrue; it then runs `docs_index.py check --profile .claude/toolkit.yaml` until it exits 0. No other phase edits the index or `CLAUDE.md`, so two phases of one wave never share them; a phase that adds, moves or deletes a doc reports it as a `docs-changed:` line and you list the expected rows in the retirement phase's brief.
+Index parts: the retirement phase also updates the docs index: one row per doc the plan added, moved or deleted (the plan document and the manual-steps page are never indexed), the ADR-index rows, and the `CLAUDE.md` lines a change made untrue; it then runs `tld ops docs-index check --profile .tld/toolkit.yaml` until it exits 0. No other phase edits the index or `CLAUDE.md`, so two phases of one wave never share them; a phase that adds, moves or deletes a doc reports it as a `docs-changed:` line and you list the expected rows in the retirement phase's brief.
 
 ### Sizing for Sonnet
 
@@ -326,12 +326,12 @@ this command file's path. Ask it to report, as a numbered list with severities, 
 fails "Sizing for Sonnet"; leaves a decision open in a brief; lets two phases in one wave share a
 path in `touches`; puts a manual step in the middle or calls something manual that the dispatch
 table can dispatch; contradicts a must-read doc, an accepted ADR or the code as it is; leaves the retirement phase without the index rows for the docs the plan adds, or gives a brief no `Read first:` line (index parts); or would make
-the manifest fail `/implement`'s validation (`validate_manifest.py`, below). Fix everything it finds that you agree with. When you disagree, say why in your
+the manifest fail `/implement`'s validation (`tld plan validate-manifest`, below). Fix everything it finds that you agree with. When you disagree, say why in your
 final reply.
 
 Then check the manifest yourself with the toolkit's validator (the `project-profile` skill says
-where it is): `python3 <devflow root>/scripts/validate_manifest.py <plan file> --profile
-.claude/toolkit.yaml`. It parses the YAML block, checks that `depends_on` ids exist and form no
+where it is): `"${CLAUDE_PLUGIN_ROOT}/bin/tld" plan validate-manifest <plan file> --profile
+.tld/toolkit.yaml`. It parses the YAML block, checks that `depends_on` ids exist and form no
 cycle, that every phase has `brief` and `acceptance`, that `worker_model: opus` has a reason, and
 that same-wave phases have disjoint `touches`. Fix every error it prints; do not push a plan it
 rejects.

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""MCP stdio bridge to the devflow status board server.
+"""MCP stdio bridge to the tld status board server.
 
     board_mcp_stdio.py
 
 Reads newline-delimited JSON-RPC from stdin and forwards each message to `POST /mcp` of the board
-server named by DEVFLOW_BOARD_URL, authenticating with DEVFLOW_BOARD_TOKEN. Replies go to stdout, one
+server named by TLD_BOARD_URL, authenticating with TLD_BOARD_TOKEN. Replies go to stdout, one
 JSON object per line. When no board is configured it answers locally with an empty tool list.
 Python 3.11+, stdlib only.
 """
@@ -20,7 +20,7 @@ from tld.board import client as board_client  # noqa: E402
 from tld.board import mcp as board_mcp  # noqa: E402
 from tld.board.client import Config  # noqa: E402
 
-NO_BOARD = "No devflow board is configured (DEVFLOW_BOARD_URL and DEVFLOW_BOARD_TOKEN are unset)."
+NO_BOARD = "No tld board is configured (TLD_BOARD_URL and TLD_BOARD_TOKEN are unset)."
 
 
 def _write(stdout: TextIO, payload: dict) -> None:
@@ -44,7 +44,7 @@ def _local_reply(message: dict) -> dict | None:
         return {"jsonrpc": "2.0", "id": msg_id, "result": {
             "protocolVersion": version,
             "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": {"name": "devflow-board", "version": "1"},
+            "serverInfo": {"name": "tld-board", "version": "1"},
             "instructions": NO_BOARD,
         }}
     if method == "tools/list":

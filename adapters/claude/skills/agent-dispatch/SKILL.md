@@ -6,30 +6,30 @@ user-invocable: false
 
 # Dispatching the profile's agents
 
-The profile key `agents` decides which of the ten devflow agents are mandatory at which point, whether a
+The profile key `agents` decides which of the ten tld agents are mandatory at which point, whether a
 finding blocks, and how strict the security reviewer is. A required agent that did not run fails visibly.
-Load the `project-profile` skill first; the `agents` defaults are applied by `scripts/agents.py`, nowhere else.
+Load the `project-profile` skill first; the `agents` defaults are applied by `tld roles`, nowhere else.
 
 The points are `make_plan`, `implement_phase`, `implement_final`, `review` and `dod`.
 
 ## Resolve
 
 Write the changed paths of the diff at this point, one repo-relative path per line, to a scratch file. Skip this
-at `make_plan` and `review`, which have no diff. Then run `agents.py required` from the repo root:
+at `make_plan` and `review`, which have no diff. Then run `tld roles required` from the repo root:
 
 ```bash
-python3 "<devflow root>/scripts/agents.py" required --profile .claude/toolkit.yaml --at <point> [--changed <file>] > required.json
+"${CLAUDE_PLUGIN_ROOT}/bin/tld" roles required --profile .tld/toolkit.yaml --at <point> [--changed <file>] > required.json
 ```
 
 The JSON has `required` (agent, `blocking`, `matched`), `not_applicable` (agent, `why`), `posture.security`,
-`extra_context` and `disabled`. Exit 1 prints `agents.py: <message>` on stderr: show it and stop. A profile without
+`extra_context` and `disabled`. Exit 1 prints `tld roles: <message>` on stderr: show it and stop. A profile without
 `agents` gives an empty `required`: nothing is mandatory and this skill has nothing more to do at that point.
 Never dispatch an agent listed in `disabled`.
 
 ## Dispatch
 
 Dispatch every item of `required` with the `Agent` tool, in parallel, one call per agent. The `subagent_type` is
-the agent's name as the agent list shows it (the plugin prefix form `devflow:<name>` when that is how the list
+the agent's name as the agent list shows it (the plugin prefix form `tld:<name>` when that is how the list
 shows it). The prompt is this text, with the fields filled in from the profile (real values, not "see the profile"):
 
 ```
@@ -66,7 +66,7 @@ other point, runs in `review` mode and reports only.
 
 **Fixing a blocking finding.** A read-only agent's blocking finding is fixed by the dispatching session (the worker
 at `implement_phase`, the planner at `make_plan`) and the same agent is then dispatched again at the same point; its
-new report line is the one that counts, because `agents.py verify` reads the last line per agent and point. An edit
+new report line is the one that counts, because `tld roles verify` reads the last line per agent and point. An edit
 agent fixes its own findings in `edit` mode and ends with a report line that already reflects the fixed state.
 
 ## Report
@@ -88,7 +88,7 @@ Copy each agent's report line unchanged; never paraphrase it.
 After the agents have answered, save their full answers, report lines included, as one report file and run:
 
 ```bash
-python3 "<devflow root>/scripts/agents.py" verify --required required.json --report <report file>
+"${CLAUDE_PLUGIN_ROOT}/bin/tld" roles verify --required required.json --report <report file>
 ```
 
 It prints one line per required agent, `OK <agent> at=<point> blocking=<n>`, `MISSING <agent> at=<point>` (no
@@ -102,4 +102,4 @@ the place the table names, and they do not fail the gate.
 
 An agent that is neither required at this point nor in `disabled` may be dispatched on judgement, for example an
 `architect` for a large plan or a `debugger` for a failing test. Use the same prompt, with `at=adhoc` in the report
-line. No failure rule applies to it: its findings are advice, and `agents.py verify` does not look at it.
+line. No failure rule applies to it: its findings are advice, and `tld roles verify` does not look at it.

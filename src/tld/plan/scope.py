@@ -2,7 +2,7 @@
 """Scope-drift monitoring for /implement: which files did a phase change outside its `touches`?
 
     scope_check.py check   --plan PLAN.md|MANIFEST.yaml --phase ID --base REF --head REF
-                           [--label LABEL] [--profile .claude/toolkit.yaml]
+                           [--label LABEL] [--profile .tld/toolkit.yaml]
                            [--plan-slug SLUG --feature REF] --results FILE
     scope_check.py disposition --results FILE --base REF --head REF
     scope_check.py record  --results FILE --label LABEL
