@@ -500,10 +500,9 @@ def test_claude_md_is_thin():
     assert len(agents.splitlines()) <= 60 and "docs/README.md" in agents
 
 
-def test_the_one_plugin_is_1_0_0_dev0():
+def test_there_is_one_plugin():
     manifests = sorted(REPO_ROOT.glob("**/.claude-plugin/plugin.json"))
     assert manifests == [REPO_ROOT / ".claude-plugin" / "plugin.json"]
-    assert json.loads(manifests[0].read_text())["version"] == "1.0.0-dev0"
 
 
 def test_move_rewrites_the_profile_paths(tmp_path):

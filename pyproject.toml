@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tld"
-version = "1.0.0.dev0"
+version = "1.0.0"
 description = "tkcs-lab-devflow: a project-independent plan, implement and review workflow for coding agents"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -21,7 +21,7 @@ tld = "tld.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-tld = ["schema/*.json", "templates/*", "board/web/*", "review/*.html"]
+tld = ["schema/*.json", "templates/*", "board/web/*"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers"

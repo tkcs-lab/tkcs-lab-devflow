@@ -1,0 +1,144 @@
+name: release
+
+# Releases tkcs-lab-devflow itself: the tag v<version> on the head of main and a GitHub release whose notes are
+# the CHANGELOG.md entry of that version plus the pull requests merged since the previous tag.
+# The version is the one in pyproject.toml, .claude-plugin/plugin.json and src/tld/__init__.py, which a test keeps
+# equal; bump all three (and add the CHANGELOG entry) in a pull request first. Run it by hand: Actions, release,
+# Run workflow, on main. It starts as a dry run.
+# Modelled on src/tld/templates/tld-release.yml: the tag is made with TLD_RELEASE_TOKEN, an owner token that is a
+# secret of the environment tld-release (main only, the owner approves every run); the workflow's GITHUB_TOKEN
+# only reads, and the tag ruleset tld-tags lets no workflow token create a tag.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only show the tag and the release notes; untick to publish"
+        required: false
+        default: true
+        type: boolean
+      skip_checks:
+        description: "Release even though a check on the commit is not green"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    environment: tld-release
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Read the version
+        id: version
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, re, sys, tomllib
+          from pathlib import Path
+          package = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          plugin = json.loads(Path(".claude-plugin/plugin.json").read_text())["version"]
+          init = re.search(r'^__version__ = "([^"]+)"', Path("src/tld/__init__.py").read_text(), re.M).group(1)
+          if not package == plugin == init:
+              sys.exit(f"::error::versions differ: pyproject.toml {package}, plugin.json {plugin}, tld.__version__ {init}")
+          if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", package):
+              sys.exit(f"::error::{package} is not a release version (x.y.z): bump it in a pull request first")
+          entry = re.search(rf"^## \[{re.escape(package)}\][^\n]*\n(.*?)(?=^## \[|\Z)", Path("CHANGELOG.md").read_text(), re.M | re.S)
+          if not entry or not entry.group(1).strip():
+              sys.exit(f"::error::CHANGELOG.md has no '## [{package}]' entry")
+          Path("release-notes.md").write_text(entry.group(1).strip() + "\n")
+          print(f"version={package}")
+          print(f"tag=v{package}")
+          PY
+          echo "Release tag: $(grep '^tag=' "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check that the tag is new and find the previous one
+        id: previous
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/$REPO/git/ref/tags/$TAG" > /dev/null 2>&1; then
+            echo "::error::tag $TAG already exists"
+            exit 1
+          fi
+          previous=$(gh api --paginate "repos/$REPO/git/matching-refs/tags/v" --jq '.[].ref' \
+            | sed 's#^refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          echo "Previous tag: ${previous:-none}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check that the commit is green
+        if: inputs.skip_checks == false
+        env:
+          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          SELF: release
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::secret TLD_RELEASE_TOKEN is not set in the environment tld-release"
+            exit 1
+          fi
+          bad=$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[]
+            | select(.name != env.SELF)
+            | select(.status != "completed" or (.conclusion | IN("success", "skipped", "neutral") | not))
+            | "\(.name): \(.status) \(.conclusion // "")"')
+          if [ -n "$bad" ]; then
+            echo "::error::checks on $SHA are not all green:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "checks on $SHA are green"
+
+      - name: Write the release notes
+        env:
+          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PREVIOUS: ${{ steps.previous.outputs.previous }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::secret TLD_RELEASE_TOKEN is not set in the environment tld-release"
+            exit 1
+          fi
+          args=(-X POST "repos/$REPO/releases/generate-notes" -f tag_name="$TAG" -f target_commitish="$SHA")
+          if [ -n "$PREVIOUS" ]; then
+            args+=(-f previous_tag_name="$PREVIOUS")
+          fi
+          { echo; gh api "${args[@]}" --jq .body; } >> release-notes.md
+          { echo "## Notes for $TAG"; cat release-notes.md; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the tag and the release
+        if: inputs.dry_run == false
+        env:
+          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          object=$(gh api -X POST "repos/$REPO/git/tags" -f tag="$TAG" -f message="Release $TAG" -f object="$SHA" -f type=commit --jq .sha)
+          gh api -X POST "repos/$REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$object" > /dev/null
+          if ! url=$(gh release create "$TAG" --verify-tag --title "$TAG" --notes-file release-notes.md --repo "$REPO"); then
+            echo "::error::tag $TAG was created but the release was not; run: gh release create $TAG --verify-tag --notes-file release-notes.md --repo $REPO"
+            exit 1
+          fi
+          echo "Released $TAG: $url" >> "$GITHUB_STEP_SUMMARY"
+          echo "$url"

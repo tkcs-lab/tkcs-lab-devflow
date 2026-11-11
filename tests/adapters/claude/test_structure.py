@@ -46,7 +46,7 @@ def test_plugin_versions_agree():
     import tld
     plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())["version"]
     package = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(), re.M).group(1)
-    assert plugin.replace("-", ".") == package == tld.__version__
+    assert plugin == package == tld.__version__  # one version: the release workflow tags v<version>
 
 
 def test_no_session_start_wording_in_the_plugin():
