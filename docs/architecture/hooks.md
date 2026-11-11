@@ -6,9 +6,26 @@ plugin (`adapters/claude/hooks/hooks.json`, scripts called through `${CLAUDE_PLU
 repository that enables the plugin gets them without a per-repository copy. Project facts come from
 [`.tld/toolkit.yaml`](../reference/profile-reference.md); the scripts contain none.
 
-**Branch protection and CI stay the hard backstop.** A hook is the fast, in-loop layer: it stops the
-agent a minute after the mistake instead of a day later, and it tells the agent what to do instead.
-It is not a security boundary (see [what the hooks do not protect](#what-the-hooks-do-not-protect)).
+**Branch protection and GitHub rulesets stay the hard control.** A hook is a fast seatbelt, not a
+boundary: it stops the agent a minute after the mistake instead of a day later, and it tells the agent
+what to do instead. Anything it cannot read it cannot stop (see
+[what the hooks do not protect](#what-the-hooks-do-not-protect)); the GitHub-side rulesets and an agent
+account without merge or tag rights are what actually hold.
+
+## Neutral core, Claude adapter
+
+The policy is a runtime-neutral core (`src/tld/guard/`), and the Claude hooks are a thin adapter over
+it. The core takes an **`Action`** — `shell` (a command), `write` (a path and the text it would write),
+`github_op` (an operation name and its arguments) or `stop` — and returns a **`Decision`**: `allow`,
+`deny` (with the reason) or `error` (a non-blocking problem). Pure policy functions, one per guard,
+decide; nothing in the core knows a tool's name.
+
+`adapters/claude/hooks/claude_adapter.py` is the only Claude-specific part. It parses the PreToolUse /
+Stop JSON into an `Action` (mapping `Bash`, `Write`/`Edit`/`MultiEdit`/`NotebookEdit`, and the
+`mcp__…__*` GitHub tools), supplies the Claude-specific extra protected paths (`~/.claude/**`,
+`.claude/settings*.json`, `.claude/hooks/**`, `.mcp.json`) and `CLAUDE_PLUGIN_ROOT` to the core, and
+turns the `Decision` back into exit code 2 / stderr / a `systemMessage`. The entry scripts are one-line
+shims; `CLAUDE_PROJECT_DIR` and `stop_hook_active` are read only here.
 
 ## The hooks
 
@@ -36,7 +53,9 @@ a ref or approve (a GraphQL `--input` file, or a `-F query=@file` field, is read
 main branch (`merge-upstream`) or rename it, `gh repo sync` of the main branch (or with `--force`), and a `git push`
 whose refspec or destination is the main branch (`git.main_branch`): `git push origin main`, `HEAD:main`,
 `HEAD:refs/heads/main`, `+x:main`, `:main`, a pattern such as `refs/heads/*:refs/heads/*`, `--all`, `--branches`,
-`--mirror`.
+`--mirror`. A destination known only at run time (`git push origin "$BRANCH"`, `HEAD:$B`, `HEAD:$(echo main)`)
+is denied on any branch, because it could resolve to the main branch (S2); so is the matching refspec
+`git push origin :`, which pushes every branch that exists on both sides, the main branch among them (S5).
 
 A `git push` without a refspec (`git push`, `git push origin`) is resolved from the git configuration, as git would:
 the remote (`--repo`, `branch.<b>.pushRemote`, `remote.pushDefault`, `branch.<b>.remote`, else `origin`), then
@@ -45,6 +64,11 @@ upstream, `nothing` nothing). It is denied when the result is the main branch, a
 determined (a mirror remote, a pattern or a run-time value in `remote.<name>.push`, `matching`, a detached `HEAD`, no
 upstream, or a failed `git` lookup). A `-c remote.*`, `-c push.*` or `-c branch.*` option on the push is denied, because it
 changes where the push writes. `git send-pack`, `git http-push` and `git subtree push` are checked like `git push`.
+
+It also catches the merge and approve forms the review found open: a `curl` / `gh api` to the merge
+endpoint, a GraphQL `mergePullRequest` / `enablePullRequestAutoMerge` / `mergeBranch` / `updateRef` (read
+from `-f query=`, `-F query=@file` or `--input`), a review with `--approve` or `--approve=true`, and a
+`DELETE` / `POST` / `PUT` to the contents API on the main branch (S11).
 
 It also covers the GitHub MCP tools sessions use where there is no `gh`: `merge_pull_request`,
 `enable_pr_auto_merge`, `pull_request_review_write` with `event: APPROVE`, and `push_files` /
@@ -73,9 +97,12 @@ refs/tags/...` and `git update-ref --stdin` (its input cannot be read), `gh rele
 --tag`, and the API calls that create or move tag refs, tag objects and releases or edit or delete a release.
 
 Releases are cut by the release workflow, so a session may not start it either: `gh workflow run tld-release.yml`, the
-`dispatches` API of that workflow, and the GitHub MCP `actions_run_trigger` with `run_workflow` for it are denied
-(`run_workflow` with a workflow id instead of a file name is denied too, since it cannot be checked). Other workflows,
-such as those in `ci.dispatchable`, stay allowed. Reading stays allowed: `git tag -l`, `--list`, `-n`,
+`dispatches` API of that workflow, and the GitHub MCP `actions_run_trigger` with `run_workflow` for it are denied.
+A workflow named by a numeric id instead of a file name — `gh workflow run 123456`, `.../workflows/123456/dispatches`,
+or `run_workflow` with a numeric `workflow_id` — is denied too, since it cannot be checked against the release workflow
+(S10), and so is `actions_run_trigger` with `rerun_workflow_run` / `rerun_failed_jobs`, which could re-run a past release
+run. `git push origin tags/v1`, a `refs/tags/` source and a bare name that is a local tag are tag pushes and denied (S9).
+Other workflows, such as those in `ci.dispatchable`, stay allowed. Reading stays allowed: `git tag -l`, `--list`, `-n`,
 `--contains`, `--points-at`, `--merged`, `-v`, `git describe`, `git fetch --tags`, `git ls-remote --tags`, `gh release list`.
 The release workflow itself runs in CI and is not affected; the template (`tld-release.yml`) runs in the `release`
 GitHub environment, so a human approves each run there.
@@ -96,24 +123,37 @@ tld secret-scan: blocked: line 12 of the new file content for src/cfg.py looks l
 The value is not shown. Do not write a credential into a file: read it from the environment or a secret store ...
 ```
 
+It also matches GitLab tokens (`glpat-`), Stripe restricted keys (`rk_live_`), and names whose secret word
+is a whole token rather than the ending — `API_KEY_1`, `SECRET_KEY_BASE` — while leaving a label such as
+`secret_name` and any `public` / `pubkey` name alone (S16).
+
 For a test fixture or a documented example, build the value at run time, or end the line with `secret-scan:allow`; the mark must be the last thing on the line.
-A line of more than a million characters is not checked for generic assignments. A secret written by a Bash command (`echo $TOKEN > file`) is not seen.
+A line of more than a million characters is not checked for generic assignments. A secret a Bash command writes to
+a file is now scanned too (S16): the hook reads the heredoc / herestring body and the words of a command that
+redirects to a file or pipes to `tee` (`echo ghp_… > f`, `cat <<EOF > .env`). A secret that only passes through a
+command's output or arguments without being written to a file is still not seen.
 
 ### `protect-paths`
 
 Denies edits to the paths in `hooks.protect_paths`. The path is checked as written and with symlinks resolved. In Bash
 the hook sees redirections (`>`, `>>`, `>|`, `&>`, `2>`), `tee`, `sed -i`, `perl -i`, `cp`, `mv`, `install`, `ln`, `rm`,
-`unlink`, `shred`, `truncate`, `touch`, `dd of=`, `git rm`, `git mv`, `git checkout -- <path>` and `git restore <path>`; it
+`unlink`, `shred`, `truncate`, `touch`, `dd of=`, `git rm`, `git mv`, `git checkout -- <path>` and `git restore <path>`. It
+also covers the write forms the review found open (S17): `git apply` (the files named inside the patch), `patch`,
+`git checkout <ref> <path>` without the `--`, and a redirection target that is a `$VAR` the same command line set
+(`F=.env; echo x > $F`). It
 expands globs against the file system and `{a,b}` braces (up to 64 results, more is denied), and follows `cd`. A write
 whose target is a hard link to a protected file is denied (same device and inode, found by walking the repository), and so
 is `ln` with a protected file as its source, since a link would let a later write through. `git config` writes to
-`alias.*`, `remote.*`, `push.*`, `branch.*` and `include*` keys are denied, because they can redirect pushes or run commands. A program that writes a file itself (`npm install` updating its lockfile, a Python one-liner)
+`alias.*`, `remote.*`, `push.*`, `branch.*`, `url.*`, `include*` and `core.hooksPath` keys are denied, because they can
+redirect pushes or run commands (S17). A program that writes a file itself (`npm install` updating its lockfile, a Python one-liner)
 is not seen, which is why lockfiles are protected from hand edits and not from tools.
 
 Default list (a list in the profile replaces it): `.tld/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`,
-`go.sum`, `.github/workflows/**`. Always protected, whatever the profile says: `.claude/settings.json`,
-`.claude/settings.local.json`, `.git/config`, `.git/hooks/**`, and anything under `$CLAUDE_PLUGIN_ROOT` (the installed
-plugin). Always allowed, whatever the profile says: `.env.example`, `.env.sample`,
+`go.sum`, `.github/workflows/**`. Always protected, whatever the profile says: `.git/config`, `.git/hooks/**`, and
+anything under `$CLAUDE_PLUGIN_ROOT` (the installed plugin). Protected on their absolute path, wherever the write lands
+(S8): `~/.gitconfig` and `~/.config/git/**` (git's own configuration), and the files the Claude adapter adds —
+`~/.claude/**`, `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/**` and `.mcp.json`, since a
+session that edits Claude Code's own configuration could switch the hooks off. Always allowed, whatever the profile says: `.env.example`, `.env.sample`,
 `.env.template`, `.env.dist`, and the two workflow files the toolkit's own commands install
 (`.github/workflows/tld-land.yml` from `/land`, `.github/workflows/tld-release.yml` from `repo-admin`). That is how
 "workflow files unless a command explicitly owns them" is decided: the command's file is on the built-in allow list;
@@ -223,13 +263,23 @@ hooks:
   disable: [protect-paths]   # any of no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate
 ```
 
-`hooks.disable` is read from the profile as committed on the main branch (`origin/<main>`, else `<main>`), not from the
-working tree, so a feature branch cannot switch a guardrail off for itself; when the working tree's `hooks` section differs
-the hook shows a notice and applies only the committed list. In a repository with no commit yet, the working tree's list
-is used. The list must be a list of names; anything else, in the working tree or on the main branch, is a profile
-error (see Parsing) even though only the committed list is applied. Two gaps are accepted: a branch can change
-`git.main_branch`, and the committed copy is read from local refs (`origin/<main>`, then `<main>`), which a session can
-rewrite, for example with `git update-ref refs/remotes/origin/main <sha>`. Branch protection stays the backstop.
+`hooks.disable` and the protect lists are read from the **trusted copy** of the profile, not from the working tree, so a
+session cannot switch a guardrail off by editing its own files or moving a local ref (S1). The trusted copy is the
+profile on the remote main branch, fetched into `refs/tld/trusted` and cached for ten minutes
+(`git fetch --no-tags origin +refs/heads/<main>:refs/tld/trusted`, stamped in `<git dir>/tld/`). To keep that ref what
+the fetch made it, the destructive guards deny a session's writes to `refs/tld/*`, `refs/remotes/origin/<main>` and
+`refs/heads/<main>` (through `update-ref`, `branch -f`, `fetch` refspecs or `symbolic-ref`) and any repointing of
+`origin` (`remote set-url` / `remote add` over origin, `-c remote.origin.url`). When the working tree's `hooks` section
+differs from the trusted one the guard shows a notice and applies only the trusted list.
+
+When no trusted copy can be read — no remote, no network, or no commit yet — **nothing is disabled** and the protect
+lists are the built-in defaults plus the working tree's `protect_paths` (an allow list is never taken from the working
+tree, so it can only add protection, never remove it). One gap remains: a branch can still change `git.main_branch` in
+its own working tree, so the guards check a push or ref write against both the working tree's main branch and the trusted
+copy's. The GitHub rulesets stay the control.
+
+The list must be a list of names; anything else, in the working tree or the trusted copy, is a profile error (see
+Parsing).
 
 It is a profile change, and `.tld/toolkit.yaml` is protected from edits by sessions, so a person does it. Prefer a narrower tool
 first: `hooks.protect_paths_allow` for one more allowed path, a `secret-scan:allow` line mark for one false positive.
@@ -243,11 +293,19 @@ newlines, subshells and groups, `$(...)`, backticks and `<(...)`, heredoc bodies
 an unquoted heredoc still runs its substitutions), comments, and redirections; each command's words are split by `shlex`
 (POSIX quoting and escapes), and `$'...'` quoting is decoded to its literal value (`$'--force'` is `--force`). It then
 strips prefixes and wrappers (`FOO=1`, `env` including `env -S`, `sudo`, `nice`, `timeout`, `time`, `flock`, `script -c`,
-`command`, `exec`, `if/then/do` and a few more), unpacks `bash -c '...'` and `eval`, follows `xargs` and `find -exec`
-(only when `git` or `gh` follows), tracks `cd`, understands `git -C <dir>`, `-c k=v`, `--config-env` and `--git-dir`,
-reads `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_<n>` / `GIT_CONFIG_VALUE_<n>` from the command's own assignments or the
-environment, and resolves git aliases (from `-c alias.x=...` and from the repository's config, including `!shell`
-aliases). Mentions are not commands: `echo "gh pr merge"` and a commit message that says "never git push -f" pass.
+`command`, `exec`, `if/then/do` and a few more), unpacks `bash -c '...'`, `fish -c`, `busybox sh -c` and `eval`, follows
+`xargs` and `find -exec` into the command they run (unpacking a `sh -c` there, and treating the run-time arguments `xargs`
+or `find … +` append as a word that could be `--force`), tracks `cd`, understands `git -C <dir>`, `-c k=v`,
+`--config-env` and `--git-dir`, reads `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_<n>` / `GIT_CONFIG_VALUE_<n>` from the
+command's own assignments or the environment, and resolves git aliases (from `-c alias.x=...` and from the repository's
+config, including `!shell` aliases). Mentions are not commands: `echo "gh pr merge"` and a commit message that says
+"never git push -f" pass.
+
+Two whole-command checks run first, on every destructive guard (`src/tld/guard/integrity.py`): a command whose **name**
+is only known at run time followed by a git/gh write word (`G=git; $G push --force …`) is denied (S3), unless the name
+is a `.../bin/tld` invocation, which the commands use; and a git command that pulls configuration from a file or the
+environment (`-c include.*` / `includeIf.*`, `GIT_CONFIG_GLOBAL` / `GIT_CONFIG_SYSTEM` / `GIT_CONFIG_PARAMETERS`,
+`GIT_DIR`) is denied, because it can set a push destination or an alias the parser cannot see (S4).
 
 What is and is not unpacked: a shell given a command string (`bash -c`, `eval`) and a shell fed a herestring or heredoc
 (`bash <<< 'git push -f'`, `bash <<EOF ... EOF`) are parsed like any command line. A shell that reads its commands from
@@ -311,14 +369,16 @@ What changed in the commands: `/implement`, `/make-plan`, `/review` and `/land` 
   force pushes and no deletions on the main branch, and a release workflow that owns tags, in the repository's rules.
   The hooks make the agent stop early; the rules make sure nothing gets through if the agent, a plugin setting or a
   hook is wrong.
-- **Anything a parser cannot see.** Expansions are not evaluated (`git push origin "$BRANCH"` is allowed; a variable that
-  holds `main` is not noticed), a script file run with `bash script.sh` is not read (a shell fed by a pipe or a file is denied instead, see Parsing), a program that merges or writes files
-  itself (`python -c`, a Makefile target) is not seen, git aliases that exist only in a global config of another machine are
-  not known, and `curl` against the API is checked only for the merge endpoint.
-- **Writes the agent does not make through its tools:** secrets in Bash output, in a command line or in a commit message.
-- **A hook switched off** with `hooks.disable` on the main branch, or a profile edited by someone who may edit it. A
-  branch can still change `git.main_branch` in its own working tree, and a session can rewrite the local refs the committed
-  copy is read from.
+- **Anything a parser cannot see.** The hooks read the command, they do not run it. Code the parser cannot follow —
+  `python -c "os.system('git push --force')"`, a script file run with `bash script.sh`, a Makefile target — is **out of
+  reach of the seatbelt** and deliberately not closed; the GitHub rulesets reject the push whatever launched it.
+  Expansions are not evaluated (a variable spliced mid-word is not noticed, though a whole dynamic destination or command
+  word is denied), and `curl` / `gh api` are checked only for the merge, approve, ref, contents and dispatch endpoints.
+- **Writes the agent does not make through its tools:** a secret in Bash output or in a command line that is not written
+  to a file, or in a commit message.
+- **A hook switched off** in the trusted copy of the profile on the remote main branch, or a profile edited by someone
+  who may edit it. A branch can still change `git.main_branch` in its own working tree (the guards fall back to checking
+  the trusted copy's main branch as well).
 - **A hook that has a bug.** The destructive hooks fail closed; the others fail open.
 
 ## Installing and checking
