@@ -1,8 +1,0 @@
-{
-  "name": "stack-go",
-  "version": "0.8.0",
-  "description": "Go stack skill for devflow: toolchain, conventions, acceptance and verify_after_merge entries",
-  "author": { "name": "andras-tkcs" },
-  "license": "Apache-2.0",
-  "homepage": "https://github.com/andras-tkcs/claude-toolkit"
-}
