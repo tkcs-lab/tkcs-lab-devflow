@@ -40,6 +40,7 @@ plugins/devflow/
   schema/status-record.schema.json
   schema/admin-policy.schema.json       # the policy repo_admin.py reads; its own file, referenced by the profile key admin.policy
   board/                                # the status board page (board.html, rules.js)
+  hooks/hooks.json, hooks/*.py          # guardrail hooks: see docs/hooks.md
   templates/devflow-land.yml            # the workflow /land installs
   templates/devflow-release.yml         # the release (tag) workflow repo-admin installs
   templates/admin-policy.yaml           # starter policy
@@ -48,7 +49,8 @@ plugins/stack-swift/skills/stack-swift/SKILL.md
 plugins/stack-ipados/skills/stack-ipados/SKILL.md
 plugins/stack-go/skills/stack-go/SKILL.md
 templates/toolkit.yaml                  # commented starter profile
-docs/{README.md,profile-reference.md,delivery.md,design.md,maintenance.md,scope-drift.md,migrating-privacyfence.md}
+evals/                                  # eval harness (not shipped): see docs/evals.md
+docs/{profile-reference.md,delivery.md,design.md,hooks.md,evals.md,review.md,admin.md,git-ops.md,maintenance.md,scope-drift.md,migrating-privacyfence.md}
 docs/design/maintenance-spike.md        # record of the spike behind the maintenance commands
 tests/                                  # pytest; fixtures from real PrivacyFence plans
 .github/workflows/test.yml
