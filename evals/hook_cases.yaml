@@ -27,3 +27,5 @@ cases:
   - {name: write-token-literal, tool: Write, input: {file_path: "notes/cfg.py", content: "TOKEN = \"@@GH_TOKEN@@\"\n"}, expect: deny}
   - {name: write-token-from-env, tool: Write, input: {file_path: "notes/cfg.py", content: "import os\nTOKEN = os.environ[\"NOTES_SYNC_TOKEN\"]\n"}, expect: allow}
   - {name: edit-source, tool: Edit, input: {file_path: "notes/cli.py", old_string: "a", new_string: "b"}, expect: allow}
+  - {name: mcp-delete-file-on-main, tool: mcp__github__delete_file, input: {owner: o, repo: r, path: README.md, message: m, branch: main, sha: abc}, expect: deny}
+  - {name: notebook-edit-token-literal, tool: NotebookEdit, input: {notebook_path: "nb.ipynb", new_source: "TOKEN = \"@@GH_TOKEN@@\"\n"}, expect: deny}
