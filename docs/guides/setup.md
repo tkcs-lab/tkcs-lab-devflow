@@ -65,8 +65,8 @@ entry) and `Not verified`.
 ## `tld profile patch`
 
 ```
-bin/tld profile patch diff .tld/toolkit.yaml survey.json
-bin/tld profile patch set-block .tld/toolkit.yaml roles survey.json --answers answers.json --write [--yes]
+launcher/tld profile patch diff .tld/toolkit.yaml survey.json
+launcher/tld profile patch set-block .tld/toolkit.yaml roles survey.json --answers answers.json --write [--yes]
 ```
 
 `diff` prints JSON with `new`, `changed`, `same` and `stale` keys; stale means a path the profile names no longer exists,

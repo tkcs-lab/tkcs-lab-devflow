@@ -15,7 +15,7 @@ in Bash gives the path.
 
 | Playbook text | In Claude Code |
 |---|---|
-| `tld <group> <command>` | `"${CLAUDE_PLUGIN_ROOT}/bin/tld" <group> <command>` |
+| `tld <group> <command>` | `"${CLAUDE_PLUGIN_ROOT}/launcher/tld" <group> <command>` |
 | `<tld root>` | `${CLAUDE_PLUGIN_ROOT}` |
 | the playbook `<cmd>` (`implement <URL>`, `make-plan <URL>`, `docs init`, review apply) | the command `/tld:<cmd>` (`/tld:implement <URL>`, `/tld:review apply <URL>`) |
 | a role `<role>` | the agent `tld:<role>` (`adapters/claude/agents/<role>.md`) |

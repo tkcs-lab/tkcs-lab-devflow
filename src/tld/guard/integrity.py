@@ -36,12 +36,12 @@ GUARD_REF_PREFIXES = ("refs/tld/", "refs/replace/")
 GIT_DIR_PARTS = ("refs", "packed-refs", "objects", "info", "hooks", "config", "tld", "shallow")
 
 
-PLUGIN_LAUNCHERS = ("${CLAUDE_PLUGIN_ROOT}/bin/tld", "$CLAUDE_PLUGIN_ROOT/bin/tld")
+PLUGIN_LAUNCHERS = ("${CLAUDE_PLUGIN_ROOT}/launcher/tld", "$CLAUDE_PLUGIN_ROOT/launcher/tld")
 
 
 def is_tld_launcher(word: str, command: str = "") -> bool:
-    """The toolkit's own launcher, which the commands call: `"${CLAUDE_PLUGIN_ROOT}/bin/tld"` (also written
-    `"${CLAUDE_PLUGIN_ROOT}"/bin/tld` or `$CLAUDE_PLUGIN_ROOT/bin/tld`) or a bare `tld`. Not any other `$X/.../tld`,
+    """The toolkit's own launcher, which the commands call: `"${CLAUDE_PLUGIN_ROOT}/launcher/tld"` (also written
+    `"${CLAUDE_PLUGIN_ROOT}"/launcher/tld` or `$CLAUDE_PLUGIN_ROOT/launcher/tld`) or a bare `tld`. Not any other `$X/.../tld`,
     and not when the same command line assigns CLAUDE_PLUGIN_ROOT itself."""
     stripped = word.strip("\"'")
     if stripped == "tld":

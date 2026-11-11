@@ -3,7 +3,7 @@
     "tld-board": {
       "command": "python3",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/bin/tld",
+        "${CLAUDE_PLUGIN_ROOT}/launcher/tld",
         "board",
         "mcp-stdio"
       ],

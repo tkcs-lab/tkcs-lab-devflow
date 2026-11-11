@@ -4,4 +4,4 @@ description: Dispatches the central tld-git-ops workflow to delete a remote bran
 ---
 
 Follow `${CLAUDE_PLUGIN_ROOT}/playbooks/git-ops.md`. Load the `tld:runtime` skill first and map every runtime action
-the playbook names with it; its `tld ...` commands run as `"${CLAUDE_PLUGIN_ROOT}/bin/tld" ...`.
+the playbook names with it; its `tld ...` commands run as `"${CLAUDE_PLUGIN_ROOT}/launcher/tld" ...`.
