@@ -52,7 +52,7 @@ plugins/stack-ipados/skills/stack-ipados/SKILL.md
 plugins/stack-go/skills/stack-go/SKILL.md
 templates/toolkit.yaml                  # commented starter profile
 evals/                                  # eval harness (not shipped): see docs/evals.md
-docs/{profile-reference.md,delivery.md,design.md,hooks.md,evals.md,review.md,admin.md,git-ops.md,maintenance.md,scope-drift.md,migrating-privacyfence.md}
+docs/{profile-reference.md,delivery.md,design.md,board-server.md,hooks.md,evals.md,review.md,admin.md,git-ops.md,maintenance.md,scope-drift.md,migrating-privacyfence.md}
 docs/design/maintenance-spike.md        # record of the spike behind the maintenance commands
 tests/                                  # pytest; fixtures from real PrivacyFence plans
 .github/workflows/test.yml
@@ -338,4 +338,4 @@ Rejected:
 * Migrating old records: the next run rewrites them.
 
 Breaking change: the profile key `status.board_url` is removed; a profile that still has `status:` fails
-validation with `unknown key 'status'`. The plugin version is 0.7.0.
+validation with `unknown key 'status'`. The plugin version is 0.7.1.
