@@ -25,7 +25,8 @@ from tld.guard.action import Action, Decision, Settings  # noqa: E402
 # hook name -> (core module, fail closed)
 GUARDS = {"no-merge": ("tld.guard.no_merge", True), "no-force-push": ("tld.guard.no_force_push", True),
           "no-git-tag": ("tld.guard.no_git_tag", True), "secret-scan": ("tld.guard.secret_scan", False),
-          "protect-paths": ("tld.guard.protect_paths", False), "dod-gate": ("tld.dod.gate", False)}
+          "protect-paths": ("tld.guard.protect_paths", False), "dod-gate": ("tld.dod.gate", False),
+          "plan-gate": ("tld.guard.plan_gate", False)}
 WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 # Claude Code's own configuration: a session that edits it could switch the hooks off.
 PROTECTED = ("~/.claude/**", ".claude/settings.json", ".claude/settings.local.json", ".claude/hooks/**", ".mcp.json")
