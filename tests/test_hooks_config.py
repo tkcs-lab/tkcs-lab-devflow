@@ -48,6 +48,8 @@ def test_hooks_json_is_valid_and_every_script_exists():
     ("no_merge.py", "Write", False),
     ("no_force_push.py", "Bash", True), ("no_force_push.py", "Write", False),
     ("no_git_tag.py", "Bash", True), ("no_git_tag.py", "Edit", False),
+    ("no_git_tag.py", "mcp__github__actions_run_trigger", True), ("no_git_tag.py", "mcp__github__merge_pull_request", False),
+    ("no_force_push.py", "mcp__github__actions_run_trigger", False),
     ("secret_scan.py", "Write", True), ("secret_scan.py", "Edit", True), ("secret_scan.py", "MultiEdit", True),
     ("secret_scan.py", "Bash", False),
     ("protect_paths.py", "Write", True), ("protect_paths.py", "Edit", True), ("protect_paths.py", "MultiEdit", True),
