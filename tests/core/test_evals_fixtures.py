@@ -92,6 +92,15 @@ def test_command_fixture_profiles_are_valid(tmp_path, vp, command):
         assert not (tmp_path / "r" / profile["upstream"]["version_file"]).exists()
 
 
+def test_migrate_fixture_is_a_legacy_repo_the_migration_plans_for(tmp_path):
+    from conftest import tld_cmd
+    expected = builder("commands").build(tmp_path / "r", command="migrate")
+    assert not (tmp_path / "r" / ".tld").exists() and (tmp_path / "r" / ".claude" / "toolkit.yaml").is_file()
+    r = subprocess.run([*tld_cmd("migrate"), str(tmp_path / "r")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert all(s in r.stdout for s in expected["stop_message"])
+
+
 def test_docs_fixture_check_names_the_unindexed_doc(tmp_path):
     from conftest import tld_cmd
     expected = builder("commands").build(tmp_path / "r", command="docs")

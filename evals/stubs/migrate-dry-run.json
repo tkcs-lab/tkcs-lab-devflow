@@ -1,0 +1,17 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "Dry run of tld migrate: .claude/toolkit.yaml moves to .tld/toolkit.yaml, 'models.planner' is removed, models.worker becomes standard and tld.version is added. Nothing was changed.",
+  "actions": [
+    {
+      "id": "t1",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "tld migrate .",
+      "error": null,
+      "output": ""
+    }
+  ]
+}

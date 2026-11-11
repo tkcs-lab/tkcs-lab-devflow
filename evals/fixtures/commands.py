@@ -9,6 +9,8 @@ judgement, so the task checks the command still reads the profile and stops wher
 - `board`: no board variables; the board check prints the setup text.
 - `implement`: a plan on `plan/tags` whose manifest has a dependency cycle; implement must stop before it
   creates the feature branch.
+- `migrate`: a claude-toolkit era profile in `.claude/toolkit.yaml` (model names, `models.planner`, no
+  `tld.version`); `migrate --dry-run` shows the plan and changes nothing.
 No real project names, no secrets, no network.
 """
 from __future__ import annotations
@@ -69,6 +71,11 @@ def build(dest: Path, command: str = "land") -> dict:
         expected["stop_message"] = ["TLD_BOARD_URL", "TLD_BOARD_TOKEN"]
     elif command == "implement":
         files[".tld/toolkit.yaml"] = _profile()
+    elif command == "migrate":
+        legacy = _profile().split("\n\n", 1)[1]  # without the tld block
+        files.pop(".tld/toolkit.yaml", None)
+        files[".claude/toolkit.yaml"] = legacy + "\nmodels:\n  planner: opus\n  worker: sonnet\n"
+        expected["stop_message"] = [".tld/toolkit.yaml", "models.planner"]
     else:
         raise ValueError(f"no fixture for command {command!r}")
     init_repo(dest, files)
