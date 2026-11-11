@@ -3,7 +3,7 @@ import pytest
 
 import hooks_helpers  # noqa: F401  (puts the hooks directory on sys.path)
 
-from hooks_helpers import bash, make_repo, run
+from hooks_helpers import BASH_GUARDS, bash, make_repo, run
 from _shell import DYN, ParseError, split_commands, walk
 
 
@@ -117,3 +117,39 @@ def test_ansi_c_quoting_is_decoded(tmp_path):
                     "bash -c $'git push -f origin feature'"]:
         assert run("no-force-push", bash(command, repo)).code == 2, command
     assert run("no-merge", bash("git push origin $'HEAD:main'", repo)).code == 2
+
+
+DENY, ALLOW = 2, 0
+
+
+@pytest.mark.parametrize("command, code, merge", [
+    ("git push $'--force' origin feature", DENY, False),
+    ("git push origin $'+feature'", DENY, False),
+    ("git push origin $'HEAD:main'", DENY, True),
+    ("bash -c $'git push -f origin feature'", DENY, False),
+    ("echo 'git push -f origin feature' | bash", DENY, False),
+    ("bash <<< 'git push -f origin feature'", DENY, False),
+    ("bash <<'EOF'\ngit push -f origin feature\nEOF", DENY, False),
+    ("sh <<EOF\ngit push origin HEAD:main\nEOF", DENY, True),
+    ("bash -s <<-EOF\n\tgit push -f origin feature\n\tEOF", DENY, False),
+    ("bash -o errexit < script.sh", DENY, False),
+    ("cat <<EOF | bash\ngit push -f x\nEOF", DENY, False),
+    ("bash script.sh", ALLOW, False),
+    ("bash -c 'echo hi'", ALLOW, False),
+    ("cat <<EOF\ngit push -f x\nEOF", ALLOW, False),
+    ("echo hi | cat", ALLOW, False),
+    ("bash --version", ALLOW, False),
+    ("bash -x script.sh <<< 'git push -f x'", ALLOW, False),
+    ("bash <<< 'echo hi'", ALLOW, False),
+])
+def test_stdin_fed_shells_and_ansi_c_are_denied(command, code, merge, tmp_path):
+    """`merge` rows push to main without forcing: no-merge is the hook that denies them."""
+    repo = make_repo(tmp_path / "r", "feature/demo")
+    hooks = ("no-merge",) if merge else ("no-force-push",) if code == DENY else BASH_GUARDS
+    for hook in hooks:
+        assert run(hook, bash(command, repo)).code == code, hook
+
+
+def test_heredoc_body_is_kept_on_its_command():
+    cmds = split_commands("cat <<A | bash <<-'B'\nx\nA\n\tgit push\n\tB\nls <<< 'y z'")
+    assert [(c.words, c.stdin_text) for c in cmds] == [(["cat"], "x\n"), (["bash"], "git push\n"), (["ls"], "y z")]
