@@ -32,6 +32,7 @@ The server prints `board_server: listening on http://127.0.0.1:8787` and keeps r
   "plan_url": "https://example.com/example/example-project/blob/plan/docs/plan.md",
   "feature_branch": "feature/plan-example-project",
   "orchestrator_session": "session_example-project",
+  "attended": true,
   "status": "running",
   "needs_you": false,
   "needs_you_reason": "",

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Scan a repository for documentation facts (input to /setup).
 
-Usage: survey_docs.py [ROOT]
+Usage: tld profile survey-docs [ROOT]
 
 Prints the result of `scan(ROOT)` (default `.`) as JSON, 2-space indented: the must-read files, the
-decision-record directory and its index, the changelog and its unreleased heading, and the
+docs index (`docs/README.md` or `docs/index.md`), the decision-record directory and its index, the changelog and its unreleased heading, and the
 documentation website (directory, tool, build and link-check commands).
 
 Exit 0 ok; 1 ROOT is not a directory (`survey_docs: <message>`).
@@ -20,6 +20,7 @@ SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "vendor", "build", "dist",
              "__pycache__", "DerivedData"}
 MUST_READ = ["README.md", "CONTRIBUTING.md", "ARCHITECTURE.md", "SECURITY.md"]
 ADR_DIRS = ["docs/adr", "docs/adrs", "docs/decisions", "doc/adr", "adr"]
+INDEXES = ["docs/README.md", "docs/index.md"]
 CHANGELOGS = ["CHANGELOG.md", "CHANGES.md", "HISTORY.md"]
 UNRELEASED = re.compile(r"^##\s+\[?Unreleased\]?")
 LINK_SCRIPT = re.compile(r"^(check[-:_]?links?|link[-:_]?check|linkcheck|links)$")
@@ -107,7 +108,8 @@ def scan(root: Path) -> dict:
     if adr_dir:
         adr_index = next((f"{adr_dir}/{n}" for n in ("README.md", "index.md")
                           if (root / adr_dir / n).is_file()), None)
-    return {"must_read": must_read, "adr_dir": adr_dir, "adr_index": adr_index,
+    index = next((n for n in INDEXES if (root / n).is_file()), None)
+    return {"must_read": must_read, "index": index, "adr_dir": adr_dir, "adr_index": adr_index,
             "changelog": _changelog(root), "website": _website(root)}
 
 

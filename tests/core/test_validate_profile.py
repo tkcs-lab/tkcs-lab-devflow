@@ -6,7 +6,7 @@ import sys
 import pytest
 import yaml
 
-from conftest import TLD, FIXTURES, tld_cmd
+from conftest import ROOT, TLD, FIXTURES, tld_cmd
 
 MINIMAL = {
     "docs": {"must_read": []},
@@ -72,8 +72,8 @@ def test_type_errors(vp, mutate, fragment):
 
 def test_defaults_are_the_only_defaults(vp):
     _, _, resolved = vp.validate(MINIMAL)
-    assert resolved["docs"]["plan_dir"] == "docs"
-    assert resolved["models"] == {"planner": "opus", "orchestrator": "sonnet", "worker": "sonnet", "reviewer": "opus"}
+    assert resolved["docs"]["plan_dir"] == "docs/plans"
+    assert resolved["models"] == {"worker": "standard", "reviewer": "strong"}
     assert "adr_dir" not in resolved["docs"]
     assert "ci" not in resolved and "project_steward" not in resolved
 
@@ -192,7 +192,7 @@ def test_cli_resolved_json(tmp_path):
     f.write_text(yaml.safe_dump(MINIMAL))
     out = run_cli(str(f), "--no-file-checks", "--resolved")
     assert out.returncode == 0
-    assert json.loads(out.stdout)["docs"]["plan_dir"] == "docs"
+    assert json.loads(out.stdout)["docs"]["plan_dir"] == "docs/plans"
 
 
 def test_privacyfence_profile_is_valid(vp):
@@ -318,3 +318,17 @@ def test_git_ops_workflow_must_be_a_workflow_file_name(vp, workflow, ok):
 
 def test_git_ops_unknown_key_is_rejected(vp):
     assert any("unknown key 'git_ops.extra'" in e for e in errs(vp, _with_git_ops(repo="a/b", extra=1)))
+
+
+def test_profile_schema_has_no_status_key():
+    schema = json.loads((TLD / "schema" / "profile.schema.json").read_text())
+    assert "status" not in schema["properties"]
+
+
+def test_profile_with_the_old_status_key_is_rejected(tmp_path):
+    profile = tmp_path / "toolkit.yaml"
+    profile.write_text((ROOT / ".tld" / "toolkit.yaml").read_text() + "status:\n  board_url: https://example.org/x\n")
+    result = subprocess.run([*tld_cmd("profile", "validate"), str(profile), "--no-file-checks"],
+                            capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "unknown key 'status'" in result.stderr

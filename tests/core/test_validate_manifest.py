@@ -15,8 +15,6 @@ manual_before:
   - {id: mb1-account, title: Create an account, why: p1 needs it, done_when: the key exists}
 manual_after:
   - {id: ma1-check, title: Click through, why: CI cannot}
-manual_steps_artifact: https://claude.ai/artifact/abc
-manual_steps_source: docs/demo-plan-manual-steps.html
 verify_after_merge: [make test]
 final_checks: [the plan is deleted]
 phases:
@@ -121,11 +119,16 @@ def test_overlap_allowed_through_transitive_dependency(vm):
     assert errors(m, vm) == []
 
 
-def test_worker_model_opus_needs_reason(vm):
-    m = mutated(lambda m: m["phases"][0].update(worker_model="opus"))
-    assert any("worker_model_reason" in e for e in errors(m, vm))
-    m["phases"][0]["worker_model_reason"] = "subtle locking"
+def test_worker_level_strong_needs_reason(vm):
+    m = mutated(lambda m: m["phases"][0].update(worker_level="strong"))
+    assert any("worker_level_reason" in e for e in errors(m, vm))
+    m["phases"][0]["worker_level_reason"] = "subtle locking"
     assert errors(m, vm) == []
+
+
+def test_worker_level_is_a_level(vm):
+    m = mutated(lambda m: m["phases"][0].update(worker_level="opus"))
+    assert any("worker_level must be one of strong, standard, fast" in e for e in errors(m, vm))
 
 
 def test_complexity_must_be_s_or_m(vm):
@@ -143,10 +146,10 @@ def test_legacy_manual_key_means_manual_after(vm):
     assert errors(m, vm) == []
 
 
-def test_artifact_without_source_warns(vm):
-    m = mutated(lambda m: m.pop("manual_steps_source"))
-    errs, warns = vm.validate(m)
-    assert errs == [] and any("manual_steps_source" in w for w in warns)
+def test_tracking_issue_is_optional(vm):
+    """C13: a manifest without tracking_issue is valid."""
+    m = mutated(lambda m: m.pop("tracking_issue", None))
+    assert errors(m, vm) == []
 
 
 @pytest.mark.parametrize("value", [0, -1, "7", True, 1.5])
@@ -242,3 +245,13 @@ def test_real_privacyfence_manifests(vm, fixture, phases):
     assert len(manifest["phases"]) == phases
     out = run_cli(str(FIXTURES / fixture), "--profile", str(FIXTURES / "privacyfence-toolkit.yaml"))
     assert out.returncode == 0, out.stderr
+
+
+@pytest.mark.parametrize("manifest", sorted(FIXTURES.glob("privacyfence-*-manifest.yaml")), ids=lambda p: p.name)
+def test_privacyfence_manifests_still_validate(manifest):
+    """Regression fixtures: two real manifests validate against the real profile they were written for."""
+    out = subprocess.run(
+        [*tld_cmd("plan", "validate-manifest"), str(manifest),
+         "--profile", str(FIXTURES / "privacyfence-toolkit.yaml")],
+        capture_output=True, text=True)
+    assert out.returncode == 0, out.stdout + out.stderr

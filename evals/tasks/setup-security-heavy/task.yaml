@@ -1,5 +1,5 @@
 id: setup-security-heavy
-description: /setup on a security-heavy repository must write a valid profile whose agents block matches the expected proposal.
+description: /setup on a security-heavy repository must write a valid profile whose roles block matches the expected proposal.
 command: /tld:setup
 arguments: create --accept-proposals
 fixture:
@@ -13,4 +13,4 @@ cost_ceiling_usd: 3.0
 requires: [adapters/claude/commands/setup.md]
 graders:
   - profile_valid
-  - agents_block_equals
+  - roles_block_equals

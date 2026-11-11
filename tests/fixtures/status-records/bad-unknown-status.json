@@ -8,6 +8,7 @@
   "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/plan/example-plan/docs/plans/example-plan-plan.md",
   "feature_branch": "feature/example-plan",
   "orchestrator_session": "session_01...",
+  "attended": true,
   "status": "paused",
   "needs_you": false,
   "needs_you_reason": "",

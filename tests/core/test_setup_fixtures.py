@@ -4,7 +4,7 @@ import yaml
 
 from evals.fixtures import setup_repos
 
-KEYS = {"main_branch", "repo", "stacks", "agents", "website", "dispatchable", "adr_dir", "adr_index", "changelog"}
+KEYS = {"main_branch", "repo", "stacks", "roles", "website", "dispatchable", "adr_dir", "adr_index", "changelog"}
 MD_COUNTS = {"docs_website": 11, "security_heavy": 3, "ios_ui_app": 1, "bare": 1}
 
 

@@ -97,12 +97,12 @@ EXPECTED = {
         "stacks": ["python"],
         "website": None,
         "dispatchable": [],
-        "agents": {
+        "roles": {
             "posture": {"security": "critical"},
             "disable": ["website-maintainer"],
             "required": [
-                {"agent": "security-reviewer", "at": ["implement_phase", "implement_final"], "blocking": True},
-                {"agent": "test-architect", "at": ["make_plan"], "blocking": False},
+                {"role": "security-reviewer", "at": ["implement_phase", "implement_final"], "blocking": True},
+                {"role": "test-architect", "at": ["make_plan"], "blocking": False},
             ],
         },
     },
@@ -110,12 +110,12 @@ EXPECTED = {
         "stacks": ["swift", "ipados"],
         "website": None,
         "dispatchable": ["macos-tests.yml"],
-        "agents": {
+        "roles": {
             "posture": {"security": "standard"},
             "disable": ["website-maintainer"],
             "required": [
-                {"agent": "security-reviewer", "at": ["implement_final"], "blocking": False},
-                {"agent": "ux-reviewer", "at": ["implement_final"], "blocking": False, "when": ["Sources/App/Views/**"]},
+                {"role": "security-reviewer", "at": ["implement_final"], "blocking": False},
+                {"role": "ux-reviewer", "at": ["implement_final"], "blocking": False, "when": ["Sources/App/Views/**"]},
             ],
         },
     },
@@ -123,12 +123,12 @@ EXPECTED = {
         "stacks": ["go"],
         "website": {"dir": "website", "build": "npm run build", "links": "npm run check-links"},
         "dispatchable": [],
-        "agents": {
+        "roles": {
             "posture": {"security": "standard"},
             "required": [
-                {"agent": "security-reviewer", "at": ["implement_final"], "blocking": False},
-                {"agent": "test-architect", "at": ["make_plan"], "blocking": False},
-                {"agent": "tech-writer", "at": ["dod"], "blocking": False},
+                {"role": "security-reviewer", "at": ["implement_final"], "blocking": False},
+                {"role": "test-architect", "at": ["make_plan"], "blocking": False},
+                {"role": "tech-writer", "at": ["dod"], "blocking": False},
             ],
         },
     },
@@ -136,7 +136,7 @@ EXPECTED = {
         "stacks": [],
         "website": None,
         "dispatchable": [],
-        "agents": {"posture": {"security": "standard"}, "disable": ["website-maintainer"]},
+        "roles": {"posture": {"security": "standard"}, "disable": ["website-maintainer"]},
     },
 }
 

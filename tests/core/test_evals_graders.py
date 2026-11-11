@@ -27,8 +27,8 @@ def plan_docs(manifest=None):
 
 
 PROFILE_OK = [("worktree", ".tld/toolkit.yaml", PROFILE)]
-AGENTS_EXPECTED = {"agents": {"posture": {"security": "critical"}, "required": [{"agent": "security-reviewer", "at": ["dod"], "blocking": False}]}}
-AGENTS_PROFILE = PROFILE + "agents:\n  posture:\n    security: critical\n  required:\n    - {agent: security-reviewer, at: [dod], blocking: false}\n"
+AGENTS_EXPECTED = {"roles": {"posture": {"security": "critical"}, "required": [{"role": "security-reviewer", "at": ["dod"], "blocking": False}]}}
+AGENTS_PROFILE = PROFILE + "roles:\n  posture:\n    security: critical\n  required:\n    - {role: security-reviewer, at: [dod], blocking: false}\n"
 GOOD_STATUS = (FIXTURES / "status-records" / "good-run.json").read_text()
 
 # name -> (good ctx, [(label, bad ctx), ...])
@@ -75,11 +75,11 @@ CASES = {
          ("broken yaml", ctx([("worktree", ".tld/toolkit.yaml", "a: [")])),
          ("missing keys", ctx([("worktree", ".tld/toolkit.yaml", "docs: {}\n")]))],
     ),
-    "agents_block_equals": (
+    "roles_block_equals": (
         ctx([("worktree", ".tld/toolkit.yaml", AGENTS_PROFILE)], expected=AGENTS_EXPECTED),
         [("no profile", ctx([], expected=AGENTS_EXPECTED)),
          ("other posture", ctx([("worktree", ".tld/toolkit.yaml", AGENTS_PROFILE.replace("critical", "low"))], expected=AGENTS_EXPECTED)),
-         ("no agents key", ctx(PROFILE_OK, expected=AGENTS_EXPECTED)),
+         ("no roles key", ctx(PROFILE_OK, expected=AGENTS_EXPECTED)),
          ("only on a branch", ctx([("chore/x", ".tld/toolkit.yaml", AGENTS_PROFILE)], expected=AGENTS_EXPECTED)),
          ("no expectation", ctx([("worktree", ".tld/toolkit.yaml", AGENTS_PROFILE)]))],
     ),

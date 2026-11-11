@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """Validate a tld status record (the document the board shows).
 
-    validate_status_record.py FILE|- [--doc-id ID]
+    tld board validate-record FILE|- [--doc-id ID]
+    tld board project-slug OWNER/NAME
 
 Exit 0 and `status-record: OK`, or exit 1 and one line per error, each starting `status-record: `
 and naming the field in single quotes. The rules are plain Python (no schema interpreter); the schema
-file src/tld/schema/status-record.schema.json documents the shape. Python 3.11+, stdlib only.
+file src/tld/schema/status-record.schema.json documents the shape. `project-slug` prints the project
+slug of a repository (`project_slug`), the only value a record's `project` may have.
+
+The record model (C7): `attended` says whether a person started the command and can answer;
+`orchestrator_session` is the session id, or null when the session cannot read its own id; the final
+states are `done`, `failed` and `pr_open`. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
 
@@ -17,7 +23,7 @@ from datetime import datetime
 
 FIELDS = (
     "schema", "kind", "command", "project", "repo", "plan_slug", "plan_url", "feature_branch",
-    "orchestrator_session", "status", "needs_you", "needs_you_reason", "needs_you_since",
+    "orchestrator_session", "attended", "status", "needs_you", "needs_you_reason", "needs_you_since",
     "phases", "pr", "last_event", "next_check_at", "finished_at", "updated_at",
 )
 ITEM_FIELDS = ("id", "title", "depends_on", "complexity", "state", "session", "branch", "started_at", "finished_at", "pr", "scope")
@@ -31,7 +37,8 @@ CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 PR_FIELDS = ("number", "url", "state", "ci", "awaiting")
 
 KINDS = ("run", "maintenance")
-COMMANDS = ("deps", "upstream", "land", "setup", "docs")
+COMMANDS = ("deps", "upstream", "land", "setup", "docs", "review", "make-plan")
+FINAL = ("done", "failed", "pr_open")
 STATUSES = ("starting", "running", "waiting_user", "reviewing", "pr_open", "done", "failed")
 ITEM_STATES = {
     "run": ("pending", "running", "merged", "failed", "gate"),
@@ -44,6 +51,12 @@ REASON_MAX = 140
 TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 SLUG = re.compile(r"^[a-z0-9-]+$")
 REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+def project_slug(repo: str) -> str:
+    """The project slug of `owner/name`: the name, lower case, every run of other characters one hyphen."""
+    name = repo.rsplit("/", 1)[-1]
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
 def _is_timestamp(value) -> bool:
@@ -187,9 +200,9 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
         if kind == "run" and command is not None:
             errors.append("'command' must be null when 'kind' is 'run'")
         elif kind == "maintenance" and command not in COMMANDS:
-            errors.append("'command' must be 'deps', 'upstream', 'land', 'setup' or 'docs' when 'kind' is 'maintenance'")
+            errors.append(f"'command' must be one of {', '.join(COMMANDS)} when 'kind' is 'maintenance'")
         elif kind is None and command is not None and command not in COMMANDS:
-            errors.append("'command' must be null, 'deps', 'upstream', 'land', 'setup' or 'docs'")
+            errors.append(f"'command' must be null or one of {', '.join(COMMANDS)}")
     project = rec.get("project")
     if "project" in rec:
         if not (isinstance(project, str) and SLUG.match(project)):
@@ -198,6 +211,9 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
             errors.append("'project' must not contain a double hyphen (it separates project and command)")
     if "repo" in rec and not (isinstance(rec["repo"], str) and REPO.match(rec["repo"])):
         errors.append("'repo' must look like owner/name")
+    elif isinstance(project, str) and SLUG.match(project) and "--" not in project and "repo" in rec:
+        if project != project_slug(rec["repo"]):
+            errors.append(f"'project' must be '{project_slug(rec['repo'])}', the slug of the repository name")
     if doc_id is not None and isinstance(project, str):
         if kind == "maintenance" and command in COMMANDS:
             expected = f"{project}--{command}"
@@ -209,18 +225,20 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
         for key in ("plan_slug", "plan_url", "feature_branch", "next_check_at"):
             if key in rec and rec[key] is not None:
                 errors.append(f"'{key}' must be null for a maintenance record")
-        if "orchestrator_session" in rec:
-            if command == "setup":
-                if not _nonempty_str(rec["orchestrator_session"]):
-                    errors.append("'orchestrator_session' must be a non-empty string for a 'setup' record")
-            elif rec["orchestrator_session"] != "scheduled":
-                errors.append("'orchestrator_session' must be \"scheduled\" for a maintenance record")
     elif kind == "run":
         for key in ("plan_slug", "plan_url", "feature_branch"):
             if key in rec and not _nonempty_str(rec[key]):
                 errors.append(f"'{key}' must be a non-empty string for a run")
-        if "orchestrator_session" in rec and not _nonempty_str(rec["orchestrator_session"]):
-            errors.append("'orchestrator_session' must be a non-empty string")
+    session = rec.get("orchestrator_session")
+    if "orchestrator_session" in rec:
+        if session == "scheduled":
+            errors.append("'orchestrator_session' is the session id or null; 'attended: false' marks an unattended run")
+        elif session is not None and not _nonempty_str(session):
+            errors.append("'orchestrator_session' must be a non-empty string or null")
+        elif session is None and rec.get("attended") is True:
+            errors.append("'orchestrator_session' must be the session id when 'attended' is true")
+    if "attended" in rec and not isinstance(rec["attended"], bool):
+        errors.append("'attended' must be true or false")
 
     # Rule 3: enums.
     status = rec.get("status")
@@ -286,7 +304,7 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
         finished = rec["finished_at"] is not None
         if status in ("done", "failed") and not finished:
             errors.append(f"'finished_at' must be set when 'status' is '{status}'")
-        if status not in ("done", "failed") and finished:
+        if status not in FINAL and finished:
             errors.append(f"'finished_at' must be null when 'status' is '{status}'")
 
     # Rule 6: no timer when nobody is waiting on the clock.
@@ -296,10 +314,20 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if args[:1] == ["project-slug"]:
+        sp = argparse.ArgumentParser(prog="tld board project-slug", description="Print the project slug of a repository.")
+        sp.add_argument("repo", help="owner/name")
+        a = sp.parse_args(args[1:])
+        if not REPO.match(a.repo):
+            print(f"status-record: '{a.repo}' does not look like owner/name", file=sys.stderr)
+            return 1
+        print(project_slug(a.repo))
+        return 0
     parser = argparse.ArgumentParser(description="Validate a tld status record.")
     parser.add_argument("file", help="path of the JSON record, or - for stdin")
     parser.add_argument("--doc-id", help="the document id the record is stored under")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args)
     try:
         text = sys.stdin.read() if args.file == "-" else open(args.file, encoding="utf-8").read()
         rec = json.loads(text)

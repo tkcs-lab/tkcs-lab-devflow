@@ -1,4 +1,4 @@
-"""tiny_app plus a profile with an `agents` block, and a feature branch with one commit that changes notes/store.py.
+"""tiny_app plus a profile with a `roles` block, and a feature branch with one commit that changes notes/store.py.
 
 The runner clones the repository; post_clone puts the clone on `feature/agents-demo`, so the /dod diff
 against origin/main is not empty. No real project names, no secrets, no network.
@@ -15,11 +15,11 @@ BRANCH = "feature/agents-demo"
 
 def _profile(posture: str) -> str:
     return tiny_app.PROFILE + (
-        "\nagents:\n"
+        "\nroles:\n"
         "  posture:\n"
         f"    security: {posture}\n"
         "  required:\n"
-        "    - {agent: security-reviewer, at: [dod], blocking: false}\n"
+        "    - {role: security-reviewer, at: [dod], blocking: false}\n"
     )
 
 

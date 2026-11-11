@@ -1,5 +1,8 @@
-# Profile of the tkcs-lab-devflow repository itself (read by /make-plan, /implement, /dod, /review).
+# Profile of the tkcs-lab-devflow repository itself (read by the playbooks make-plan, implement, dod, review).
 # Reference: docs/reference/profile-reference.md
+
+tld:
+  version: ">=1.0,<2"
 
 project:
   name: tkcs-lab-devflow
@@ -7,7 +10,8 @@ project:
 docs:
   must_read:
     - README.md
-  plan_dir: docs/
+  index: docs/README.md
+  plan_dir: docs/plans/
 
 git:
   main_branch: main
@@ -25,7 +29,7 @@ verify:
     - ".venv/bin/python bin/tld ops repo-admin validate-policy src/tld/templates/admin-policy.yaml"
     - 'for m in tests/fixtures/privacyfence-*-manifest.yaml; do .venv/bin/python bin/tld plan validate-manifest "$m" --profile tests/fixtures/privacyfence-toolkit.yaml || exit 1; done'
   dod_manual:
-    - "Every behaviour a command file promises is covered by a test that greps the exact string or runs the script."
-    - "No project-specific word was added to src/, adapters/ or .claude-plugin/ (tests/core/test_no_project_words.py)."
+    - "Every tld command a playbook or adapter names parses with the real CLI, and every behaviour it promises of a script is covered by a test that runs the script (tests/core/test_contracts.py)."
+    - "No project-specific word was added to src/, bin/, adapters/, .claude-plugin/, playbooks/, roles/, checklists/ or stacks/ (tests/core/test_no_project_words.py)."
 
 stacks: [python]

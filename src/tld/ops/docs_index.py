@@ -5,11 +5,12 @@
                             [--max-claude-lines 60] [--max-index-lines 150] [--max-doc-lines 400]
                             [--strict] [--json]
     docs_index.py inventory [--profile .tld/toolkit.yaml] [--root .] [--index PATH] [--json]
-    docs_index.py move SRC DST [--root .] [--apply] [--exclude GLOB]... [--json]
+    docs_index.py move SRC DST [--root .] [--profile .tld/toolkit.yaml] [--apply] [--exclude GLOB]... [--json]
 
 `move` renames one file and rewrites every reference to it (markdown links, root path mentions, quoted
-path expressions in .py files); it is a dry run unless --apply is given, and it reports mentions it
-cannot rewrite safely as `unresolved:` lines. The other two modes never write anything.
+path expressions in .py files, and the paths in the profile, such as `docs.must_read` or `docs.index`);
+it is a dry run unless --apply is given, and it reports mentions it cannot rewrite safely as
+`unresolved:` lines. The other two modes never write anything.
 
 `check` exits 1 on an error (and, with --strict, on a warning); 2 when it cannot run (no `docs.index`
 in the profile and no --index). `inventory` always exits 0 and prints, for every markdown file under
@@ -460,7 +461,8 @@ def run_move(args) -> int:
         return 1
     exists = lambda p: (root / p).is_file()  # noqa: E731
     plans, changes, unresolved = {}, [], []
-    for f in scanned_files(root, args.exclude):
+    scanned = scanned_files(root, args.exclude)
+    for f in scanned:
         text = (root / f).read_text(errors="replace")
         new_text, ch, un = plan_file(text, f, src, dst, exists)
         for c in ch:
@@ -469,6 +471,17 @@ def run_move(args) -> int:
             unresolved.append({"file": f, "line": line, "kind": kind, "message": msg})
         if ch:
             plans[f] = new_text
+    profile = Path(args.profile) if args.profile else root / DEFAULT_PROFILE
+    if not profile.is_absolute():
+        profile = root / profile
+    prof_rel = os.path.relpath(profile, root).replace(os.sep, "/")
+    if profile.is_file() and prof_rel not in scanned:
+        text = profile.read_text(errors="replace")
+        new_text, ch = _apply(text, mention_edits(text, src, dst))
+        for c in ch:
+            changes.append({"file": prof_rel, **c})
+        if ch:
+            plans[prof_rel] = new_text
     n_files = len({c["file"] for c in changes})
     summary = (f"{len(changes)} reference(s) in {n_files} file(s) would change, {len(unresolved)} unresolved"
                if not args.apply else None)
@@ -537,6 +550,7 @@ def main(argv: list[str] | None = None) -> int:
     mv.add_argument("src", metavar="SRC", help="repo-relative path of the file to move")
     mv.add_argument("dst", metavar="DST", help="repo-relative destination path (must not exist)")
     mv.add_argument("--root", default=".", help="repository root (default: the current directory)")
+    mv.add_argument("--profile", help=f"profile whose paths are rewritten too (default {DEFAULT_PROFILE} under --root)")
     mv.add_argument("--apply", action="store_true", help="perform the move and the rewrites (default: dry run)")
     mv.add_argument("--exclude", action="append", default=[], metavar="GLOB",
                     help="skip files matching this glob (repeatable; added to the default excludes)")

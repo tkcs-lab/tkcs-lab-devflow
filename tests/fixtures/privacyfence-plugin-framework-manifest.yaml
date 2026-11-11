@@ -2,8 +2,6 @@ plan_slug: plugin-framework
 feature_branch: feature/plugin-framework
 tracking_issue: 846
 max_parallel: 3
-manual_steps_artifact: https://claude.ai/artifact/HWFGVdnbDPW4kkE75kwLz5
-manual_steps_source: docs/plugin-framework-plan-manual-steps.html
 manual_before:
 - id: mb1-pypi-pending-publishers
   title: Register privacyfence-plugin-sdk as a pending trusted publisher on TestPyPI and PyPI
@@ -147,8 +145,8 @@ phases:
   depends_on:
   - p1-protocol-core
   complexity: M
-  worker_model: opus
-  worker_model_reason: It extends the policy engine's static tables and the "Always allow" proposal path; a proposal that matches more than the call it came from silently widens what auto-accepts.
+  worker_level: strong
+  worker_level_reason: It extends the policy engine's static tables and the "Always allow" proposal path; a proposal that matches more than the call it came from silently widens what auto-accepts.
   touches:
   - src/privacyfence/auto_accept.py
   - src/privacyfence/policy/registry.py
@@ -330,8 +328,8 @@ phases:
   depends_on:
   - p2-blocks-manifest
   complexity: M
-  worker_model: opus
-  worker_model_reason: Cross-platform ownership and ACL logic extracted from the privilege-separation code; a mistake silently weakens the ADR 0058 boundary.
+  worker_level: strong
+  worker_level_reason: Cross-platform ownership and ACL logic extracted from the privilege-separation code; a mistake silently weakens the ADR 0058 boundary.
   touches:
   - src/privacyfence/privilege_separation.py
   - src/privacyfence/plugins/trust.py
@@ -452,8 +450,8 @@ phases:
   depends_on:
   - p2-blocks-manifest
   complexity: M
-  worker_model: opus
-  worker_model_reason: Confirmations must never be auto-accepted and must keep step-up; card rendering of plugin-supplied text is an injection surface.
+  worker_level: strong
+  worker_level_reason: Confirmations must never be auto-accepted and must keep step-up; card rendering of plugin-supplied text is an injection surface.
   touches:
   - src/privacyfence/plugins/confirm.py
   - src/privacyfence/dialog_window_html.py
@@ -504,8 +502,8 @@ phases:
   - p4-policy-dynamic
   - p7-tool-defs
   complexity: M
-  worker_model: opus
-  worker_model_reason: Prepare-to-release consistency, pending-call reuse and single-use writes are security invariants of the gate.
+  worker_level: strong
+  worker_level_reason: Prepare-to-release consistency, pending-call reuse and single-use writes are security invariants of the gate.
   touches:
   - src/privacyfence/plugins/connector.py
   - tests/unit/plugins/test_connector.py
@@ -620,8 +618,8 @@ phases:
   depends_on:
   - p13b-daemon-wiring
   complexity: M
-  worker_model: opus
-  worker_model_reason: The sandbox CSP and the route authentication are the whole isolation story for plugin HTML.
+  worker_level: strong
+  worker_level_reason: The sandbox CSP and the route authentication are the whole isolation story for plugin HTML.
   touches:
   - src/privacyfence/plugins/pages.py
   - src/privacyfence/web/routes_plugins.py

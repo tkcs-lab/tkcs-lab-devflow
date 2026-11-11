@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Validate .tld/toolkit.yaml against schema/profile.schema.json.
 
-    validate_profile.py [PROFILE] [--root DIR] [--resolved]
+    tld profile validate [PROFILE] [--root DIR] [--resolved] [--no-file-checks]
 
 Exit 0 when valid, 1 with one error per line otherwise. --resolved prints the profile as JSON with
-the schema's documented defaults filled in (the only defaults there are). Python 3.11+, PyYAML.
+the schema's documented defaults filled in (the only defaults there are). `tld.version`, when set, is
+checked against the running tld (src/tld/profile/version.py). Python 3.11+, PyYAML.
 """
 from __future__ import annotations
 
@@ -16,9 +17,13 @@ from pathlib import Path
 
 import yaml
 
+import tld
+from tld.profile import version as tv
+
 SCHEMA = Path(__file__).resolve().parent.parent / "schema" / "profile.schema.json"
 DEFAULT_PROFILE = ".tld/toolkit.yaml"
-REVIEW_AGENTS = ("security-reviewer", "dependency-auditor", "test-architect", "tech-writer", "website-maintainer")
+# The roles that are review dimensions of the review playbook (playbooks/review.md); only they can run at `review`.
+REVIEW_ROLES = ("security-reviewer", "dependency-auditor", "test-architect", "tech-writer", "website-maintainer")
 DIFF_POINTS = ("implement_phase", "implement_final", "dod")
 HELP = "see docs/reference/profile-reference.md in the tkcs-lab-devflow repo"
 
@@ -153,21 +158,29 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
         )
     if "ipados" in stacks and "swift" not in stacks:
         warnings.append("stack 'ipados' builds on 'swift': list both (stacks: [swift, ipados])")
-    agents = profile.get("agents", {})
-    disabled = agents.get("disable", [])
-    for i, entry in enumerate(agents.get("required", [])):
-        name, points = entry["agent"], entry["at"]
-        where = f"agents.required[{i}]"
+    roles = profile.get("roles", {})
+    disabled = roles.get("disable", [])
+    for i, entry in enumerate(roles.get("required", [])):
+        name, points = entry["role"], entry["at"]
+        where = f"roles.required[{i}]"
         if name in disabled:
-            errors.append(f"'{where}': '{name}' is listed in 'agents.disable'")
+            errors.append(f"'{where}': '{name}' is listed in 'roles.disable'")
         if name == "website-maintainer" and "website" not in docs:
             errors.append(f"'{where}': 'website-maintainer' needs 'docs.website'")
         if "when" in entry and not any(pt in DIFF_POINTS for pt in points):
             errors.append(f"'{where}.when': needs a diff, but 'at' has no point with a diff "
                           "(only 'make_plan' and 'review' have none)")
-        if "review" in points and name not in REVIEW_AGENTS:
+        if "review" in points and name not in REVIEW_ROLES:
             errors.append(f"'{where}': '{name}' cannot run at 'review' (it has no review dimension; "
-                          f"allowed: {', '.join(REVIEW_AGENTS)})")
+                          f"allowed: {', '.join(REVIEW_ROLES)})")
+    spec = profile.get("tld", {}).get("version")
+    if spec is not None:
+        try:
+            if not tv.satisfies(tld.__version__, spec):
+                errors.append(f"'tld.version': this profile needs tld {spec}, but tld {tld.__version__} is running "
+                              "(update the plugin, or change tld.version after reading the release notes)")
+        except tv.SpecifierError as exc:
+            errors.append(f"'tld.version': {exc}")
     if docs.get("index") and len(docs.get("must_read", [])) > 3:
         warnings.append(
             f"'docs.must_read' lists {len(docs['must_read'])} files while 'docs.index' is set: "
@@ -195,6 +208,9 @@ def validate(profile, root_dir: Path | None = None) -> tuple[list[str], list[str
     if "toolkit" in profile:
         return (["'toolkit' was removed: the toolkit is delivered only as plugins (docs/guides/delivery.md); "
                  "delete the 'toolkit' section"], [], {})
+    if "agents" in profile:
+        return (["'agents' was renamed to 'roles' (and each entry's 'agent' to 'role'): "
+                 "rename the section"], [], {})
     check(profile, schema, schema, "", errors)
     if errors:
         return errors, [], {}

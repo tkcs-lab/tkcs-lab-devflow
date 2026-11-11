@@ -252,12 +252,12 @@ def profile_valid(ctx: GradeContext) -> GradeResult:
     return GradeResult(True, f"{path} valid")
 
 
-@grader("agents_block_equals")
-def agents_block_equals(ctx: GradeContext) -> GradeResult:
-    """The `agents` key of the profile in the final work tree equals expected["agents"] (the fixture's expectation)."""
+@grader("roles_block_equals")
+def roles_block_equals(ctx: GradeContext) -> GradeResult:
+    """The `roles` key of the profile in the final work tree equals expected["roles"] (the fixture's expectation)."""
     path = ctx.params.get("path", ".tld/toolkit.yaml")
-    if "agents" not in ctx.expected:
-        return GradeResult(False, "grader misconfigured: no expected agents block")
+    if "roles" not in ctx.expected:
+        return GradeResult(False, "grader misconfigured: no expected roles block")
     wt = [d for d in ctx.docs(path) if d.ref == "worktree"]
     if not wt:
         return GradeResult(False, f"{path} is missing from the final working tree")
@@ -265,11 +265,11 @@ def agents_block_equals(ctx: GradeContext) -> GradeResult:
         profile = yaml.safe_load(wt[0].text)
     except yaml.YAMLError as exc:
         return GradeResult(False, f"{path} is not valid YAML: {exc}")
-    got = profile.get("agents") if isinstance(profile, dict) else None
-    want = ctx.expected["agents"]
+    got = profile.get("roles") if isinstance(profile, dict) else None
+    want = ctx.expected["roles"]
     if got != want:
-        return GradeResult(False, f"agents block differs: expected {json.dumps(want, sort_keys=True)}, got {json.dumps(got, sort_keys=True)}"[:300])
-    return GradeResult(True, "agents block equals the expected one")
+        return GradeResult(False, f"roles block differs: expected {json.dumps(want, sort_keys=True)}, got {json.dumps(got, sort_keys=True)}"[:300])
+    return GradeResult(True, "roles block equals the expected one")
 
 
 @grader("result_matches")

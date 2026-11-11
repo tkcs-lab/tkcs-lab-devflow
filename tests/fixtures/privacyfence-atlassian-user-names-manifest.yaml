@@ -1,8 +1,6 @@
 plan_slug: atlassian-user-names
 feature_branch: feature/atlassian-user-names
 max_parallel: 2
-manual_steps_artifact: https://claude.ai/artifact/QtNMCYuE915oX7TTD96n66
-manual_steps_source: docs/atlassian-user-names-plan-manual-steps.html
 manual_before: []
 manual_after:
   - id: ma1-verify-reads

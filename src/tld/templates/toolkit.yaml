@@ -1,7 +1,10 @@
-# .tld/toolkit.yaml — the project profile read by the tld commands (/review, /make-plan, /implement, /dod).
-# Every command checks this file first and stops, naming the key, if a required key is missing.
+# .tld/toolkit.yaml — the project profile read by the tld playbooks (review, make-plan, implement, dod, ...).
+# Every playbook checks this file first and stops, naming the key, if a required key is missing.
 # An optional key you leave out means "this project does not use that".
 # Reference: docs/reference/profile-reference.md in https://github.com/tkcs-lab/tkcs-lab-devflow
+
+tld:
+  version: ">=1.0,<2"    # optional: the tld releases this profile is written for; tld profile validate checks it
 
 project:
   name: My Project       # optional; used in prose. Default: the repository name
@@ -9,8 +12,8 @@ project:
 docs:
   must_read:             # REQUIRED (may be []). Planner, workers and the final reviewer read these first.
     - README.md
-  plan_dir: docs/        # optional, default docs/. Plan documents are <plan_dir>/<slug>-plan.md
-  # index: docs/README.md   # optional. The entry-level docs index: sessions read it first, then only matching rows. /docs init builds it
+  plan_dir: docs/plans/  # optional, default docs/plans/. Plans <plan_dir>/<slug>-plan.md, reviews <slug>-review.md
+  # index: docs/README.md   # optional. The entry-level docs index: sessions read it first, then only matching rows. docs init builds it
   # adr_dir: docs/adr    # optional. Set it and the commands use ADRs; leave it out and they never mention them
   # adr_index: docs/adr/README.md
   # adr_bar: CONTRIBUTING.md#decisions-and-adrs   # where "this needs an ADR" is defined
@@ -27,7 +30,7 @@ git:
   branch_pattern: "<type>/<kebab-case>"   # REQUIRED. Quoted into worker prompts
   # branch_types: [feature, fix, chore]   # optional. /implement checks the manifest's feature_branch against it
   # merge_style: merge-commit             # optional: merge-commit | squash
-  # bot_login: my-agent                   # optional: the second GitHub user the agent acts as; get_me must return it
+  # bot_login: my-agent                   # optional: the second GitHub user the agent acts as; identity() must return it
   # codeowners: [my-login]                # optional (needs bot_login): logins whose review /implement requests
 
 verify:
@@ -55,13 +58,11 @@ verify:
 #       use_when: "Build or test an iOS/macOS target (xcodebuild, simulators)"
 #       notes: "No inputs."              # optional
 
-stacks: []               # REQUIRED (may be []). Stack skills to load: [python], [go], [swift], [swift, ipados]
+stacks: []               # REQUIRED (may be []). Stack guides to load (stacks/<name>.md): [python], [go], [swift], [swift, ipados]
 
-# models:                # optional. Defaults shown.
-#   planner: opus
-#   orchestrator: sonnet
-#   worker: sonnet
-#   reviewer: opus
+# models:                # optional: the levels (strong | standard | fast) of the workers the playbooks start. Defaults shown.
+#   worker: standard     # implement's phase, fix and conflict workers
+#   reviewer: strong     # implement's final reviewer, make-plan's plan reviewer, review's roles and verifiers
 
 # scope:                 # optional: /implement reports files a phase changed outside its `touches`
 #   ignore:              # globs not counted as drift; default none. The changelog file is ignored on its own
@@ -96,21 +97,21 @@ stacks: []               # REQUIRED (may be []). Stack skills to load: [python],
 # land:                  # optional: /land works without it
 #   max_prs: 10            # 1..50
 
-# agents:                # optional. Which agents are mandatory and how they run (docs/reference/profile-reference.md).
-#                        # Without this section every agent is available and none is mandatory.
+# roles:                 # optional. Which roles are mandatory and how they run (docs/reference/profile-reference.md).
+#                        # Without this section every role is available and none is mandatory.
 #   posture:
 #     security: critical  # critical | standard | low; default standard
-#   disable: [dependency-auditor]     # agents that are never dispatched
-#   required:            # {agent, at: [make_plan, implement_phase, implement_final, review, dod], blocking?, when?}
-#     - {agent: security-reviewer, at: [implement_phase, implement_final], blocking: true}
-#     - {agent: ux-reviewer, at: [implement_final], when: ["app/views/**"], blocking: false}
-#     - {agent: test-architect, at: [make_plan]}
-#     - {agent: tech-writer, at: [dod, review]}
-#     - {agent: website-maintainer, at: [dod], when: ["site/**", "docs/**"]}   # needs docs.website
-#   extra_context:       # lines added to every agent prompt
-#     - "Every outbound request must pass the approval gate."
+#   disable: [dependency-auditor]     # roles that are never run
+#   required:            # {role, at: [make_plan, implement_phase, implement_final, review, dod], blocking?, when?}
+#     - {role: security-reviewer, at: [implement_phase, implement_final], blocking: true}
+#     - {role: ux-reviewer, at: [implement_final], when: ["app/views/**"], blocking: false}
+#     - {role: test-architect, at: [make_plan]}
+#     - {role: tech-writer, at: [dod, review]}
+#     - {role: website-maintainer, at: [dod], when: ["site/**", "docs/**"]}   # needs docs.website
+#   extra_context:       # lines added to every role's context
+#     - "<a project rule every role should check>"
 
-# hooks:                 # optional: settings of the guardrail hooks the tld plugin ships (docs/architecture/hooks.md).
+# hooks:                 # optional: settings of the guardrail hooks tld ships (docs/architecture/hooks.md).
 #                        # The values below are the defaults; with no `hooks` section all hooks but dod-gate are on.
 #   disable: []          # escape hatch: names of hooks to switch off here, any of
 #                        #   no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate

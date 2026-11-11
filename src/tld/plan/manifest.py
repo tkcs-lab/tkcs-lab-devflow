@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate a plan's implementation manifest, for /make-plan (before it pushes) and /implement (before it starts).
 
-    validate_manifest.py PLAN.md|MANIFEST.yaml [--profile .tld/toolkit.yaml]
+    tld plan validate-manifest PLAN.md|MANIFEST.yaml [--profile .tld/toolkit.yaml]
 
 PLAN.md: the first fenced yaml block under the '## Implementation manifest' heading is checked.
 Exit 0 (warnings go to stderr) or 1 with one error per line. Python 3.11+, PyYAML.
@@ -17,6 +17,7 @@ from pathlib import Path
 import yaml
 
 HEADING = "## Implementation manifest"
+LEVELS = ("strong", "standard", "fast")
 WILDCARDS = "*?["
 
 
@@ -170,11 +171,6 @@ def validate(manifest, profile: dict | None = None) -> tuple[list[str], list[str
             for field in required:
                 if not _nonempty(item.get(field)):
                     errors.append(f"{key}[{i}] ({item.get('id', '?')}) is missing '{field}'")
-    has_manual = bool(manifest.get("manual_before") or manifest.get(manual_after_key))
-    if has_manual and not manifest.get("manual_steps_artifact"):
-        warnings.append("there are manual steps but no 'manual_steps_artifact'")
-    if manifest.get("manual_steps_artifact") and not manifest.get("manual_steps_source"):
-        warnings.append("'manual_steps_artifact' is set without 'manual_steps_source'; a revision cannot republish it")
 
     phases = manifest.get("phases")
     if not isinstance(phases, list) or not phases:
@@ -203,11 +199,11 @@ def validate(manifest, profile: dict | None = None) -> tuple[list[str], list[str
         cx = ph.get("complexity")
         if cx is not None and cx not in ("S", "M"):
             errors.append(f"phase '{pid}': complexity must be S or M (got {cx!r}); there is no L, split the phase")
-        wm = ph.get("worker_model")
-        if wm is not None and wm not in ("opus", "sonnet"):
-            errors.append(f"phase '{pid}': worker_model must be opus or sonnet (got {wm!r})")
-        if wm == "opus" and not _nonempty(ph.get("worker_model_reason")):
-            errors.append(f"phase '{pid}': worker_model: opus needs a worker_model_reason")
+        wl = ph.get("worker_level")
+        if wl is not None and wl not in LEVELS:
+            errors.append(f"phase '{pid}': worker_level must be one of {', '.join(LEVELS)} (got {wl!r})")
+        if wl == "strong" and not _nonempty(ph.get("worker_level_reason")):
+            errors.append(f"phase '{pid}': worker_level: strong needs a worker_level_reason")
         d = ph.get("depends_on") or []
         if not isinstance(d, list):
             errors.append(f"phase '{pid}': depends_on must be a list")

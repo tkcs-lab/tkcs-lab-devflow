@@ -24,7 +24,7 @@ def test_docs_website(tmp_path):
 def test_bare(tmp_path):
     build(tmp_path, "bare")
     out = sd.scan(tmp_path)
-    assert out == {"must_read": ["README.md"], "adr_dir": None, "adr_index": None,
+    assert out == {"must_read": ["README.md"], "index": None, "adr_dir": None, "adr_index": None,
                    "changelog": None, "website": None}
 
 
@@ -70,3 +70,10 @@ def test_cli(tmp_path):
     assert res.returncode == 0
     assert json.loads(res.stdout)["adr_dir"] == "docs/adr"
     assert sd.main([str(tmp_path / "missing")]) == 1
+
+
+def test_index_found(tmp_path):
+    build(tmp_path, "bare")
+    (tmp_path / "docs").mkdir(exist_ok=True)
+    (tmp_path / "docs" / "README.md").write_text("# Docs index\n")
+    assert sd.scan(tmp_path)["index"] == "docs/README.md"

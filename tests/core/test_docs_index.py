@@ -504,3 +504,34 @@ def test_the_one_plugin_is_1_0_0_dev0():
     manifests = sorted(REPO_ROOT.glob("**/.claude-plugin/plugin.json"))
     assert manifests == [REPO_ROOT / ".claude-plugin" / "plugin.json"]
     assert json.loads(manifests[0].read_text())["version"] == "1.0.0-dev0"
+
+
+def test_move_rewrites_the_profile_paths(tmp_path):
+    """C4: a moved doc's paths in .tld/toolkit.yaml move with it, in the dry run and with --apply."""
+    profile = "docs:\n  must_read:\n    - docs/design.md\n  index: docs/README.md\n  plan_dir: docs/plans/\n"
+    move_repo(tmp_path, {"docs/design.md": "# Design\n", "docs/README.md": "# Index\n\n- [design](design.md) - x\n",
+                         ".tld/toolkit.yaml": profile})
+    dry = mv(tmp_path, "docs/design.md", "docs/architecture/design.md")
+    assert dry.returncode == 0 and "would rewrite .tld/toolkit.yaml:3: docs/design.md -> docs/architecture/design.md" in dry.stdout
+    assert read(tmp_path, ".tld/toolkit.yaml") == profile
+    r = mv(tmp_path, "docs/design.md", "docs/architecture/design.md", "--apply")
+    assert r.returncode == 0, r.stderr
+    assert read(tmp_path, ".tld/toolkit.yaml") == profile.replace("docs/design.md", "docs/architecture/design.md")
+
+
+def test_move_rewrites_the_index_path_of_the_profile(tmp_path):
+    profile = "docs:\n  must_read: []\n  index: docs/README.md\n"
+    move_repo(tmp_path, {"docs/README.md": "# Index\n", ".tld/toolkit.yaml": profile})
+    r = mv(tmp_path, "docs/README.md", "docs/index.md", "--apply", "--json")
+    out = json.loads(r.stdout)
+    assert {"file": ".tld/toolkit.yaml", "line": 3, "old": "docs/README.md", "new": "docs/index.md"} in out["changes"]
+    assert "index: docs/index.md" in read(tmp_path, ".tld/toolkit.yaml")
+
+
+def test_move_with_an_explicit_profile_and_without_one(tmp_path):
+    move_repo(tmp_path, {"docs/a.md": "# A\n", "conf/profile.yaml": "docs:\n  must_read: [docs/a.md]\n"})
+    r = mv(tmp_path, "docs/a.md", "docs/b.md", "--apply", "--profile", "conf/profile.yaml")
+    assert r.returncode == 0, r.stderr
+    assert read(tmp_path, "conf/profile.yaml") == "docs:\n  must_read: [docs/b.md]\n"
+    r = mv(tmp_path, "docs/b.md", "docs/c.md", "--apply")  # no .tld/toolkit.yaml: nothing else to rewrite
+    assert r.returncode == 0 and (tmp_path / "docs" / "c.md").is_file()

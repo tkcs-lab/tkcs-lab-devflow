@@ -9,8 +9,7 @@ from conftest import TLD, CLAUDE, FIXTURES, tld_cmd, _load
 
 SCRIPT = TLD / "roles" / "dispatch.py"
 SCRIPT_CMD = tld_cmd("roles")
-SKILL = CLAUDE / "skills" / "agent-dispatch" / "SKILL.md"
-FIXTURE = FIXTURES / "agents-toolkit.yaml"
+FIXTURE = FIXTURES / "roles-toolkit.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -24,11 +23,11 @@ def profile():
 
 
 def names(result, key="required"):
-    return [i["agent"] for i in result[key]]
+    return [i["role"] for i in result[key]]
 
 
 def item(result, agent):
-    return next(i for i in result["required"] if i["agent"] == agent)
+    return next(i for i in result["required"] if i["role"] == agent)
 
 
 # --- required ------------------------------------------------------------------------------------
@@ -38,27 +37,27 @@ def test_make_plan(ag, profile):
     assert r["point"] == "make_plan"
     assert r["posture"] == {"security": "critical"}
     assert r["disabled"] == ["dependency-auditor"]
-    assert r["extra_context"] == ["Every outbound request must pass the approval gate."]
-    assert r["required"] == [{"agent": "test-architect", "blocking": False, "matched": ["always"]}]
+    assert r["extra_context"] == ["Every outbound request is logged."]
+    assert r["required"] == [{"role": "test-architect", "blocking": False, "matched": ["always"], "mode": "review"}]
     assert r["not_applicable"] == []
 
 
 def test_implement_phase(ag, profile):
     r = ag.required(profile, "implement_phase", [])
-    assert r["required"] == [{"agent": "security-reviewer", "blocking": True, "matched": ["always"]}]
+    assert r["required"] == [{"role": "security-reviewer", "blocking": True, "matched": ["always"], "mode": "review"}]
 
 
 def test_implement_final_when_matches(ag, profile):
     r = ag.required(profile, "implement_final", ["app/views/home.py", "README.md"])
     assert names(r) == ["security-reviewer", "ux-reviewer"]
-    assert item(r, "ux-reviewer") == {"agent": "ux-reviewer", "blocking": False, "matched": ["app/views/**"]}
+    assert item(r, "ux-reviewer") == {"role": "ux-reviewer", "blocking": False, "matched": ["app/views/**"], "mode": "review"}
     assert r["not_applicable"] == []
 
 
 def test_implement_final_when_does_not_match(ag, profile):
     r = ag.required(profile, "implement_final", ["README.md"])
     assert names(r) == ["security-reviewer"]
-    assert r["not_applicable"] == [{"agent": "ux-reviewer", "why": "no changed file matches 'when'"}]
+    assert r["not_applicable"] == [{"role": "ux-reviewer", "why": "no changed file matches 'when'"}]
 
 
 def test_review_has_no_diff(ag, profile):
@@ -81,19 +80,19 @@ def test_dod_no_match(ag, profile):
 
 @pytest.mark.parametrize("point", ["make_plan", "review"])
 def test_when_at_a_point_without_diff_is_not_applicable(ag, point):
-    prof = {"agents": {"required": [{"agent": "tech-writer", "at": [point], "when": ["docs/**"]}]}}
+    prof = {"roles": {"required": [{"role": "tech-writer", "at": [point], "when": ["docs/**"]}]}}
     r = ag.required(prof, point, None)
     assert r["required"] == []
-    assert r["not_applicable"] == [{"agent": "tech-writer", "why": "no diff at this point"}]
+    assert r["not_applicable"] == [{"role": "tech-writer", "why": "no diff at this point"}]
 
 
 def test_blocking_or_merge(ag):
-    prof = {"agents": {"required": [
-        {"agent": "security-reviewer", "at": ["dod"]},
-        {"agent": "security-reviewer", "at": ["dod", "review"], "blocking": True, "when": ["src/**"]},
+    prof = {"roles": {"required": [
+        {"role": "security-reviewer", "at": ["dod"]},
+        {"role": "security-reviewer", "at": ["dod", "review"], "blocking": True, "when": ["src/**"]},
     ]}}
     r = ag.required(prof, "dod", ["src/a.py"])
-    assert r["required"] == [{"agent": "security-reviewer", "blocking": True, "matched": ["always", "src/**"]}]
+    assert r["required"] == [{"role": "security-reviewer", "blocking": True, "matched": ["always", "src/**"], "mode": "review"}]
 
 
 def test_profile_without_agents(ag):
@@ -104,27 +103,27 @@ def test_profile_without_agents(ag):
 
 
 def test_defaults_applied_here(ag):
-    prof = {"agents": {"required": [{"agent": "debugger", "at": ["dod"]}]}}
+    prof = {"roles": {"required": [{"role": "debugger", "at": ["dod"]}]}}
     r = ag.required(prof, "dod", None)
     assert r["posture"] == {"security": "standard"}
     assert item(r, "debugger")["blocking"] is False
 
 
 def test_unknown_point(ag, profile):
-    with pytest.raises(ag.AgentsError, match=r"unknown point 'x' \(one of make_plan, implement_phase"):
+    with pytest.raises(ag.RolesError, match=r"unknown point 'x' \(one of make_plan, implement_phase"):
         ag.required(profile, "x", None)
 
 
 def test_changed_missing_at_dod(ag, profile):
-    with pytest.raises(ag.AgentsError, match="--changed is needed: agents.required has entries with 'when'"):
+    with pytest.raises(ag.RolesError, match="--changed is needed: roles.required has entries with 'when'"):
         ag.required(profile, "dod", None)
 
 
 # --- verify --------------------------------------------------------------------------------------
 
 REQ = {"point": "implement_final", "required": [
-    {"agent": "security-reviewer", "blocking": True, "matched": ["always"]},
-    {"agent": "ux-reviewer", "blocking": False, "matched": ["always"]}]}
+    {"role": "security-reviewer", "blocking": True, "matched": ["always"]},
+    {"role": "ux-reviewer", "blocking": False, "matched": ["always"]}]}
 
 
 def line(agent, verdict="pass", b=0, nb=0, at="implement_final"):
@@ -136,14 +135,14 @@ def test_verify_ok(ag):
     assert ok
     assert out == ["OK security-reviewer at=implement_final blocking=0",
                    "OK ux-reviewer at=implement_final blocking=0",
-                   "agents: ok (2 required)"]
+                   "roles: ok (2 required)"]
 
 
 def test_verify_missing_line(ag):
     out, ok = ag.verify(REQ, line("security-reviewer"))
     assert not ok
     assert "MISSING ux-reviewer at=implement_final" in out
-    assert out[-1] == "agents: FAILED (1 of 2 required)"
+    assert out[-1] == "roles: FAILED (1 of 2 required)"
 
 
 def test_verify_wrong_point_is_missing(ag):
@@ -160,7 +159,7 @@ def test_verify_blocked(ag):
     out, ok = ag.verify(REQ, line("security-reviewer", "findings", 2, 1) + "\n" + line("ux-reviewer"))
     assert not ok
     assert out[0] == "BLOCKED security-reviewer at=implement_final blocking=2"
-    assert out[-1] == "agents: FAILED (1 of 2 required)"
+    assert out[-1] == "roles: FAILED (1 of 2 required)"
 
 
 def test_verify_non_blocking_entry_with_findings_is_ok(ag):
@@ -187,7 +186,7 @@ def test_verify_ignores_text_after_the_line(ag):
 
 
 def test_verify_empty_required(ag):
-    assert ag.verify({"point": "dod", "required": []}, "") == (["agents: ok (0 required)"], True)
+    assert ag.verify({"point": "dod", "required": []}, "") == (["roles: ok (0 required)"], True)
 
 
 # --- CLI -----------------------------------------------------------------------------------------
@@ -207,13 +206,13 @@ def test_cli_round_trip(tmp_path):
     report = tmp_path / "report.txt"
     report.write_text(line("security-reviewer") + "\n" + line("ux-reviewer") + "\n")
     v = run("verify", "--required", str(tmp_path / "req.json"), "--report", str(report))
-    assert v.returncode == 0 and v.stdout.splitlines()[-1] == "agents: ok (2 required)"
+    assert v.returncode == 0 and v.stdout.splitlines()[-1] == "roles: ok (2 required)"
     report.write_text(line("security-reviewer", "findings", 1, 0) + "\n")
     v = run("verify", "--required", str(tmp_path / "req.json"), "--report", str(report))
     assert v.returncode == 1
     assert v.stdout.splitlines() == ["BLOCKED security-reviewer at=implement_final blocking=1",
                                      "MISSING ux-reviewer at=implement_final",
-                                     "agents: FAILED (2 of 2 required)"]
+                                     "roles: FAILED (2 of 2 required)"]
 
 
 def test_cli_make_plan_needs_no_changed():
@@ -230,34 +229,34 @@ def test_cli_changed_from_stdin():
 
 def test_cli_errors(tmp_path):
     p = run("required", "--profile", str(FIXTURE), "--at", "nope")
-    assert p.returncode == 1 and p.stderr.startswith("agents.py: unknown point 'nope' (one of make_plan")
+    assert p.returncode == 1 and p.stderr.startswith("tld roles: unknown point 'nope' (one of make_plan")
     p = run("required", "--profile", str(tmp_path / "missing.yaml"), "--at", "dod")
-    assert p.returncode == 1 and p.stderr.startswith(f"agents.py: cannot read '{tmp_path / 'missing.yaml'}'")
+    assert p.returncode == 1 and p.stderr.startswith(f"tld roles: cannot read '{tmp_path / 'missing.yaml'}'")
     p = run("required", "--profile", str(FIXTURE), "--at", "dod")
     assert p.returncode == 1
-    assert p.stderr.strip() == "agents.py: --changed is needed: agents.required has entries with 'when'"
+    assert p.stderr.strip() == "tld roles: --changed is needed: roles.required has entries with 'when'"
     bad = tmp_path / "bad.yaml"
     bad.write_text("stacks: []\n")
     p = run("required", "--profile", str(bad), "--at", "dod")
-    assert p.returncode == 1 and p.stderr.startswith("agents.py: ") and "verify" in p.stderr
+    assert p.returncode == 1 and p.stderr.startswith("tld roles: ") and "verify" in p.stderr
     p = run("verify", "--required", str(tmp_path / "nope.json"), "--report", str(bad))
     assert p.returncode == 1 and "cannot read" in p.stderr
 
 
 def test_cli_invalid_agents_block(tmp_path):
     prof = yaml.safe_load(FIXTURE.read_text())
-    prof["agents"]["required"].append({"agent": "tech-writer", "at": ["nowhere"]})
+    prof["roles"]["required"].append({"role": "tech-writer", "at": ["nowhere"]})
     bad = tmp_path / "bad.yaml"
     bad.write_text(yaml.safe_dump(prof))
     p = run("required", "--profile", str(bad), "--at", "make_plan")
     assert p.returncode == 1 and "nowhere" in p.stderr
 
 
-# --- the skill -----------------------------------------------------------------------------------
+# --- modes (C2) ----------------------------------------------------------------------------------
 
-def test_skill_has_the_headings_and_strings():
-    text = SKILL.read_text()
-    for heading in ("## Resolve", "## Dispatch", "## Modes", "## Report", "## Gate", "## Not required"):
-        assert heading in text.splitlines()
-    assert "AGENT-REPORT" in text
-    assert "roles required" in text
+@pytest.mark.parametrize("point", ["make_plan", "implement_phase", "implement_final", "dod"])
+def test_edit_mode_only_for_edit_roles_in_a_phase(ag, point):
+    prof = {"roles": {"required": [{"role": "tech-writer", "at": [point]}, {"role": "code-reviewer", "at": [point]}]}}
+    r = ag.required(prof, point, [])
+    modes = {i["role"]: i["mode"] for i in r["required"]}
+    assert modes == {"tech-writer": "edit" if point == "implement_phase" else "review", "code-reviewer": "review"}

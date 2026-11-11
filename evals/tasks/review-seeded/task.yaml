@@ -2,7 +2,7 @@ id: review-seeded
 description: A review of a fixture with a planted command-injection flaw and a planted missing test must name both, by file and class; noise is reported.
 command: /tld:review
 arguments: >-
-  the whole repository. Nobody is available for the decisions page: write the review document, list any
+  the whole repository. Nobody is available to answer the decisions ask: write the review document, list any
   open items in it, and stop.
 fixture:
   builder: review_seeded

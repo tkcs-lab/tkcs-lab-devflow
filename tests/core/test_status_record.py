@@ -62,7 +62,8 @@ def setup_record(*args, **changes):
     base = json.loads((RECORDS / "good-maintenance.json").read_text())["phases"][0]
     items = [{**base, "id": step, "title": step, "branch": None, "pr": None, "state": "pending"}
              for step in ("survey", "confirm", "write", "verify", "pr")]
-    return maintenance(*args, **{"command": "setup", "orchestrator_session": "session_01abc", "phases": items, **changes})
+    return maintenance(*args, **{"command": "setup", "orchestrator_session": "session_01abc", "attended": True,
+                                 "phases": items, **changes})
 
 
 def test_valid_setup_record_passes():
@@ -70,11 +71,41 @@ def test_valid_setup_record_passes():
     assert result.returncode == 0, result.stdout
 
 
-def test_setup_accepts_scheduled_but_deps_rejects_a_session_id():
-    assert setup_record(orchestrator_session="scheduled").returncode == 0
+def test_attended_replaces_the_scheduled_literal():
+    """C7: `attended` says who is there; `orchestrator_session` is an id or null, never 'scheduled'."""
+    bad = setup_record(orchestrator_session="scheduled")
+    assert bad.returncode == 1 and "'attended: false' marks an unattended run" in bad.stdout
     assert setup_record(orchestrator_session="").returncode == 1
-    bad = maintenance(orchestrator_session="session_01abc")
-    assert bad.returncode == 1 and "'orchestrator_session'" in bad.stdout
+    assert maintenance(orchestrator_session="session_01abc").returncode == 0  # unattended, but it knows its id
+    no_id = setup_record(orchestrator_session=None)
+    assert no_id.returncode == 1 and "must be the session id when 'attended' is true" in no_id.stdout
+    assert maintenance(attended="no").returncode == 1
+    missing = json.loads((RECORDS / "good-maintenance.json").read_text())
+    missing.pop("attended")
+    assert "'attended' is required" in run("-", stdin=json.dumps(missing)).stdout
+
+
+@pytest.mark.parametrize("command", ["review", "make-plan"])
+def test_review_and_make_plan_write_records(command):
+    result = setup_record("--doc-id", f"tkcs-lab-devflow--{command}", command=command)
+    assert result.returncode == 0, result.stdout
+
+
+def test_project_slug_comes_from_the_repository_name():
+    assert maintenance(repo="someone/Tkcs_Lab.Devflow").returncode == 0
+    wrong = maintenance(project="other")
+    assert wrong.returncode == 1 and "'project' must be 'tkcs-lab-devflow'" in wrong.stdout
+    out = subprocess.run(tld_cmd("board", "project-slug", "Org/My__Repo.js"), capture_output=True, text=True)
+    assert out.returncode == 0 and out.stdout == "my-repo-js\n"
+    bad = subprocess.run(tld_cmd("board", "project-slug", "no-slash"), capture_output=True, text=True)
+    assert bad.returncode == 1
+
+
+def test_pr_open_is_a_final_state():
+    """C7: done, failed and pr_open are final; only they may carry finished_at."""
+    assert maintenance(finished_at="2026-11-09T05:00:00Z").returncode == 0  # status pr_open
+    assert maintenance(finished_at=None).returncode == 0
+    assert maintenance(status="running", finished_at="2026-11-09T05:00:00Z").returncode == 1
 
 
 def test_doc_id_for_setup():

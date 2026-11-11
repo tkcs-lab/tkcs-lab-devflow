@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""The mechanical parts of running a plan: where it may come from, branch names, which phases to start.
+
+    tld plan check-url URL [--repo OWNER/NAME] [--main BRANCH]
+    tld plan branch-name (--plan-slug SLUG | --review-slug SLUG | --manifest PLAN [--phase ID [--rev N] | --fix N])
+    tld plan phase-status PLAN [--ref REF] [--running ID]... [--approved ID]... [--repo DIR]
+
+`check-url` (S14) parses `https://github.com/<owner>/<repo>/blob/<ref>/<path>` and accepts it only when
+`<owner>/<repo>` is this repository (`--repo`, default: the `origin` remote of the current directory) and
+`<ref>` is the main branch (`--main`, default `main`) or a `plan/<slug>` branch. It prints
+`{"owner", "repo", "ref", "path"}` as JSON. A plan from anywhere else is refused (exit 1): its
+`verify_after_merge` commands would run on this machine.
+
+`branch-name` prints one branch name (C12): `plan/<slug>`, `review/<slug>`, the manifest's
+`feature_branch`, a phase branch `<feature>--<phase>`, a revision `<feature>--<phase>-rev<n>` or a fix
+branch `<feature>--fix-<n>`.
+
+`phase-status` reads the `Plan-Phase: <plan slug>/<id>` trailers in the history of REF (default `HEAD`)
+and prints JSON: `done` (phases with a trailer), `gated` (done phases with `human_gate: true` that are not
+`--approved`), `ready` (not done, not `--running`, every `depends_on` done and none of them gated),
+`waiting` (the rest), and `start` (the first `ready` phases that fit in `max_parallel` next to the running
+ones). Exit 0, or 1 with `plan: <message>` on stderr.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+from tld.plan import manifest as vm
+
+URL = re.compile(r"^https://github\.com/(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+)/blob/(?P<rest>.+)$")
+REMOTE = re.compile(r"github\.com[:/](?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?/?$")
+SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+class PlanError(Exception):
+    """Printed as `plan: <message>`."""
+
+
+def origin_repo(cwd: str | None = None) -> str:
+    try:
+        out = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, cwd=cwd,
+                             timeout=30)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise PlanError(f"cannot read the origin remote ({exc}); pass --repo") from None
+    m = REMOTE.search(out.stdout.strip()) if out.returncode == 0 else None
+    if not m:
+        raise PlanError("the origin remote is not a GitHub repository; pass --repo")
+    return f"{m['owner']}/{m['repo']}"
+
+
+def check_url(url: str, repo: str, main: str) -> dict:
+    m = URL.match(url.strip())
+    if not m:
+        raise PlanError("not a plan URL of the form https://github.com/<owner>/<repo>/blob/<ref>/<path>")
+    if f"{m['owner']}/{m['repo']}".lower() != repo.lower():
+        raise PlanError(f"the plan is in {m['owner']}/{m['repo']}, not in this repository ({repo}): "
+                        "only plans of this repository run here")
+    rest = m["rest"]
+    if rest.startswith(f"{main}/"):
+        ref, path = main, rest[len(main) + 1:]
+    elif rest.startswith("plan/"):
+        slug, _, path = rest[len("plan/"):].partition("/")
+        if not SLUG.match(slug) or not path:
+            raise PlanError("a plan branch is plan/<kebab-case slug> followed by the file path")
+        ref = f"plan/{slug}"
+    else:
+        raise PlanError(f"the plan must be on '{main}' or on a plan/<slug> branch (the owner reviews those), "
+                        f"not on '{rest.split('/', 1)[0]}'")
+    if not path or ".." in path.split("/"):
+        raise PlanError("the URL names no file, or a path with '..'")
+    return {"owner": m["owner"], "repo": m["repo"], "ref": ref, "path": path}
+
+
+def load_manifest(path: str) -> dict:
+    p = Path(path)
+    try:
+        text = p.read_text()
+    except OSError as exc:
+        raise PlanError(f"cannot read '{path}': {exc.strerror or exc}") from None
+    try:
+        raw = vm.extract_manifest(text) if p.suffix == ".md" else text
+        manifest = yaml.safe_load(raw)
+    except (ValueError, yaml.YAMLError) as exc:
+        raise PlanError(str(exc)) from None
+    errors, _ = vm.validate(manifest)
+    if errors:
+        raise PlanError("the manifest is not valid: " + errors[0] + " (run tld plan validate-manifest)")
+    return manifest
+
+
+def branch_name(args) -> str:
+    for slug in (args.plan_slug, args.review_slug):
+        if slug is not None and not SLUG.match(slug):
+            raise PlanError(f"'{slug}' is not a kebab-case slug")
+    if args.plan_slug:
+        return f"plan/{args.plan_slug}"
+    if args.review_slug:
+        return f"review/{args.review_slug}"
+    manifest = load_manifest(args.manifest)
+    feature = manifest["feature_branch"]
+    if args.fix is not None:
+        if args.phase or args.rev is not None:
+            raise PlanError("--fix takes no --phase or --rev")
+        return f"{feature}--fix-{args.fix}"
+    if args.phase is None:
+        if args.rev is not None:
+            raise PlanError("--rev needs --phase")
+        return feature
+    ids = [ph["id"] for ph in manifest["phases"]]
+    if args.phase not in ids:
+        raise PlanError(f"no phase '{args.phase}' in the manifest (phases: {', '.join(ids)})")
+    if args.rev is not None:
+        return f"{feature}--{args.phase}-rev{args.rev}"
+    return f"{feature}--{args.phase}"
+
+
+def trailers(ref: str, slug: str, cwd: str | None) -> set[str]:
+    try:
+        out = subprocess.run(["git", "log", "--format=%B", ref], capture_output=True, text=True, cwd=cwd, timeout=60)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise PlanError(f"git log failed: {exc}") from None
+    if out.returncode != 0:
+        raise PlanError(f"git log {ref} failed: {out.stderr.strip()}")
+    rx = re.compile(r"^Plan-Phase:\s*" + re.escape(slug) + r"/(\S+)\s*$", re.M)
+    return set(rx.findall(out.stdout))
+
+
+def phase_status(manifest: dict, done_ids: set[str], running: list[str], approved: list[str]) -> dict:
+    phases = manifest["phases"]
+    by_id = {ph["id"]: ph for ph in phases}
+    done = [ph["id"] for ph in phases if ph["id"] in done_ids]
+    gated = [pid for pid in done if by_id[pid].get("human_gate") is True and pid not in approved]
+    ready, waiting = [], []
+    for ph in phases:
+        pid = ph["id"]
+        if pid in done_ids or pid in running:
+            continue
+        deps = ph.get("depends_on") or []
+        if all(d in done_ids and d not in gated for d in deps):
+            ready.append(pid)
+        else:
+            waiting.append(pid)
+    room = max(0, int(manifest.get("max_parallel") or 2) - len(running))
+    return {"plan_slug": manifest["plan_slug"], "feature_branch": manifest["feature_branch"],
+            "done": done, "gated": gated, "running": list(running), "ready": ready, "waiting": waiting,
+            "start": ready[:room], "all_done": len(done) == len(phases)}
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(prog="tld plan", description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    cu = sub.add_parser("check-url", help="accept a plan URL only from this repository's main or plan/* branch")
+    cu.add_argument("url")
+    cu.add_argument("--repo", help="owner/name of this repository (default: the origin remote)")
+    cu.add_argument("--main", default="main", help="the main branch (git.main_branch)")
+    bn = sub.add_parser("branch-name", help="print a plan, review, feature, phase, revision or fix branch name")
+    grp = bn.add_mutually_exclusive_group(required=True)
+    grp.add_argument("--plan-slug")
+    grp.add_argument("--review-slug")
+    grp.add_argument("--manifest", help="plan file (.md) or manifest (.yaml)")
+    bn.add_argument("--phase")
+    bn.add_argument("--rev", type=int)
+    bn.add_argument("--fix", type=int)
+    ps = sub.add_parser("phase-status", help="which phases are done, gated, ready or waiting, as JSON")
+    ps.add_argument("plan")
+    ps.add_argument("--ref", default="HEAD", help="the feature branch to read Plan-Phase trailers from")
+    ps.add_argument("--running", action="append", default=[], metavar="ID")
+    ps.add_argument("--approved", action="append", default=[], metavar="ID", help="a human_gate phase the human approved")
+    ps.add_argument("--repo", help="the checkout to run git in (default: the current directory)")
+    args = ap.parse_args(argv)
+    try:
+        if args.cmd == "check-url":
+            print(json.dumps(check_url(args.url, args.repo or origin_repo(), args.main)))
+        elif args.cmd == "branch-name":
+            if (args.rev is not None and args.rev < 1) or (args.fix is not None and args.fix < 1):
+                raise PlanError("--rev and --fix count from 1")
+            print(branch_name(args))
+        else:
+            manifest = load_manifest(args.plan)
+            ids = {ph["id"] for ph in manifest["phases"]}
+            for pid in [*args.running, *args.approved]:
+                if pid not in ids:
+                    raise PlanError(f"no phase '{pid}' in the manifest")
+            done = trailers(args.ref, manifest["plan_slug"], args.repo) & ids
+            print(json.dumps(phase_status(manifest, done, args.running, args.approved), indent=2))
+        return 0
+    except PlanError as exc:
+        print(f"plan: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
