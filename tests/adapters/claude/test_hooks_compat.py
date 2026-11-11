@@ -99,6 +99,14 @@ COMPAT = {
         ("git add docs/foo-plan.md docs/foo-plan-manual-steps.html && git commit -m 'plan: foo' && git push origin plan/foo",
          "Commit, push and hand over"),
     ],
+    "migrate": [
+        ("git fetch origin main", "git fetch origin <main>"),
+        ("git checkout -b chore/tld-migrate origin/main", "git checkout -b chore/tld-migrate origin/<main>"),
+        ('"${CLAUDE_PLUGIN_ROOT}/bin/tld" migrate .', "tld migrate ."),
+        ('"${CLAUDE_PLUGIN_ROOT}/bin/tld" migrate . --write', "tld migrate . --write"),
+        ("git commit -m 'chore: migrate from claude-toolkit to tld'", "chore: migrate from claude-toolkit to tld"),
+        ("git push -u origin chore/tld-migrate", "git push -u origin chore/tld-migrate"),
+    ],
     "dod": [
         ("git diff --stat origin/main...HEAD", "git diff --stat origin/<main>...HEAD"),
         ("git diff --name-only origin/main...HEAD", "git diff --name-only origin/<main>...HEAD"),

@@ -1,0 +1,129 @@
+# .claude/toolkit.yaml — the project profile read by the devflow commands (/review, /make-plan, /implement, /dod).
+# Every command checks this file first and stops, naming the key, if a required key is missing.
+# An optional key you leave out means "this project does not use that".
+# Reference: docs/reference/profile-reference.md in https://github.com/tkcs-lab/claude-toolkit
+
+project:
+  name: My Project       # optional; used in prose. Default: the repository name
+
+docs:
+  must_read:             # REQUIRED (may be []). Planner, workers and the final reviewer read these first.
+    - README.md
+  plan_dir: docs/        # optional, default docs/. Plan documents are <plan_dir>/<slug>-plan.md
+  # index: docs/README.md   # optional. The entry-level docs index: sessions read it first, then only matching rows. /docs init builds it
+  # adr_dir: docs/adr    # optional. Set it and the commands use ADRs; leave it out and they never mention them
+  # adr_index: docs/adr/README.md
+  # adr_bar: CONTRIBUTING.md#decisions-and-adrs   # where "this needs an ADR" is defined
+  # changelog:                                    # optional. Leave out if the project keeps no changelog
+  #   file: CHANGELOG.md
+  #   section: "## [Unreleased]"
+  # website:                                     # optional. Leave out if the project has no website
+  #   dir: site                                   # directory relative to the repo root, "." for the root
+  #   build: "npm run build"                      # command run from dir
+  #   links: "npm run check-links"                # optional, command run from dir
+
+git:
+  main_branch: main            # REQUIRED
+  branch_pattern: "<type>/<kebab-case>"   # REQUIRED. Quoted into worker prompts
+  # branch_types: [feature, fix, chore]   # optional. /implement checks the manifest's feature_branch against it
+  # merge_style: merge-commit             # optional: merge-commit | squash
+  # bot_login: my-agent                   # optional: the second GitHub user the agent acts as; get_me must return it
+  # codeowners: [my-login]                # optional (needs bot_login): logins whose review /implement requests
+
+verify:
+  fast:                  # REQUIRED. Run after every merge in /implement. Keep it to seconds-to-a-minute.
+    - echo "replace with your lint + quick tests"
+  dod:                   # REQUIRED. The blocking definition-of-done gate /dod runs, in order.
+    - echo "replace with your full gate"
+    # A command can also be a mapping:
+    # - run: make test-cov
+    #   narrow: "make test ARGS={args}"     # used when /dod is given arguments (a partial run)
+    # - run: python3 scripts/check_floor.py
+    #   skip_when_narrowed: true       # reported as n/a (partial run) on a partial run
+    # - run: npm test
+    #   cwd: web                       # relative to the repo root
+  # dod_conditional:       # optional. Rows that apply only when the diff touches matching files
+  #   - when: ["src/db/**", "migrations/**"]
+  #     do: "Run the migration check: scripts/check_migrations.sh"
+  # dod_manual:            # optional. Judgement rows: reported ok / needs attention / n/a, never PASS
+  #   - "A user-visible change has a changelog line."
+  # dod_doc: docs/contributing.md#definition-of-done   # optional pointer, quoted in the report
+
+# ci:
+#   dispatchable:          # optional. Workflows a session may dispatch against its own branch for
+#     - workflow: macos-tests.yml        # work the cloud container cannot do. One line each.
+#       use_when: "Build or test an iOS/macOS target (xcodebuild, simulators)"
+#       notes: "No inputs."              # optional
+
+stacks: []               # REQUIRED (may be []). Stack skills to load: [python], [go], [swift], [swift, ipados]
+
+# models:                # optional. Defaults shown.
+#   planner: opus
+#   orchestrator: sonnet
+#   worker: sonnet
+#   reviewer: opus
+
+# scope:                 # optional: /implement reports files a phase changed outside its `touches`
+#   ignore:              # globs not counted as drift; default none. The changelog file is ignored on its own
+#     - "package-lock.json"   # example: a lockfile every phase may regenerate
+
+# project_steward: .claude/skills/steward/SKILL.md   # optional: project skill with policy that fits no key above
+
+# deps:                  # optional: /deps stops with a missing-key message when absent
+#   cooldown_days: 3         # 0..30: Dependabot cooldown your .github/dependabot.yml must set
+#   time_budget_minutes: 90  # 10..480: no new update group after 80% of this
+#   audit:                   # optional: commands that list vulnerable packages (exit 0 = none found)
+#     - ecosystem: "<ecosystem>"
+#       run: "<audit command>"
+#       cwd: "."             # optional, relative to the repo root
+#   lock_freshness:          # optional: run after a manifest change
+#     - when: ["<manifest glob>"]
+#       run: "<lock command>"
+#       lockfiles: ["<lockfile>"]
+
+# upstream:              # optional: /upstream stops with a missing-key message when absent
+#   repo: "owner/name"
+#   tag_pattern: "<release tag regex>"
+#   version_file: "<file recording the synced tag>"
+
+# admin:                 # optional: the repo-admin skill stops with a missing-key message when absent
+#   policy: .claude/admin-policy.yaml   # starter: plugins/devflow/templates/admin-policy.yaml
+
+# git_ops:               # optional: the git-ops skill stops with a missing-key message when absent
+#   repo: owner/name       # the central repository that holds the devflow-git-ops workflow
+#   workflow: devflow-git-ops.yml   # optional, this is the default
+
+# land:                  # optional: /land works without it
+#   max_prs: 10            # 1..50
+
+# agents:                # optional. Which agents are mandatory and how they run (docs/reference/profile-reference.md).
+#                        # Without this section every agent is available and none is mandatory.
+#   posture:
+#     security: critical  # critical | standard | low; default standard
+#   disable: [dependency-auditor]     # agents that are never dispatched
+#   required:            # {agent, at: [make_plan, implement_phase, implement_final, review, dod], blocking?, when?}
+#     - {agent: security-reviewer, at: [implement_phase, implement_final], blocking: true}
+#     - {agent: ux-reviewer, at: [implement_final], when: ["app/views/**"], blocking: false}
+#     - {agent: test-architect, at: [make_plan]}
+#     - {agent: tech-writer, at: [dod, review]}
+#     - {agent: website-maintainer, at: [dod], when: ["site/**", "docs/**"]}   # needs docs.website
+#   extra_context:       # lines added to every agent prompt
+#     - "Every outbound request must pass the approval gate."
+
+# hooks:                 # optional: settings of the guardrail hooks the devflow plugin ships (docs/architecture/hooks.md).
+#                        # The values below are the defaults; with no `hooks` section all hooks but dod-gate are on.
+#   disable: []          # escape hatch: names of hooks to switch off here, any of
+#                        #   no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate
+#   protect_paths:       # paths protect-paths refuses to edit (replaces this default list when set)
+#     - .claude/toolkit.yaml
+#     - .env
+#     - ".env.*"
+#     - "*.lock"
+#     - package-lock.json
+#     - go.sum
+#     - ".github/workflows/**"
+#   protect_paths_allow: []   # exceptions, on top of .env.example / .env.sample / .env.template / .env.dist
+#                             # and the workflow files /land and repo-admin install
+#   dod_gate:
+#     enabled: false     # opt in: block stopping until verify.dod passes (not for the /implement orchestrator)
+#     max_attempts: 3    # after this many failed attempts the session may stop, and the user is told why

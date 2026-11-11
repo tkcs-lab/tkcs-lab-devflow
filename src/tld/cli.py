@@ -1,4 +1,4 @@
-"""The `tld` command line: `tld <group> <command> [args...]`.
+"""The `tld` command line: `tld <group> <command> [args...]`, and `tld migrate`.
 
 Every command hands its remaining arguments, unchanged, to the `main(argv)` of one module of the
 package (see docs/reference/cli.md for the table). `tld --help` lists the commands, and
@@ -54,6 +54,11 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("version", "show"): ("tld.cli", ("--version",), "print the running tld version"),
 }
 
+# One-word commands: `tld <command> [args...]`.
+TOP: dict[str, tuple[str, str]] = {
+    "migrate": ("tld.ops.migrate", "move a claude-toolkit (devflow) repository to tld; a dry run unless --write"),
+}
+
 
 # Commands whose module has no argparse `--help` of its own (or acts on any argument): `tld <group> <command>
 # --help` prints the one-line help and the module's docstring instead of running it.
@@ -64,10 +69,12 @@ DOC_HELP = {("profile", "survey"), ("profile", "survey-docs"), ("profile", "surv
 
 
 def usage() -> str:
-    lines = ["usage: tld <group> <command> [args...]", "", "commands:"]
+    lines = ["usage: tld <group> <command> [args...] | tld migrate [ROOT] [--write]", "", "commands:"]
     width = max(len(f"{g} {c}") for g, c in COMMANDS)
     for (group, command), (_, _, text) in COMMANDS.items():
         lines.append(f"  {f'{group} {command}':<{width}}  {text}")
+    for command, (_, text) in TOP.items():
+        lines.append(f"  {command:<{width}}  {text}")
     return "\n".join(lines)
 
 
@@ -79,6 +86,11 @@ def main(argv: list[str] | None = None) -> int:
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(usage())
         return 0 if argv else 2
+    if argv[0] in TOP:
+        module = importlib.import_module(TOP[argv[0]][0])
+        sys.argv = [f"tld {argv[0]}", *argv[1:]]
+        code = module.main(argv[1:])
+        return code if isinstance(code, int) else 0
     if len(argv) < 2 or (argv[0], argv[1]) not in COMMANDS:
         print(f"tld: unknown command '{' '.join(argv[:2])}'\n\n{usage()}", file=sys.stderr)
         return 2

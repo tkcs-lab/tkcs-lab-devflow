@@ -17,8 +17,8 @@ writes a record. When neither works there is no board: skip every record step si
 
 | Field | Value |
 |---|---|
-| `kind` | `run` for implement; `command` for every other playbook (deps, upstream, land, setup, docs, review, make-plan) |
-| `command` | `null` for a run; else the playbook: `setup`, `review`, `make-plan`, `deps`, `upstream`, `land`, `docs` |
+| `kind` | `run` for implement; `command` for every other playbook (deps, upstream, land, setup, docs, review, make-plan, migrate) |
+| `command` | `null` for a run; else the playbook: `setup`, `review`, `make-plan`, `deps`, `upstream`, `land`, `docs`, `migrate` |
 | `project` | `tld board project-slug <owner>/<repo>`: the repository name, lower case, other characters as `-` |
 | document id | the project slug for a run, `<project>--<command>` for the others |
 | `attended` | `true` when a person started the command and can answer; `false` for a scheduled run |

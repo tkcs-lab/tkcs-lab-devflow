@@ -58,7 +58,7 @@ def test_no_session_start_wording_in_the_plugin():
 # ---- commands -------------------------------------------------------------------------------
 def test_every_playbook_command_has_a_wrapper():
     assert COMMANDS == tuple(sorted(("setup", "review", "make-plan", "implement", "dod", "land", "deps",
-                                     "upstream", "docs", "board")))
+                                     "upstream", "docs", "board", "migrate")))
 
 
 @pytest.mark.parametrize("name", COMMANDS)

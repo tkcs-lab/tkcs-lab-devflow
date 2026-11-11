@@ -22,7 +22,7 @@ RUNTIME = PLAYBOOKS / "runtime.md"
 CORE_DIRS = [ROOT / d for d in ("playbooks", "roles", "checklists", "stacks")]
 CORE_FILES = sorted(p for d in CORE_DIRS for p in d.rglob("*.md"))
 ADAPTER_FILES = sorted(CLAUDE.rglob("*.md"))
-COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "upstream", "docs", "board")
+COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "upstream", "docs", "board", "migrate")
 
 cli = _load("tld.cli")
 dispatch = _load("tld.roles.dispatch")
@@ -50,7 +50,7 @@ def code_texts(text: str) -> list[str]:
     return out
 
 
-GROUPS = sorted({g for g, _ in cli.COMMANDS})
+GROUPS = sorted({g for g, _ in cli.COMMANDS} | set(cli.TOP))
 TLD_CALL = re.compile(r'(?:"\$\{CLAUDE_PLUGIN_ROOT\}/bin/tld"|(?<![\w/.<-])tld)\s+(--help|--version|'
                       + "|".join(GROUPS) + r')\b(?:\s+([a-z][a-z-]*))?(.*)')
 
@@ -97,6 +97,12 @@ def test_every_tld_call_parses_with_the_real_cli(call):
     path, group, command, rest = call
     if group in ("--help", "--version"):
         assert cli.main([group]) == 0
+        return
+    if group in cli.TOP:  # a one-word command: what follows it are its arguments
+        code, text = help_text(group)
+        assert code == 0, text
+        for flag in re.findall(r"(?<![\w-])--[a-z][a-z-]*", f"{command} {rest}"):
+            assert re.search(rf"(?<![\w-]){re.escape(flag)}(?![\w-])", text), f"{path}: 'tld {group}' uses {flag}"
         return
     if not command:  # the group named in prose (`tld roles`)
         assert group in GROUPS
@@ -240,7 +246,7 @@ def test_every_command_playbook_writes_a_status_record_or_says_why_not(name):
 
 def test_record_commands_cover_the_playbooks():
     record = _load("tld.board.record")
-    expected = {"setup", "review", "make-plan", "deps", "upstream", "land", "docs"}
+    expected = {"setup", "review", "make-plan", "deps", "upstream", "land", "docs", "migrate"}
     assert set(record.COMMANDS) == expected
 
 
