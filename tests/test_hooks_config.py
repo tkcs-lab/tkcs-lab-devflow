@@ -183,7 +183,7 @@ EXEMPT_LINE = 'python3 "<devflow root>/hooks/dod_gate.py" --exempt'
 
 
 @pytest.mark.parametrize("name, exempt", [("implement", True), ("make-plan", True), ("review", True), ("land", True),
-                                          ("deps", False), ("upstream", False), ("dod", False), ("board", False)])
+                                          ("deps", False), ("docs", False), ("upstream", False), ("dod", False), ("board", False)])
 def test_which_commands_mark_the_session_exempt(name, exempt):
     assert (EXEMPT_LINE in (DEVFLOW / "commands" / f"{name}.md").read_text()) is exempt
 
