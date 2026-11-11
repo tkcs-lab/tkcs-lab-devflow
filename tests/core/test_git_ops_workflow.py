@@ -2,7 +2,6 @@
 import json
 import os
 import re
-import shutil
 import subprocess
 
 import pytest
@@ -68,7 +67,7 @@ case "$path" in
 esac
 """
 
-needs_jq = pytest.mark.skipif(shutil.which("jq") is None, reason="jq not installed")
+needs_jq = pytest.mark.usefixtures("jq_installed")  # fails instead of skipping under TLD_REQUIRE_BROWSER=1
 
 
 @pytest.fixture(scope="module")

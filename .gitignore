@@ -6,3 +6,9 @@ evals/results/
 evals/transcripts/
 build/
 *.egg-info/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+node_modules/
+mutation-report.txt

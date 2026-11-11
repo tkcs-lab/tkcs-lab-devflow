@@ -1,0 +1,347 @@
+# Hand-written mutants for tests/mutation/run_mutants.py (see CONTRIBUTING.md, "Mutation check").
+# Each one replaces `old` (it must occur exactly once in `file`) by `new` and runs the tests listed for that file
+# under `tests`; a mutant the tests do not fail on SURVIVES and fails the check. They are the mutants of the review (docs/reviews/claude-toolkit-review.md,
+# "Tests") and the survivors pinned by tests/core/test_guard_mutations.py, ported to src/tld, plus a few more.
+# tests/core/test_mutants_file.py keeps this list in step with the code.
+tests:
+  src/tld/guard/no_merge.py:
+  - tests/core/test_hook_no_merge.py
+  - tests/core/test_guard_mutations.py
+  - tests/core/test_guard_corpus.py
+  src/tld/guard/no_force_push.py:
+  - tests/core/test_hook_no_force_push.py
+  - tests/core/test_guard_mutations.py
+  - tests/core/test_guard_corpus.py
+  src/tld/guard/secret_scan.py:
+  - tests/core/test_hook_secret_scan.py
+  - tests/core/test_guard_mutations.py
+  src/tld/guard/protect_paths.py:
+  - tests/core/test_hook_protect_paths.py
+  - tests/core/test_hook_protect_paths_setup.py
+  - tests/core/test_guard_mutations.py
+  - tests/core/test_guard_corpus.py
+  src/tld/profile/validate.py:
+  - tests/core/test_validate_profile.py
+  - tests/core/test_profile_roles.py
+  - tests/core/test_profile_version.py
+  src/tld/plan/manifest.py:
+  - tests/core/test_validate_manifest.py
+  src/tld/guard/markers.py:
+  - tests/core/test_guard_markers.py
+  - tests/core/test_guard_mutations.py
+  - tests/core/test_hook_protect_paths_setup.py
+  src/tld/guard/_common.py:
+  - tests/adapters/claude/test_hooks_config.py
+  - tests/core/test_guard_corpus.py
+  - tests/core/test_hook_no_force_push.py
+  - tests/core/test_hook_no_merge.py
+  src/tld/guard/no_git_tag.py:
+  - tests/core/test_hook_no_git_tag.py
+  - tests/core/test_guard_corpus.py
+  src/tld/guard/_wrappers.py:
+  - tests/core/test_guard_mutations.py
+  - tests/core/test_guard_corpus.py
+
+mutants:
+- id: NM1
+  file: src/tld/guard/no_merge.py
+  why: gh pr merge not denied
+  old: 'if path[:2] == ["pr", "merge"]:'
+  new: 'if path[:2] == ["pr", "mergeX"]:'
+- id: NM3
+  file: src/tld/guard/no_merge.py
+  why: glob refspec allowed
+  old: 'if has_glob(dst):'
+  new: 'if False:'
+- id: NM4
+  file: src/tld/guard/no_merge.py
+  why: MCP write w/o branch allowed
+  old: if not branch or (isinstance
+  new: if (isinstance
+- id: NM5
+  file: src/tld/guard/no_merge.py
+  why: graphql approve allowed
+  old: if GRAPHQL_REVIEW.search(text) and
+  new: if False and
+- id: NM6
+  file: src/tld/guard/no_merge.py
+  why: -c branch.* allowed
+  old: ("remote.", "push.", "branch.")
+  new: ("remote.", "push.")
+- id: NM7
+  file: src/tld/guard/no_merge.py
+  why: merge-upstream only PUT
+  old: MERGE_UPSTREAM.match(ep) and method == "POST"
+  new: MERGE_UPSTREAM.match(ep) and method == "PUT"
+- id: NM8
+  file: src/tld/guard/no_merge.py
+  why: contents DELETE allowed
+  old: method in ("PUT", "DELETE", "POST")
+  new: method in ("PUT",)
+- id: NM9
+  file: src/tld/guard/no_merge.py
+  why: curl merge allowed
+  old: CURL_MERGE.search(w) for w
+  new: False for w
+- id: NM10
+  file: src/tld/guard/no_merge.py
+  why: rename main allowed
+  old: 'if m and m.group(1) == ctx.require_main_branch():'
+  new: 'if False:'
+- id: FP1
+  file: src/tld/guard/no_force_push.py
+  why: --delete allowed
+  old: 'if push.delete:'
+  new: 'if False:'
+- id: FP2
+  file: src/tld/guard/no_force_push.py
+  why: +refspec allowed
+  old: 'if spec.plus:'
+  new: 'if False:'
+- id: FP3
+  file: src/tld/guard/no_force_push.py
+  why: gh api DELETE ref allowed
+  old: api.method == "DELETE" and
+  new: api.method == "DELETEX" and
+- id: FP4
+  file: src/tld/guard/no_force_push.py
+  why: --del abbreviation allowed
+  old: (w.startswith("--del") and "--delete-branch".startswith(w))
+  new: 'False'
+- id: FP5
+  file: src/tld/guard/no_force_push.py
+  why: dynamic option allowed
+  old: 'if push.dynamic_option:'
+  new: 'if False:'
+- id: FP6
+  file: src/tld/guard/no_force_push.py
+  why: refspec :dst delete allowed
+  old: 'if spec.delete:'
+  new: 'if False:'
+- id: SS1
+  file: src/tld/guard/secret_scan.py
+  why: allow mark anywhere
+  old: 'if line.rstrip().endswith(ALLOW_MARK):'
+  new: 'if ALLOW_MARK in line:'
+- id: SS2
+  file: src/tld/guard/secret_scan.py
+  why: entropy threshold 4.5
+  old: MIN_ENTROPY = 3.5
+  new: MIN_ENTROPY = 4.5
+- id: SS3
+  file: src/tld/guard/secret_scan.py
+  why: slack xoxp/xoxr/xoxs dropped
+  old: \bxox[abprs]-
+  new: \bxox[ab]-
+- id: SS6
+  file: src/tld/guard/secret_scan.py
+  why: '''pub'' exempts'
+  old: 'if "public" in lower or "pubkey" in lower:'
+  new: 'if "pub" in lower:'
+- id: SS7
+  file: src/tld/guard/secret_scan.py
+  why: password min len 16
+  old: return (len(value) >= 12 and
+  new: return (len(value) >= 16 and
+- id: SS10
+  file: src/tld/guard/secret_scan.py
+  why: azure key dropped
+  old: AccountKey=[A-Za-z0-9+/]{60,}
+  new: AccountKey=[A-Za-z0-9+/]{600,}
+- id: SS11
+  file: src/tld/guard/secret_scan.py
+  why: jwt dropped
+  old: \.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}
+  new: \.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{800,}
+- id: PP1
+  file: src/tld/guard/protect_paths.py
+  why: profile always allowed
+  old: 'if rel == PROFILE and profile_allowed(ctx.project_dir):'
+  new: 'if rel == PROFILE:'
+- id: PP3
+  file: src/tld/guard/protect_paths.py
+  why: trailing-slash dir pattern
+  old: '        pattern += "**"'
+  new: '        pass'
+- id: PP4
+  file: src/tld/guard/protect_paths.py
+  why: symlink realpath dropped
+  old: 'for candidate in dict.fromkeys([absolute, os.path.realpath(absolute)]):'
+  new: 'for candidate in [absolute]:'
+- id: PP5
+  file: src/tld/guard/protect_paths.py
+  why: plugin root subpaths
+  old: if cand == r or cand.startswith(
+  new: if cand == r or False and cand.startswith(
+- id: PP8
+  file: src/tld/guard/protect_paths.py
+  why: hard links ignored
+  old: 'def hard_link_hit(ctx: Ctx, path: str, here: str) -> str | None:
+
+    '
+  new: "def hard_link_hit(ctx: Ctx, path: str, here: str) -> str | None:\n    return None\n"
+- id: VP1
+  file: src/tld/profile/validate.py
+  why: bot in codeowners ok
+  old: 'if owners is not None and bot is not None and bot in owners:'
+  new: 'if False:'
+- id: VP2
+  file: src/tld/profile/validate.py
+  why: codeowners w/o bot ok
+  old: 'if owners is not None and bot is None:'
+  new: 'if False:'
+- id: VP3
+  file: src/tld/profile/validate.py
+  why: bad tag regex ok
+  old: '            errors.append(f"''upstream.tag_pattern'': not'
+  new: '            pass; [f"''upstream.tag_pattern'': not'
+- id: VP4
+  file: src/tld/profile/validate.py
+  why: required+disabled ok
+  old: 'if name in disabled:'
+  new: 'if False:'
+- id: VP6
+  file: src/tld/profile/validate.py
+  why: must_read warn >30
+  old: len(docs.get("must_read", [])) > 3
+  new: len(docs.get("must_read", [])) > 30
+- id: VP7
+  file: src/tld/profile/validate.py
+  why: file check off
+  old: 'if not (root_dir / p.split("#")[0]).exists():'
+  new: 'if False:'
+- id: VP8
+  file: src/tld/profile/validate.py
+  why: additionalProperties off
+  old: 'elif schema.get("additionalProperties") is False:'
+  new: 'elif False:'
+- id: VP9
+  file: src/tld/profile/validate.py
+  why: minimum off
+  old: 'errors.append(f"''{path}'': must be at least {schema[''minimum'']}")'
+  new: pass
+- id: VP10
+  file: src/tld/profile/validate.py
+  why: pattern off
+  old: 'errors.append(f"''{path}'': does not match {schema[''pattern'']}")'
+  new: pass
+- id: VP11
+  file: src/tld/profile/validate.py
+  why: website-maintainer w/o website
+  old: 'if name == "website-maintainer" and "website" not in docs:'
+  new: 'if False:'
+- id: VP12
+  file: src/tld/profile/validate.py
+  why: when w/o diff point
+  old: 'if "when" in entry and not any(pt in DIFF_POINTS for pt in points):'
+  new: 'if False:'
+- id: VM1
+  file: src/tld/plan/manifest.py
+  why: max_parallel 0 ok
+  old: 'or mp < 1):'
+  new: 'or mp < 0):'
+- id: VM2
+  file: src/tld/plan/manifest.py
+  why: cycle unchecked
+  old: '    if cycle:
+
+    '
+  new: '    if False:
+
+    '
+- id: VM3
+  file: src/tld/plan/manifest.py
+  why: overlap unchecked
+  old: '                    if paths_overlap(pa, pb):'
+  new: '                    if False:'
+- id: VM4
+  file: src/tld/plan/manifest.py
+  why: self-dep ok
+  old: 'elif dep == pid:'
+  new: 'elif False:'
+- id: VM6
+  file: src/tld/plan/manifest.py
+  why: human_gate type
+  old: 'if "human_gate" in ph and not isinstance(ph["human_gate"], bool):'
+  new: 'if False:'
+- id: VM7
+  file: src/tld/plan/manifest.py
+  why: touches type
+  old: 'if t is not None and not (isinstance(t, list) and all(isinstance(x, str) for x in t)):'
+  new: 'if False:'
+- id: VM8
+  file: src/tld/plan/manifest.py
+  why: duplicate id ok
+  old: 'if pid in ids:'
+  new: 'if False:'
+- id: VM9
+  file: src/tld/plan/manifest.py
+  why: manual items unchecked
+  old: '                if not _nonempty(item.get(field)):'
+  new: '                if False:'
+- id: VM10
+  file: src/tld/plan/manifest.py
+  why: depends_on type
+  old: '            errors.append(f"phase ''{pid}'': depends_on must be a list")'
+  new: '            pass'
+- id: VM11
+  file: src/tld/plan/manifest.py
+  why: acceptance list
+  old: 'errors.append(f"phase ''{pid}'': ''acceptance'' must be a list")'
+  new: pass
+- id: VM12
+  file: src/tld/plan/manifest.py
+  why: verify_after_merge type
+  old: errors.append(f"'{key}' must be a list of strings")
+  new: pass
+- id: VM13
+  file: src/tld/plan/manifest.py
+  why: dep transitive reach
+  old: 'if b in reach.get(a, set()) or a in reach.get(b, set()):'
+  new: 'if b in deps.get(a, []) or a in deps.get(b, []):'
+- id: NM2
+  file: src/tld/guard/no_merge.py
+  why: --appr abbreviation allowed
+  old: name == "--approve" or (name.startswith("--ap") and "--approve".startswith(name))
+  new: name == "--approve"
+- id: SS8
+  file: src/tld/guard/secret_scan.py
+  why: stripe rk_live dropped
+  old: \b(?:sk|rk)_live_
+  new: \b(?:sk)_live_
+- id: MK1
+  file: src/tld/guard/markers.py
+  why: future-dated marker accepted
+  old: return data if 0 <= time.time() - written <= KINDS[kind][1] else None
+  new: return data if time.time() - written <= KINDS[kind][1] else None
+- id: CM1
+  file: src/tld/guard/_common.py
+  why: hooks.disable from the working tree
+  old: '    return committed
+
+
+    '
+  new: '    return working
+
+
+    '
+- id: VM5
+  file: src/tld/plan/manifest.py
+  why: strong level without a reason
+  old: 'if wl == "strong" and not _nonempty(ph.get("worker_level_reason")):'
+  new: 'if False:'
+- id: GT1
+  file: src/tld/guard/no_git_tag.py
+  why: git tag -d allowed
+  old: '        return deny("`git tag -d` deletes a tag")'
+  new: '        return None'
+- id: GT2
+  file: src/tld/guard/no_git_tag.py
+  why: git tag create allowed
+  old: "    if create or positional:\n        return deny(\"`git tag` would create or move a tag\")"
+  new: "    if create:\n        return deny(\"`git tag` would create or move a tag\")"
+- id: WR1
+  file: src/tld/guard/_wrappers.py
+  why: script --command=CMD not unwrapped
+  old: '            return tok[len("--command="):]'
+  new: '            return None'
