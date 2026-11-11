@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -53,6 +54,7 @@ class Ctx:
     tool: str = ""
     tool_input: dict = field(default_factory=dict)
     notice: str | None = None  # shown to the user (stdout `systemMessage`) when the hook allows
+    disable_error: ProfileError | None = None  # dod-gate only: a malformed hooks.disable, re-raised by its evaluate
 
     def hooks_section(self) -> dict:
         section = (self.profile or {}).get("hooks")
@@ -80,20 +82,83 @@ class Ctx:
         return value
 
     def disabled(self, name: str) -> bool:
+        return name in trusted_disable(self)
+
+
+def _committed_profile(project: str, main: str) -> dict | None:
+    """The profile as committed on origin/<main>, else <main>; None when neither can be read."""
+    import yaml
+    for ref in (f"origin/{main}", main):
         try:
-            return name in self.list_key("disable", [])
-        except ProfileError:
-            return False
+            r = subprocess.run(["git", "-C", project, "show", f"{ref}:{PROFILE.as_posix()}"], capture_output=True,
+                               text=True, timeout=5, stdin=subprocess.DEVNULL)
+            if r.returncode == 0:
+                data = yaml.safe_load(r.stdout)
+                return data if isinstance(data, dict) else None
+        except (OSError, subprocess.SubprocessError, yaml.YAMLError):
+            continue
+    return None
+
+
+def _disable_list(profile: dict) -> list[str]:
+    section = profile.get("hooks")
+    if section is None:
+        return []
+    if not isinstance(section, dict):
+        raise ProfileError("toolkit.yaml: 'hooks' must be a mapping")
+    value = section.get("disable")
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+        raise ProfileError("toolkit.yaml: 'hooks.disable' must be a list of non-empty strings")
+    return list(value)
+
+
+def trusted_disable(ctx: Ctx) -> list[str]:
+    """`hooks.disable` as committed on the main branch, so a branch cannot switch a guardrail off for itself.
+    With no commit yet (or no repository) no trusted copy can exist and the working tree's list is used."""
+    if ctx.profile is None:
+        return []
+    git = ctx.profile.get("git")
+    main = git.get("main_branch") if isinstance(git, dict) else None
+    try:
+        head = subprocess.run(["git", "-C", ctx.project_dir, "rev-parse", "--verify", "-q", "HEAD"],
+                              capture_output=True, text=True, timeout=5, stdin=subprocess.DEVNULL).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        head = False
+    if not head:
+        return _disable_list(ctx.profile)
+    committed = _committed_profile(ctx.project_dir, main) if isinstance(main, str) and main else None
+    if committed is None:
+        return []
+    if committed.get("hooks") != ctx.profile.get("hooks"):
+        ctx.notice = (f"the working tree's hooks section differs from the committed {main} profile; "
+                      "only the committed hooks.disable is applied")
+    return _disable_list(committed)
 
 
 def find_project(cwd: str) -> tuple[str, dict | None, str | None]:
     """Project directory, parsed profile (or None) and the reason there is none."""
     starts = []
     env = os.environ.get("CLAUDE_PROJECT_DIR")
-    if env:
-        starts.append(Path(env))
     start = Path(cwd or os.getcwd())
-    starts += [start, *start.parents]
+    outside = False
+    if env:
+        root = Path(env).resolve()
+        starts.append(Path(env))
+        try:
+            inside = start.resolve().is_relative_to(root)
+        except OSError:
+            inside = False
+        if inside:  # the walk up from cwd stops at the project directory
+            for d in (start, *start.parents):
+                starts.append(d)
+                if d.resolve() == root:
+                    break
+        else:
+            outside = True
+    else:
+        starts += [start, *start.parents]
     for d in starts:
         path = d / PROFILE
         if path.is_file():
@@ -107,6 +172,8 @@ def find_project(cwd: str) -> tuple[str, dict | None, str | None]:
             if not isinstance(data, dict):
                 return str(d), None, f"{PROFILE} must be a YAML mapping"
             return str(d), data, None
+    if outside and (start / PROFILE).is_file():
+        return env or str(start), None, f"{PROFILE} outside CLAUDE_PROJECT_DIR ignored"
     return env or str(start), None, f"no {PROFILE} found from {start}"
 
 
@@ -158,8 +225,13 @@ def execute(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: bool,
     armed = _arm_budget() if fail_closed else None
     try:
         ctx = make_ctx(payload)
-        if ctx.disabled(name):
-            return Result(0)
+        try:
+            if ctx.disabled(name):
+                return Result(0)
+        except ProfileError as exc:
+            if name != "dod-gate":
+                raise
+            ctx.disable_error = exc  # the gate stays on and counts it as a failed attempt
         message = evaluate(ctx)
     except HookBudgetExceeded:
         return Result(2, prefix + f"took longer than {HOOK_BUDGET_SECONDS} s, so the call is denied.")

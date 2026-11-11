@@ -251,9 +251,25 @@ def test_bad_max_attempts_is_reported(tmp_path, bad):
 
 
 def test_disable_flag(tmp_path):
-    repo = repo_with(tmp_path, ["exit 1"])
+    repo = repo_with(tmp_path, ["exit 1"], change=False)
     (repo / ".claude" / "toolkit.yaml").write_text(profile(["exit 1"]) + "  disable: [dod-gate]\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "disable on main")
+    git(repo, "branch", "-f", "main", "HEAD")  # the disable is committed on main
+    (repo / "work.txt").write_text("new work\n")
     assert run(HOOK, stop(repo)).code == 0
+
+
+def test_malformed_disable_does_not_loop_dod_gate(tmp_path):
+    repo = repo_with(tmp_path, ["exit 1"])
+    cfg = profile(["exit 1"]) + "  disable: dod-gate\n"
+    (repo / ".claude" / "toolkit.yaml").write_text(cfg)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "bad disable")
+    git(repo, "branch", "-f", "main", "HEAD")
+    (repo / "work.txt").write_text("more work\n")
+    codes = [run(HOOK, stop(repo, active=True)).code for _ in range(3)]
+    assert codes == [2, 2, 0], codes  # three profile-error attempts, then it lets go
 
 
 def test_script_contract(tmp_path):

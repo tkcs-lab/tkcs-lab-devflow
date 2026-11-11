@@ -2,6 +2,7 @@
 import ast
 import json
 import re
+import os
 import subprocess
 import sys
 
@@ -9,7 +10,7 @@ import pytest
 import yaml
 
 from conftest import DEVFLOW, ROOT
-from hooks_helpers import HOOKS, MODULES
+from hooks_helpers import HOOKS, MODULES, bash, git, make_repo, run, run_script
 
 import _common
 
@@ -176,3 +177,43 @@ def test_docs_cover_every_hook_and_key():
     readme = (ROOT / "README.md").read_text()
     assert "## Guardrails" in readme and "docs/hooks.md" in readme
     assert "hooks.md" in (ROOT / "docs" / "profile-reference.md").read_text()
+
+
+# ---- profile trust and loud errors ---------------------------------------------------------------
+def test_disable_must_be_a_list(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo", "git:\n  main_branch: main\nhooks:\n  disable: no-merge\n")
+    r = run("no-merge", bash("gh pr merge 1", repo))
+    assert r.code == 2 and "hooks.disable" in r.stderr
+
+
+def test_walks_up_from_cwd_without_project_dir(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo")
+    sub = repo / "sub"
+    sub.mkdir()
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
+    payload = bash("git push origin main", sub)
+    r = subprocess.run([sys.executable, str(HOOKS / "no_merge.py")], input=json.dumps(payload), capture_output=True,
+                       text=True, env=env, timeout=60)
+    assert r.returncode == 2 and "missing required key" not in r.stderr
+
+
+def test_hooks_without_pyyaml(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo")
+    fake = tmp_path / "fake"
+    fake.mkdir()
+    (fake / "yaml.py").write_text("raise ImportError('no yaml here')\n")
+    env = {"PYTHONPATH": str(fake)}
+    r = run_script("no-merge", bash("git push -u origin feature/x", repo), project=repo, extra_env=env)
+    assert r.returncode == 2 and "PyYAML is not installed" in r.stderr
+    assert run_script("no-merge", bash("gh pr merge 1", repo), project=repo, extra_env=env).returncode == 2
+
+
+def test_disable_in_a_branch_with_a_bogus_main_branch_is_ignored(tmp_path):
+    repo = make_repo(tmp_path / "r", "main", "git:\n  main_branch: main\n")
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", "main")
+    git(repo, "checkout", "-q", "-b", "feature/demo")
+    (repo / ".claude" / "toolkit.yaml").write_text("git:\n  main_branch: nosuch\nhooks:\n  disable: [no-merge]\n")
+    assert run("no-merge", bash("gh pr merge 1", repo)).code == 2
