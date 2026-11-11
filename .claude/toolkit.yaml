@@ -7,9 +7,6 @@ project:
 docs:
   must_read:
     - README.md
-    - docs/design.md
-    - docs/profile-reference.md
-    - docs/delivery.md
   plan_dir: docs/
 
 git:
