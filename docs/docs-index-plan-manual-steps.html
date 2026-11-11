@@ -1,0 +1,140 @@
+<title>Docs Index Checklist</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one narrow reading column; two parts (before / after), each item a card of checkable steps. */
+  :root {
+    --bg: #f6f7f4; --surface: #ffffff; --fg: #1d2420; --muted: #5d6a62; --line: #d9ded7;
+    --accent: #1f6f54; --accent-bg: #e3f1ea; --code-bg: #eceee9; --warn: #8a5a00;
+    --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141916; --surface: #1c231f; --fg: #e6ebe7; --muted: #99a79e; --line: #2d3731;
+      --accent: #5fc79d; --accent-bg: #1f3a2f; --code-bg: #232c27; --warn: #e0b45c; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141916; --surface: #1c231f; --fg: #e6ebe7; --muted: #99a79e; --line: #2d3731;
+    --accent: #5fc79d; --accent-bg: #1f3a2f; --code-bg: #232c27; --warn: #e0b45c; color-scheme: dark;
+  }
+  html { height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.55;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 28px 56px;
+  }
+  main { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+  h1 { font-size: 26px; line-height: 1.2; margin: 0 0 6px; text-wrap: balance; }
+  h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
+  h3 { font-size: 17px; margin: 0; text-wrap: balance; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 65ch; }
+  .progress { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .item { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .item header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 12px; }
+  .time { font-size: 12px; color: var(--muted); }
+  .why { color: var(--muted); font-size: 14px; }
+  ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; counter-reset: s; }
+  li { counter-increment: s; display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; min-width: 0; }
+  li label { display: flex; gap: 10px; cursor: pointer; min-width: 0; }
+  li input { margin-top: 4px; accent-color: var(--accent); flex: none; }
+  li .txt { min-width: 0; overflow-wrap: anywhere; }
+  li .txt::before { content: counter(s) ". "; color: var(--muted); font-variant-numeric: tabular-nums; }
+  li input:checked + .txt { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+  li input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { margin: 6px 0 0; background: var(--code-bg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  a { color: var(--accent); }
+  .done { background: var(--accent-bg); border-radius: 6px; padding: 8px 12px; font-size: 14px; }
+  .done b { font-weight: 600; }
+  .note { border-left: 3px solid var(--warn); padding: 2px 0 2px 12px; font-size: 14px; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main>
+  <div>
+    <h1>Docs Index Checklist</h1>
+    <p class="lede">Three things only you can do for the docs-index plan. One before <code>/implement</code> starts, two after the last merge. Your ticks are remembered in this browser.</p>
+    <p class="progress" id="progress" aria-live="polite"></p>
+  </div>
+
+  <section>
+    <h2>Before implementation</h2>
+
+    <article class="item">
+      <header><h3>Shrink the profile's must-read list</h3><span class="time">about 3 min</span></header>
+      <p class="why">The plan moves <code>docs/design.md</code>, <code>docs/profile-reference.md</code> and <code>docs/delivery.md</code>. The profile lists them under <code>docs.must_read</code>, and the toolkit stops when a listed file is missing. The agent cannot edit the profile (the <code>protect-paths</code> hook guards it), so you do it on <code>main</code> first.</p>
+      <ol>
+        <li><label><input type="checkbox" id="b1-1"><span class="txt">Open <a href="https://github.com/tkcs-lab/claude-toolkit/edit/main/.claude/toolkit.yaml">the profile on <code>main</code></a> in the GitHub editor.</span></label></li>
+        <li><label><input type="checkbox" id="b1-2"><span class="txt">Replace the four <code>must_read</code> entries with one. You should end with:
+<pre>docs:
+  must_read:
+    - README.md
+  plan_dir: docs/</pre></span></label></li>
+        <li><label><input type="checkbox" id="b1-3"><span class="txt">Commit directly to <code>main</code> (or open a pull request and merge it). Do this before you run <code>/implement</code>: it merges <code>origin/main</code> into the feature branch when it starts.</span></label></li>
+      </ol>
+      <p class="done"><b>Done when</b> the file on <code>main</code> lists only <code>README.md</code> under <code>docs.must_read</code>.</p>
+    </article>
+  </section>
+
+  <section>
+    <h2>After implementation</h2>
+
+    <article class="item">
+      <header><h3>Switch the profile to the docs index</h3><span class="time">about 5 min</span></header>
+      <p class="why">Same protected file, now that the feature branch has created <code>docs/README.md</code>. Do this once the pull request is merged.</p>
+      <ol>
+        <li><label><input type="checkbox" id="a1-1"><span class="txt">Open <a href="https://github.com/tkcs-lab/claude-toolkit/edit/main/.claude/toolkit.yaml">the profile on <code>main</code></a>.</span></label></li>
+        <li><label><input type="checkbox" id="a1-2"><span class="txt">Change the <code>docs</code> section to:
+<pre>docs:
+  must_read: []
+  index: docs/README.md
+  plan_dir: docs/plans/</pre></span></label></li>
+        <li><label><input type="checkbox" id="a1-3"><span class="txt">Add this line to the end of <code>verify.dod</code>:
+<pre>    - ".venv/bin/python plugins/devflow/scripts/docs_index.py check --profile .claude/toolkit.yaml"</pre></span></label></li>
+        <li><label><input type="checkbox" id="a1-4"><span class="txt">Change the comment on line 2 to <code># Reference: docs/reference/profile-reference.md</code>.</span></label></li>
+        <li><label><input type="checkbox" id="a1-5"><span class="txt">Commit to <code>main</code>. In a new session run <code>/dod</code>; every row must pass, including the new docs index row.</span></label></li>
+      </ol>
+      <p class="done"><b>Report back</b> one line: <code>/dod: PASS</code> or the failing row.</p>
+    </article>
+
+    <article class="item">
+      <header><h3>Schedule <code>/docs tidy</code> and update the board</h3><span class="time">about 10 min</span></header>
+      <p class="why">A scheduled task needs the repository attached, which only the claude.ai interface can do. The status board rejects <code>command: docs</code> records until it runs the new code.</p>
+      <ol>
+        <li><label><input type="checkbox" id="a2-1"><span class="txt">If you run the status board, update its checkout to the merged <code>main</code> and restart it, following <a href="https://github.com/tkcs-lab/claude-toolkit/blob/plan/docs-index/docs/board-server.md">the board server guide</a>. Skip this step without a board.</span></label></li>
+        <li><label><input type="checkbox" id="a2-2"><span class="txt">In <a href="https://claude.ai/code">claude.ai/code</a>, create a scheduled task with this repository attached, as described under "Scheduling" in <a href="https://github.com/tkcs-lab/claude-toolkit/blob/plan/docs-index/docs/maintenance.md">the maintenance guide</a>.</span></label></li>
+        <li><label><input type="checkbox" id="a2-3"><span class="txt">Set it to weekly, outside your working hours. Prompt: <code>/docs tidy</code>. Permission mode: auto.</span></label></li>
+        <li><label><input type="checkbox" id="a2-4"><span class="txt">Use an environment that has <code>DEVFLOW_BOARD_URL</code> and <code>DEVFLOW_BOARD_TOKEN</code> (the token is a secret: type it into the environment settings, never into a chat).</span></label></li>
+        <li><label><input type="checkbox" id="a2-5"><span class="txt">Run the task once from the interface.</span></label></li>
+      </ol>
+      <p class="done"><b>Report back</b> what the first run ended with: <code>docs clean</code>, a tidy pull request, or an issue titled <code>Docs tidy:</code>.</p>
+    </article>
+  </section>
+</main>
+
+<script>
+  (function () {
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type="checkbox"]'));
+    var key = 'docs-index-manual-steps';
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) { saved = {}; }
+    function save() {
+      var out = {};
+      boxes.forEach(function (b) { out[b.id] = b.checked; });
+      try { localStorage.setItem(key, JSON.stringify(out)); } catch (e) {}
+    }
+    function show() {
+      var n = boxes.filter(function (b) { return b.checked; }).length;
+      document.getElementById('progress').textContent = n + ' of ' + boxes.length + ' steps done';
+    }
+    boxes.forEach(function (b) {
+      b.checked = !!saved[b.id];
+      b.addEventListener('change', function () { save(); show(); });
+    });
+    show();
+  })();
+</script>
