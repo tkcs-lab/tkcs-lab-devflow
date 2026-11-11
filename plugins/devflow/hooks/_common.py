@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,6 +25,18 @@ DEFAULT_PROTECT_PATHS = [".claude/toolkit.yaml", ".env", ".env.*", "*.lock", "pa
 BUILTIN_PROTECT_ALLOW = [".env.example", ".env.sample", ".env.template", ".env.dist",
                          ".github/workflows/devflow-land.yml", ".github/workflows/devflow-release.yml"]
 DEFAULT_MAX_ATTEMPTS = 3
+HOOK_BUDGET_SECONDS = 15  # below the 20 s hook timeout, so a slow destructive hook denies instead of being killed
+
+
+class HookBudgetExceeded(BaseException):
+    """Raised by the SIGALRM handler. A BaseException so that `except OSError` / `except Exception`
+    around a git call cannot swallow it."""
+
+
+def exit_import_error(name: str, exc: BaseException) -> None:
+    """A destructive hook could not load its helpers: deny (exit 2) instead of crashing with status 1."""
+    print(f"devflow {name}: internal error while loading ({type(exc).__name__}: {exc}).", file=sys.stderr)
+    sys.exit(2)
 
 
 class ProfileError(Exception):
@@ -111,6 +124,27 @@ class Result(NamedTuple):
     stdout: str = ""
 
 
+def _arm_budget():
+    """Start the time budget; returns the previous handler, or None when SIGALRM is unavailable."""
+    if not hasattr(signal, "SIGALRM"):
+        return None
+
+    def on_alarm(signum, frame):  # noqa: ARG001
+        raise HookBudgetExceeded()
+    try:
+        previous = signal.signal(signal.SIGALRM, on_alarm)
+        signal.setitimer(signal.ITIMER_REAL, HOOK_BUDGET_SECONDS)
+    except (ValueError, OSError):  # not the main thread
+        return None
+    return (previous,)
+
+
+def _disarm_budget(armed) -> None:
+    if armed:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, armed[0])
+
+
 def execute(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: bool, stdin_text: str) -> Result:
     """Run one hook on the raw stdin text."""
     prefix = f"devflow {name}: "
@@ -121,15 +155,20 @@ def execute(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: bool,
             raise ValueError("the event is not a JSON object")
     except ValueError as exc:
         return Result(problem_code, prefix + f"cannot read the hook event ({exc}).")
+    armed = _arm_budget() if fail_closed else None
     try:
         ctx = make_ctx(payload)
         if ctx.disabled(name):
             return Result(0)
         message = evaluate(ctx)
+    except HookBudgetExceeded:
+        return Result(2, prefix + f"took longer than {HOOK_BUDGET_SECONDS} s, so the call is denied.")
     except ProfileError as exc:
         return Result(2, prefix + str(exc))
     except Exception as exc:  # noqa: BLE001 - a hook must never crash into an allow
         return Result(problem_code, prefix + f"internal error ({type(exc).__name__}: {exc}).")
+    finally:
+        _disarm_budget(armed)
     if message:
         return Result(2, prefix + message)
     if ctx.notice:

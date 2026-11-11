@@ -6,10 +6,13 @@ import re
 
 import _common
 from _common import Ctx
-from _gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs
-from _shell import ParseError
 
 NAME = "no-force-push"
+try:
+    from _gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs
+    from _shell import ParseError
+except Exception as exc:  # noqa: BLE001 - a destructive hook that cannot load denies
+    _common.exit_import_error(NAME, exc)
 INSTEAD = ("Push normally (`git push -u origin <branch>`). If the push is rejected because the remote branch "
            "moved, `git fetch`, merge `origin/<branch>` into yours (a merge commit, never a rebase) and push "
            "again. Branches are deleted by the owner, not by a session.")

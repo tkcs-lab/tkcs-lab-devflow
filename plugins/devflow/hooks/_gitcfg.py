@@ -4,30 +4,43 @@ from __future__ import annotations
 import os
 import subprocess
 
+from _shell import ParseError
 
-def _run_git(ctx_dir: str, repo_opts: list[str], *args: str) -> str | None:
+
+class GitLookupError(ParseError):
+    """A git lookup the hook needs could not be answered (timeout, cannot run, unexpected status)."""
+
+
+def _run_git(ctx_dir: str, repo_opts: list[str], *args: str, strict: bool = False) -> str | None:
+    """Stdout of `git`, or None. Status 1 is "no such value" and gives None. Any other failure gives None
+    too, unless `strict`: then a timeout, a launch error or another status raises GitLookupError."""
     cmd = ["git", *repo_opts, *args]
     try:
         r = subprocess.run(cmd, cwd=ctx_dir if os.path.isdir(ctx_dir) else None, capture_output=True,
                            text=True, timeout=5, stdin=subprocess.DEVNULL)
-    except (OSError, subprocess.SubprocessError):
+    except subprocess.TimeoutExpired:
+        if strict:
+            raise GitLookupError(f"`git {args[0]}` timed out") from None
         return None
-    return r.stdout.strip() if r.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError) as exc:
+        if strict:
+            raise GitLookupError(f"`git {args[0]}` could not run ({type(exc).__name__})") from None
+        return None
+    if r.returncode == 0:
+        return r.stdout.strip()
+    if strict and r.returncode != 1:
+        raise GitLookupError(f"`git {args[0]}` exited with status {r.returncode}")
+    return None
 
 
 def current_branch(ctx_dir: str, repo_opts: list[str] | None = None) -> str | None:
-    return _run_git(ctx_dir, repo_opts or [], "symbolic-ref", "--short", "-q", "HEAD")
+    """The short branch name; None for a detached HEAD. Raises GitLookupError when git cannot answer."""
+    return _run_git(ctx_dir, repo_opts or [], "symbolic-ref", "--short", "-q", "HEAD", strict=True)
 
 
 def ref_exists(ctx_dir: str, full_ref: str, repo_opts: list[str] | None = None) -> bool:
-    """True when the local repository has `full_ref` (for example refs/tags/v1)."""
-    try:
-        r = subprocess.run(["git", *(repo_opts or []), "show-ref", "--verify", "-q", full_ref],
-                           cwd=ctx_dir if os.path.isdir(ctx_dir) else None, capture_output=True,
-                           timeout=5, stdin=subprocess.DEVNULL)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return r.returncode == 0
+    """True when the local repository has `full_ref` (for example refs/tags/v1). Raises GitLookupError."""
+    return _run_git(ctx_dir, repo_opts or [], "show-ref", "--verify", "-q", full_ref, strict=True) is not None
 
 
 def git_config_values(ctx_dir: str, repo_opts: list[str], overrides: list[str], key: str) -> list[str]:

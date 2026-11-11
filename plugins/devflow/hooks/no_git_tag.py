@@ -11,11 +11,14 @@ import re
 
 import _common
 from _common import Ctx
-from _gitcfg import _truthy, git_config_value, git_config_values
-from _gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs, ref_exists, short_ref
-from _shell import ParseError, is_dynamic
 
 NAME = "no-git-tag"
+try:
+    from _gitcfg import _truthy, git_config_value, git_config_values
+    from _gitgh import Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs, ref_exists, short_ref
+    from _shell import ParseError, is_dynamic
+except Exception as exc:  # noqa: BLE001 - a destructive hook that cannot load denies
+    _common.exit_import_error(NAME, exc)
 INSTEAD = ("Tags are cut by the release workflow in CI, on the maintainer's decision. Do not create, move, "
            "delete or push a tag from a session; say in your report that a release is due instead. Reading "
            "is fine: `git tag -l`, `git describe`, `git fetch --tags`, `git ls-remote --tags`.")
