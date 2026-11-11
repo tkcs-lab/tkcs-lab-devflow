@@ -193,7 +193,7 @@ def run_once(task: Task, repeat: int, agent: Agent, budget: Budget, *, model_ove
             res = AgentResult(exit_status=-1, error=str(exc))
         res.duration_s = res.duration_s or round(time.monotonic() - t0, 2)
         # a timed-out or killed run may have spent more than it reported: charge the whole allowance
-        budget.add(max(res.cost_usd, allowance) if res.aborted == "timeout" else res.cost_usd)
+        budget.add(max(res.cost_usd, allowance) if res.aborted == "timeout" or res.exit_status < 0 else res.cost_usd)
         art = capture(work, base_sha, tmp / "origin.git")
         ctx = GradeContext(art, expected, res.transcript, res.result_text, work)
         graded = run_graders(ctx, task.graders)

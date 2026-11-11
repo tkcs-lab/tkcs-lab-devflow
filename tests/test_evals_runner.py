@@ -115,6 +115,21 @@ def test_timeout_charges_full_allowance():
     assert budget.spent == pytest.approx(agent.calls[0].max_budget_usd) and budget.spent > 0
 
 
+def test_killed_run_charges_full_allowance():
+    agent = StubAgent({"exit_status": -9, "cost_usd": 0})
+    budget = Budget(5)
+    run_once(task(), 1, agent, budget)
+    assert budget.spent == pytest.approx(agent.calls[0].max_budget_usd) and budget.spent > 0
+
+
+@pytest.mark.parametrize("bad", ["../x", "/etc/passwd"])
+def test_stub_delete_files_must_stay_in_workdir(bad, tmp_path):
+    req = AgentRequest(workdir=tmp_path, prompt="p", plugin_dirs=[], model=None, timeout_s=5,
+                       max_budget_usd=1, task_id="t", repeat=1)
+    with pytest.raises(AgentError, match="escapes the workdir"):
+        StubAgent({"delete_files": [bad]}).run(req)
+
+
 def test_tiny_remaining_allowance_aborts_before_the_run():
     agent = StubAgent(plan_entry())
     r = run_once(task(), 1, agent, Budget(0.005)).record
