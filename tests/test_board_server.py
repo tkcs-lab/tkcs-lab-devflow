@@ -143,7 +143,6 @@ def test_page_is_served_with_security_headers(server):
 def test_unknown_route_is_401_without_a_token_and_404_with_one(server):
     assert call(server, "GET", "/nope", token=None)[0] == 401
     assert jcall(server, "GET", "/nope") == (404, {"error": "not_found"})
-    assert jcall(server, "POST", "/mcp") [0] == 404  # added by a later phase
 
 
 def test_wrong_method_is_405(server):
