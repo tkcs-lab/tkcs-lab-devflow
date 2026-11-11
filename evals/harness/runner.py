@@ -16,6 +16,7 @@ from .model import AgentRequest, AgentResult, Artifacts, Doc, GradeContext
 from .results import scrub, write_transcript
 from .taskspec import Task
 
+MIN_ALLOWANCE_USD = 0.01
 MAX_DOC_BYTES = 200_000
 MAX_DIFF_BYTES = 200_000
 SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv"}
@@ -43,7 +44,16 @@ def prepare_plugin(ref: str, dest: Path, names: list[str] | None = None) -> tupl
 
     Returns (plugin dirs, resolved ref for the record).
     """
+    if ref.startswith("-"):
+        raise RuntimeError("plugin ref must not start with '-'")
     names = ["devflow", *(names or [])]
+    sha = ref
+    if ref != "worktree":
+        v = subprocess.run(["git", "rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}"],
+                           cwd=ROOT, capture_output=True, text=True)
+        if v.returncode != 0:
+            raise RuntimeError(f"plugin ref {ref!r} does not name a commit: {v.stderr.strip()}")
+        sha = v.stdout.strip()
     dirs = []
     for name in names:
         out = dest / name
@@ -51,16 +61,16 @@ def prepare_plugin(ref: str, dest: Path, names: list[str] | None = None) -> tupl
         if ref == "worktree":
             shutil.copytree(ROOT / "plugins" / name, out, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         else:
-            tar = subprocess.run(["git", "archive", ref, f"plugins/{name}"], cwd=ROOT, capture_output=True)
+            tar = subprocess.run(["git", "archive", sha, f"plugins/{name}"], cwd=ROOT, capture_output=True)
             if tar.returncode != 0:
-                raise RuntimeError(f"git archive {ref} plugins/{name} failed: {tar.stderr.decode().strip()}")
+                raise RuntimeError(f"git archive {sha} plugins/{name} failed: {tar.stderr.decode().strip()}")
             stage = dest / "_x"
             stage.mkdir(exist_ok=True)
             subprocess.run(["tar", "-x", "-C", str(stage), "-f", "-"], input=tar.stdout, check=True)
             shutil.copytree(stage / "plugins" / name, out, dirs_exist_ok=True)
         dirs.append(out)
     shutil.rmtree(dest / "_x", ignore_errors=True)
-    resolved = "worktree" if ref == "worktree" else git("rev-parse", ref, cwd=ROOT).strip()
+    resolved = "worktree" if ref == "worktree" else sha
     return dirs, resolved
 
 
@@ -163,7 +173,7 @@ def run_once(task: Task, repeat: int, agent: Agent, budget: Budget, *, model_ove
         record.update(status="skipped", reason="requires: " + ", ".join(missing) + " (not in this checkout)", passed=None, graders=[])
         return RunOutcome(record, None)
     allowance = budget.allowance(task)
-    if allowance <= 0:
+    if allowance < MIN_ALLOWANCE_USD:
         record.update(status="aborted", reason="run cost ceiling reached before this run", passed=False, graders=[])
         return RunOutcome(record, None)
 
@@ -182,7 +192,8 @@ def run_once(task: Task, repeat: int, agent: Agent, budget: Budget, *, model_ove
         except AgentError as exc:
             res = AgentResult(exit_status=-1, error=str(exc))
         res.duration_s = res.duration_s or round(time.monotonic() - t0, 2)
-        budget.add(res.cost_usd)
+        # a timed-out or killed run may have spent more than it reported: charge the whole allowance
+        budget.add(max(res.cost_usd, allowance) if res.aborted == "timeout" else res.cost_usd)
         art = capture(work, base_sha, tmp / "origin.git")
         ctx = GradeContext(art, expected, res.transcript, res.result_text, work)
         graded = run_graders(ctx, task.graders)
@@ -210,6 +221,9 @@ def run_once(task: Task, repeat: int, agent: Agent, budget: Budget, *, model_ove
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+STOP_REASONS = {"run cost ceiling reached before this run", "cost_ceiling"}
+
+
 def run_tasks(tasks: list[Task], agent: Agent, budget: Budget, *, repeats: int | None = None, **kw) -> list[RunOutcome]:
     """Run every task `repeats` times (default: the task's own). Stops cleanly once the run ceiling is spent."""
     outcomes: list[RunOutcome] = []
@@ -217,6 +231,6 @@ def run_tasks(tasks: list[Task], agent: Agent, budget: Budget, *, repeats: int |
         for r in range(1, (repeats or task.repeats) + 1):
             out = run_once(task, r, agent, budget, **kw)
             outcomes.append(out)
-            if out.record["status"] == "aborted" and out.record.get("reason") == "run cost ceiling reached before this run":
+            if out.record["status"] == "aborted" and out.record.get("reason") in STOP_REASONS:
                 return outcomes
     return outcomes

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -55,6 +56,9 @@ def print_plan(tasks, repeats, run_ceiling, model) -> None:
 
 
 def cmd_run(args) -> int:
+    if not (math.isfinite(args.run_ceiling) and args.run_ceiling > 0):
+        print("evals: run ceiling must be a positive finite number", file=sys.stderr)
+        return 2
     try:
         tasks = _tasks(args)
     except ValueError as exc:
