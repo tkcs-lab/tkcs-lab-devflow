@@ -238,3 +238,44 @@ def test_maintenance_keys_are_checked(vp, mutate, message):
     profile = copy.deepcopy(_maintenance())
     mutate(profile)
     assert any(message in e for e in errs(vp, profile))
+
+
+def _with_git_ops(**git_ops):
+    p = copy.deepcopy(MINIMAL)
+    p["git_ops"] = git_ops
+    return p
+
+
+def test_git_ops_section_is_optional_and_stays_absent(vp):
+    assert errs(vp, MINIMAL) == []
+    assert "git_ops" not in vp.validate(MINIMAL)[2]
+
+
+def test_git_ops_accepts_repo_and_workflow(vp):
+    assert errs(vp, _with_git_ops(repo="tkcs-lab/git-ops")) == []
+    assert errs(vp, _with_git_ops(repo="tkcs-lab/git-ops", workflow="devflow-git-ops.yml")) == []
+
+
+def test_git_ops_requires_repo(vp):
+    assert any("missing required key 'git_ops.repo'" in e
+               for e in errs(vp, _with_git_ops(workflow="devflow-git-ops.yml")))
+
+
+@pytest.mark.parametrize("repo", ["x", "a/b/c", "a b/c", "/c", "a/"])
+def test_git_ops_repo_must_be_owner_slash_name(vp, repo):
+    assert any("'git_ops.repo'" in e for e in errs(vp, _with_git_ops(repo=repo)))
+
+
+@pytest.mark.parametrize("workflow,ok", [
+    ("ci.yml", True), ("devflow-git-ops.yaml", True),
+    ("ci", False), ("ci.txt", False), ("../ci.yml", False),
+])
+def test_git_ops_workflow_must_be_a_workflow_file_name(vp, workflow, ok):
+    result = errs(vp, _with_git_ops(repo="a/b", workflow=workflow))
+    assert (result == []) is ok
+    if not ok:
+        assert any("'git_ops.workflow'" in e for e in result)
+
+
+def test_git_ops_unknown_key_is_rejected(vp):
+    assert any("unknown key 'git_ops.extra'" in e for e in errs(vp, _with_git_ops(repo="a/b", extra=1)))

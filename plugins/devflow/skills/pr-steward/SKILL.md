@@ -37,7 +37,9 @@ Things about dispatching that are true everywhere:
   or private content may enter the repository.
 - **Never push a release tag from a session.** The container can push branches but not
   `refs/tags/*`, and cutting a release is the maintainer's decision. If a release workflow is
-  listed, dispatch its dry run if it has one, report it, and wait to be told.
+  listed, dispatch its dry run if it has one, report it, and wait to be told. The one route to a tag is the `git-ops`
+  skill, which starts the central workflow, and only for a tag the maintainer named in this session; a
+  release tag still waits to be told.
 - **A missing credential or capability is not a test failure.** It is a dispatch.
 
 ## Which pull requests to follow
