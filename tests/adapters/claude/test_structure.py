@@ -190,3 +190,16 @@ def test_review_hands_over_to_make_plan():
     for text in ("review_slug", "ready-for-plan", "decisions-pending", "Findings to fix", "Not doing",
                  "Issues created", "Suggested grouping"):
         assert text in review and text in make_plan, text
+
+
+def test_runtime_skill_has_the_environment_section():
+    """The claude.ai network facts live in one section of the runtime skill."""
+    text = RUNTIME_SKILL.read_text()
+    headings = re.findall(r"^## (.+)$", text, re.M)
+    assert headings == ["Names", "Environment", "Levels", "Workers", "Roles and helpers", "The human", "GitHub"]
+    section = text.split("## Environment", 1)[1].split("## Levels", 1)[0]
+    for needle in ("**Limited**", "playbooks/policies/research.md", "docs/guides/cloud-environments.md",
+                   "update_environment"):
+        assert needle in section, needle
+    assert "research sweep" not in text
+    assert "research sweep" not in (PLAYBOOKS / "runtime.md").read_text()

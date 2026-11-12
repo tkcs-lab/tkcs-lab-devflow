@@ -21,6 +21,27 @@ in Bash gives the path.
 | a role `<role>` | the agent `tld:<role>` (`adapters/claude/agents/<role>.md`) |
 | the dod gate | the `dod-gate` hook (`docs/architecture/hooks.md`) |
 
+## Environment
+
+Your session runs in a claude.ai cloud environment whose network is **Limited**. Assume it unless a refused
+request proves otherwise.
+
+- **Reachable:** package registries (npm, PyPI, crates.io, the Go proxy, apt mirrors), the hosts of the MCP
+  servers the environment offers, and the hosts the owner allowed (normally only the status board).
+- **GitHub** only through the GitHub MCP tools and the session's git proxy. There is no GraphQL and no other
+  GitHub API.
+- **Everything else is closed:** web pages, vendor documentation, other registries and mirrors, other APIs. A
+  proxy refusal (403, `request blocked: no rule allows host`, `not allowed for this session`) is the environment
+  speaking, not a bug in the repository and not a flaky network: quote it once and stop trying.
+- **Research is possible and the owner encourages it.** When a question needs the open web, write a research
+  request as `playbooks/policies/research.md` says; the owner runs it in a separate environment with unrestricted
+  network and pastes the report back. Do this instead of guessing and instead of asking for a wider network.
+- **Do not widen the environment for a research question:** no `update_environment`, `create_environment` or
+  `switch_environment` call and no request to the owner to open hosts for it. Those tools are for a concrete need
+  of the task itself, such as a package host a lockfile names, and each has its own approval prompt.
+- The owner's setup steps: `docs/guides/cloud-environments.md` in the tkcs-lab-devflow repository; the runtime's
+  own settings pages: `read_documentation` with topic `environment.network` or `environment.secrets`.
+
 ## Levels
 
 The one table of models. Command and agent front matter use the alias; `create_session` takes the id.
@@ -59,7 +80,7 @@ is handled at once. A child that finishes cleanly may never report back: the tim
 | Action | Tool |
 |---|---|
 | `run_role(role, mode, point, context[, level])` | the `Agent` tool with `subagent_type` `tld:<role>` (or `<role>`, whichever the agent list shows) and the context as the prompt; one call per role, in parallel. With `level`, also pass the Agent tool's `model` parameter as the level's alias (the Levels table): it overrides the agent's front matter `model`, which stays the role's default level. The front matter fixes the tools: the four edit agents have Edit and Write and change files only when the context says `Mode: edit`. |
-| `run_helper(task, level)` | the `Agent` tool with `subagent_type` `Explore` for a research sweep ("very thorough") or `Plan` for a review of a plan or prompt, `model` the level's alias, fresh context. |
+| `run_helper(task, level)` | the `Agent` tool with `subagent_type` `Explore` for a repository sweep ("very thorough") or `Plan` for a review of a plan or prompt, `model` the level's alias, fresh context. |
 
 ## The human
 
