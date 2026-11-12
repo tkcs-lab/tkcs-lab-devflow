@@ -74,7 +74,7 @@ def check_prompt(text: str, forbid: list[str], env: dict[str, str]) -> list[str]
     plain = _plain(text)
     for n, name, _ in scan_text(plain):
         problems.append(f"secret: line {n} looks like a credential ({name})")
-    for n, line in enumerate(lines, 1):
+    for n, line in enumerate(plain.splitlines(), 1):
         if ALLOW_MARK in line:
             problems.append(f"secret: line {n} has `{ALLOW_MARK}`, which lets a token past the scan")
     low = plain.lower()
@@ -118,7 +118,7 @@ def split_reply(text: str, rid: str) -> tuple[str, str, str]:
         return status, "", rest_text
     if not mine[0][2]:
         return "incomplete", "", rest_text
-    body = BAD_CHARS.sub("", "\n".join(mine[0][1])).rstrip()
+    body = "".join(ch for ch in "\n".join(mine[0][1]) if not BAD_CHARS.match(ch) and not _hidden(ch)).rstrip()
     if len(body) > MAX_REPORT:
         return f"too long:{len(body)}", body, rest_text
     if not any(line.strip().startswith("Answer:") for line in body.splitlines()):

@@ -354,3 +354,16 @@ def test_report_rest_that_cannot_be_written_exits_2(tmp_path):
     reply.write_text(report(), encoding="utf-8")
     done = run("report", "--id", RID, "--reply", str(reply), "--rest", str(tmp_path / "no" / "rest.txt"))
     assert done.returncode == 2 and done.stdout == ""
+
+
+@pytest.mark.parametrize("mark", ["ｓｅｃｒｅｔ-scan:allow", "secret-scan：allow", "secret-scan:al\u200blow"])
+def test_check_prompt_rejects_a_disguised_allow_mark(mark):
+    text = fill().replace("Python 3.11, MIT", f"{TOKEN} {mark}")
+    problems = research.check_prompt(text, [], {})
+    assert problems and all(p.startswith(("secret:", "character:")) for p in problems)
+    assert any("secret-scan:allow" in p for p in problems)
+
+
+def test_report_body_drops_invisible_characters():
+    body = "Answer: a\u200bb\u00adc\U000e0041d"
+    assert research.split_reply(report(body=body), RID) == ("ok", "Answer: abcd", "")
