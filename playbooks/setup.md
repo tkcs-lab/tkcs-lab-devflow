@@ -56,8 +56,7 @@ Build one table `key | proposed value | evidence` from `survey.json` (`evidence`
 `ask_human` one ask titled `Profile for <repo>` with at most four questions: the security posture (always;
 `choice` of `critical`, `standard`, `low`, the proposal first and recommended), every `roles.required` entry the
 proposal marks `blocking: true` (`confirm`), and what the survey could not determine (no test command, no main
-branch; `text`). Nothing else is asked. Wait for the answers (`tld board answers <id> --wait 600`, then on each
-wake).
+branch; `text`). Nothing else is asked. Wait for the answers as `ask_human` says for an attended session.
 
 Turn the answers into `answers.json`, keyed like `tld profile patch set-block` reads it:
 `{"roles": {"posture": {"security": "<answer>"}, "required": [{"role": "<role>", "blocking": <true|false>}]}}`

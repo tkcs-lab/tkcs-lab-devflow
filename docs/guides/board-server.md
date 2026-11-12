@@ -313,6 +313,15 @@ count; replies by collaborators with write or maintain access never do (the agen
 do the session's own login (`--self LOGIN`, required) and the fallback comment itself. The session reads them with
 `tld board answers --from-issue COMMENTS.json --ask FILE --self LOGIN` (see `playbooks/runtime.md`, `ask_human`).
 
+## Answering in the session
+
+In an attended session (you started the command and watch the chat) the ask is also shown in the conversation
+(`tld board ask-text`). Answer there with one `<question id>: <answer>` line per question, or just the answer when
+there is one choice or confirm question. The session reads the lines with `tld board answers --from-reply` and
+cancels the board copy. It also checks the board on its own, every 10 minutes for the first hour after the ask,
+then hourly, and stops after 24 hours, so an answer on the board needs no chat message. Unattended sessions are
+unchanged.
+
 ## Security notes
 
 * The passphrase is compared in constant time (on SHA-256 digests). Wrong passphrases lock that client out
