@@ -19,10 +19,16 @@ PLAYBOOKS = ROOT / "playbooks"  # the neutral procedures the Claude commands fol
 # (concrete command run in a checkout on a feature branch, phrase the command file contains)
 COMPAT = {
     "implement": [
-        ("git fetch origin plan/foo", "git fetch origin <ref>"),
-        ("git show FETCH_HEAD:docs/foo-plan.md", "git show FETCH_HEAD:<path>"),
+        ("git fetch origin feature/demo", "git fetch origin <ref>"),
+        ("git fetch origin feature/demo", "`git fetch origin <feature>`"),
+        ("git show FETCH_HEAD:docs/14/plan.md", "git show FETCH_HEAD:<path>"),
+        ("git rev-parse origin/feature/demo:docs/14/plan.md", "git rev-parse origin/<feature>:<plan path>"),
+        ("git checkout feature/demo", "check out `<feature>`"),
         ("git checkout -b feature/demo origin/plan/foo", "create it from `<ref>`"),
         ("git merge origin/main", "merge `origin/<main>` into it"),
+        ("git rev-parse HEAD:docs/14/plan.md", "git rev-parse HEAD:<plan path>"),
+        ("git add docs/14/deviations.md && git commit -m 'Start foo' -m 'Plan-Started: foo abc1234'",
+         "the message `Start <plan slug>`"),
         ("git push -u origin feature/demo", "git push -u origin <feature>"),
         ("git push origin feature/demo", "push merge commits to it"),
         ("git log --format=%B origin/feature/demo", "`Plan-Phase` trailers"),
@@ -150,7 +156,7 @@ PLACEHOLDERS = {
     "<path>": "docs/foo-plan.md", "<ref>": "plan/foo", "<main>": "main", "<slug>": "foo", "<feature_branch>": "feature/demo",
     "<branch>": "feature/demo", "<phase branch>": "feature/demo--p1", "<base>": "abc1234", "<feature>": "feature/demo",
     "<new-with-hyphens>": "v1-2-3", "<new>": "v1.2.3", "<ecosystem>": "npm", "<plan file>": "/tmp/plan.md", "<version_file>": "UPSTREAM", "<upstream.tag_pattern>": "^v[0-9.]+$",
-    "<yyyymmdd-hhmm>": "20260101-0101", "<yyyymmdd>": "20260101", "<workflow>": "pages", "<owner>/<repo>": "o/r",
+    "<plan path>": "docs/14/plan.md", "<yyyymmdd-hhmm>": "20260101-0101", "<yyyymmdd>": "20260101", "<workflow>": "pages", "<owner>/<repo>": "o/r",
 }
 SPAN = re.compile(r"`((?:git|gh) [^`]+)`")
 
