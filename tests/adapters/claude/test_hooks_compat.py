@@ -19,10 +19,16 @@ PLAYBOOKS = ROOT / "playbooks"  # the neutral procedures the Claude commands fol
 # (concrete command run in a checkout on a feature branch, phrase the command file contains)
 COMPAT = {
     "implement": [
-        ("git fetch origin plan/foo", "git fetch origin <ref>"),
-        ("git show FETCH_HEAD:docs/foo-plan.md", "git show FETCH_HEAD:<path>"),
+        ("git fetch origin feature/demo", "git fetch origin <ref>"),
+        ("git fetch origin feature/demo", "`git fetch origin <feature>`"),
+        ("git show FETCH_HEAD:docs/14/plan.md", "git show FETCH_HEAD:<path>"),
+        ("git rev-parse origin/feature/demo:docs/14/plan.md", "git rev-parse origin/<feature>:<plan path>"),
+        ("git checkout feature/demo", "check out `<feature>`"),
         ("git checkout -b feature/demo origin/plan/foo", "create it from `<ref>`"),
         ("git merge origin/main", "merge `origin/<main>` into it"),
+        ("git rev-parse HEAD:docs/14/plan.md", "git rev-parse HEAD:<plan path>"),
+        ("git add docs/14/deviations.md && git commit -m 'Start foo' -m 'Plan-Started: foo abc1234'",
+         "the message `Start <plan slug>`"),
         ("git push -u origin feature/demo", "git push -u origin <feature>"),
         ("git push origin feature/demo", "push merge commits to it"),
         ("git log --format=%B origin/feature/demo", "`Plan-Phase` trailers"),
@@ -77,9 +83,9 @@ COMPAT = {
     "upstream": [
         ("git ls-remote --tags https://github.com/o/r.git", "git ls-remote --tags"),
         ("git fetch origin main", "git fetch origin <main>"),
-        ('"${CLAUDE_PLUGIN_ROOT}/launcher/tld" ops upstream-sync plan --upstream-url https://github.com/o/r.git '
+        ('"${CLAUDE_PLUGIN_ROOT}/cli/tld" ops upstream-sync plan --upstream-url https://github.com/o/r.git '
          "--version-file UPSTREAM --pattern '^v[0-9.]+$'", "ops upstream-sync plan"),
-        ('"${CLAUDE_PLUGIN_ROOT}/launcher/tld" ops upstream-sync prepare --upstream-url https://github.com/o/r.git '
+        ('"${CLAUDE_PLUGIN_ROOT}/cli/tld" ops upstream-sync prepare --upstream-url https://github.com/o/r.git '
          "--version-file UPSTREAM --tag v1.2.3 --branch chore/upstream-v1-2-3 --base origin/main", "ops upstream-sync prepare"),
         ("git commit -m 'Sync o/r v1.2.2 to v1.2.3'", "Sync <upstream.repo> <old> to <new>"),
         ("git push -u origin chore/upstream-v1-2-3", "git push -u origin <branch>"),
@@ -98,16 +104,16 @@ COMPAT = {
     "make-plan": [
         ("git fetch origin review/foo", "git fetch origin <ref>"),
         ("git show FETCH_HEAD:docs/foo-review.md", "git show FETCH_HEAD:<path>"),
-        ("git fetch origin main && git checkout -b plan/foo origin/main", "git checkout -b plan/<slug>"),
-        ("git push -u origin plan/foo", "git push -u origin plan/<slug>"),
-        ("git add docs/foo-plan.md docs/foo-plan-manual-steps.html && git commit -m 'plan: foo' && git push origin plan/foo",
+        ("git fetch origin main && git checkout -b feature/foo origin/main", "git checkout -b <feature>"),
+        ("git push -u origin feature/foo", "git push -u origin <feature>"),
+        ("git add docs/14/plan.md && git commit -m 'plan: foo' && git push origin feature/foo",
          "Commit, push and hand over"),
     ],
     "migrate": [
         ("git fetch origin main", "git fetch origin <main>"),
         ("git checkout -b chore/tld-migrate origin/main", "git checkout -b chore/tld-migrate origin/<main>"),
-        ('"${CLAUDE_PLUGIN_ROOT}/launcher/tld" migrate .', "tld migrate ."),
-        ('"${CLAUDE_PLUGIN_ROOT}/launcher/tld" migrate . --write', "tld migrate . --write"),
+        ('"${CLAUDE_PLUGIN_ROOT}/cli/tld" migrate .', "tld migrate ."),
+        ('"${CLAUDE_PLUGIN_ROOT}/cli/tld" migrate . --write', "tld migrate . --write"),
         ("git commit -m 'chore: migrate from claude-toolkit to tld'", "chore: migrate from claude-toolkit to tld"),
         ("git push -u origin chore/tld-migrate", "git push -u origin chore/tld-migrate"),
     ],
@@ -150,7 +156,7 @@ PLACEHOLDERS = {
     "<path>": "docs/foo-plan.md", "<ref>": "plan/foo", "<main>": "main", "<slug>": "foo", "<feature_branch>": "feature/demo",
     "<branch>": "feature/demo", "<phase branch>": "feature/demo--p1", "<base>": "abc1234", "<feature>": "feature/demo",
     "<new-with-hyphens>": "v1-2-3", "<new>": "v1.2.3", "<ecosystem>": "npm", "<plan file>": "/tmp/plan.md", "<version_file>": "UPSTREAM", "<upstream.tag_pattern>": "^v[0-9.]+$",
-    "<yyyymmdd-hhmm>": "20260101-0101", "<yyyymmdd>": "20260101", "<workflow>": "pages", "<owner>/<repo>": "o/r",
+    "<plan path>": "docs/14/plan.md", "<yyyymmdd-hhmm>": "20260101-0101", "<yyyymmdd>": "20260101", "<workflow>": "pages", "<owner>/<repo>": "o/r",
 }
 SPAN = re.compile(r"`((?:git|gh) [^`]+)`")
 

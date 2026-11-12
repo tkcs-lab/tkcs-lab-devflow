@@ -28,7 +28,7 @@ def entries():
 
 def test_hooks_json_is_valid_and_every_script_exists():
     data = json.loads(HOOKS_JSON.read_text())
-    assert set(data["hooks"]) == {"PreToolUse", "UserPromptSubmit", "Stop"}
+    assert set(data["hooks"]) == {"PreToolUse", "UserPromptSubmit", "SessionStart", "Stop"}
     scripts = []
     for event_name, matcher, hook in entries():
         assert hook["type"] == "command" and isinstance(hook["timeout"], int) and hook["timeout"] > 0
@@ -40,8 +40,8 @@ def test_hooks_json_is_valid_and_every_script_exists():
             assert matcher and re.compile(matcher)
         else:
             assert matcher is None
-    expected = sorted([f"{m}.py" for m in MODULES.values()] + ["plan_gate.py"])
-    assert sorted(scripts) == expected, "each hook is registered once, plan_gate.py twice (UserPromptSubmit and PreToolUse)"
+    expected = sorted([f"{m}.py" for m in MODULES.values()] + ["plan_gate.py", "model_check.py"])
+    assert sorted(scripts) == expected, "each hook is registered once, plan_gate.py twice (UserPromptSubmit and PreToolUse), model_check.py twice (UserPromptSubmit and SessionStart)"
 
 
 @pytest.mark.parametrize("script, tool, listens", [

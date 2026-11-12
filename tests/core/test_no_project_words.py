@@ -2,7 +2,7 @@
 from conftest import ROOT, FORBIDDEN
 
 # The python stack guide names its tools on purpose; docs/ and tests/ use the first project as the worked example.
-CHECKED = ["src", "launcher", "adapters", ".claude-plugin", "playbooks", "roles", "checklists", "stacks"]
+CHECKED = ["src", "cli", "adapters", ".claude-plugin", "playbooks", "roles", "checklists", "stacks"]
 OPTIONAL: list[str] = []  # directories checked only when they exist
 EXEMPT = ["stacks/python.md"]
 SUFFIXES = {".md", ".py", ".sh", ".json", ".yaml", ".yml", ".txt", ".html", ".js", ".toml", ""}

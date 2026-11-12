@@ -53,6 +53,24 @@ These run after every merge, on top of the profile's `verify.fast`. Keep them ta
 - Use the interpreter the project's `verify.fast` uses (`python`, `python3` or `.venv/bin/python`),
   so all of them run in the same environment.
 
+## Options `/implement` trusts after an allowed prefix
+
+`tld plan check-commands` reads this block. A `verify_after_merge` command that a
+`verify.after_merge_allow` prefix matches is trusted only when every word after the prefix is one of
+these options; any other word (a test path, `--basetemp`, `-p`, `-c`, `--rootdir`, `-o`) sends it to
+the owner's start question. `null` takes no value, `token` one plain word, a list one of its words.
+
+```yaml after-merge-options
+pytest:
+  -q: null
+  -x: null
+  -v: null
+  -vv: null
+  -k: token
+  -m: token
+  --tb: ["short", "line", "no"]
+```
+
 ## Planning notes
 
 - A new module and its test file belong in the same phase; list both in `touches`.

@@ -123,7 +123,7 @@
 - {guard: no-force-push, repo: plain, kind: shell, expect: allow, command: "git push -u origin feature/demo"}
 - {guard: no-git-tag, repo: plain, kind: shell, expect: allow, command: "git tag -l"}
 - {guard: no-git-tag, repo: plain, kind: shell, expect: allow,
-   command: "\"${CLAUDE_PLUGIN_ROOT}/launcher/tld\" ops upstream-sync plan --upstream-url https://x/r.git --version-file U --pattern '^v'"}
+   command: "\"${CLAUDE_PLUGIN_ROOT}/cli/tld\" ops upstream-sync plan --upstream-url https://x/r.git --version-file U --pattern '^v'"}
 - {guard: protect-paths, repo: plain, kind: write, path: docs/x.md, expect: allow, content: "hi\n"}
 - {guard: secret-scan, repo: plain, kind: write, path: a.py, expect: allow,
    content: "API_KEY = os.environ['API_KEY']\n"}
@@ -189,16 +189,16 @@
    command: "git remote add upstream https://example.invalid/up.git"}
 - {guard: no-merge, repo: origin, kind: shell, expect: allow, note: S19, command: "git remote -v"}
 
-# ---------------- S20: only the real launcher is exempt from the run-time command name check ----------------
+# ---------------- S20: only the real CLI script is exempt from the run-time command name check ----------------
 - {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S20,
-   command: "X=/tmp/x; $X/launcher/tld push --force origin HEAD:main"}
+   command: "X=/tmp/x; $X/cli/tld push --force origin HEAD:main"}
 - {guard: no-merge, repo: origin, kind: shell, expect: deny, note: S20, command: "X=/usr/bin; $X/tld push origin HEAD:main"}
 - {guard: no-force-push, repo: origin, kind: shell, expect: deny, note: S20,
-   command: "CLAUDE_PLUGIN_ROOT=/tmp/e; \"${CLAUDE_PLUGIN_ROOT}/launcher/tld\" push --force origin HEAD:main"}
+   command: "CLAUDE_PLUGIN_ROOT=/tmp/e; \"${CLAUDE_PLUGIN_ROOT}/cli/tld\" push --force origin HEAD:main"}
 - {guard: no-merge, repo: origin, kind: shell, expect: allow, note: S20,
-   command: "\"${CLAUDE_PLUGIN_ROOT}/launcher/tld\" plan phase-status docs/plans/x.md --phase p1"}
+   command: "\"${CLAUDE_PLUGIN_ROOT}/cli/tld\" plan phase-status docs/plans/x.md --phase p1"}
 - {guard: no-git-tag, repo: origin, kind: shell, expect: allow, note: S20,
-   command: "\"${CLAUDE_PLUGIN_ROOT}\"/launcher/tld guard end-allow"}
+   command: "\"${CLAUDE_PLUGIN_ROOT}\"/cli/tld guard end-allow"}
 - {guard: no-force-push, repo: origin, kind: shell, expect: allow, note: S20, command: "tld profile validate .tld/toolkit.yaml"}
 
 # ---------------- S21: whole-directory writes over protected paths ----------------

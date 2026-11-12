@@ -8,8 +8,8 @@ judgement, so the task checks the command still reads the profile and stops wher
 - `ci`: `ci.lookback_hours: 0`, out of range, so ci stops with the validation message.
 - `docs`: a docs index that misses one doc (`docs/sync.md`); `docs check` reports it and changes nothing.
 - `board`: no board variables; the board check prints the setup text.
-- `implement`: a plan on `plan/tags` whose manifest has a dependency cycle; implement must stop before it
-  creates the feature branch.
+- `implement`: a plan on `feature/tags` whose manifest has a dependency cycle; implement must stop before it
+  starts a worker.
 - `migrate`: a claude-toolkit era profile in `.claude/toolkit.yaml` (model names, `models.planner`, no
   `tld.version`); `migrate --dry-run` shows the plan and changes nothing.
 No real project names, no secrets, no network.
@@ -24,8 +24,8 @@ from . import commit_all, init_repo, tiny_app
 from evals.harness.common import git
 
 REPO = "example-org/notes-demo"
-PLAN_PATH = "docs/tags-plan.md"
-PLAN_URL = f"https://github.com/{REPO}/blob/plan/tags/{PLAN_PATH}"
+PLAN_PATH = "docs/1/plan.md"
+PLAN_URL = f"https://github.com/{REPO}/blob/feature/tags/{PLAN_PATH}"
 CYCLE_MANIFEST = {
     "plan_slug": "tags", "feature_branch": "feature/tags",
     "phases": [
@@ -84,7 +84,7 @@ def build(dest: Path, command: str = "land") -> dict:
         raise ValueError(f"no fixture for command {command!r}")
     init_repo(dest, files)
     if command == "implement":
-        git("checkout", "-q", "-b", "plan/tags", cwd=dest)
+        git("checkout", "-q", "-b", "feature/tags", cwd=dest)
         plan = ("# Plan: tags\n\n## Goal\n\nTags on notes.\n\n## Implementation manifest\n\n```yaml\n"
                 + yaml.safe_dump(CYCLE_MANIFEST, sort_keys=False) + "```\n")
         (dest / PLAN_PATH).parent.mkdir(parents=True, exist_ok=True)

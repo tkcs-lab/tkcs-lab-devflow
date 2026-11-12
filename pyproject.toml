@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -33,7 +33,7 @@ markers = [
 branch = true
 source_pkgs = ["tld"]
 parallel = true
-# measure the hook and CLI subprocesses the tests start (launcher/tld, the hook scripts): coverage writes a .pth
+# measure the hook and CLI subprocesses the tests start (cli/tld, the hook scripts): coverage writes a .pth
 # file and passes its config to every child Python through the environment
 patch = ["subprocess"]
 # copies of the plugin that some tests build in their temp directory are not the measured source

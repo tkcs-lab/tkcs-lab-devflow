@@ -122,6 +122,23 @@ def test_unlisted_doc_is_an_error(tmp_path):
     assert "docs/orphan.md: not listed in the docs index (add a row, or move it to archive/)" in r.stdout
 
 
+def test_plan_and_deviations_files_in_a_plan_directory_need_no_index_row(tmp_path):
+    make_repo(tmp_path)
+    write(tmp_path, "docs/plans/14/plan.md", "# Plan\n")
+    write(tmp_path, "docs/plans/14/deviations.md", "# Deviations\n")
+    r = run(tmp_path)
+    assert r.returncode == 0, r.stdout
+    assert messages(r) == []
+
+
+def test_plan_md_elsewhere_is_a_normal_doc(tmp_path):
+    make_repo(tmp_path)
+    write(tmp_path, "docs/guides/plan.md", "# Plan\n")
+    r = run(tmp_path)
+    assert r.returncode == 1
+    assert "docs/guides/plan.md: not listed in the docs index (add a row, or move it to archive/)" in r.stdout
+
+
 def test_plan_review_and_archive_are_not_reported(tmp_path):
     make_repo(tmp_path)
     write(tmp_path, "docs/x-plan.md", "# Plan\n")
@@ -354,6 +371,13 @@ def test_move_does_not_touch_plan_documents(tmp_path):
     mv(tmp_path, "docs/hooks.md", "docs/architecture/hooks.md", "--apply")
     assert read(tmp_path, "docs/x-plan.md") == text
     assert read(tmp_path, "docs/x-plan-manual-steps.html") == text
+
+
+def test_move_still_rewrites_links_in_a_plan_record(tmp_path):
+    move_repo(tmp_path, {"docs/hooks.md": "# H\n", "docs/plans/14/plan.md": "See [h](../../hooks.md).\n"})
+    r = mv(tmp_path, "docs/hooks.md", "docs/architecture/hooks.md", "--apply")
+    assert r.returncode == 0, r.stderr
+    assert read(tmp_path, "docs/plans/14/plan.md") == "See [h](../../architecture/hooks.md).\n"
 
 
 def test_move_dry_run_changes_nothing_and_prints_the_plan(tmp_path):

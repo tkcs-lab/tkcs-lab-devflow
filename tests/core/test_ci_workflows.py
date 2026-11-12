@@ -17,15 +17,77 @@ def steps(doc, job):
     return [s.get("run", "") for s in doc["jobs"][job]["steps"]]
 
 
+BUILD_PERMISSIONS = {"contents": "read", "packages": "write"}
+PUBLISH_PERMISSIONS = {"contents": "read"}
+ALLOWED_JOB_PERMISSIONS = [BUILD_PERMISSIONS, PUBLISH_PERMISSIONS]
+
+
+def permission_problems(doc) -> list[str]:
+    """Why a workflow breaks the permission rule: top-level `{contents: read}` everywhere; a job may add its own
+    `permissions` only under `environment: tld-release`, and only one of the two shapes of ALLOWED_JOB_PERMISSIONS (the
+    release workflow's build job and publish job)."""
+    problems = []
+    if not isinstance(doc, dict):
+        return ["the workflow is not a mapping"]
+    if doc.get("permissions") != {"contents": "read"}:
+        problems.append(f"top-level permissions are {doc.get('permissions')!r}, not {{contents: read}}")
+    jobs = doc.get("jobs")
+    for name, job in (jobs.items() if isinstance(jobs, dict) else []):
+        if not isinstance(job, dict) or "permissions" not in job:
+            continue
+        perms = job["permissions"]
+        if job.get("environment") != "tld-release":
+            problems.append(f"job {name} has permissions but not environment: tld-release")
+        if not isinstance(perms, dict):
+            problems.append(f"job {name} permissions are {perms!r}, not a mapping")
+            continue
+        if perms not in ALLOWED_JOB_PERMISSIONS:
+            problems.append(f"job {name} permissions {perms!r} are neither {BUILD_PERMISSIONS} nor {PUBLISH_PERMISSIONS}")
+    return problems
+
+
 @pytest.mark.parametrize("name", sorted(p.name for p in WORKFLOWS.glob("*.yml")))
 def test_actions_are_pinned_and_permissions_read_only(name):
     doc = load(name)
-    assert doc["permissions"] == {"contents": "read"}
+    assert permission_problems(doc) == []
     for job in doc["jobs"].values():
-        assert "permissions" not in job
         for step in job["steps"]:
             if "uses" in step:
                 assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", step["uses"]), step["uses"]
+
+
+def job_doc(permissions, environment="tld-release", top=None):
+    job = {"runs-on": "ubuntu-latest", "permissions": permissions, "steps": []}
+    if environment is not None:
+        job["environment"] = environment
+    return {"permissions": {"contents": "read"} if top is None else top, "jobs": {"release": job}}
+
+
+RELEASE_PERMISSIONS = BUILD_PERMISSIONS
+
+
+@pytest.mark.parametrize("doc", [
+    job_doc(RELEASE_PERMISSIONS, environment=None),
+    job_doc(RELEASE_PERMISSIONS, environment="other"),
+    job_doc({"contents": "write"}),
+    job_doc({"packages": "write", "issues": "write"}),
+    job_doc(RELEASE_PERMISSIONS, top="write-all"),
+    job_doc("write-all"),
+    job_doc(RELEASE_PERMISSIONS, top={"contents": "read", "packages": "write"}),
+    {"jobs": {"release": {"runs-on": "ubuntu-latest", "steps": []}}},
+    job_doc(PUBLISH_PERMISSIONS, environment=None),
+    job_doc({"packages": "write"}),
+    job_doc({"contents": "read", "packages": "write", "id-token": "write"}),
+], ids=["no-environment", "other-environment", "contents-write", "extra-write", "top-write-all",
+        "job-write-all", "top-packages-write", "no-top-level", "publish-shape-without-environment",
+        "packages-without-contents", "third-permission"])
+def test_permission_rule_rejects(doc):
+    assert permission_problems(doc)
+
+
+@pytest.mark.parametrize("permissions", [BUILD_PERMISSIONS, PUBLISH_PERMISSIONS], ids=["build", "publish"])
+def test_permission_rule_accepts_the_two_release_jobs(permissions):
+    assert permission_problems(job_doc(permissions)) == []
 
 
 def test_the_test_workflow_runs_every_check():
@@ -38,8 +100,8 @@ def test_the_test_workflow_runs_every_check():
     assert "claude plugin validate ." in run and re.search(r'CLAUDE_CODE_VERSION: "\d+\.\d+\.\d+"', (WORKFLOWS / "test.yml").read_text())
     assert re.search(r'PLAYWRIGHT_VERSION: "\d+\.\d+\.\d+"', (WORKFLOWS / "test.yml").read_text())
     assert "playwright\" install --with-deps chromium" in run or "playwright install --with-deps chromium" in run
-    for check in ("launcher/tld profile validate", "launcher/tld plan validate-manifest", "launcher/tld board validate-record",
-                  "launcher/tld ops repo-admin validate-policy", "launcher/tld ops docs-index check",
+    for check in ("cli/tld profile validate", "cli/tld plan validate-manifest", "cli/tld board validate-record",
+                  "cli/tld ops repo-admin validate-policy", "cli/tld ops docs-index check",
                   "evals/run.py validate", "evals/run.py check-baseline", "--agent stub", "--require-pass"):
         assert check in run, check
 

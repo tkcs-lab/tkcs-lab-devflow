@@ -7,9 +7,9 @@ codes are those documented in the module's docstring. `tld --help` lists the com
 
 How to run it:
 
-- From a checkout: `launcher/tld ...` (puts `src/` on `sys.path`; Python 3.11+ and PyYAML).
+- From a checkout: `cli/tld ...` (puts `src/` on `sys.path`; Python 3.11+ and PyYAML).
 - Installed: `pip install .` gives the console script `tld`.
-- In the Claude Code plugin: `"${CLAUDE_PLUGIN_ROOT}/launcher/tld" ...` (the plugin is sourced from the repository
+- In the Claude Code plugin: `"${CLAUDE_PLUGIN_ROOT}/cli/tld" ...` (the plugin is sourced from the repository
   root). The hooks run `adapters/claude/hooks/<name>.py`, thin shims over the same modules.
 
 The playbooks call these commands as `tld ...`; `tests/core/test_contracts.py` checks that every call in
@@ -28,11 +28,14 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld profile survey-docs [ROOT]` | `tld.profile.survey_docs` | the docs part of the survey |
 | `tld profile survey-signals [ROOT]` | `tld.profile.survey_signals` | the signals part of the survey |
 | `tld profile survey-proposal SIGNALS.json` | `tld.profile.survey_proposal` | turn survey signals into a proposal |
-| `tld plan validate-manifest PLAN [--profile P]` | `tld.plan.manifest` | validate a plan's implementation manifest |
+| `tld plan validate-manifest PLAN [--profile P] [--ref REF]` | `tld.plan.manifest` | validate a plan's implementation manifest; `--ref` is the branch the plan file is on: only `<main>` or the manifest's own `feature_branch` (`plan/<slug>` deprecated) |
+| `tld plan deviations init\|add\|check` | `tld.plan.deviations` | the orchestrator-owned `deviations.md` next to a plan: `init --plan --out` writes a pending section per phase, `add --file --section --tag (--text\|--none)` records one line, `check --file --plan [--done\|--all] [--scope-results]` lists pending sections and unrecorded out-of-scope paths |
 | `tld plan scope-check check\|disposition\|record\|section ...` | `tld.plan.scope` | scope-drift checks of `/implement` |
-| `tld plan check-url URL [--repo O/N] [--main B]` | `tld.plan.phases` | accept a plan URL only from this repository's main branch or a `plan/<slug>` branch (S14); prints owner, repo, ref, path |
+| `tld plan check-url URL [--repo O/N] [--main B]` | `tld.plan.phases` | accept a plan URL `.../<plan-dir>/<n>/plan.md` only on this repository's main branch or a `<type>/<kebab>` feature branch (S14); `--plan-dir` (default `docs/plans`) names the plan directory; `plan/*` refs are deprecated (warning on stderr); prints owner, repo, ref, path, legacy |
+| `tld plan check-commands PLAN --profile P` | `tld.plan.phases` | which `verify_after_merge` commands the profile trusts (a verify entry, a `verify.after_merge_allow` prefix, a `ci.dispatchable` dispatch); prints `{"trusted", "unknown"}` (S14) |
 | `tld plan branch-name --plan-slug S \| --review-slug S \| --manifest PLAN [--phase ID [--rev N] \| --fix N]` | `tld.plan.phases` | the branch names of the playbooks (C12) |
 | `tld plan phase-status PLAN [--ref R] [--running ID]... [--approved ID]... [--repo DIR]` | `tld.plan.phases` | done (by `Plan-Phase` trailers on the branch's own, unreverted commits), approved (`Plan-Gate-Approved` trailers or `--approved`), gated, ready, waiting phases and the ones to start, as JSON |
+| `tld plan active-run --kind make-plan\|implement --comments F --bot L [--record F --plan-slug S] [--self ID] [--now ISO] [--max-age-minutes N]` | `tld.plan.active` | is another run of the same plan or issue alive: `none`, `own`, `stale` (exit 0) or `active` (exit 4), from the tracking issue's comments and the board record |
 | `tld roles required --profile P --at POINT [--changed F]` | `tld.roles.dispatch` | the roles required at a point, with their mode, as JSON |
 | `tld roles verify --required F --report F` | `tld.roles.dispatch` | check a report against `tld roles required` |
 | `tld dod exempt` | `tld.dod.gate` | mark this checkout's session exempt from the dod-gate hook |
@@ -51,7 +54,8 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld board ask-text FILE\|- [--id ID]` | `tld.board.inbox` | the ask as a chat message an attended session shows; the owner may answer there |
 | `tld board validate-ask FILE` | `tld.board.ask` | validate an ask (`schema/ask.schema.json`) |
 | `tld board mcp-stdio` | `tld.board.mcp_stdio` | MCP stdio bridge to the board server (the `tld-board` MCP server) |
-| `tld board stale [FILE] [--now T]` | `tld.board.stale` | print the ids of hidden status records |
+| `tld board stale [FILE] [--now T]` | `tld.board.stale` | print the ids of hidden and dismissed status records |
+| `tld board resolve FILE\|- --now T --reason TEXT` | `tld.board.resolve` | clear needs_you of a record whose pull requests are all merged or closed |
 | `tld board build --title T --out F ...` | `tld.board.build` | build the self-contained board page |
 | `tld board validate-record FILE [--doc-id ID]` | `tld.board.record` | validate a status record |
 | `tld board project-slug OWNER/NAME` | `tld.board.record` | the project slug of a repository, the only `project` a record may have |

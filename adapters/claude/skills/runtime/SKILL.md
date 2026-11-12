@@ -15,7 +15,7 @@ in Bash gives the path.
 
 | Playbook text | In Claude Code |
 |---|---|
-| `tld <group> <command>` | `"${CLAUDE_PLUGIN_ROOT}/launcher/tld" <group> <command>` |
+| `tld <group> <command>` | `"${CLAUDE_PLUGIN_ROOT}/cli/tld" <group> <command>` |
 | `<tld root>` | `${CLAUDE_PLUGIN_ROOT}` |
 | the playbook `<cmd>` (`implement <URL>`, `make-plan <URL>`, `docs init`, review apply) | the command `/tld:<cmd>` (`/tld:implement <URL>`, `/tld:review apply <URL>`) |
 | a role `<role>` | the agent `tld:<role>` (`adapters/claude/agents/<role>.md`) |
@@ -76,7 +76,7 @@ An unattended (scheduled) session has no `get_session` or `list_sessions`: never
 
 **Status board.** `tld board client` or, when the tool list has them, the `board_get`, `board_list` and
 `board_set` tools of the `tld-board` MCP server (same operations, same rules). There is no delete tool: the board
-playbook's prune runs `tld board client delete` after the owner confirmed.
+playbook's prune runs `tld board client delete`, or `tld board resolve` and `tld board client set`, after the owner confirmed.
 
 **Session links on the board.** The board links a record's session when its server has `TLD_BOARD_SESSION_URL`;
 for Claude Code on the web set it to `https://claude.ai/code/` (the session id is appended).

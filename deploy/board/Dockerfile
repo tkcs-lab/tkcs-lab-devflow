@@ -1,6 +1,9 @@
 # Build from the repository root: docker build -f deploy/board/Dockerfile -t tld-board .
 # Run: docs/guides/board-server.md. The database and the generated cookie secret live in the /data volume.
 FROM python:3.13-slim
+LABEL org.opencontainers.image.source="https://github.com/tkcs-lab/tkcs-lab-devflow"
+LABEL org.opencontainers.image.description="The tld board server"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 RUN useradd --system --uid 10001 --no-create-home board && mkdir /data && chown board /data && chmod 700 /data
 WORKDIR /app
 COPY src/tld/__init__.py /app/src/tld/

@@ -31,12 +31,20 @@ its own settings). In a local Claude Code:
 /plugin install tld --marketplace tkcs-lab/tkcs-lab-devflow
 ```
 
-The command line alone, for scripts, CI or a migration from a plain checkout (Python 3.11+, PyYAML):
+The command line alone, for scripts, CI or a migration from a plain checkout (Python 3.11+), and the board server (Docker):
 
 ```
-pip install git+https://github.com/tkcs-lab/tkcs-lab-devflow@v1.0.0
+curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download/install.sh | sh              # the tld command
+curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download/install.sh | sh -s -- board  # the board (Docker)
 tld --help
 ```
+
+What the checksum does and does not prove: [SECURITY.md](SECURITY.md). To read the script first, download it with `curl -fsSLO <url>`, then `sh install.sh`.
+Running the same line again upgrades to the latest release. To pin a version, run that release's own installer
+(`curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/download/vX.Y.Z/install.sh | sh`), which installs its own version.
+Uninstall with `... | sh -s -- uninstall`. Without the installer:
+`pip install https://github.com/tkcs-lab/tkcs-lab-devflow/releases/download/vX.Y.Z/tld-X.Y.Z-py3-none-any.whl`. Do not `pip install tld`: that name on PyPI is
+another package.
 
 Then run `/tld:setup` in a session to create `.tld/toolkit.yaml` (one pull request, never merged), or copy
 [`src/tld/templates/toolkit.yaml`](src/tld/templates/toolkit.yaml) and fill it in. The profile's `tld.version`
@@ -48,7 +56,7 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | Command | What it does |
 |---|---|
 | `/tld:setup [create \| update]` | surveys the repository and writes or updates the profile, including the `roles` block; asks you the posture; one pull request ([guide](docs/guides/setup.md)) |
-| `/tld:make-plan <what you want>` | researches the repository, then writes a single-session prompt (small scope) or a plan with an implementation manifest on a `plan/<slug>` branch (large scope); manual steps become an ask |
+| `/tld:make-plan <what you want>` | researches the repository, then writes a single-session prompt (small scope) or a plan with an implementation manifest on its feature branch (large scope); manual steps become an ask |
 | `/tld:implement <plan URL>` | one worker session per phase, merges into one feature branch, verification after every merge, scope-drift monitoring, one final review, one pull request driven to green ([scope drift](docs/architecture/scope-drift.md)) |
 | `/tld:review [scope]` | deep review of security, tests (unit, integration, e2e) and docs by the roles; verified findings in a review document on a `review/<slug>` branch; your decisions are one ask ([guide](docs/guides/review.md)) |
 | `/tld:dod` | runs the profile's definition of done and reports a table |
@@ -57,7 +65,7 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | `/tld:deps` | weekly, unattended: triages Dependabot pull requests and audit findings, fixes what is red, opens pull requests |
 | `/tld:upstream` | weekly, unattended: syncs a patch-carrying fork to the newest upstream release tag, one pull request |
 | `/tld:docs [check \| init \| tidy]` | a thin CLAUDE.md, one docs index, docs read only when a row matches ([guide](docs/guides/docs-index.md)) |
-| `/tld:board [prune]` | checks the connection to your board, or prunes its stale records after you confirm |
+| `/tld:board [prune]` | checks the connection to your board, or prunes its stale records and clears cards whose pull requests are done, after you confirm |
 | `/tld:migrate` | moves a repository from claude-toolkit to tld: shows the plan, writes it on a branch after you confirm, one pull request |
 
 No command merges, approves, tags or force-pushes. Three skills run on request:
@@ -72,7 +80,7 @@ a policy file; [guide](docs/guides/admin.md)) and `tld:git-ops` (delete a remote
   the `write` role, and the environments `tld-agent` and `tld-release` that hold `TLD_AGENT_TOKEN` and
   `TLD_RELEASE_TOKEN`. Tags have one route: the release workflow, run by the owner.
 - **Seatbelt: the hooks.** `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths` and the opt-in
-  `dod-gate` deny the action before it runs and tell the agent what to do instead. The protect lists and
+  `dod-gate` deny the action before it runs and tell the agent what to do instead; `model-check` only warns when a session runs on the most expensive level. The protect lists and
   `hooks.disable` are read from the profile on the remote default branch. They need `python3` 3.11+ and PyYAML in
   the session, and every repository in a Project that enables `tld` needs at least `git.main_branch` in its profile.
 
@@ -90,7 +98,7 @@ account never does.
 
 | Path | |
 |---|---|
-| `src/tld/`, `launcher/tld` | the core package and its launcher ([CLI reference](docs/reference/cli.md)); `schema/` holds the JSON schemas of the profile, the status record, the ask and the admin policy (the implementation manifest is checked in code by `tld plan validate-manifest`), and `templates/` the starter files |
+| `src/tld/`, `cli/tld` | the core package and its CLI script ([CLI reference](docs/reference/cli.md)); `schema/` holds the JSON schemas of the profile, the status record, the ask and the admin policy (the implementation manifest is checked in code by `tld plan validate-manifest`), and `templates/` the starter files |
 | `playbooks/`, `roles/`, `checklists/`, `stacks/` | the neutral procedures (with `runtime.md` and `policies/`), role cards, checklists and stack guides |
 | `adapters/claude/` | the Claude Code plugin: commands, agents, the runtime skill, hooks, `mcp.json` |
 | `.claude-plugin/` | the marketplace `tkcs-lab-devflow` and the plugin manifest (sourced from the repository root) |

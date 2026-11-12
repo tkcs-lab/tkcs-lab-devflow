@@ -33,7 +33,7 @@ Rules:
 | `tld.version` | no | A version specifier such as `>=1.0,<2` (clauses `==`, `!=`, `>=`, `<=`, `>`, `<`, joined by commas). `tld profile validate` fails when the running tld does not satisfy it; a development build (`1.0.0.dev0`) counts as the release it leads to. `/setup` writes `>=<major>.<minor>,<<major+1>` |
 | `project.name` | no | Name used in prose; default is the repository name |
 | `docs.must_read` | **yes** (may be `[]`) | Files the planner reads first, every worker brief names, and the final reviewer reads |
-| `docs.plan_dir` | no (default `docs/plans/`) | Plans are `<plan_dir>/<slug>-plan.md` and reviews `<plan_dir>/<slug>-review.md` |
+| `docs.plan_dir` | no (default `docs/plans/`) | Plans are `<plan_dir>/<n>/plan.md` on the feature branch (`<n>` = the tracking issue number) and stay after the merge; reviews are `<plan_dir>/<slug>-review.md` |
 | `docs.index` | no | The entry-level docs index: the one file sessions read first, then only the rows that match the task. `/docs init` builds it, `/docs` checks it, `/setup` proposes it when it finds one. With it, `docs.must_read` keeps at most three files (a warning otherwise) |
 | `docs.adr_dir` | no | If set, the project uses ADRs and the commands plan, write and check them |
 | `docs.adr_index` | no (needs `adr_dir`) | File that must list every new ADR |
@@ -44,7 +44,7 @@ Rules:
 | `docs.website.dir` | **yes** (in `docs.website`) | Directory relative to the repo root (`.` for the root); `build` and `links` run from there |
 | `docs.website.build` | **yes** (in `docs.website`) | Command that builds the site |
 | `docs.website.links` | no | Command that checks the site's links |
-| `git.main_branch` | **yes** | Base of plan branches, the merge target and the PR base |
+| `git.main_branch` | **yes** | Base of feature branches, the merge target and the PR base |
 | `git.branch_pattern` | **yes** | Human-readable branch rule, quoted into prompts, for example `<type>/<kebab-case>` |
 | `git.branch_types` | no | Allowed `<type>` values; `/implement` rejects a manifest whose `feature_branch` uses another |
 | `git.merge_style` | no | `merge-commit` or `squash`; only quoted to workers and the steward |
@@ -56,6 +56,7 @@ Rules:
 | `verify.dod_conditional` | no | `{when: [globs], do: text}`: checked against the diff by `/dod` |
 | `verify.dod_manual` | no | Judgement rows `/dod` reports `ok / needs attention / n/a` |
 | `verify.dod_doc` | no | Pointer to the project's human-readable DoD, quoted in the `/dod` report |
+| `verify.after_merge_allow` | no | Command prefixes (`npm test`) whose `verify_after_merge` commands `/implement` runs without asking (S14); read from the main branch's profile, never a plan branch's. Name read-only checks only, never a whole tool whose subcommands can change state or lift a guard. No positional word may follow the prefix: every word after it must be a safe option of the program, with a plain value (no glob, no `@`, no leading `-`; a path value has no leading `/` and no segment that starts with `.`). tld's own options are `--json --strict --no-file-checks --index <path> --ref <word>`; a stack guide adds its tools' options in an `after-merge-options` block (the python guide: pytest `-q -x -v -vv -k -m --tb`); a program no table names takes none. Anything else makes the command unknown, so the owner is asked; see `tld plan check-commands` |
 | `ci.dispatchable` | no | `{workflow, use_when, notes?}`: workflows a session may dispatch against its own branch for work the container cannot do |
 | `stacks` | **yes** (may be `[]`) | Stack guides to load: `python` loads `stacks/python.md`, `go`, `swift` and `ipados` likewise (list `ipados` with `swift`) |
 | `models` | no | The levels of the workers the playbooks start: `strong`, `standard` or `fast`. The adapter maps a level to a model (Claude: the `tld:runtime` skill) |
@@ -75,7 +76,7 @@ Rules:
 | `admin.policy` | **yes** (in `admin`) | Path, relative to the repo root, of the policy file the repo-admin playbook audits and applies (see [admin.md](../guides/admin.md)). The file must exist. It needs the `admin` section and stops with a missing-key message when it is absent |
 | `git_ops.repo` | **yes** (in `git_ops`) | Owner/name of the central repository that holds the `tld-git-ops` workflow. The git-ops playbook needs the section and stops with a missing-key message when it is absent; see [git-ops.md](../guides/git-ops.md) |
 | `git_ops.workflow` | no | File name of the workflow in that repository. Default `tld-git-ops.yml` |
-| `hooks.disable` | no (default none) | Names of guardrail hooks to switch off in this repository: any of `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths`, `dod-gate`, `plan-gate`. Read from the committed `<main>` profile, so a branch cannot switch a hook off for itself; it must be a list. The escape hatch; see [hooks.md](../architecture/hooks.md) |
+| `hooks.disable` | no (default none) | Names of guardrail hooks to switch off in this repository: any of `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths`, `dod-gate`, `plan-gate`, `model-check`. Read from the committed `<main>` profile, so a branch cannot switch a hook off for itself; it must be a list. The escape hatch; see [hooks.md](../architecture/hooks.md) |
 | `hooks.protect_paths` | no | Globs of repo-relative paths `protect-paths` refuses to edit. Default `.tld/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`, `go.sum`, `.github/workflows/**`. A list here replaces the default. A pattern without a slash matches the file name at any depth; `**` crosses directories. `*` and `?` do **not** cross `/` (unlike `touches` and `scope.ignore`) |
 | `hooks.protect_paths_allow` | no | Globs exempt from `protect_paths`, on top of the built-in exceptions (`.env.example`, `.env.sample`, `.env.template`, `.env.dist`, the workflow files `/land` and `repo-admin` install) |
 | `hooks.dod_gate.enabled` | no (default `false`) | Opt in to the `dod-gate` Stop hook: the session cannot stop while `verify.dod` fails. Not applied to sessions that marked themselves exempt, such as the `/implement` orchestrator |
@@ -127,8 +128,8 @@ Every entry of `verify.fast` and `verify.dod` is a string, or a mapping:
 Set `git.bot_login` and `git.codeowners` when the agent should open pull requests as its own GitHub
 account and the owner's review is the gate. Sessions keep running in the owner's claude.ai seat;
 only the GitHub account connected to it changes, so the owner's own GitHub access from that seat
-goes away until the connection is swapped back. The owner does these steps once (`/make-plan` adds
-them to `manual_before` as `mb0-second-user`):
+goes away until the connection is swapped back. The owner does these steps once per repository. Plans do not repeat them; `/implement` checks step 8 at
+every start by comparing `identity()` with `git.bot_login`:
 
 GitHub:
 
@@ -190,5 +191,5 @@ keys, unique phase ids, known `depends_on`, no cycles, `brief` and `acceptance` 
 `complexity` of `S` or `M`, a `worker_level` of `strong`, `standard` or `fast` and a `worker_level_reason` for
 `strong`, honest manual-step entries, `feature_branch` against `git.branch_types`, and that phases which can run
 at the same time share no path in `touches` (globs included). `tracking_issue` is optional everywhere.
-`/implement` also runs `tld plan check-url` (a plan only from `<main>` or `plan/<slug>` of the same repository),
+`/implement` also runs `tld plan check-url` (a plan only from `<main>` or a feature branch of the same repository, at `<plan_dir>/<n>/plan.md`),
 `tld plan branch-name` and `tld plan phase-status`.

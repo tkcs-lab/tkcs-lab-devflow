@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate a plan's implementation manifest, for /make-plan (before it pushes) and /implement (before it starts).
 
-    tld plan validate-manifest PLAN.md|MANIFEST.yaml [--profile .tld/toolkit.yaml]
+    tld plan validate-manifest PLAN.md|MANIFEST.yaml [--profile .tld/toolkit.yaml] [--ref REF]
 
 PLAN.md: the first fenced yaml block under the '## Implementation manifest' heading is checked.
 Exit 0 (warnings go to stderr) or 1 with one error per line. Python 3.11+, PyYAML.
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import posixpath
 import re
 import sys
 from pathlib import Path
@@ -143,7 +144,62 @@ def find_cycle(phases: dict[str, list[str]]) -> list[str] | None:
     return None
 
 
-def validate(manifest, profile: dict | None = None) -> tuple[list[str], list[str]]:
+def _names_record_file(last: str) -> bool:
+    """True when the last segment of a glob is plan.md or deviations.md, or a glob that picks one of them by
+    more than its extension (`plan.*`, `*an.md`, `[p]lan.md`); `*.md` and `plugin*.md` do not."""
+    if last in ("plan.md", "deviations.md"):
+        return True
+    if not any(c in last for c in WILDCARDS):
+        return False
+    literal = re.sub(r"[*?\[\]!]", "", re.sub(r"\.\w+$", "", last))
+    return len(literal) >= 2 and any(fnmatch.fnmatchcase(f, last) for f in ("plan.md", "deviations.md"))
+
+
+def _is_plan_record(entry: str, plan_dir: str, known: tuple[str, ...] = ()) -> bool:
+    """True when a touches entry grants write scope over <plan_dir>/<slug>/plan.md or deviations.md.
+
+    `known` are the names a plan's record directory can have: its plan_slug and its tracking_issue number.
+    The entry is judged with `path_matches`, the matcher that enforces scope, so globs (`docs/plans/*`,
+    `**/plan.md`), directory prefixes (`docs/plans/14/`), whitespace and `..` spellings count. The records
+    tried are those of the known names, of a placeholder and of the name the entry itself gives (under a
+    `plan_dir` of two or more segments).
+
+    Left alone on purpose: `<plan_dir>/` and any directory above it (`docs/` for `docs/plans`), and a glob that
+    does not aim at the records (`docs/*.md`, `docs/adr/**` under a `plan_dir` of `docs`). A glob aims when its
+    literal prefix is inside `plan_dir` (two or more segments), names a known name as a path segment
+    (`docs/14*`, `**/demo/*`), picks plan.md or deviations.md by more than the extension, or is `*`/`**`. Such broad entries are not caught here: the merge review of an
+    implement run is the control for them."""
+    name = _norm(entry)
+    if not name:
+        return False
+    base = plan_dir.rstrip("/")
+    wild = any(c in name for c in WILDCARDS)
+    if not wild:
+        name = posixpath.normpath(name) + ("/" if name.endswith("/") else "")
+    if (base + "/").startswith(name) and name.endswith("/"):
+        return False  # plan_dir/ itself or a strict ancestor of it
+    if re.fullmatch(re.escape(base) + r"/[^/]+/(plan|deviations)\.md", name):
+        return True
+    def clean(seg: str) -> str:
+        return re.sub(r"[*?\[\]]+", "a", seg)
+    parts = name.split("/")
+    slugs = {"x", *known}
+    depth = len(base.split("/"))
+    if depth >= 2 and len(parts) > depth:
+        slugs.add(clean(parts[depth]))
+    if len(parts) >= 2 and re.search(r"[A-Za-z]", parts[-1]):
+        slugs.add(clean(parts[-2]))
+    if wild:
+        prefix = _static_prefix(name)
+        aims = ((depth >= 2 and prefix.startswith(base + "/")) or any(prefix.startswith(f"{base}/{k}/") for k in known)
+                or any(re.search(r"(^|/)" + re.escape(k), name) for k in known)
+                or _names_record_file(parts[-1]) or all(seg in ("*", "**") for seg in parts))
+        if not aims:
+            return False
+    return any(path_matches(f"{base}/{sl}/{f}", name) for sl in slugs for f in ("plan.md", "deviations.md"))
+
+
+def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/plans") -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
     if not isinstance(manifest, dict):
@@ -227,6 +283,8 @@ def validate(manifest, profile: dict | None = None) -> tuple[list[str], list[str
             errors.append(f"phase '{pid}': worker_level must be one of {', '.join(LEVELS)} (got {wl!r})")
         if wl == "strong" and not _nonempty(ph.get("worker_level_reason")):
             errors.append(f"phase '{pid}': worker_level: strong needs a worker_level_reason")
+        if wl == "fast" and cx != "S":
+            errors.append(f"phase '{pid}': worker_level: fast needs complexity S")
         d = ph.get("depends_on") or []
         if not isinstance(d, list):
             errors.append(f"phase '{pid}': depends_on must be a list")
@@ -237,6 +295,12 @@ def validate(manifest, profile: dict | None = None) -> tuple[list[str], list[str
             errors.append(f"phase '{pid}': touches must be a list of paths")
         else:
             touches[pid] = t or []
+            known = tuple(str(v) for v in (manifest.get("plan_slug"), manifest.get("tracking_issue"))
+                          if v and not isinstance(v, bool))
+            for entry in t or []:
+                if _is_plan_record(entry, plan_dir, known):
+                    errors.append(f"phase '{pid}': touches '{entry}' is a plan record; "
+                                  "a phase never edits a plan or its deviations file")
         if "human_gate" in ph and not isinstance(ph["human_gate"], bool):
             errors.append(f"phase '{pid}': human_gate must be true or false")
 
@@ -274,6 +338,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("plan")
     ap.add_argument("--profile", help="resolved or raw .tld/toolkit.yaml, to check feature_branch against git.branch_types")
+    ap.add_argument("--ref", help="the branch the plan file is on: it may only be on main or on its own feature branch")
     args = ap.parse_args(argv)
 
     path = Path(args.plan)
@@ -294,13 +359,32 @@ def main(argv: list[str] | None = None) -> int:
     profile = None
     if args.profile:
         profile = yaml.safe_load(Path(args.profile).read_text())
-    errors, warnings = validate(manifest, profile)
+    plan_dir = "docs/plans"
+    main_branch = "main"
+    if isinstance(profile, dict):
+        docs, git = profile.get("docs"), profile.get("git")
+        if isinstance(docs, dict) and docs.get("plan_dir"):
+            plan_dir = str(docs["plan_dir"])
+        if isinstance(git, dict) and git.get("main_branch"):
+            main_branch = str(git["main_branch"])
+    errors, warnings = validate(manifest, profile, plan_dir=plan_dir.rstrip("/") or plan_dir)
     for w in warnings:
         print(f"manifest: warning: {w}", file=sys.stderr)
     for e in errors:
         print(f"manifest: {e}", file=sys.stderr)
     if errors:
         return 1
+    if args.ref is not None:
+        ref = args.ref.strip()
+        if not ref:
+            print("manifest: --ref is empty", file=sys.stderr)
+            return 1
+        if ref == "plan/" + manifest["plan_slug"]:
+            print(f"manifest: old-layout plan on '{ref}' (deprecated)", file=sys.stderr)
+        elif ref not in (main_branch, manifest["feature_branch"]):
+            print(f"manifest: the plan is on '{ref}', but it may only be on '{main_branch}' "
+                  f"or on its own feature branch '{manifest['feature_branch']}'", file=sys.stderr)
+            return 1
     n = len(manifest["phases"])
     print(f"manifest: OK ({manifest['plan_slug']}, {n} phase{'s' if n != 1 else ''})")
     return 0

@@ -27,7 +27,7 @@ From a checkout of the tkcs-lab-devflow repository:
 ```bash
 export TLD_BOARD_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 read -rs TLD_BOARD_OWNER_PASSPHRASE && export TLD_BOARD_OWNER_PASSPHRASE   # type 16+ characters
-launcher/tld board server --port 8787 --insecure-cookie
+cli/tld board server --port 8787 --insecure-cookie
 ```
 
 `--insecure-cookie` drops the cookie's `Secure` flag so the login works over plain `http://127.0.0.1`; never use
@@ -41,11 +41,11 @@ cat > ask.json <<'JSON'
  "title": "Try the inbox", "created_by": "local-test",
  "questions": [{"id": "go", "text": "Does the inbox work?", "kind": "confirm"}]}
 JSON
-launcher/tld board ask ask.json            # prints the ask id
+cli/tld board ask ask.json            # prints the ask id
 ```
 
 Open `http://127.0.0.1:8787/`, log in, open the ask under "Needs you" and answer it; then
-`launcher/tld board answers <id>` prints `{"go":true}`. A status record is written with `tld board client set`;
+`cli/tld board answers <id>` prints `{"go":true}`. A status record is written with `tld board client set`;
 this one is valid (save it as `record.json`):
 
 ```json
@@ -117,7 +117,7 @@ this one is valid (save it as `record.json`):
 ```
 
 ```bash
-launcher/tld board client set example-project record.json
+cli/tld board client set example-project record.json
 ```
 
 The answer is `{"id":"example-project","version":1}`, and the run shows on the page.
@@ -156,7 +156,7 @@ Server flags (secrets come from the environment only):
 
 ## Docker
 
-Build from the repository root (the image holds only the server, its modules and the page):
+This is the development route; to run a release use the installer (next section). Build from the repository root (the image holds only the server, its modules and the page):
 
 ```bash
 docker build -f deploy/board/Dockerfile -t tld-board .
@@ -176,6 +176,30 @@ docker run -d --name tld-board --restart unless-stopped \
 container runs as an unprivileged user (uid 10001), keeps `/data/board.sqlite3` and `/data/board.sqlite3.secret`
 in the volume, rate-limits logins per client behind the proxy (`--trust-proxy`), and has a health check on
 `/healthz`. Publish the port on `127.0.0.1` only: the proxy is the one way in.
+
+## Docker Compose (the installer)
+
+The release carries the image `ghcr.io/tkcs-lab/tld-board` (linux/amd64 and linux/arm64) and a compose file that
+pins it by digest. The installer sets it up (needs Docker with the compose plugin):
+
+```
+curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download/install.sh | sh -s -- board
+```
+
+It creates `~/tld-board` (`TLD_BOARD_DIR`) with:
+
+- `compose.yaml`: overwritten on every upgrade. Put local changes in `compose.override.yaml`, which compose merges
+  and the installer never touches.
+- `.env`: created once (mode 0600) with a fresh `TLD_BOARD_TOKEN`, empty `TLD_BOARD_OWNER_PASSPHRASE` and
+  `TLD_BOARD_PUBLIC_ORIGIN`, and `TLD_BOARD_SESSION_URL`. The installer never prints the token and never rewrites the file.
+
+Fill in `TLD_BOARD_OWNER_PASSPHRASE` and `TLD_BOARD_PUBLIC_ORIGIN` (avoid `$` in `.env` values: Compose may expand it), then start the board: `docker compose up -d` in
+the directory. The installer starts it itself only when both are set. Upgrade: run the line again (it pulls the new
+image and restarts). Stop: `docker compose down` (the volume stays). The compose file uses the volume
+`tld-board-data`, so the data of an earlier `docker run` setup is reused. If a container named `tld-board` made by
+`docker run` still exists, the installer stops with a message: run `docker rm -f tld-board` once and run the line
+again. If the pull is denied, the package must be made public once by the repository owner
+([CONTRIBUTING.md](../../CONTRIBUTING.md)).
 
 ## TLS and a reverse proxy
 
@@ -200,13 +224,12 @@ port 8787 itself.
 
 The steps you follow once, about 30 minutes:
 
-1. On a host with Docker and a DNS name (`board.example.org` below), clone this repository and build the image
-   (section Docker).
-2. Make the two secrets in a shell on that host, and keep them in your password manager:
-   `export TLD_BOARD_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"`, then
-   `read -rs TLD_BOARD_OWNER_PASSPHRASE && export TLD_BOARD_OWNER_PASSPHRASE` and type a passphrase of four or
-   more random words.
-3. Start the container with the `docker run` above (your host name in `TLD_BOARD_PUBLIC_ORIGIN`).
+1. On a host with Docker and a DNS name (`board.example.org` below), run the installer
+   (`curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download/install.sh | sh -s -- board`, section Docker Compose).
+2. The installer made the token in `~/tld-board/.env`; keep a copy in your password manager. Put a passphrase of
+   four or more random words in `TLD_BOARD_OWNER_PASSPHRASE` there.
+3. Put your host name in `TLD_BOARD_PUBLIC_ORIGIN` (`https://board.example.org`) and start the board:
+   `docker compose up -d` in `~/tld-board`.
 4. Install Caddy, put the Caddyfile above in `/etc/caddy/Caddyfile` with your host name, and reload it
    (`systemctl reload caddy`). `curl -sS https://board.example.org/healthz` answers `{"ok": true}`.
 5. Open `https://board.example.org/` and log in with the passphrase. The page is empty until a session writes.
@@ -256,10 +279,12 @@ board's own `Origin` and the `X-CSRF-Token` header the login returned; the login
 | `POST /login` | - | - | 200 `{"owner": true, "csrf"}` and the cookie; body `{"passphrase"}` | 401 `wrong_passphrase`, 429 `too_many_attempts` (`Retry-After`), 403 `origin_not_allowed` |
 | `GET /api/session` | - | - | 200 `{"owner": bool, "csrf"}` | |
 | `POST /logout` | 403 | yes | 200, the cookie cleared and its session ended | |
-| `GET /api/records` | yes | yes | 200 `{"records": [{"id", "version", "data"}, ...]}` | |
-| `GET /api/records/<id>` | yes | yes | 200 `{"id", "version", "data"}` | 404 `not_found` |
+| `GET /api/records` | yes | yes | 200 `{"records": [{"id", "version", "dismissed_at", "data"}, ...]}` | |
+| `GET /api/records/<id>` | yes | yes | 200 `{"id", "version", "dismissed_at", "data"}` | 404 `not_found` |
 | `PUT /api/records/<id>` | yes | 403 | 200 `{"id", "version"}`; body `{"data": {...}, "if_version": 3}` | 400 `bad_request`, 409 `version_conflict` (`current`), 422 `invalid` (`errors`) |
 | `DELETE /api/records/<id>` | yes | 403 | 200 `{"deleted": true}` | 404 `not_found` |
+| `POST /api/records/<id>/dismiss` | 403 | yes | 200 `{"id", "version", "dismissed_at"}`; body `{"version": n}` | 400 `bad_request`, 404 `not_found`, 409 `version_conflict` (`current`), 409 `not_needs_you`, 403 `csrf` |
+| `POST /api/records/<id>/restore` | 403 | yes | 200 `{"id", "dismissed_at": null}`; empty body | 404 `not_found` |
 | `GET /api/asks[?state=open]` | yes | yes | 200 `{"asks": [...]}`, open ones first | 400 for an unknown state |
 | `POST /api/asks` | yes | 403 | 201, the stored ask with its `id`; body the ask | 422 `invalid` (`errors`) |
 | `GET /api/asks/<id>` | yes | yes | 200, the ask | 404 `not_found` |
@@ -283,15 +308,15 @@ variables in a remote server's headers are not expanded in a plugin's `.mcp.json
 
 | Tool | Arguments | Result text (JSON) |
 |---|---|---|
-| `board_list` | none | `{"records": [{"id", "version", "data"}, ...]}` |
-| `board_get` | `id` (string) | the record `{"id", "version", "data"}`; error `{"error": "not_found"}` |
+| `board_list` | none | `{"records": [{"id", "version", "dismissed_at", "data"}, ...]}` |
+| `board_get` | `id` (string) | the record `{"id", "version", "dismissed_at", "data"}`; error `{"error": "not_found"}` |
 | `board_set` | `id` (string), `data` (object), `if_version` (integer >= 1, optional) | `{"id", "version"}`; errors `{"error": "version_conflict", "current"}` and `{"error": "invalid", "errors"}` |
 | `board_ask` | `ask` (object) | the stored ask with its `id`; error `{"error": "invalid", "errors"}` |
 | `board_answers` | `id` (string) | `{"id", "state", "answers", "answered_at"}` |
 | `board_cancel` | `id` (string) | `{"id", "state"}`; error `{"error": "not_open"}` for an answered ask |
 
-Errors come back as a tool result with `isError` true. There is no delete tool: `/tld:board prune` deletes
-stale records with `tld board client delete`, after you confirmed the list.
+Errors come back as a tool result with `isError` true. There is no delete tool: `/tld:board prune` deletes and
+clears records after you confirmed ([Cards that wait](maintenance.md#cards-that-wait)).
 
 ## The issue fallback
 
@@ -336,10 +361,12 @@ unchanged.
   at most 64 connections are served at once; one more gets `503` and is closed.
 * The cookie is `HttpOnly`, `Secure` (unless `--insecure-cookie`), `SameSite=Strict`, `Path=/`, named
   `__Host-tld_owner`, signed with HMAC-SHA256 and valid for `--session-hours`. Logout ends the session on the
-  server too, and the logged-out session is kept in the database (`revoked_sessions`, schema version 3), so a
+  server too, and the logged-out session is kept in the database (`revoked_sessions`, schema version 4), so a
   restart does not bring it back.
 * Every owner `POST` checks the `Origin` (and `Sec-Fetch-Site` when sent) and a CSRF token bound to the
   session. The session token cannot answer asks; the cookie cannot write records.
+* Dismissals are kept in the database (`dismissals`, schema version 4), next to a record and never inside it.
+  The owner still writes no record; a dismissal counts only until a session writes the record again.
 * The page is served with a Content-Security-Policy that allows only its own inline script and style and
   requests to its own origin, and with `X-Frame-Options: DENY`. It builds every element with `textContent`:
   no text of a record or an ask is ever read as HTML.
@@ -362,6 +389,8 @@ In the container (the image has no sqlite3 tool):
 docker exec tld-board python -c "import sqlite3; sqlite3.connect('/data/board.sqlite3').backup(sqlite3.connect('/data/copy.sqlite3'))"
 docker cp tld-board:/data/copy.sqlite3 ./board-backup.sqlite3
 ```
+
+A database at schema 4 is refused by an older image, so keep the backup from before the upgrade to roll back.
 
 To restore, stop the server, put the copy at the path given by `--db` (in the container `/data/board.sqlite3`),
 and start it again. Records are short-lived and rewritten by the next run; open asks are the part worth
