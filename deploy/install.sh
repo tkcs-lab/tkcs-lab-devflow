@@ -59,7 +59,10 @@ check_version() {
 
 # fetch NAME DEST
 fetch() {
-    curl -fsSL "$BASE/v$VERSION/$1" -o "$2" ||
+    case "$BASE" in
+        https://*) curl -fsSL --proto '=https' --proto-redir '=https' --tlsv1.2 "$BASE/v$VERSION/$1" -o "$2" ;;
+        *) curl -fsSL "$BASE/v$VERSION/$1" -o "$2" ;;
+    esac ||
         die "cannot download $1 for v$VERSION (a release before the first one with installer assets has none)"
 }
 
@@ -126,11 +129,20 @@ install_cli() {
         die "tld --version printed '$out', expected 'tld $VERSION'"
     fi
 
-    if [ -e "$BIN/tld" ] && [ ! -L "$BIN/tld" ]; then
+    OLD=$(readlink "$BIN/tld" 2>/dev/null || true)
+    foreign=0
+    if [ -e "$BIN/tld" ] && [ ! -L "$BIN/tld" ]; then foreign=1; fi
+    if [ -L "$BIN/tld" ]; then
+        case "$OLD" in
+            "$DATA/venvs/"*) ;;
+            *) foreign=1 ;;
+        esac
+    fi
+    if [ "$foreign" -eq 1 ]; then
         rm -rf "$VENV"
         die "$BIN/tld exists and was not made by this installer"
     fi
-    OLD=$(readlink "$BIN/tld" 2>/dev/null || true)
+    rm -f "$BIN/.tld.$$"
     ln -s "$VENV/bin/tld" "$BIN/.tld.$$"
     mv -f "$BIN/.tld.$$" "$BIN/tld"
 
@@ -186,8 +198,9 @@ install_board() {
         die "compose.yaml is not stamped"
     fi
 
-    mkdir -p "$BOARD_DIR"
+    (umask 077 && mkdir -p "$BOARD_DIR")
     # Local changes belong in compose.override.yaml, which compose merges and this installer never touches.
+    rm -f "$BOARD_DIR/.compose.yaml.$$"
     cp "$TMP/compose.yaml" "$BOARD_DIR/.compose.yaml.$$"
     mv -f "$BOARD_DIR/.compose.yaml.$$" "$BOARD_DIR/compose.yaml"
 
@@ -199,10 +212,11 @@ install_board() {
         esac
     fi
 
-    if [ ! -e "$BOARD_DIR/.env" ]; then
+    if [ ! -e "$BOARD_DIR/.env" ] && [ ! -L "$BOARD_DIR/.env" ]; then
         (
             umask 077
             token=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')
+            [ "${#token}" -eq 64 ] || die "could not generate a board token"
             {
                 printf 'TLD_BOARD_TOKEN=%s\n' "$token"
                 printf 'TLD_BOARD_OWNER_PASSPHRASE=\n'
@@ -213,6 +227,7 @@ install_board() {
         say "created $BOARD_DIR/.env with a new board token (it stays in that file)"
     fi
 
+    chmod 600 "$BOARD_DIR/.env"
     (cd "$BOARD_DIR" && docker compose pull) ||
         die "could not pull the board image; if the message says denied, the package ghcr.io/tkcs-lab/tld-board must be made public once by the repository owner (CONTRIBUTING.md, first release)"
 

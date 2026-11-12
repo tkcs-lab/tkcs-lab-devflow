@@ -472,3 +472,13 @@ def test_board_without_compose_plugin_refuses(tmp_path, release) -> None:
     assert r.returncode == 1
     assert "Docker with the compose plugin is required" in r.stderr
     assert "pull" not in docker_log(tmp_path)
+
+
+def test_foreign_symlink_is_not_replaced(tmp_path, release) -> None:
+    (tmp_path / "bin").mkdir()
+    link(tmp_path).symlink_to("/usr/bin/true")
+    r = run_installer(tmp_path, [], release)
+    assert r.returncode == 1
+    assert "was not made by this installer" in r.stderr
+    assert os.readlink(link(tmp_path)) == "/usr/bin/true"
+    assert "9.9.9" not in venvs(tmp_path)
