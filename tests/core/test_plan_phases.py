@@ -35,21 +35,31 @@ def plan(tmp_path):
 
 
 # ---- check-url (S14) ------------------------------------------------------------------------
-@pytest.mark.parametrize("url, ref, path", [
-    ("https://github.com/o/r/blob/main/docs/plans/x-plan.md", "main", "docs/plans/x-plan.md"),
-    ("https://github.com/o/r/blob/plan/x-y/docs/plans/x-y-plan.md", "plan/x-y", "docs/plans/x-y-plan.md"),
-    ("https://github.com/O/R/blob/plan/x/p.md", "plan/x", "p.md"),
+@pytest.mark.parametrize("url, ref, path, legacy", [
+    ("https://github.com/o/r/blob/main/docs/plans/14/plan.md", "main", "docs/plans/14/plan.md", False),
+    ("https://github.com/o/r/blob/feature/my-thing/docs/plans/14/plan.md", "feature/my-thing",
+     "docs/plans/14/plan.md", False),
+    ("https://github.com/o/r/blob/fix/a-b/docs/plans/3/plan.md", "fix/a-b", "docs/plans/3/plan.md", False),
+    ("https://github.com/o/r/blob/main/docs/plans/x-plan.md", "main", "docs/plans/x-plan.md", True),
+    ("https://github.com/o/r/blob/plan/x-y/docs/plans/x-y-plan.md", "plan/x-y", "docs/plans/x-y-plan.md", True),
+    ("https://github.com/o/r/blob/plan/tags/docs/tags-plan.md", "plan/tags", "docs/tags-plan.md", True),
+    ("https://github.com/O/R/blob/plan/x/p.md", "plan/x", "p.md", True),
 ])
-def test_check_url_accepts_main_and_plan_branches_of_this_repo(url, ref, path):
+def test_check_url_accepts_main_feature_and_legacy_plan_branches_of_this_repo(url, ref, path, legacy):
     r = run("check-url", url, "--repo", "o/r")
     assert r.returncode == 0, r.stderr
-    assert json.loads(r.stdout)["ref"] == ref and json.loads(r.stdout)["path"] == path
+    out = json.loads(r.stdout)
+    assert out["ref"] == ref and out["path"] == path and out["legacy"] is legacy
+    assert ("old-layout plans are deprecated" in r.stderr) is legacy
 
 
 @pytest.mark.parametrize("url, message", [
     ("https://github.com/other/r/blob/main/p.md", "not in this repository"),
-    ("https://github.com/o/r/blob/feature/x/p.md", "must be on 'main' or on a plan/<slug> branch"),
-    ("https://github.com/o/r/blob/claude/abc/p.md", "must be on 'main'"),
+    ("https://github.com/o/r/blob/feature/x/p.md", "the plan must be at docs/plans/<n>/plan.md on 'main'"),
+    ("https://github.com/o/r/blob/claude/abc/p.md", "the plan must be at docs/plans/<n>/plan.md"),
+    ("https://github.com/o/r/blob/plans/x/p.md", "the plan must be at docs/plans/<n>/plan.md"),
+    ("https://github.com/o/r/blob/feature/Upper/docs/plans/3/plan.md", "not on 'feature/Upper'"),
+    ("https://github.com/o/r/blob/feature/x--p1/docs/plans/3/plan.md", "not on 'feature/x--p1'"),
     ("https://github.com/o/r/blob/plan/Bad_Slug/p.md", "kebab-case slug"),
     ("https://github.com/o/r/blob/main/../x.md", "'..'"),
     ("https://gitlab.com/o/r/blob/main/p.md", "not a plan URL"),
@@ -257,8 +267,33 @@ def test_gate_approval_is_read_from_an_empty_commit_trailer_and_a_later_revision
     assert status(plan, feature_repo, "--ref", "feature/demo", "--approved", "p2")["approved"] == ["p2"]
 
 
+def test_phase_status_reports_plan_started(plan, feature_repo):
+    git(feature_repo, "commit", "-q", "--allow-empty", "-m", "work")
+    assert status(plan, feature_repo)["started"] is False
+    (feature_repo / "plan.md").write_text("plan\n")
+    git(feature_repo, "add", "plan.md")
+    git(feature_repo, "commit", "-q", "-m", "Start plan\n\nPlan-Started: demo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    s = status(plan, feature_repo)
+    assert s["started"] is True and s["plan_blob"] == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    git(feature_repo, "revert", "--no-edit", "HEAD")
+    s = status(plan, feature_repo)
+    assert s["started"] is False and s["plan_blob"] is None
+
+
+def test_plan_started_trailer_must_be_on_one_line(plan, feature_repo):
+    git(feature_repo, "commit", "-q", "--allow-empty", "-m", "x\n\nPlan-Started:\ndemo\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    assert status(plan, feature_repo)["started"] is False
+
+
+def test_plan_started_needs_a_full_object_id(plan, feature_repo):
+    git(feature_repo, "commit", "-q", "--allow-empty", "-m", "x\n\nPlan-Started: demo abc1234")
+    assert status(plan, feature_repo)["started"] is False
+    git(feature_repo, "commit", "-q", "--allow-empty", "-m", "y\n\nPlan-Started: demo " + "b" * 64)
+    assert status(plan, feature_repo)["plan_blob"] == "b" * 64
+
+
 # ---- check-commands (S14) -------------------------------------------------------------------
-BASE = ".venv/bin/python -m pytest tests -q"
+BASE = ".venv/bin/python -m pytest -q"
 PFX = ".venv/bin/python -m pytest"
 
 
@@ -269,8 +304,8 @@ def mf(cmds):
     return m
 
 
-def profile_with(allow=None, fast=("x",), dod=("y",), ci=None):
-    p = {"verify": {"fast": list(fast), "dod": list(dod)}}
+def profile_with(allow=None, fast=("x",), dod=("y",), ci=None, stacks=("python",)):
+    p = {"verify": {"fast": list(fast), "dod": list(dod)}, "stacks": list(stacks)}
     if allow is not None:
         p["verify"]["after_merge_allow"] = allow
     if ci is not None:
@@ -305,10 +340,11 @@ def test_check_commands_cwd_entry_not_trusted():
 
 
 def test_check_commands_trusts_allow_prefixes():
-    r = cc([".venv/bin/python -m pytest tests/core/test_board_*.py -q", BASE, ".venv/bin/python -m pytestx",
-            ".venv/bin/python -m"], allow=[PFX])
-    assert r["trusted"] == [".venv/bin/python -m pytest tests/core/test_board_*.py -q", BASE]
-    assert r["unknown"] == [".venv/bin/python -m pytestx", ".venv/bin/python -m"]
+    r = cc([".venv/bin/python -m pytest -k board -q", BASE, PFX, ".venv/bin/python -m pytestx",
+            ".venv/bin/python -m", ".venv/bin/python -m pytest tests/core/test_board_*.py -q"], allow=[PFX])
+    assert r["trusted"] == [".venv/bin/python -m pytest -k board -q", BASE, PFX]
+    assert r["unknown"] == [".venv/bin/python -m pytestx", ".venv/bin/python -m",
+                            ".venv/bin/python -m pytest tests/core/test_board_*.py -q"]
 
 
 def test_check_commands_rejects_shell_metacharacters():
@@ -396,7 +432,8 @@ def test_check_commands_cli_output(tmp_path):
 
 
 @pytest.mark.parametrize("cmd, ok", [
-    (".venv/bin/python -m pytest tests/core/test_board_*.py -q", True),
+    (".venv/bin/python -m pytest -k board -q", True),
+    (".venv/bin/python -m pytest tests/core/test_board_*.py -q", False),
     (".venv/bin/python cli/tld ops docs-index check --index docs/README.md", True),
     (".venv/bin/python cli/tld guard allow-profile", False),
     (".venv/bin/python cli/tld guard allow-plan", False),
@@ -407,3 +444,98 @@ def test_repo_profile_trust_boundary(cmd, ok):
     prof = yaml.safe_load((ROOT / ".tld" / "toolkit.yaml").read_text())
     r = phases.check_commands(mf([cmd]), prof)
     assert (r["trusted"] == [cmd]) is ok
+
+
+# ---- check-commands: options after an allowed prefix ----------------------------------------
+TLD = ".venv/bin/python cli/tld"
+
+
+@pytest.mark.parametrize("tail", ["-q", "-x", "-v", "-vv", "-k test_a", "-k=test_a", "-m slow", "--tb=short",
+                                  "--tb=line", "--tb=no", "--tb short", "-q -x -k a"])
+def test_check_commands_pytest_safe_options_are_trusted(tail):
+    cmd = f"{PFX} {tail}"
+    assert cc([cmd], allow=[PFX])["trusted"] == [cmd]
+
+
+@pytest.mark.parametrize("tail", ["--basetemp=/home/user -q", "--basetemp build", "-p x", "-pno:cacheprovider",
+                                  "-c other.ini", "--rootdir=/", "--confcutdir=/", "-o addopts=x",
+                                  "--pyargs os", "--junitxml=/root/.bashrc", "/etc", "tests/../../x", "../x",
+                                  "~/x", "--unknown", "--tb=long", "--tb=", "-k", "-k -p", "-q=1", "-- tests",
+                                  "tests", "-q tests/core", "tests/core/test_x.py::test_a -k a", ".git/config",
+                                  ".venv/lib/x"])
+def test_check_commands_pytest_other_options_are_unknown(tail):
+    cmd = f"{PFX} {tail}"
+    assert cc([cmd], allow=[PFX]) == {"trusted": [], "unknown": [cmd]}
+
+
+@pytest.mark.parametrize("cmd", [
+    f"{TLD} ops docs-index check --index docs/README.md",
+    f"{TLD} ops docs-index check --index docs/README.md --json --strict",
+    f"{TLD} profile validate --no-file-checks",
+    f"{TLD} plan validate-manifest --ref feature/x",
+])
+def test_check_commands_tld_safe_options_are_trusted(cmd):
+    prof = yaml.safe_load((ROOT / ".tld" / "toolkit.yaml").read_text())
+    assert phases.check_commands(mf([cmd]), prof)["trusted"] == [cmd]
+
+
+@pytest.mark.parametrize("cmd", [
+    f"{TLD} ops docs-index check --root /",
+    f"{TLD} ops docs-index check --index /etc/passwd",
+    f"{TLD} ops docs-index check --index ../README.md",
+    f"{TLD} ops docs-index check --write",
+    f"{TLD} profile validate /etc/x.yaml",
+    f"{TLD} plan validate-manifest p.yaml --ref -x",
+    f"{TLD} plan validate-manifest --ref -x",
+    f"{TLD} profile validate .git/config",
+    f"{TLD} profile validate .tld/toolkit.yaml --no-file-checks",
+    f"{TLD} ops docs-index check --profile .tld/toolkit.yaml",
+    f"{TLD} ops docs-index check --index .git/config",
+    f"{TLD} ops docs-index check --index docs/.env",
+    f"{TLD} ops docs-index check --index docs//x",
+])
+def test_check_commands_tld_other_options_are_unknown(cmd):
+    prof = yaml.safe_load((ROOT / ".tld" / "toolkit.yaml").read_text())
+    assert phases.check_commands(mf([cmd]), prof)["unknown"] == [cmd]
+
+
+def test_check_commands_other_program_takes_no_options():
+    assert cc(["npm test", "npm test web", "npm test --watch", "make check install"],
+              allow=["npm test", "make check"]) == {
+        "trusted": ["npm test"], "unknown": ["npm test web", "npm test --watch", "make check install"]}
+
+
+def test_check_commands_pytest_options_come_from_the_stack_guide():
+    assert cc([BASE], allow=[PFX], stacks=()) == {"trusted": [], "unknown": [BASE]}
+    assert cc([PFX], allow=[PFX], stacks=()) == {"trusted": [PFX], "unknown": []}
+    assert phases.stack_options(["python"])["pytest"]["--tb"] == ["short", "line", "no"]
+    assert "pytest" not in phases.stack_options(["go", "nonexistent", "../x", 3])
+
+
+def test_stack_options_block_must_be_well_formed(tmp_path, monkeypatch):
+    monkeypatch.setattr(phases, "STACKS", tmp_path)
+    (tmp_path / "s.md").write_text("x\n\n```yaml after-merge-options\nprog:\n  -a: maybe\n```\n")
+    with pytest.raises(phases.PlanError, match="bad after-merge-options entry 'prog'"):
+        phases.stack_options(["s"])
+    (tmp_path / "s.md").write_text("```yaml after-merge-options\n- a\n```\n")
+    with pytest.raises(phases.PlanError, match="must be a mapping"):
+        phases.stack_options(["s"])
+    (tmp_path / "s.md").write_text("```yaml after-merge-options\nprog:\n  -a: null\n  -b: [x]\n```\n")
+    assert phases.stack_options(["s"])["prog"] == {"-a": None, "-b": ["x"]}
+
+
+@pytest.mark.parametrize("tail", ["*", "@args.txt", "-k *", "-k @x", "-m t?", "tests/.?/.?/x", "tests/*/x",
+                                  "tests/?x", "tests/[.]", "t*/x", "tests/core/*"])
+def test_check_commands_shell_expansion_is_unknown(tail):
+    cmd = f"{PFX} {tail}"
+    assert cc([cmd], allow=[PFX]) == {"trusted": [], "unknown": [cmd]}
+
+
+def test_check_commands_argfile_path_is_unknown():
+    prof = yaml.safe_load((ROOT / ".tld" / "toolkit.yaml").read_text())
+    cmd = f"{TLD} profile validate --profile @x"
+    assert phases.check_commands(mf([cmd]), prof)["unknown"] == [cmd]
+
+
+def test_check_commands_non_string_entry_is_unknown():
+    assert cc([{"run": "x"}, 3], allow=[PFX]) == {"trusted": [], "unknown": [{"run": "x"}, 3]}

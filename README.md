@@ -56,7 +56,7 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | Command | What it does |
 |---|---|
 | `/tld:setup [create \| update]` | surveys the repository and writes or updates the profile, including the `roles` block; asks you the posture; one pull request ([guide](docs/guides/setup.md)) |
-| `/tld:make-plan <what you want>` | researches the repository, then writes a single-session prompt (small scope) or a plan with an implementation manifest on a `plan/<slug>` branch (large scope); manual steps become an ask |
+| `/tld:make-plan <what you want>` | researches the repository, then writes a single-session prompt (small scope) or a plan with an implementation manifest on its feature branch (large scope); manual steps become an ask |
 | `/tld:implement <plan URL>` | one worker session per phase, merges into one feature branch, verification after every merge, scope-drift monitoring, one final review, one pull request driven to green ([scope drift](docs/architecture/scope-drift.md)) |
 | `/tld:review [scope]` | deep review of security, tests (unit, integration, e2e) and docs by the roles; verified findings in a review document on a `review/<slug>` branch; your decisions are one ask ([guide](docs/guides/review.md)) |
 | `/tld:dod` | runs the profile's definition of done and reports a table |
@@ -80,7 +80,7 @@ a policy file; [guide](docs/guides/admin.md)) and `tld:git-ops` (delete a remote
   the `write` role, and the environments `tld-agent` and `tld-release` that hold `TLD_AGENT_TOKEN` and
   `TLD_RELEASE_TOKEN`. Tags have one route: the release workflow, run by the owner.
 - **Seatbelt: the hooks.** `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths` and the opt-in
-  `dod-gate` deny the action before it runs and tell the agent what to do instead. The protect lists and
+  `dod-gate` deny the action before it runs and tell the agent what to do instead; `model-check` only warns when a session runs on the most expensive level. The protect lists and
   `hooks.disable` are read from the profile on the remote default branch. They need `python3` 3.11+ and PyYAML in
   the session, and every repository in a Project that enables `tld` needs at least `git.main_branch` in its profile.
 

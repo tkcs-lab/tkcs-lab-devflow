@@ -31,7 +31,7 @@ follow from that:
 |---|---|
 | `tld.version` | The tld releases the profile is written for; `tld profile validate` checks the running one |
 | `docs.must_read` | Read first by the planner; named in every worker brief and in the final review |
-| `docs.plan_dir` | Plans `<plan_dir>/<slug>-plan.md` and reviews `<plan_dir>/<slug>-review.md` (default `docs/plans/`) |
+| `docs.plan_dir` | Plans `<plan_dir>/<n>/plan.md` with `deviations.md` next to them, and reviews `<plan_dir>/<slug>-review.md` (default `docs/plans/`) |
 | `docs.index` | The docs index ([docs.md](docs.md)): read first, then only matching rows |
 | `docs.adr_dir`, `adr_index`, `adr_bar` | ADR steps, only when `adr_dir` is set |
 | `docs.changelog.file`, `.section` | The changelog line a user-visible change adds |

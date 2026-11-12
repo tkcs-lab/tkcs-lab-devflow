@@ -48,7 +48,7 @@ def run_graders(base: GradeContext, specs: list[dict]) -> list[dict]:
 
 def _plan_manifest(ctx: GradeContext) -> tuple[Doc | None, dict | None, str]:
     vm = plugin_script("validate_manifest")
-    plans = [d for d in ctx.docs("*-plan.md") if vm.HEADING in d.text]
+    plans = [d for d in [*ctx.docs("*-plan.md"), *ctx.docs("*/plan.md")] if vm.HEADING in d.text]
     if not plans:
         return None, None, "no plan document with an implementation manifest was produced"
     doc = plans[0]

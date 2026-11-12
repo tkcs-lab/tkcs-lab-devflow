@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """The mechanical parts of running a plan: where it may come from, branch names, which phases to start.
 
-    tld plan check-url URL [--repo OWNER/NAME] [--main BRANCH]
+    tld plan check-url URL [--repo OWNER/NAME] [--main BRANCH] [--plan-dir DIR]
     tld plan check-commands PLAN --profile PROFILE
     tld plan branch-name (--plan-slug SLUG | --review-slug SLUG | --manifest PLAN [--phase ID [--rev N] | --fix N])
     tld plan phase-status PLAN [--ref REF] [--running ID]... [--approved ID]... [--repo DIR]
 
 `check-url` (S14) parses `https://github.com/<owner>/<repo>/blob/<ref>/<path>` and accepts it only when
 `<owner>/<repo>` is this repository (`--repo`, default: the `origin` remote of the current directory) and
-`<ref>` is the main branch (`--main`, default `main`) or a `plan/<slug>` branch. It prints
-`{"owner", "repo", "ref", "path"}` as JSON. A plan from anywhere else is refused (exit 1): its
+`<ref>` is the main branch (`--main`, default `main`) or a `<type>/<kebab>` feature branch and the path ends in
+`<plan-dir>/<n>/plan.md` (`--plan-dir`, default `docs/plans`); the old `main/` and `plan/<slug>` layouts are still
+accepted with `"legacy": true`. It prints `{"owner", "repo", "ref", "path", "legacy"}` as JSON. `phase-status`
+also prints `started` and `plan_blob` (from the newest `Plan-Started: <slug> <blob>` trailer). A plan from anywhere else is refused (exit 1): its
 `verify_after_merge` commands would run on this machine.
 
 `check-commands` (S14, part two) sorts the manifest's `verify_after_merge` commands into those the profile
@@ -57,6 +59,15 @@ REMOTE = re.compile(r"github\.com[:/](?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z
 DISPATCH = re.compile(r"dispatch ([^\s]+)")
 PLAIN = re.compile(r"[A-Za-z0-9_./=:@%+,*?\[\]\- '\"]*")
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+TOKEN = re.compile(r"[A-Za-z0-9_./:%+,=-]+")
+STACKS = Path(__file__).resolve().parents[3] / "stacks"
+OPTIONS_BLOCK = re.compile(r"^```yaml after-merge-options\n(.*?)^```", re.S | re.M)
+# The options a command may carry after a `verify.after_merge_allow` prefix, keyed by the program the prefix
+# names: null takes no value, "token" a plain word, "path" a plain repo-relative path, a list one of its words.
+# tld's own options are here; a stack guide adds its tools' options in an `after-merge-options` block. A
+# program no table names takes no option; no command takes a positional word after its prefix.
+TLD_OPTIONS: dict[str, object] = {"--json": None, "--strict": None, "--no-file-checks": None, "--index": "path",
+                                  "--ref": "token"}
 
 
 class PlanError(Exception):
@@ -75,7 +86,10 @@ def origin_repo(cwd: str | None = None) -> str:
     return f"{m['owner']}/{m['repo']}"
 
 
-def check_url(url: str, repo: str, main: str) -> dict:
+FEATURE_REF = re.compile(r"^[a-z0-9]+/[a-z0-9-]+$")
+
+
+def check_url(url: str, repo: str, main: str, plan_dir: str = "docs/plans") -> dict:
     m = URL.match(url.strip())
     if not m:
         raise PlanError("not a plan URL of the form https://github.com/<owner>/<repo>/blob/<ref>/<path>")
@@ -83,7 +97,14 @@ def check_url(url: str, repo: str, main: str) -> dict:
         raise PlanError(f"the plan is in {m['owner']}/{m['repo']}, not in this repository ({repo}): "
                         "only plans of this repository run here")
     rest = m["rest"]
-    if rest.startswith(f"{main}/"):
+    suffix = re.compile(r"^(?P<ref>.+)/(?P<path>" + re.escape(plan_dir.strip("/")) + r"/[^/]+/plan\.md)$")
+    sm = suffix.match(rest)
+    legacy = sm is None
+    if sm:
+        ref, path = sm["ref"], sm["path"]
+        if ref != main and (not FEATURE_REF.match(ref) or "--" in ref):
+            raise PlanError(f"the plan must be on '{main}' or on a <type>/<kebab> feature branch, not on {ref!r}")
+    elif rest.startswith(f"{main}/"):
         ref, path = main, rest[len(main) + 1:]
     elif rest.startswith("plan/"):
         slug, _, path = rest[len("plan/"):].partition("/")
@@ -91,11 +112,10 @@ def check_url(url: str, repo: str, main: str) -> dict:
             raise PlanError("a plan branch is plan/<kebab-case slug> followed by the file path")
         ref = f"plan/{slug}"
     else:
-        raise PlanError(f"the plan must be on '{main}' or on a plan/<slug> branch (the owner reviews those), "
-                        f"not on '{rest.split('/', 1)[0]}'")
+        raise PlanError(f"the plan must be at {plan_dir}/<n>/plan.md on '{main}' or on its feature branch")
     if not path or ".." in path.split("/"):
         raise PlanError("the URL names no file, or a path with '..'")
-    return {"owner": m["owner"], "repo": m["repo"], "ref": ref, "path": path}
+    return {"owner": m["owner"], "repo": m["repo"], "ref": ref, "path": path, "legacy": legacy}
 
 
 def load_manifest(path: str) -> dict:
@@ -161,8 +181,9 @@ def history(ref: str, cwd: str | None) -> list[tuple[str, str]]:
     return commits
 
 
-def trailers(ref: str, slug: str, cwd: str | None) -> tuple[set[str], set[str]]:
-    """The done phases and the phases whose gate approval is newer than their latest counted merge."""
+def trailers(ref: str, slug: str, cwd: str | None) -> tuple[set[str], set[str], str | None]:
+    """The done phases, the phases whose gate approval is newer than their latest counted merge, and the
+    plan blob of the newest active non-revert commit with a Plan-Started trailer (None when there is none)."""
     commits = history(ref, cwd)
     shas = [sha for sha, _ in commits]
     reverters: dict[str, list[str]] = {}
@@ -181,6 +202,8 @@ def trailers(ref: str, slug: str, cwd: str | None) -> tuple[set[str], set[str]]:
 
     phase_rx = re.compile(r"^Plan-Phase:\s*" + re.escape(slug) + r"/(\S+)\s*$", re.M)
     gate_rx = re.compile(r"^Plan-Gate-Approved:\s*" + re.escape(slug) + r"/(\S+)\s*$", re.M)
+    started_rx = re.compile(r"^Plan-Started:[ \t]*" + re.escape(slug) + r"[ \t]+([0-9a-f]{40}|[0-9a-f]{64})[ \t]*$", re.M)
+    plan_blob = None
     merged_at: dict[str, int] = {}  # phase -> index of its newest counted merge (0 = newest commit)
     approved_at: dict[str, int] = {}
     for i, (sha, body) in enumerate(commits):
@@ -190,13 +213,18 @@ def trailers(ref: str, slug: str, cwd: str | None) -> tuple[set[str], set[str]]:
             approved_at.setdefault(pid, i)
         if REVERTS.search(body):
             continue
+        if plan_blob is None:
+            started = started_rx.findall(body)
+            if started:
+                plan_blob = started[0]
         for pid in phase_rx.findall(body):
             merged_at.setdefault(pid, i)
     approved = {pid for pid, i in approved_at.items() if pid in merged_at and i < merged_at[pid]}
-    return set(merged_at), approved
+    return set(merged_at), approved, plan_blob
 
 
-def phase_status(manifest: dict, done_ids: set[str], running: list[str], approved: list[str]) -> dict:
+def phase_status(manifest: dict, done_ids: set[str], running: list[str], approved: list[str],
+                 plan_blob: str | None = None) -> dict:
     phases = manifest["phases"]
     by_id = {ph["id"]: ph for ph in phases}
     done = [ph["id"] for ph in phases if ph["id"] in done_ids]
@@ -216,7 +244,8 @@ def phase_status(manifest: dict, done_ids: set[str], running: list[str], approve
     return {"plan_slug": manifest["plan_slug"], "feature_branch": manifest["feature_branch"],
             "done": done, "approved": [pid for pid in gates if pid in approved], "gated": gated,
             "running": list(running), "ready": ready, "waiting": waiting,
-            "start": ready[:room], "all_done": len(done) == len(phases)}
+            "start": ready[:room], "all_done": len(done) == len(phases),
+            "started": plan_blob is not None, "plan_blob": plan_blob}
 
 
 def _entries(items: object) -> list[str]:
@@ -228,6 +257,74 @@ def _entries(items: object) -> list[str]:
         elif isinstance(item, dict) and isinstance(item.get("run"), str) and "cwd" not in item:
             out.append(item["run"].strip())
     return out
+
+
+def stack_options(stacks: object) -> dict[str, dict[str, object]]:
+    """The safe options per program: tld's own plus the `after-merge-options` block of each listed stack guide."""
+    table: dict[str, dict[str, object]] = {"tld": dict(TLD_OPTIONS)}
+    for name in stacks if isinstance(stacks, list) else []:
+        if not isinstance(name, str) or not SLUG.match(name):
+            continue
+        try:
+            text = (STACKS / f"{name}.md").read_text()
+        except (OSError, UnicodeError):
+            continue
+        m = OPTIONS_BLOCK.search(text)
+        if not m:
+            continue
+        data = yaml.safe_load(m.group(1))
+        if not isinstance(data, dict):
+            raise PlanError(f"stacks/{name}.md: the after-merge-options block must be a mapping")
+        for program, opts in data.items():
+            if not isinstance(program, str) or not isinstance(opts, dict) or not all(
+                    isinstance(o, str) and o.startswith("-") and (v is None or v in ("token", "path") or (
+                        isinstance(v, list) and all(isinstance(c, str) for c in v))) for o, v in opts.items()):
+                raise PlanError(f"stacks/{name}.md: bad after-merge-options entry '{program}'")
+            table.setdefault(program, {}).update(opts)
+    return table
+
+
+def _program(prefix: list[str], table: dict) -> dict[str, object]:
+    """The safe options of the program a prefix runs (matched by a word's base name), or none."""
+    for word in prefix:
+        base = word.rsplit("/", 1)[-1]
+        if base in table:
+            return table[base]
+    return {}
+
+
+def _plain_value(word: str, kind: object) -> bool:
+    """An option's value: a plain word without a leading `-`; a path also has no leading `/` and no segment
+    that starts with `.` (no `..`, `.git`, `.env`)."""
+    if isinstance(kind, list):
+        return word in kind
+    if not TOKEN.fullmatch(word) or word.startswith("-"):
+        return False
+    return kind != "path" or not (word.startswith("/") or any(seg.startswith(".") or not seg
+                                                              for seg in word.split("/")))
+
+
+def _safe_tail(tail: list[str], options: dict[str, object]) -> bool:
+    """Whether every word after an allowed prefix is one of the program's safe options (with its value)."""
+    i = 0
+    while i < len(tail):
+        name, eq, value = tail[i].partition("=")
+        i += 1
+        if name not in options:
+            return False
+        kind = options[name]
+        if kind is None:
+            if eq:
+                return False
+            continue
+        if not eq:
+            if i >= len(tail):
+                return False
+            value = tail[i]
+            i += 1
+        if not _plain_value(value, kind):
+            return False
+    return True
 
 
 def check_commands(manifest: dict, profile: dict) -> dict:
@@ -248,6 +345,7 @@ def check_commands(manifest: dict, profile: dict) -> dict:
         if words:
             prefixes.append(words)
     exact = set(_entries(verify.get("fast")) + _entries(verify.get("dod")))
+    table = stack_options(profile.get("stacks"))
     dispatchable = {d["workflow"] for d in ci.get("dispatchable") or [] if isinstance(d, dict)
                     and isinstance(d.get("workflow"), str)} if isinstance(ci.get("dispatchable"), list) else set()
 
@@ -263,27 +361,28 @@ def check_commands(manifest: dict, profile: dict) -> dict:
             words = shlex.split(cmd)
         except ValueError:
             return False
-        return any(words[:len(p)] == p for p in prefixes)
+        return any(words[:len(p)] == p and _safe_tail(words[len(p):], _program(p, table)) for p in prefixes)
 
     result: dict = {"trusted": [], "unknown": []}
     for cmd in manifest.get("verify_after_merge") or []:
-        result["trusted" if trusted(cmd) else "unknown"].append(cmd)
+        result["trusted" if isinstance(cmd, str) and trusted(cmd) else "unknown"].append(cmd)
     return result
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="tld plan", description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    cu = sub.add_parser("check-url", help="accept a plan URL only from this repository's main or plan/* branch")
+    cu = sub.add_parser("check-url", help="accept a plan URL (<plan_dir>/<n>/plan.md on main or its feature branch; plan/* deprecated)")
     cu.add_argument("url")
     cu.add_argument("--repo", help="owner/name of this repository (default: the origin remote)")
     cu.add_argument("--main", default="main", help="the main branch (git.main_branch)")
+    cu.add_argument("--plan-dir", default="docs/plans", help="the directory that holds <n>/plan.md")
     cc = sub.add_parser("check-commands", help="which verify_after_merge commands the profile trusts, as JSON")
     cc.add_argument("plan", help="plan file (.md) or manifest (.yaml)")
     cc.add_argument("--profile", required=True, help="the main branch's profile (never a plan branch's copy)")
     bn = sub.add_parser("branch-name", help="print a plan, review, feature, phase, revision or fix branch name")
     grp = bn.add_mutually_exclusive_group(required=True)
-    grp.add_argument("--plan-slug")
+    grp.add_argument("--plan-slug", help="deprecated: plans now live on the feature branch")
     grp.add_argument("--review-slug")
     grp.add_argument("--manifest", help="plan file (.md) or manifest (.yaml)")
     bn.add_argument("--phase")
@@ -298,7 +397,11 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         if args.cmd == "check-url":
-            print(json.dumps(check_url(args.url, args.repo or origin_repo(), args.main)))
+            result = check_url(args.url, args.repo or origin_repo(), args.main, args.plan_dir)
+            if result["legacy"]:
+                print("tld plan: warning: old-layout plans are deprecated; make-plan now commits the plan "
+                      "to the feature branch", file=sys.stderr)
+            print(json.dumps(result))
         elif args.cmd == "check-commands":
             try:
                 profile = yaml.safe_load(Path(args.profile).read_text())
@@ -317,9 +420,9 @@ def main(argv: list[str] | None = None) -> int:
             for pid in [*args.running, *args.approved]:
                 if pid not in ids:
                     raise PlanError(f"no phase '{pid}' in the manifest")
-            done, gate_ok = trailers(args.ref, manifest["plan_slug"], args.repo)
+            done, gate_ok, plan_blob = trailers(args.ref, manifest["plan_slug"], args.repo)
             approved = sorted((gate_ok & ids) | set(args.approved))
-            print(json.dumps(phase_status(manifest, done & ids, args.running, approved), indent=2))
+            print(json.dumps(phase_status(manifest, done & ids, args.running, approved, plan_blob), indent=2))
         return 0
     except PlanError as exc:
         print(f"plan: {exc}", file=sys.stderr)

@@ -1,5 +1,5 @@
 ---
-description: "Research a change, then write either a single-session prompt (small scope) or a plan document with an implementation manifest on its own plan/ branch (large scope), with step-by-step instructions for anything only a human can do"
+description: "Research a change, then write either a single-session prompt (small scope) or a plan document with an implementation manifest on its feature branch (large scope), with step-by-step instructions for anything only a human can do"
 argument-hint: "<what to build: a prompt, an issue number, a /review document URL, or a mix>"
 model: opus
 ---

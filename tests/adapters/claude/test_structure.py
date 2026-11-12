@@ -49,10 +49,14 @@ def test_plugin_versions_agree():
     assert plugin == package == tld.__version__  # one version: the release workflow tags v<version>
 
 
-def test_no_session_start_wording_in_the_plugin():
+def test_session_start_is_only_used_by_model_check():
+    allowed = {CLAUDE / "hooks" / name for name in ("hooks.json", "claude_adapter.py", "model_check.py")}
     for path in [*CLAUDE.rglob("*"), *TLD.rglob("*")]:
-        if path.is_file() and "__pycache__" not in path.parts:
+        if path.is_file() and "__pycache__" not in path.parts and path not in allowed:
             assert "SessionStart" not in path.read_text(errors="ignore"), path
+    data = json.loads((CLAUDE / "hooks" / "hooks.json").read_text())
+    commands = [h["command"] for group in data["hooks"]["SessionStart"] for h in group["hooks"]]
+    assert commands and all(c.endswith("/adapters/claude/hooks/model_check.py\"") for c in commands), commands
 
 
 # ---- commands -------------------------------------------------------------------------------

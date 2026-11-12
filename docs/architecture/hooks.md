@@ -40,6 +40,7 @@ shims; `CLAUDE_PROJECT_DIR` and `stop_hook_active` are read only here.
 | `secret-scan` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | content that looks like a credential | A secret in a file ends up in history | a GitHub token or a private key block; `API_KEY = os.environ["API_KEY"]` |
 | `protect-paths` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` | edits to paths the profile lists | Some files are changed by people or by tools, not by hand | `echo x > .env`; `echo x > .env.example` |
 | `plan-gate` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, the GitHub MCP content-write tools (`push_files`, `create_or_update_file`, `delete_file`); UserPromptSubmit (opt-in) | writes into the repository from a session no tld command started | A chat message must not start an implementation | `echo x > README.md`; `ls` |
+| `model-check` | SessionStart, UserPromptSubmit | nothing (a `systemMessage` warning only) | The most expensive level is easy to forget | strong session + `/tld:implement x` warns; strong session + `/tld:make-plan x` does not |
 | `dod-gate` | Stop | stopping while `verify.dod` is red (opt-in) | Work is not done until the definition of done passes | stop with a failing test; stop after `/dod` is green |
 
 A denial is exit code 2 with the reason on stderr, which Claude Code hands back to the agent. Every message says what to do
@@ -220,6 +221,22 @@ commands and the tail of their output back to the agent. Rules that keep it from
   After the limit (`max_attempts`, or 3 when that value is itself invalid) the gate lets the session stop and shows the
   message in `systemMessage`, so it gives up after the attempt limit also for profile errors.
 
+### `model-check`
+
+On by default; never denies. Warns when a `/tld:<command>` starts in a session on the strong (most expensive) level and the
+command is meant for a lower one.
+
+- **Levels by model family.** `opus` is strong, `sonnet` standard, `haiku` fast (case-insensitive substring of the model
+  string); any other string is unknown. A command's level is the `model:` front matter of its wrapper; a skill or a command
+  without it is standard.
+- **Session level.** From the newest assistant entry of the transcript, else the level stored at session start (the
+  SessionStart event's `model`, kept per session under the state directory). The SessionStart run only records it and
+  installs or fetches nothing. Unknown: silent.
+- **Output.** `systemMessage` only, no `additionalContext`, so the model does not repeat it. `hooks.disable: [model-check]`
+  turns it off; the setting is looked up only when it would warn.
+- **Limits.** After a strong command such as `/tld:make-plan` the next prompt may be warned though the session model is
+  lower (the warning says so). A session with no `model` in its start event and no assistant entry yet is silent.
+
 ### `plan-gate`
 
 Opt-in, off by default: set `hooks.plan_gate.enabled` to `true`. A plain chat message must not start an implementation:
@@ -322,7 +339,7 @@ Reference: [profile-reference.md](../reference/profile-reference.md).
 
 ```yaml
 hooks:
-  disable: [protect-paths]   # any of no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate, plan-gate
+  disable: [protect-paths]   # any of no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate, plan-gate, model-check
 ```
 
 `hooks.disable` and the protect lists are read from the **trusted copy** of the profile, not from the working tree, so a

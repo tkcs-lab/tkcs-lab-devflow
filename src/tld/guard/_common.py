@@ -18,7 +18,7 @@ from tld.guard import trust
 from tld.guard.action import Action, Decision, Settings
 
 HOOK_NAMES = ("no-merge", "no-force-push", "no-git-tag", "secret-scan", "protect-paths", "dod-gate",
-              "plan-gate")
+              "plan-gate", "model-check")
 PROFILE = Path(".tld") / "toolkit.yaml"
 
 # Defaults of the `hooks` section. They are repeated in schema/profile.schema.json; a test keeps them equal.
@@ -229,7 +229,9 @@ def run_guard(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: boo
     try:
         ctx = make_ctx(action, settings)
         try:
-            if name != "plan-gate" and ctx.disabled(name):  # plan-gate looks it up itself, after its cheap checks
+            # plan-gate and model-check look it up themselves, only when they would act: the lookup can take
+            # a git ls-remote of up to 12 s, which is more than the hook's own timeout
+            if name not in ("plan-gate", "model-check") and ctx.disabled(name):
                 return Decision("allow")
         except ProfileError as exc:
             if name != "dod-gate":

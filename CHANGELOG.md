@@ -25,12 +25,22 @@ entry of the released version at the top of the GitHub release, above the list o
 - The opt-in `plan-gate` hook (`hooks.plan_gate.enabled`): a session that no tld command started cannot write into the repository and is told to propose `/tld:make-plan`.
 - The `ask` skill (`/tld:ask`): answers without changing anything and turns a change request into a `/tld:make-plan` proposal.
 - Answer an ask in the chat: an attended session shows each ask in the conversation too (`tld board ask-text`), reads the owner's reply there (`tld board answers --from-reply`) and cancels the board copy, and checks the board on its own every 10 minutes for an hour, then hourly for 24 hours. Before, a board answer woke nothing and the owner had to message the session anyway.
+- `deviations.md` next to every plan, written by the `/implement` orchestrator only, and `tld plan deviations init | add | check` to
+  create it, record a deviation and check that none is missing.
+- The `model-check` hook: it warns when a tld command starts in a session that runs on the `strong` level although the
+  command is meant for a cheaper one. Switch it off with `hooks.disable: [model-check]`.
 - `tld board resolve` clears the `needs_you` of a record whose pull requests are finished, and an ask has the
   optional field `record`, the status record that posted it.
 - Install with curl: one line installs or upgrades the `tld` command, another the board server (Docker Compose). A release now carries the wheel, the sdist, `install.sh`, `compose.yaml` and `SHA256SUMS`, and the multi-arch board image `ghcr.io/tkcs-lab/tld-board` is pushed by the release workflow.
 
 ### Fixed
 
+- `tld plan check-commands` trusts a command through a `verify.after_merge_allow` prefix only when every word after
+  the prefix is a safe option of that program with a plain value: tld's own (`--index`, `--json`, ...) and those a
+  stack guide lists in an `after-merge-options` block (the python guide: `-q`, `-k`, `--tb=short`, ...); no
+  positional word, no glob, no `@file`. Before, `--basetemp=/some/dir`, `-p <module>` or a path into `.git` ran
+  without asking. `/implement` takes a start confirmation only from the owner's answer to the recorded ask,
+  never from a ledger or issue comment.
 - A "needs you" card on the board no longer outlives its reason: one card per wait, `answer received` once you
   answered, Dismiss and Restore on the page, and `/tld:board prune` clears cards whose pull requests are all
   merged or closed.
@@ -40,6 +50,9 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Changed
 
+- Plans now live on the feature branch at `docs/plans/<issue>/plan.md` and stay after the merge; `plan/<slug>` plans are
+  deprecated for one release.
+- `/make-plan` assigns the `fast` worker level to literal phases, and `validate-manifest` requires complexity S for it.
 - Board: sending the answers of an ask (or cancelling it) returns to the inbox and confirms it there, instead of
   staying on the answered ask; the "← Inbox" link sits above the ask card.
 - `/land` asks only for what only you can fix and lists its pull requests as items of its record.

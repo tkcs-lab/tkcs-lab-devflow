@@ -19,7 +19,7 @@ docs/architecture/         how it is built and why
 docs/guides/               how to do things
 docs/reference/            lookups: config keys, schema, API
 docs/adr/                  README.md (ADR index) + NNNN-<kebab>.md   (only when the project uses ADRs)
-docs/plans/                active plans only (<slug>-plan.md), deleted at retirement, never indexed
+docs/plans/                plans (<n>/plan.md) and deviations.md: kept history, transient, never indexed
 docs/archive/              superseded docs, kept for history, never read by default
 ```
 

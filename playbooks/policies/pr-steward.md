@@ -58,9 +58,8 @@ These are the branch kinds the playbooks use, and no others:
 
 | Kind | Name | Made by |
 |---|---|---|
-| plan | `plan/<slug>` | make-plan (`tld plan branch-name --plan-slug <slug>`) |
 | review | `review/<slug>` | review (`tld plan branch-name --review-slug <slug>`) |
-| feature | the manifest's `feature_branch`, following `git.branch_pattern` | implement |
+| feature | the manifest's `feature_branch`, following `git.branch_pattern` | make-plan (with the plan), then implement |
 | phase | `<feature>--<phase id>`, `<feature>--<phase id>-rev<n>`, `<feature>--fix-<n>` | implement (`tld plan branch-name --manifest <plan> ...`) |
 | chore | `chore/<what>` or `chore/<what>-<date>`: `chore/toolkit-profile` (setup), `chore/docs-init-<yyyymmdd>` and `chore/docs-tidy-<yyyymmdd>` (docs), `chore/deps-<ecosystem>-<yyyymmdd>` (deps), `chore/ci-<workflow>-<yyyymmdd>` (ci), `chore/upstream-<new-with-hyphens>` (upstream), `chore/land-<yyyymmdd-hhmm>` and `chore/tld-land-workflow` (land), `chore/tld-migrate` (migrate) | setup, docs, deps, ci, upstream, land, migrate |
 

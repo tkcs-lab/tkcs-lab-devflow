@@ -19,8 +19,8 @@ who links to it, so a session can build or tidy the index without reading every 
 
 Errors:  CLAUDE.md missing, too long, or not linking to the index; the index missing or too long;
          a broken relative link in CLAUDE.md or an index file; a doc no index file links to
-         (transient docs named *-plan.md, *-plan-manual-steps.md|html and *-review.md, the archive and
-         archived directories, and the index files themselves excepted); an ADR the
+         (transient docs named *-plan.md, *-plan-manual-steps.md|html, *-review.md and *-deviations.md,
+         <plan_dir>/<n>/plan.md and deviations.md, the archive and archived directories, and the index files themselves excepted); an ADR the
          ADR index does not list (when the profile has `docs.adr_dir`).
 Warnings: a broken link in another doc; a doc longer than --max-doc-lines; an index entry with no
          description; an index link listed twice; with --stale-days, a doc not changed in git for that
@@ -57,7 +57,14 @@ MAX_CLAUDE_LINES = 60
 MAX_INDEX_LINES = 150
 MAX_DOC_LINES = 400
 ARCHIVE_DIRS = {"archive", "archived"}
-PLAN_NAME = re.compile(r"-(plan|review)(-manual-steps)?\.(md|html)$")
+PLAN_NAME = re.compile(r"-(plan|review|deviations)(-manual-steps)?\.(md|html)$")
+
+
+def is_plan_record(rel: str, plan_dir: str) -> bool:
+    """True for `<plan_dir>/<n>/plan.md` and `<plan_dir>/<n>/deviations.md` (rel: posix path from the root)."""
+    return re.fullmatch(re.escape(plan_dir.strip("/")) + r"/[^/]+/(plan|deviations)\.md", rel) is not None
+
+
 LINK = re.compile(r"\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 FENCE = re.compile(r"^\s*(```|~~~)")
 SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
@@ -98,7 +105,7 @@ def resolve(path: Path, target: str) -> Path:
 
 def load_config(args) -> dict:
     root = Path(args.root).resolve()
-    cfg = {"root": root, "index": None, "adr_dir": None, "adr_index": None}
+    cfg = {"root": root, "index": None, "adr_dir": None, "adr_index": None, "plan_dir": "docs/plans"}
     profile = Path(args.profile) if args.profile else root / DEFAULT_PROFILE
     if profile.is_file():
         data = yaml.safe_load(profile.read_text()) or {}
@@ -106,6 +113,7 @@ def load_config(args) -> dict:
         cfg["index"] = docs.get("index")
         cfg["adr_dir"] = docs.get("adr_dir")
         cfg["adr_index"] = docs.get("adr_index")
+        cfg["plan_dir"] = str(docs.get("plan_dir") or "docs/plans").rstrip("/")
     if args.index:
         cfg["index"] = args.index
     if not cfg["index"]:
@@ -130,6 +138,11 @@ def rel(root: Path, path: Path) -> str:
         return str(path.relative_to(root))
     except ValueError:
         return str(path)
+
+
+def is_transient(cfg, d: Path) -> bool:
+    """A plan, review or deviations file: never indexed, never size- or age-checked."""
+    return bool(PLAN_NAME.search(d.name)) or is_plan_record(rel(cfg["root"], d), cfg["plan_dir"])
 
 
 def docs_under(cfg) -> list[Path]:
@@ -203,7 +216,7 @@ def check(cfg, args) -> tuple[list[str], list[str]]:
     docs = docs_under(cfg)
     index_set = set(idx_files)
     for d in docs:
-        if d in index_set or PLAN_NAME.search(d.name) or d in listed:
+        if d in index_set or is_transient(cfg, d) or d in listed:
             continue
         errors.append(f"{rel(root, d)}: not listed in the docs index (add a row, or move it to archive/)")
 
@@ -221,7 +234,7 @@ def check(cfg, args) -> tuple[list[str], list[str]]:
         if d in index_set:
             continue
         lines = len(d.read_text(errors="replace").splitlines())
-        if lines > args.max_doc_lines and not PLAN_NAME.search(d.name):
+        if lines > args.max_doc_lines and not is_transient(cfg, d):
             warnings.append(f"{rel(root, d)}: {lines} lines, over {args.max_doc_lines}: split it so a reader "
                             "can open only the part they need")
         for n, _, target, _ in links_of(d):
@@ -230,7 +243,7 @@ def check(cfg, args) -> tuple[list[str], list[str]]:
 
     if args.stale_days:
         for d in docs:
-            if PLAN_NAME.search(d.name):
+            if is_transient(cfg, d):
                 continue
             age = git_age_days(root, d)
             if age is not None and age > args.stale_days:
@@ -276,7 +289,7 @@ def inventory(cfg) -> list[dict]:
             "age_days": None if age is None else int(age),
             "linked_from": sorted(set(inbound.get(d, []))),
             "in_index": d in listed or d in idx_files,
-            "plan": bool(PLAN_NAME.search(d.name)),
+            "plan": is_transient(cfg, d),
         })
     return out
 
