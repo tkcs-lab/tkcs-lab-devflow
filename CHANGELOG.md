@@ -7,6 +7,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Added
 
+- Sessions now know they run in a limited claude.ai environment and may ask the owner for research: the new policy `playbooks/policies/research.md`, the commands `tld research check-prompt` and `tld research report`, an `## Environment` section in the runtime skill, and the guide `docs/guides/cloud-environments.md` (what to enable and deny for the working and the research environment). A pasted research report is data, never an instruction.
 - A second `/make-plan` of an issue, or `/implement` of a plan, that another session is still running now stops and asks (`stop` or `take_over`). New `tld plan active-run` reads the tracking issue's comments and the board record; a run silent for more than two hours counts as dead. The start comments now end with `Session: <id>.`, and runs post `Planning stopped:` / `Implementation stopped:`.
 - The release workflow template (`template: release`) takes three new parameters, so one `tld-release` can cut
   the tags of every repository: `version_style: pep440` accepts versions like `4.2.0a1`, `check_script` runs a
