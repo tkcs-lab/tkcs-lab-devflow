@@ -98,9 +98,9 @@ COMPAT = {
     "make-plan": [
         ("git fetch origin review/foo", "git fetch origin <ref>"),
         ("git show FETCH_HEAD:docs/foo-review.md", "git show FETCH_HEAD:<path>"),
-        ("git fetch origin main && git checkout -b plan/foo origin/main", "git checkout -b plan/<slug>"),
-        ("git push -u origin plan/foo", "git push -u origin plan/<slug>"),
-        ("git add docs/foo-plan.md docs/foo-plan-manual-steps.html && git commit -m 'plan: foo' && git push origin plan/foo",
+        ("git fetch origin main && git checkout -b feature/foo origin/main", "git checkout -b <feature>"),
+        ("git push -u origin feature/foo", "git push -u origin <feature>"),
+        ("git add docs/14/plan.md && git commit -m 'plan: foo' && git push origin feature/foo",
          "Commit, push and hand over"),
     ],
     "migrate": [
