@@ -16,7 +16,7 @@ Plans (`<slug>-plan.md`) are transient and not listed; a finished plan's decisio
 
 ## Guides
 
-- [guides/delivery.md](guides/delivery.md) - installing the plugin (Claude Project marketplace, local) and the CLI, releases and `tld.version` pinning; read when installing or upgrading.
+- [guides/delivery.md](guides/delivery.md) - installing the plugin, the CLI and the board with the curl installer, releases and `tld.version` pinning; read when installing or upgrading.
 - [guides/migrating-from-claude-toolkit.md](guides/migrating-from-claude-toolkit.md) - the owner's steps to move a repository from claude-toolkit with /migrate and tld migrate; read when migrating a repository.
 - [guides/docs-index.md](guides/docs-index.md) - the CLAUDE.md, index and leaf-doc structure and /docs init, check and tidy; read when touching documentation layout or the docs skills.
 - [guides/review.md](guides/review.md) - the /review flow and its decisions ask; read when changing /review.
