@@ -5,9 +5,14 @@ name: release
 # The version is the one in pyproject.toml, .claude-plugin/plugin.json and src/tld/__init__.py, which a test keeps
 # equal; bump all three (and add the CHANGELOG entry) in a pull request first. Run it by hand: Actions, release,
 # Run workflow, on main. It starts as a dry run.
+# The release carries everything an install needs: the wheel and the sdist, install.sh and compose.yaml stamped with
+# the version and the image digest, SHA256SUMS over those four, and the multi-arch board image on ghcr.io. The order
+# is: build the image (a dry run builds it and pushes nothing), then the tag, then a draft release holding every
+# asset, then publish the draft. So releases/latest never lacks install.sh, and a failure before the last step
+# leaves no public half-release (at worst an orphan image tag, which a re-run overwrites).
 # Modelled on src/tld/templates/tld-release.yml: the tag is made with TLD_RELEASE_TOKEN, an owner token that is a
 # secret of the environment tld-release (main only, the owner approves every run); the workflow's GITHUB_TOKEN
-# only reads, and the tag ruleset tld-tags lets no workflow token create a tag.
+# reads, and writes only packages (the board image), and the tag ruleset tld-tags lets no workflow token create a tag.
 
 on:
   workflow_dispatch:
@@ -36,6 +41,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: tld-release
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -105,6 +113,79 @@ jobs:
           fi
           echo "checks on $SHA are green"
 
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.13"
+
+      - name: Build the wheel and the sdist
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          python -m pip install build==1.2.2
+          python -m build --outdir dist .
+          for f in "dist/tld-$VERSION-py3-none-any.whl" "dist/tld-$VERSION.tar.gz"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::the build did not produce $f"
+              exit 1
+            fi
+          done
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to ghcr
+        if: inputs.dry_run == false
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build the board image
+        id: image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deploy/board/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ inputs.dry_run == false }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/tld-board:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/tld-board:latest
+
+      - name: Collect the release assets
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/tld-board
+          DIGEST: ${{ steps.image.outputs.digest }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "$DRY_RUN" = "true" ]; then
+            DIGEST=sha256:dry-run
+          elif [ -z "$DIGEST" ]; then
+            echo "::error::the image build gave no digest"
+            exit 1
+          fi
+          sed "s/@TLD_VERSION@/$VERSION/" deploy/install.sh > dist/install.sh
+          sed "s#@TLD_IMAGE@#$IMAGE@$DIGEST#" deploy/board/compose.yaml > dist/compose.yaml
+          if grep -l '@TLD_' dist/install.sh dist/compose.yaml; then
+            echo "::error::a release asset still holds an unstamped @TLD_ token"
+            exit 1
+          fi
+          (cd dist && sha256sum "tld-$VERSION-py3-none-any.whl" "tld-$VERSION.tar.gz" install.sh compose.yaml > SHA256SUMS)
+          {
+            echo "## Release assets"
+            ls -1 dist | sed 's/^/- /'
+            echo
+            echo "Image: $IMAGE@$DIGEST"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Write the release notes
         env:
           GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN }}
@@ -136,8 +217,9 @@ jobs:
           set -euo pipefail
           object=$(gh api -X POST "repos/$REPO/git/tags" -f tag="$TAG" -f message="Release $TAG" -f object="$SHA" -f type=commit --jq .sha)
           gh api -X POST "repos/$REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$object" > /dev/null
-          if ! url=$(gh release create "$TAG" --verify-tag --title "$TAG" --notes-file release-notes.md --repo "$REPO"); then
-            echo "::error::tag $TAG was created but the release was not; run: gh release create $TAG --verify-tag --notes-file release-notes.md --repo $REPO"
+          if ! url=$(gh release create "$TAG" --verify-tag --draft --repo "$REPO" --title "$TAG" --notes-file release-notes.md dist/*) \
+            || ! gh release edit "$TAG" --draft=false --repo "$REPO"; then
+            echo "::error::tag $TAG was created but the release was not published; run: gh release create $TAG --verify-tag --draft --repo $REPO --notes-file release-notes.md dist/*  and then: gh release edit $TAG --draft=false --repo $REPO"
             exit 1
           fi
           echo "Released $TAG: $url" >> "$GITHUB_STEP_SUMMARY"
