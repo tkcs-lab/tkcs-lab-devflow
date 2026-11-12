@@ -27,7 +27,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p5-guide-and-retire
 
-- pending
+- None.
+- review: Open non-blocking: the research environment Allow package managers row and a line telling the owner not to run anything a report suggests may need wording changes
 
 ## Final review
 
