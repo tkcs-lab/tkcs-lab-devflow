@@ -19,6 +19,10 @@ entry of the released version at the top of the GitHub release, above the list o
 - The opt-in `plan-gate` hook (`hooks.plan_gate.enabled`): a session that no tld command started cannot write into the repository and is told to propose `/tld:make-plan`.
 - The `ask` skill (`/tld:ask`): answers without changing anything and turns a change request into a `/tld:make-plan` proposal.
 - Answer an ask in the chat: an attended session shows each ask in the conversation too (`tld board ask-text`), reads the owner's reply there (`tld board answers --from-reply`) and cancels the board copy, and checks the board on its own every 10 minutes for an hour, then hourly for 24 hours. Before, a board answer woke nothing and the owner had to message the session anyway.
+- `deviations.md` next to every plan, written by the `/implement` orchestrator only, and `tld plan deviations init | add | check` to
+  create it, record a deviation and check that none is missing.
+- The `model-check` hook: it warns when a tld command starts in a session that runs on the `strong` level although the
+  command is meant for a cheaper one. Switch it off with `hooks.disable: [model-check]`.
 
 ### Fixed
 
@@ -27,6 +31,9 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Changed
 
+- Plans now live on the feature branch at `docs/plans/<issue>/plan.md` and stay after the merge; `plan/<slug>` plans are
+  deprecated for one release.
+- `/make-plan` assigns the `fast` worker level to literal phases, and `validate-manifest` requires complexity S for it.
 - The CLI launcher moved from `bin/tld` to `launcher/tld`: claude.ai refuses to sync a plugin with a top-level `bin/`
   directory. Call `launcher/tld` from a checkout; the installed `tld` command is unchanged.
 
