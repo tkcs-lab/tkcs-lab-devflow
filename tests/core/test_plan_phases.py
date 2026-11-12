@@ -271,14 +271,21 @@ def test_phase_status_reports_plan_started(plan, feature_repo):
     assert status(plan, feature_repo)["started"] is False
     (feature_repo / "plan.md").write_text("plan\n")
     git(feature_repo, "add", "plan.md")
-    git(feature_repo, "commit", "-q", "-m", "Start plan\n\nPlan-Started: demo abc1234")
+    git(feature_repo, "commit", "-q", "-m", "Start plan\n\nPlan-Started: demo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
     s = status(plan, feature_repo)
-    assert s["started"] is True and s["plan_blob"] == "abc1234"
+    assert s["started"] is True and s["plan_blob"] == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     git(feature_repo, "revert", "--no-edit", "HEAD")
     s = status(plan, feature_repo)
     assert s["started"] is False and s["plan_blob"] is None
 
 
 def test_plan_started_trailer_must_be_on_one_line(plan, feature_repo):
-    git(feature_repo, "commit", "-q", "--allow-empty", "-m", "x\n\nPlan-Started:\ndemo\nabc1234")
+    git(feature_repo, "commit", "-q", "--allow-empty", "-m", "x\n\nPlan-Started:\ndemo\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
     assert status(plan, feature_repo)["started"] is False
+
+
+def test_plan_started_needs_a_full_object_id(plan, feature_repo):
+    git(feature_repo, "commit", "-q", "--allow-empty", "-m", "x\n\nPlan-Started: demo abc1234")
+    assert status(plan, feature_repo)["started"] is False
+    git(feature_repo, "commit", "-q", "--allow-empty", "-m", "y\n\nPlan-Started: demo " + "b" * 64)
+    assert status(plan, feature_repo)["plan_blob"] == "b" * 64

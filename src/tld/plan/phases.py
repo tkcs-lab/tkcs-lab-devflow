@@ -182,7 +182,7 @@ def trailers(ref: str, slug: str, cwd: str | None) -> tuple[set[str], set[str], 
 
     phase_rx = re.compile(r"^Plan-Phase:\s*" + re.escape(slug) + r"/(\S+)\s*$", re.M)
     gate_rx = re.compile(r"^Plan-Gate-Approved:\s*" + re.escape(slug) + r"/(\S+)\s*$", re.M)
-    started_rx = re.compile(r"^Plan-Started:[ \t]*" + re.escape(slug) + r"[ \t]+([0-9a-f]{7,40})[ \t]*$", re.M)
+    started_rx = re.compile(r"^Plan-Started:[ \t]*" + re.escape(slug) + r"[ \t]+([0-9a-f]{40}|[0-9a-f]{64})[ \t]*$", re.M)
     plan_blob = None
     merged_at: dict[str, int] = {}  # phase -> index of its newest counted merge (0 = newest commit)
     approved_at: dict[str, int] = {}
