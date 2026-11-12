@@ -9,6 +9,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - review: No finding; scope matches touches exactly (4 files); scope check skipped because it ran after the local merge
 - retry: Merge verification was red before any phase because docs/plans/33/plan.md line 72 has a broken relative link; the owner chose to keep the plan and deselect that one test (test_docs_links.py::test_relative_links_and_anchors_resolve[docs/plans/33/plan.md]) in merge verification; the failure stays in the final pull request
 - final: src/tld/ CORE_PATH in tests/core/test_contracts.py uses src/tld/[a-z0-9/_.-]*[a-z0-9_] instead of the D8 pattern src/tld/[a-z0-9/_.-]+; the separate r1 regression test of the p1 brief step 4 is not present as a separate test (found by the final review)
+- final: fix-1: gate also rejects Mongolian, Khmer, Khitan and hieroglyph blank characters and drops combining marks for matching; rest holds only lines before the first start line; board check also refuses the bare host (4+ chars), the URL without trailing slash and whitespace-stripped forms; --forbid also matches with whitespace removed; Design D3 should be updated
+- conflict: fix-1 merge conflicted in evals/baselines/default.json with fix-2 hashes; resolved by refreshing the hashes with the eval tool
 
 ## p2-policy-core
 
@@ -16,6 +18,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - retry: Sent back once for the D1 step 5 security gaps found by the security-reviewer; second report approved
 - review: Open non-blocking: a bare skip or stop line in the rest file could answer a single-choice ask; policy does not say where the ask file comes from or that all scratch files are deleted on every exit path
 - final: fix-2: implement.md follow-up brief after a pasted or skipped research answer is now the full phase brief with the report last in a longer fence as data; worker Research: lines are rewritten from public facts, never copied; scope: playbooks/ask.md (p3 file) edited by the fix, accepted
+- final: fix-1: research.md step 5 keeps reading the rest file only after exit 0 (orchestrator decision, owner not asked): after a non-zero exit skip, stop and other answers go on the board; step 2 passes the bare repository name as a second --forbid; pasted alone is never taken as the report
 
 ## p3-playbook-links
 
@@ -33,6 +36,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - review: Open non-blocking: the research environment Allow package managers row and a line telling the owner not to run anything a report suggests may need wording changes
 - conflict: Merging origin/main (board-record-per-session) conflicted in CHANGELOG.md and evals/baselines/default.json; kept both changelog entries and refreshed the baseline hashes
 - final: cloud-environments.md adds a paragraph on skimming a report for instructions (line 69) and the advice to keep the research environment personal (line 32), both beyond Design D6 (found by the final review)
+- final: fix-1: the guide limits a plain claude.ai chat to connectors off, memory off and outside any project, adds any connector to the Deny list, says the owners own lines go before the report block; cli.md research rows moved after the last board row and document exit 2; scope: guide, cli.md, research.md and the baseline are files of other phases, accepted
 
 ## Final review
 
