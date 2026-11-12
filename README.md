@@ -82,7 +82,7 @@ See [docs/architecture/hooks.md](docs/architecture/hooks.md) and [SECURITY.md](S
 
 A small server you host ([docs/guides/board-server.md](docs/guides/board-server.md)) holds a status record of every
 run and the **asks**: questions, decisions and manual steps a playbook puts to you. You answer in the browser after
-logging in; a session cannot answer for you. Without a board, an ask becomes a comment on the tracking issue that
+logging in; a session cannot answer for you. When you started the session yourself, the ask also shows in the chat and you can answer there; the session also checks the board on its own, so an answer there is picked up within minutes. Without a board, an ask becomes a comment on the tracking issue that
 mentions you, and only replies by you (the repository owner or `git.owner_login`) or an admin count; the agent's own
 account never does.
 

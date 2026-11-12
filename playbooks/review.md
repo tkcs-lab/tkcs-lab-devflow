@@ -226,16 +226,15 @@ If you can settle it by reading, settle it. Aim for few open items.
    optional `text` question `notes` for remarks per item, with `--fallback-issue <owner>/<repo>`. Put the ask id
    (or, on the fallback, the comment URL) into the header's `decisions_ask`, commit and push.
 5. **Hand over.** No open items: go to section 7, step 6. Open items: reply with one line per open item (id,
-   title, recommendation) and end your turn. The board wakes nobody: the owner answers there and then messages
-   this session, or runs review apply in a new one.
+   title, recommendation) and end your turn. Wait as `ask_human` says for an attended session: the owner answers on the board or here in the conversation, or runs review apply in a new session.
 
 ## 6. Read the decisions
 
-Reached when the owner messages this session after answering, or by `apply <review URL>` in a new session (read the file from its URL with
+Reached on a wake of that wait (the owner's reply here, or a wakeup that finds the board answered), or by `apply <review URL>` in a new session (read the file from its URL with
 `git fetch origin <ref>` and `git show FETCH_HEAD:<path>`, check out its branch, and take `decisions_ask` from
 its header).
 
-1. `tld board answers <ask id>` (exit 3: still open; say so and stop; exit 4: the owner cancelled it, so every
+1. In an attended session read the answers as `ask_human` says (the board first, then `tld board answers --from-reply`; answers recorded as `answered in the conversation` in the header or `last_event` count); otherwise `tld board answers <ask id>` (exit 3: still open; say so and stop; exit 4: the owner cancelled it, so every
    item stays open; say so and stop). For the fallback (a comment URL in `decisions_ask`), read the replies as
    `ask_human` says, with `tld board answers --from-issue <comments file> --ask <ask file> --self <identity()>
    --repo <owner>/<repo>`: only the owner's or an admin's replies count, never this session's own account;

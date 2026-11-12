@@ -29,7 +29,7 @@ then skip the record steps as the policy says.
 
 `ask_human` one ask titled `Migrate <repo> to tld` with one `confirm` question: "Write this migration on a branch
 and open one pull request?", the plan lines in the question text (cut to the limit; the count of changes stays).
-Wait for the answer (`tld board answers <id> --wait 600`, then on each wake). On no, or a cancelled ask, change
+Wait for the answer as `ask_human` says for an attended session. On no, or a cancelled ask, change
 nothing and stop.
 
 ## 3. Write

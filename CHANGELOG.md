@@ -18,6 +18,7 @@ entry of the released version at the top of the GitHub release, above the list o
   separate pull request from the code and the version bump). With `release-only`, `section` is optional.
 - The opt-in `plan-gate` hook (`hooks.plan_gate.enabled`): a session that no tld command started cannot write into the repository and is told to propose `/tld:make-plan`.
 - The `ask` skill (`/tld:ask`): answers without changing anything and turns a change request into a `/tld:make-plan` proposal.
+- Answer an ask in the chat: an attended session shows each ask in the conversation too (`tld board ask-text`), reads the owner's reply there (`tld board answers --from-reply`) and cancels the board copy, and checks the board on its own every 10 minutes for an hour, then hourly for 24 hours. Before, a board answer woke nothing and the owner had to message the session anyway.
 
 ### Fixed
 

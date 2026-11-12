@@ -400,3 +400,99 @@ def test_board_client_does_not_send_the_token_to_another_host():
         for s in (other, board):
             s.shutdown()
             s.server_close()
+
+
+# -- ask in the chat: `ask-text` and `answers --from-reply` ----------------------------------------
+
+def _one(kind, **extra):
+    q = {"id": "q1", "text": "Proceed?", "kind": kind, **extra}
+    return ask_doc(questions=[q])
+
+
+def _write(tmp_path, name, doc):
+    path = tmp_path / name
+    path.write_text(json.dumps(doc) if not isinstance(doc, str) else doc, encoding="utf-8")
+    return str(path)
+
+
+def test_ask_text_lists_every_question_and_the_reply_format(tmp_path):
+    result = tld("ask-text", _write(tmp_path, "a.json", ask_doc()), "--id", "a-1")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("**Review all: 2 decisions**\nAnswer here in the chat, or on the board (ask a-1).")
+    for needle in ("`SEC-1` (choice, required)", "`go` (confirm, required)", "`notes` (text, optional)",
+                   "Options:", "Reply with one line per question"):
+        assert needle in result.stdout
+    assert "-- example reply --" not in result.stdout and "Only replies by" not in result.stdout
+    assert result.stdout.endswith("\n") and not result.stdout.endswith("\n\n")
+
+
+def test_ask_text_without_id_and_with_one_question(tmp_path):
+    result = tld("ask-text", _write(tmp_path, "a.json", _one("confirm")))
+    assert result.stdout.splitlines()[1] == "Answer here in the chat."
+    assert result.stdout.endswith("With one question, the answer alone is enough.\n")
+    result = tld("ask-text", _write(tmp_path, "b.json", _one("text")))
+    assert "With one question" not in result.stdout
+
+
+def test_ask_text_on_the_fallback_names_the_issue(tmp_path):
+    url = "https://github.com/o/r/issues/1#issuecomment-2"
+    result = tld("ask-text", _write(tmp_path, "a.json", ask_doc()), "--id", url)
+    assert result.stdout.splitlines()[1] == f"Answer here in the chat, or on the issue ({url})."
+
+
+def test_ask_text_refuses_an_invalid_ask(tmp_path):
+    result = tld("ask-text", _write(tmp_path, "a.json", {"kind": "ask"}))
+    assert result.returncode == 1
+    assert "ask: " in result.stderr
+
+
+def test_ask_text_and_answers_from_reply_directly():
+    text = inbox.ask_text(ask_doc(), "a-1")
+    assert text.splitlines()[0] == "**Review all: 2 decisions**"
+    assert "Context: https://example.com/review.md" in text
+    assert inbox.answers_from_reply(ask_doc(), "SEC-1: plan\ngo: yes") == {"SEC-1": "plan", "go": True}
+    assert inbox.answers_from_reply(_one("confirm"), "no") == {"q1": False}
+
+
+def test_answers_from_reply_reads_answer_lines_and_later_overrides(tmp_path):
+    reply = _write(tmp_path, "r.txt", "go: no\n\nSEC-1: issue\ngo: yes\n")
+    result = tld("answers", "--from-reply", reply, "--ask", _write(tmp_path, "a.json", ask_doc()))
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"go": True, "SEC-1": "issue"}
+
+
+def test_answers_from_reply_takes_the_bare_answer_for_one_question(tmp_path):
+    result = tld("answers", "--from-reply", _write(tmp_path, "r.txt", "yes"), "--ask",
+                 _write(tmp_path, "a.json", _one("confirm")))
+    assert result.returncode == 0 and json.loads(result.stdout) == {"q1": True}
+
+
+def test_answers_from_reply_ignores_quotes_and_code(tmp_path):
+    reply = _write(tmp_path, "r.txt", "```\nSEC-1: plan\n```\n> go: yes\n")
+    result = tld("answers", "--from-reply", reply, "--ask", _write(tmp_path, "a.json", ask_doc()))
+    assert result.returncode == 3 and result.stdout == ""
+    assert "no answer yet for: SEC-1, go" in result.stderr
+
+
+def test_a_text_question_never_takes_a_bare_answer(tmp_path):
+    result = tld("answers", "--from-reply", _write(tmp_path, "r.txt", "what does this mean?"), "--ask",
+                 _write(tmp_path, "a.json", _one("text")))
+    assert result.returncode == 3
+    result = tld("answers", "--from-reply", _write(tmp_path, "r2.txt", "go: maybe"), "--ask",
+                 _write(tmp_path, "b.json", ask_doc(questions=[{"id": "go", "text": "Go?", "kind": "confirm"}])))
+    assert result.returncode == 3
+
+
+def test_answers_from_reply_reads_stdin(tmp_path):
+    result = tld("answers", "--from-reply", "-", "--ask", _write(tmp_path, "a.json", _one("confirm")), stdin="no\n")
+    assert result.returncode == 0 and json.loads(result.stdout) == {"q1": False}
+
+
+def test_answers_from_reply_needs_the_ask_and_no_id(tmp_path):
+    reply = _write(tmp_path, "r.txt", "yes")
+    ask_file = _write(tmp_path, "a.json", _one("confirm"))
+    assert tld("answers", "--from-reply", reply).returncode == 2
+    assert tld("answers", "a-1", "--from-reply", reply, "--ask", ask_file).returncode == 2
+    assert tld("answers", "--from-reply", reply, "--from-issue", reply, "--ask", ask_file).returncode == 2
+    both = tld("answers", "--from-reply", "-", "--ask", "-", stdin="yes")
+    assert both.returncode == 2 and "cannot both read stdin" in both.stderr
