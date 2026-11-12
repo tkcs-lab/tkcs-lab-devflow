@@ -37,6 +37,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Changed
 
+- Board: sending the answers of an ask (or cancelling it) returns to the inbox and confirms it there, instead of staying on the answered ask; the "← Inbox" link sits above the ask card.
 - `/land` asks only for what only you can fix and lists its pull requests as items of its record.
 - The board database moves to schema version 4 (dismissals). An older image refuses it: keep a backup from before
   the upgrade to roll back.

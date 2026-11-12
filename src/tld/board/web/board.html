@@ -82,7 +82,8 @@ button:disabled { opacity: .6; cursor: default; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .answer { font-weight: 600; white-space: pre-wrap; }
 .hidden-view { display: none; }
-h2.ask-title { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 10px 0 4px; }
+h2.ask-title { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 0 0 4px; }
+.back { display: inline-block; margin: 0 0 8px; }
 label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 13px; }
 </style>
 </head>
@@ -104,6 +105,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
   </form>
 </section>
 <section id="askview" class="hidden-view" aria-label="Ask"></section>
+<div class="notice hidden-view" id="flash" role="status"></div>
 <main id="main"><div class="notice" id="status">Loading…</div></main>
 <script>
 /*TLD:RULES*/
@@ -519,11 +521,14 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     node.className = node.className.replace(/\s*hidden-view/g, "") + (visible ? "" : " hidden-view");
   }
 
+  function flash(text) { var n = document.getElementById("flash"); n.textContent = text; show("flash", !!text); }
+
   function showLogin(message) {
     csrf = null;
     if (timer !== null) { clearInterval(timer); timer = null; }
     show("login", true);
     show("logout", false);
+    flash("");
     show("askview", false);
     show("main", false);
     document.getElementById("counts").textContent = "";
@@ -611,9 +616,9 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     view.textContent = "";
     var card = el("div", "card");
     card.setAttribute("data-ask-view", ask.id);
-    var back = el("a", null, "← Inbox");
+    var back = el("a", "back", "← Inbox");
     back.href = "#";
-    card.appendChild(back);
+    view.appendChild(back);
     card.appendChild(el("h2", "ask-title", ask.title));
     var meta = [ask.project, "asked " + ago(ask.created_at, nowMs()), "by " + ask.created_by];
     card.appendChild(el("div", "meta", meta.join(" · ")));
@@ -660,7 +665,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
       status.textContent = "Sending…";
       api("POST", "api/asks/" + encodeURIComponent(ask.id) + "/answer", { answers: readAnswers(form, ask) }).then(function (r) {
         submit.disabled = false;
-        if (r.status === 200 && r.data) { renderAsk(r.data); load(); return; }
+        if (r.status === 200 && r.data) { flash("Answers sent: " + ask.title); location.hash = ""; load(); return; }
         status.className = "notice bad";
         var errs = r.data && Array.isArray(r.data.errors) ? r.data.errors.join("; ") : (r.data && r.data.error) || ("HTTP " + r.status);
         status.textContent = "Not sent: " + errs;
@@ -672,10 +677,11 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
       });
     });
     cancel.addEventListener("click", function () {
+      cancel.disabled = true;
       api("POST", "api/asks/" + encodeURIComponent(ask.id) + "/cancel").then(function (r) {
-        if (r.status === 200 && r.data) { renderAsk(r.data); load(); }
-        else { status.className = "notice bad"; status.textContent = "Not cancelled: HTTP " + r.status; }
-      }).catch(function (err) { if (err instanceof Unauthorized) showLogin("Your session ended. Log in again."); });
+        if (r.status === 200 && r.data) { flash("Ask cancelled: " + ask.title); location.hash = ""; load(); }
+        else { cancel.disabled = false; status.className = "notice bad"; status.textContent = "Not cancelled: HTTP " + r.status; }
+      }).catch(function (err) { cancel.disabled = false; if (err instanceof Unauthorized) showLogin("Your session ended. Log in again."); });
     });
     card.appendChild(form);
     view.appendChild(card);
@@ -684,10 +690,12 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
   function route() {
     var m = /^#ask=([A-Za-z0-9-]+)$/.exec(location.hash);
     if (!m) {
+      document.getElementById("askview").textContent = "";
       show("askview", false);
       show("main", true);
       return;
     }
+    flash("");
     show("main", false);
     show("askview", true);
     var view = document.getElementById("askview");
