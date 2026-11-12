@@ -32,6 +32,10 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Changed
 
+- `/implement` asks the `verify_after_merge` question only for commands the profile does not trust (a
+  `verify.fast`/`verify.dod` entry, a new `verify.after_merge_allow` prefix, a `ci.dispatchable` dispatch),
+  and asks nothing at the start when there are no manual steps either; new `tld plan check-commands`.
+  `/make-plan` no longer adds the standing `mb0-second-user` step: implement already checks the identity.
 - The CLI launcher moved from `bin/tld` to `launcher/tld`: claude.ai refuses to sync a plugin with a top-level `bin/`
   directory. Call `launcher/tld` from a checkout; the installed `tld` command is unchanged.
 

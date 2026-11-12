@@ -31,6 +31,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld plan validate-manifest PLAN [--profile P]` | `tld.plan.manifest` | validate a plan's implementation manifest |
 | `tld plan scope-check check\|disposition\|record\|section ...` | `tld.plan.scope` | scope-drift checks of `/implement` |
 | `tld plan check-url URL [--repo O/N] [--main B]` | `tld.plan.phases` | accept a plan URL only from this repository's main branch or a `plan/<slug>` branch (S14); prints owner, repo, ref, path |
+| `tld plan check-commands PLAN --profile P` | `tld.plan.phases` | which `verify_after_merge` commands the profile trusts (a verify entry, a `verify.after_merge_allow` prefix, a `ci.dispatchable` dispatch); prints `{"trusted", "unknown"}` (S14) |
 | `tld plan branch-name --plan-slug S \| --review-slug S \| --manifest PLAN [--phase ID [--rev N] \| --fix N]` | `tld.plan.phases` | the branch names of the playbooks (C12) |
 | `tld plan phase-status PLAN [--ref R] [--running ID]... [--approved ID]... [--repo DIR]` | `tld.plan.phases` | done (by `Plan-Phase` trailers on the branch's own, unreverted commits), approved (`Plan-Gate-Approved` trailers or `--approved`), gated, ready, waiting phases and the ones to start, as JSON |
 | `tld roles required --profile P --at POINT [--changed F]` | `tld.roles.dispatch` | the roles required at a point, with their mode, as JSON |
