@@ -11,6 +11,7 @@ import importlib
 import json
 import os
 import re
+import stat
 import sys
 from pathlib import Path
 from typing import NamedTuple
@@ -26,7 +27,7 @@ from tld.guard.action import Action, Decision, Settings  # noqa: E402
 GUARDS = {"no-merge": ("tld.guard.no_merge", True), "no-force-push": ("tld.guard.no_force_push", True),
           "no-git-tag": ("tld.guard.no_git_tag", True), "secret-scan": ("tld.guard.secret_scan", False),
           "protect-paths": ("tld.guard.protect_paths", False), "dod-gate": ("tld.dod.gate", False),
-          "plan-gate": ("tld.guard.plan_gate", False)}
+          "plan-gate": ("tld.guard.plan_gate", False), "model-check": ("tld.guard.model_check", False)}
 WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 # Claude Code's own configuration: a session that edits it could switch the hooks off.
 PROTECTED = ("~/.claude/**", ".claude/settings.json", ".claude/settings.local.json", ".claude/hooks/**", ".mcp.json")
@@ -63,6 +64,66 @@ def invoked_command(prompt: str) -> str | None:
     return m.group(1) if m and m.group(1) in known_commands() else None
 
 
+def level_of(model: object) -> str | None:
+    """The level (strong, standard, fast) of a model string, by family; None for anything else."""
+    if not isinstance(model, str):
+        return None
+    name = model.lower()
+    for family, level in (("opus", "strong"), ("sonnet", "standard"), ("haiku", "fast")):
+        if family in name:
+            return level
+    return None
+
+
+TRANSCRIPT_TAIL = 262144
+
+
+def transcript_level(path: object) -> str | None:
+    """The level of the newest assistant entry in the tail of a transcript file, or None."""
+    try:
+        if not isinstance(path, str) or not path:
+            return None
+        if not stat.S_ISREG(os.stat(path).st_mode):  # a FIFO would block the hook
+            return None
+        with open(path, "rb") as fh:
+            size = fh.seek(0, os.SEEK_END)
+            start = max(0, size - TRANSCRIPT_TAIL)
+            fh.seek(start)
+            data = fh.read()
+        lines = data.decode("utf-8", errors="replace").splitlines()
+        if start > 0 and lines:
+            lines = lines[1:]  # the first line may be cut in half
+        for line in reversed(lines):
+            try:
+                obj = json.loads(line)
+            except ValueError:
+                continue
+            msg = obj.get("message") if isinstance(obj, dict) else None
+            if isinstance(obj, dict) and obj.get("type") == "assistant" and isinstance(msg, dict) \
+                    and isinstance(msg.get("model"), str):
+                return level_of(msg["model"])
+    except Exception:  # noqa: BLE001 - an unreadable transcript only means an unknown level
+        return None
+    return None
+
+
+def command_level(name: str) -> str:
+    """The level a command is meant for: its `model:` front matter line; `standard` without one."""
+    try:
+        text = (Path(__file__).resolve().parents[1] / "commands" / f"{name}.md").read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return "standard"
+    lines = text.splitlines()
+    if lines and lines[0].strip() == "---":
+        for line in lines[1:]:
+            if line.strip() == "---":
+                break
+            key, _, value = line.partition(":")
+            if key.strip() == "model":
+                return level_of(value.strip().strip("\"'")) or "standard"
+    return "standard"
+
+
 def _sid(payload: dict) -> str | None:
     sid = payload.get("session_id")
     return None if sid is None else str(sid)
@@ -91,7 +152,13 @@ def to_action(payload: dict, project_dir: str | None = None) -> Action | None:
         text = payload.get("prompt")
         if not isinstance(text, str):
             return None
-        return Action("prompt", project, cwd, prompt=text, invoked=invoked_command(text), session_id=_sid(payload))
+        invoked = invoked_command(text)
+        return Action("prompt", project, cwd, prompt=text, invoked=invoked, session_id=_sid(payload),
+                      session_level=transcript_level(payload.get("transcript_path")),
+                      command_level=command_level(invoked) if invoked else None)
+    if payload.get("hook_event_name") == "SessionStart":
+        return Action("session_start", project, cwd, session_id=_sid(payload),
+                      session_level=level_of(payload.get("model")))
     if payload.get("hook_event_name") == "Stop" or (not tool and "stop_hook_active" in payload):
         return Action("stop", project, cwd, session_id=_sid(payload),
                       continuing=bool(payload.get("stop_hook_active")))
@@ -143,7 +210,7 @@ def execute(name: str, stdin_text: str) -> Result:
             raise ValueError("the event is not a JSON object")
     except ValueError as exc:
         return to_result(_common.problem(name, fail_closed, f"cannot read the hook event ({exc})."))
-    prompt = payload.get("hook_event_name") == "UserPromptSubmit"
+    prompt = payload.get("hook_event_name") in ("UserPromptSubmit", "SessionStart")
     try:
         return to_result(decide(name, payload), prompt)
     except Exception as exc:  # noqa: BLE001 - loading the guard failed
