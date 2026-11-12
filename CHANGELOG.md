@@ -19,11 +19,13 @@ entry of the released version at the top of the GitHub release, above the list o
 - The opt-in `plan-gate` hook (`hooks.plan_gate.enabled`): a session that no tld command started cannot write into the repository and is told to propose `/tld:make-plan`.
 - The `ask` skill (`/tld:ask`): answers without changing anything and turns a change request into a `/tld:make-plan` proposal.
 - Answer an ask in the chat: an attended session shows each ask in the conversation too (`tld board ask-text`), reads the owner's reply there (`tld board answers --from-reply`) and cancels the board copy, and checks the board on its own every 10 minutes for an hour, then hourly for 24 hours. Before, a board answer woke nothing and the owner had to message the session anyway.
+- Install with curl: one line installs or upgrades the `tld` command, another the board server (Docker Compose). A release now carries the wheel, the sdist, `install.sh`, `compose.yaml` and `SHA256SUMS`, and the multi-arch board image `ghcr.io/tkcs-lab/tld-board` is pushed by the release workflow.
 
 ### Fixed
 
 - The board client and repo-admin send `User-Agent: tld/<version>` instead of urllib's default, which Cloudflare's
   Browser Integrity Check refuses (error 1010), so a board behind Cloudflare is reachable from a session.
+- The plan-gate now opens when a slash command reaches the hook expanded (`<command-name>/tld:...</command-name>` after `<system-reminder>` blocks), not only when it is typed as the first characters.
 
 ### Changed
 

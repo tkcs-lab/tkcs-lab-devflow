@@ -482,3 +482,12 @@ def test_foreign_symlink_is_not_replaced(tmp_path, release) -> None:
     assert "was not made by this installer" in r.stderr
     assert os.readlink(link(tmp_path)) == "/usr/bin/true"
     assert "9.9.9" not in venvs(tmp_path)
+
+
+def test_docs_name_every_installer_variable() -> None:
+    """Every TLD_* name the installer reads is in the delivery or board-server guide."""
+    text = (ROOT / "docs" / "guides" / "delivery.md").read_text() + (ROOT / "docs" / "guides" / "board-server.md").read_text()
+    names = set(re.findall(r"TLD_[A-Z_]+", INSTALL.read_text()))
+    assert {"TLD_VERSION", "TLD_PYTHON", "TLD_BIN_DIR", "TLD_BOARD_DIR"} <= names
+    for name in sorted(names):
+        assert name in text, name

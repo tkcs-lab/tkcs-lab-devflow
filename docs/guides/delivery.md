@@ -38,16 +38,40 @@ of it: `~/.claude/plugins/cache/tkcs-lab-devflow/tld/<version>/` after an instal
 ## The command line
 
 ```
-pip install git+https://github.com/tkcs-lab/tkcs-lab-devflow@v1.0.0   # a release tag; the console script tld
-cli/tld --help                                                         # or, from a checkout, without installing
+curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download/install.sh | sh              # the tld command
+cli/tld --help                                                                                    # or, from a checkout, without installing
 ```
 
-Python 3.11+ and PyYAML. [cli.md](../reference/cli.md) lists every command.
+Python 3.11+ (PyYAML is installed with it). The installer downloads the release wheel and `SHA256SUMS`, checks the
+wheel, builds a private virtual environment per version under `~/.local/share/tld/venvs`, runs `tld --version` in it
+and only then points the link `~/.local/bin/tld` at it. The previous venv is kept for rollback; older ones are
+removed. A file `~/.local/bin/tld` that is not a link made by the installer is never overwritten. If no interpreter
+of 3.11 or newer is found, set `TLD_PYTHON`. Other variables: `TLD_VERSION`, `TLD_BIN_DIR`, `TLD_BOARD_DIR`,
+`XDG_DATA_HOME`. Three more exist for the installer's own tests: `TLD_RELEASE_BASE` (where the files are downloaded from), `TLD_PIP_ARGS` and `TLD_VENV_ARGS` (extra arguments for pip and `venv`); do not set them outside tests: a `TLD_RELEASE_BASE` that is not https turns off the installer's TLS enforcement, and the checksum then proves nothing. The board is installed with `... | sh -s -- board` (see [board-server.md](board-server.md)).
+
+Upgrade = run the same line again. Without the installer, from the wheel:
+`pip install https://github.com/tkcs-lab/tkcs-lab-devflow/releases/download/vX.Y.Z/tld-X.Y.Z-py3-none-any.whl`. Do not `pip install tld`: that name on PyPI is
+another package. [cli.md](../reference/cli.md) lists every command.
 
 ## Versions
 
 Releases are tags `vX.Y.Z` with a GitHub release (notes from CHANGELOG.md and the merged pull requests), cut by
-the owner with this repository's release workflow. The plugin version in `.claude-plugin/plugin.json` and the
+the owner with this repository's release workflow. A release carries five assets:
+
+| Asset | What it is |
+|---|---|
+| `tld-X.Y.Z-py3-none-any.whl` | the command line (the package `src/tld`) |
+| `tld-X.Y.Z.tar.gz` | the source distribution |
+| `install.sh` | the installer, stamped with the version |
+| `compose.yaml` | the board's compose file, stamped with the image digest |
+| `SHA256SUMS` | sha256 of the other four |
+
+A release before 1.1.0 has no assets: `TLD_VERSION=1.0.0` fails with a "cannot download ... (a release before the
+first one with installer assets has none)" message. To pin a version run that release's own installer
+(`curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/download/vX.Y.Z/install.sh | sh`); the latest installer also takes `... | TLD_VERSION=X.Y.Z sh`.
+The latest installer is `https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download/install.sh`.
+
+The plugin version in `.claude-plugin/plugin.json` and the
 package version are the same string, so a Claude Project caches one copy per release.
 
 A Claude Project installs the marketplace's current version; there is no per-repository pin of the plugin.
@@ -56,9 +80,9 @@ What a repository pins is compatibility: `tld.version` in its profile (`">=1.0,<
 `'tld.version': this profile needs tld >=1.0,<2, but tld 2.0.0 is running` when the installed tld does not
 satisfy it; the session stops before doing anything. Read the release notes, then raise the specifier in a pull
 request. A development build (`1.1.0.dev0`) counts as the release it leads to. To run a fixed version of the
-command line, install that tag (above).
+command line, install that release (above).
 
-Upgrade by updating the plugin in the Project; a new session picks it up.
+Upgrade the plugin by updating it in the Project; a new session picks it up.
 
 ## Not tested end to end
 
@@ -69,4 +93,6 @@ marketplace and its plugin, and `claude plugin marketplace add <path>` followed 
 ## Uninstall
 
 Disable the plugin in the Claude Project settings. In a cloud session there is nothing else: the container goes
-away. `pip uninstall tld` removes the command line.
+away. The command line installed by the installer: `curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download/install.sh | sh -s -- uninstall`
+removes the link and the venvs. A board directory is left alone; `docker compose down` in it stops the board (the
+data volume stays). A command line installed with pip: `pip uninstall tld`.
