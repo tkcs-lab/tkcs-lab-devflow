@@ -40,6 +40,7 @@ shims; `CLAUDE_PROJECT_DIR` and `stop_hook_active` are read only here.
 | `secret-scan` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | content that looks like a credential | A secret in a file ends up in history | a GitHub token or a private key block; `API_KEY = os.environ["API_KEY"]` |
 | `protect-paths` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` | edits to paths the profile lists | Some files are changed by people or by tools, not by hand | `echo x > .env`; `echo x > .env.example` |
 | `plan-gate` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, the GitHub MCP content-write tools (`push_files`, `create_or_update_file`, `delete_file`); UserPromptSubmit (opt-in) | writes into the repository from a session no tld command started | A chat message must not start an implementation | `echo x > README.md`; `ls` |
+| `board-gate` | UserPromptSubmit, PostToolUse (`Bash`, the `board_set` tool of the board MCP server), Stop (opt-in) | ending a turn before the status record is written, once | A session that skips its record is not on the board | stop after `/tld:docs x` with no record write; stop after `board_set` succeeded |
 | `model-check` | SessionStart, UserPromptSubmit | nothing (a `systemMessage` warning only) | The most expensive level is easy to forget | strong session + `/tld:implement x` warns; strong session + `/tld:make-plan x` does not |
 | `dod-gate` | Stop | stopping while `verify.dod` is red (opt-in) | Work is not done until the definition of done passes | stop with a failing test; stop after `/dod` is green |
 
@@ -270,6 +271,24 @@ itself would open it, a marker survives in a reused container, `end-allow` would
 blocked. (3) It shares `write_targets` with `protect-paths`. (4) It covers the GitHub content-write tools. (5) `enabled` from
 the working tree, `disable` from the trusted copy.
 
+### `board-gate`
+
+Opt-in, off by default: set `hooks.board_gate.enabled` to `true`. A session that a record-writing tld command started
+(`make-plan`, `implement`, `review`, `setup`, `migrate`, `land`, `deps`, `upstream`, `docs`, `ci`) must write its status
+record to the board once before it ends a turn. It is a nudge, not a control.
+
+- **Three events.** `UserPromptSubmit`: a prompt that starts with one of those commands opens a record of the session
+  (`written` false). `PostToolUse` (matcher `Bash|mcp__.*tld-board.*__board_set`): a successful record write sets
+  `written`: the `board_set` tool returned an object with an `id` and a `version`, or a `tld board client set` command
+  printed one. It never denies. `Stop`: if the session has not written and a board is configured (`TLD_BOARD_URL` and
+  `TLD_BOARD_TOKEN`), the turn end is blocked **once** with a message that says how to write the record (the `board_set`
+  tool, or `tld board client set <id> -` when the tool is missing or fails); the next stop is allowed.
+- **State.** `<git dir>/tld/board-gate/<hash>.json`, named by a hash of the session id (`command`, `opened_at`,
+  `written`, `blocked`); it lapses after 24 hours. No session id: nothing is written and nothing blocks.
+- **Fails open.** No board configured, a malformed `hooks.board_gate`, an unreadable state file, any error: allow. The hook
+  never calls the board. `enabled` is read from the working tree, `hooks.disable` from the trusted copy, and only on
+  `Stop`, so a malformed `hooks.disable` can never make it block.
+
 ## How the dod-gate recognises a session
 
 The question is which sessions the gate must **not** block. The `/implement` orchestrator legitimately stops at
@@ -322,6 +341,8 @@ hooks:
     max_attempts: 3          # 1..10; a value outside that range is a profile error
   plan_gate:
     enabled: false           # opt in: no writes into the repository from a session no tld command started
+  board_gate:
+    enabled: false           # opt in: a record-writing tld command cannot end its turn before it wrote its board record once
 ```
 
 Project facts the hooks read from elsewhere in the profile: `git.main_branch` (`no-merge` when it sees a `git push` or a
@@ -339,7 +360,7 @@ Reference: [profile-reference.md](../reference/profile-reference.md).
 
 ```yaml
 hooks:
-  disable: [protect-paths]   # any of no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate, plan-gate, model-check
+  disable: [protect-paths]   # any of no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate, plan-gate, model-check, board-gate
 ```
 
 `hooks.disable` and the protect lists are read from the **trusted copy** of the profile, not from the working tree, so a

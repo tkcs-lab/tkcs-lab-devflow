@@ -28,7 +28,7 @@ def entries():
 
 def test_hooks_json_is_valid_and_every_script_exists():
     data = json.loads(HOOKS_JSON.read_text())
-    assert set(data["hooks"]) == {"PreToolUse", "UserPromptSubmit", "SessionStart", "Stop"}
+    assert set(data["hooks"]) == {"PreToolUse", "PostToolUse", "UserPromptSubmit", "SessionStart", "Stop"}
     scripts = []
     for event_name, matcher, hook in entries():
         assert hook["type"] == "command" and isinstance(hook["timeout"], int) and hook["timeout"] > 0
@@ -36,12 +36,12 @@ def test_hooks_json_is_valid_and_every_script_exists():
         assert m, hook["command"]
         assert (HOOKS / m.group(1)).is_file(), m.group(1)
         scripts.append(m.group(1))
-        if event_name == "PreToolUse":
+        if event_name in ("PreToolUse", "PostToolUse"):
             assert matcher and re.compile(matcher)
         else:
             assert matcher is None
-    expected = sorted([f"{m}.py" for m in MODULES.values()] + ["plan_gate.py", "model_check.py"])
-    assert sorted(scripts) == expected, "each hook is registered once, plan_gate.py twice (UserPromptSubmit and PreToolUse), model_check.py twice (UserPromptSubmit and SessionStart)"
+    expected = sorted([f"{m}.py" for m in MODULES.values()] + ["plan_gate.py", "model_check.py", "board_gate.py", "board_gate.py"])
+    assert sorted(scripts) == expected, "each hook is registered once, plan_gate.py twice (UserPromptSubmit and PreToolUse), model_check.py twice (UserPromptSubmit and SessionStart), board_gate.py three times (UserPromptSubmit, PostToolUse, Stop)"
 
 
 @pytest.mark.parametrize("script, tool, listens", [
@@ -61,10 +61,13 @@ def test_hooks_json_is_valid_and_every_script_exists():
     ("protect_paths.py", "Bash", True), ("protect_paths.py", "Read", False),
     ("plan_gate.py", "Write", True), ("plan_gate.py", "Bash", True), ("plan_gate.py", "mcp__github__push_files", True),
     ("plan_gate.py", "mcp__github__create_branch", False), ("plan_gate.py", "Read", False),
+    ("board_gate.py", "mcp__plugin_tld_tld-board__board_set", True), ("board_gate.py", "Bash", True),
+    ("board_gate.py", "mcp__plugin_tld_tld-board__board_get", False), ("board_gate.py", "Read", False),
+    ("board_gate.py", "mcp__github__push_files", False),
 ])
 def test_matchers(script, tool, listens):
     for event_name, matcher, hook in entries():
-        if event_name == "PreToolUse" and hook["command"].endswith(f'/hooks/{script}"'):
+        if event_name in ("PreToolUse", "PostToolUse") and hook["command"].endswith(f'/hooks/{script}"'):
             assert matcher_matches(matcher, tool) is listens, (script, matcher, tool)
 
 
@@ -144,6 +147,7 @@ def test_schema_defaults_equal_the_hooks_built_in_defaults():
     assert gate["enabled"]["x-hook-default"] is False
     assert gate["max_attempts"]["x-hook-default"] == _common.DEFAULT_MAX_ATTEMPTS
     assert props["plan_gate"]["properties"]["enabled"]["x-hook-default"] is False
+    assert props["board_gate"]["properties"]["enabled"]["x-hook-default"] is False
 
 
 def test_template_documents_the_defaults_and_stays_valid(vp):
@@ -169,6 +173,7 @@ def test_template_documents_the_defaults_and_stays_valid(vp):
     ({"dod_gate": {"max_attempts": 0}}, "'hooks.dod_gate.max_attempts': must be at least 1"),
     ({"dod_gate": {"enabled": "yes"}}, "'hooks.dod_gate.enabled': must be true/false"),
     ({"plan_gate": {"enabled": "yes"}}, "'hooks.plan_gate.enabled': must be true/false"),
+    ({"board_gate": {"enabled": "yes"}}, "'hooks.board_gate.enabled': must be true/false"),
     ({"protect_paths": ".env"}, "'hooks.protect_paths': must be a list"),
     ({"mystery": 1}, "unknown key 'hooks.mystery'"),
 ])

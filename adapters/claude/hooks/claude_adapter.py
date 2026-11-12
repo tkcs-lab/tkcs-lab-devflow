@@ -27,7 +27,8 @@ from tld.guard.action import Action, Decision, Settings  # noqa: E402
 GUARDS = {"no-merge": ("tld.guard.no_merge", True), "no-force-push": ("tld.guard.no_force_push", True),
           "no-git-tag": ("tld.guard.no_git_tag", True), "secret-scan": ("tld.guard.secret_scan", False),
           "protect-paths": ("tld.guard.protect_paths", False), "dod-gate": ("tld.dod.gate", False),
-          "plan-gate": ("tld.guard.plan_gate", False), "model-check": ("tld.guard.model_check", False)}
+          "plan-gate": ("tld.guard.plan_gate", False), "model-check": ("tld.guard.model_check", False),
+          "board-gate": ("tld.guard.board_gate", False)}
 WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 # Claude Code's own configuration: a session that edits it could switch the hooks off.
 PROTECTED = ("~/.claude/**", ".claude/settings.json", ".claude/settings.local.json", ".claude/hooks/**", ".mcp.json")
@@ -142,6 +143,26 @@ def _sid(payload: dict) -> str | None:
     return None if sid is None else str(sid)
 
 
+BOARD_SET = re.compile(r"^mcp__.*tld-board.*__board_set$")
+
+
+def _texts(items: object) -> str:
+    if not isinstance(items, list):
+        return ""
+    return "\n".join(i["text"] for i in items if isinstance(i, dict) and isinstance(i.get("text"), str))
+
+
+def _result_text(response: object) -> str:
+    """The text a tool returned: a string as is; a mapping's `stdout`, else its `content` texts; a list's texts."""
+    if isinstance(response, str):
+        return response
+    if isinstance(response, dict):
+        if isinstance(response.get("stdout"), str):
+            return response["stdout"]
+        return _texts(response.get("content"))
+    return _texts(response)
+
+
 def _content(tool: str, ti: dict) -> tuple[tuple[str, str], ...]:
     if tool == "Write":
         pieces = [("the new file content", ti.get("content"))]
@@ -161,6 +182,16 @@ def to_action(payload: dict, project_dir: str | None = None) -> Action | None:
     project = project_dir or _common.find_project(cwd, os.environ.get("CLAUDE_PROJECT_DIR") or None)[0]
     ti = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
     tool = str(payload.get("tool_name") or "")
+    if payload.get("hook_event_name") == "PostToolUse":
+        output = _result_text(payload.get("tool_response"))
+        if tool == "Bash":
+            command = ti.get("command")
+            return Action("tool_result", project, cwd, command=command, output=output, session_id=_sid(payload)) \
+                if isinstance(command, str) else None
+        if BOARD_SET.match(tool):
+            return Action("tool_result", project, cwd, op="board_set", args=dict(ti), output=output,
+                          session_id=_sid(payload))
+        return None
     if payload.get("hook_event_name") == "UserPromptSubmit":
         text = payload.get("prompt")
         if not isinstance(text, str):
