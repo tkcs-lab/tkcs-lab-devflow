@@ -41,6 +41,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("board", "client"): ("tld.board.client", (), "health | list | get | set | delete of status records"),
     ("board", "mcp-stdio"): ("tld.board.mcp_stdio", (), "MCP stdio bridge to the board server"),
     ("board", "stale"): ("tld.board.stale", (), "print the ids of hidden status records"),
+    ("board", "resolve"): ("tld.board.resolve", (), "clear needs_you of a record whose pull requests are all merged or closed"),
     ("board", "build"): ("tld.board.build", (), "build the self-contained board page"),
     ("board", "validate-record"): ("tld.board.record", (), "validate a status record"),
     ("board", "project-slug"): ("tld.board.record", ("project-slug",), "the project slug of owner/name"),
