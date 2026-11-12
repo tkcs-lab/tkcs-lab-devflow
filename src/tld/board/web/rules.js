@@ -46,6 +46,48 @@ function drift(phase) {
   return { text: "drift " + n, title: title, level: c ? "collision" : "drift" };
 }
 
+// Owner dismissal: the entry carries a dismissed_at made on its current version and still needs the owner.
+function isDismissed(entry) {
+  return typeof entry.dismissed_at === "string" && entry.data.needs_you === true;
+}
+
+// An ask belongs to an entry by its record field, else by session and project.
+function linksTo(ask, entry) {
+  if (typeof ask.record === "string") return ask.record === entry.id;
+  var session = entry.data.orchestrator_session;
+  return typeof session === "string" && session !== "" &&
+    ask.created_by === session && ask.project === entry.data.project;
+}
+
+function linkedAsks(entry, asks) {
+  return asks.filter(function (ask) { return linksTo(ask, entry); });
+}
+
+// The answered linked ask that arrived since the entry began waiting (none open), else null.
+function answerReceived(entry, asks) {
+  var linked = linkedAsks(entry, asks);
+  if (linked.some(function (ask) { return ask.state === "open"; })) return null;
+  var since = Date.parse(entry.data.needs_you_since);
+  for (var i = 0; i < linked.length; i++) {
+    if (linked[i].state === "answered" && Date.parse(linked[i].answered_at) >= since) return linked[i];
+  }
+  return null;
+}
+
+// Where an entry is drawn: {section, badge, ask}. section adds "linked" (no record card: the open ask is the card).
+function place(entry, asks, nowMs) {
+  var rec = entry.data;
+  if (rec.needs_you === true) {
+    if (isDismissed(entry)) return { section: "hidden", badge: "dismissed", ask: null };
+    var linked = linkedAsks(entry, asks);
+    if (linked.some(function (ask) { return ask.state === "open"; })) return { section: "linked", badge: null, ask: null };
+    var answered = answerReceived(entry, asks);
+    if (answered) return { section: "running", badge: "answer_received", ask: answered };
+  }
+  return { section: section(rec, nowMs), badge: null, ask: null };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { elapsed: elapsed, isHidden: isHidden, isSilent: isSilent, section: section, drift: drift };
+  module.exports = { elapsed: elapsed, isHidden: isHidden, isSilent: isSilent, section: section, drift: drift,
+    isDismissed: isDismissed, linksTo: linksTo, linkedAsks: linkedAsks, answerReceived: answerReceived, place: place };
 }

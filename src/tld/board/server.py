@@ -60,6 +60,8 @@ ROUTES = (
     (re.compile(r"^/api/session$"), "session", ("GET",)),
     (re.compile(r"^/api/records$"), "records", ("GET",)),
     (re.compile(r"^/api/records/([^/]+)$"), "record", ("GET", "PUT", "DELETE")),
+    (re.compile(r"^/api/records/([^/]+)/dismiss$"), "dismiss", ("POST",)),
+    (re.compile(r"^/api/records/([^/]+)/restore$"), "restore", ("POST",)),
     (re.compile(r"^/api/asks$"), "asks", ("GET", "POST")),
     (re.compile(r"^/api/asks/([^/]+)$"), "ask", ("GET",)),
     (re.compile(r"^/api/asks/([^/]+)/answer$"), "answer", ("POST",)),
@@ -77,6 +79,8 @@ POLICY: dict[tuple[str, str], frozenset[str]] = {
     ("record", "GET"): frozenset({SESSION, OWNER}),
     ("record", "PUT"): frozenset({SESSION}),
     ("record", "DELETE"): frozenset({SESSION}),
+    ("dismiss", "POST"): frozenset({OWNER}),
+    ("restore", "POST"): frozenset({OWNER}),
     ("asks", "GET"): frozenset({SESSION, OWNER}),
     ("asks", "POST"): frozenset({SESSION}),
     ("ask", "GET"): frozenset({SESSION, OWNER}),
@@ -506,6 +510,37 @@ class Handler(BaseHTTPRequestHandler):
             self._error(409, "version_conflict", current=exc.current)
         except Invalid as exc:
             self._error(422, "invalid", errors=exc.errors)
+        else:
+            self._json(200, result)
+
+    def _do_dismiss(self, method, doc_id, principal) -> None:
+        ok, payload = self._read_json()
+        if not ok:
+            return
+        version = payload.get("version") if isinstance(payload, dict) else None
+        if (not isinstance(payload, dict) or set(payload) != {"version"} or isinstance(version, bool)
+                or not isinstance(version, int) or version < 1):
+            self._error(400, "bad_request")
+            return
+        try:
+            result = self.server.store.dismiss(doc_id or "", version)
+        except NotFound:
+            self._error(404, "not_found")
+        except Conflict as exc:
+            self._error(409, "version_conflict", current=exc.current)
+        except Invalid:
+            self._error(409, "not_needs_you")
+        else:
+            self._json(200, result)
+
+    def _do_restore(self, method, doc_id, principal) -> None:
+        if self.headers.get("Content-Length", "0").strip() not in ("", "0"):
+            if self._read_body() is None:
+                return
+        try:
+            result = self.server.store.restore(doc_id or "")
+        except NotFound:
+            self._error(404, "not_found")
         else:
             self._json(200, result)
 
