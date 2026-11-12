@@ -148,7 +148,7 @@ def _is_plan_record(entry: str, plan_dir: str, plan_slug: str = "") -> bool:
     """True when a touches entry grants write scope over <plan_dir>/<slug>/plan.md or deviations.md.
 
     Judged with `path_matches`, the matcher that enforces scope, so globs (`docs/plans/*`, `**/plan.md`),
-    directory prefixes (`docs/plans/14/`), whitespace and `..` spellings count. A glob counts only when it aims
+    directory prefixes (`docs/plans/14/`), whitespace and `..` spellings count. A glob or directory counts only when it aims
     at the plan records (its literal prefix is inside `plan_dir`, it ends in plan.md or deviations.md, or it is `*`/`**`);
     a broad docs glob such as `docs/*.md` is left to the overlap check. The records tried are those of
     this plan's slug, of a placeholder slug and of the slug the entry itself names. A bare `<plan_dir>/` entry
@@ -174,7 +174,7 @@ def _is_plan_record(entry: str, plan_dir: str, plan_slug: str = "") -> bool:
         slugs.add(clean(parts[depth]))
     if len(parts) >= 2 and re.search(r"[A-Za-z]", parts[-1]):
         slugs.add(clean(parts[-2]))
-    if wild:  # `docs/*.md` is an ordinary docs phase: a glob counts only when it aims at the plan records
+    if wild or name.endswith("/"):  # `docs/*.md` and `docs/` are ordinary docs phases: they count only when aimed
         aims = ((depth >= 2 and _static_prefix(name).startswith(base + "/")) or parts[-1] in ("plan.md", "deviations.md")
                 or all(seg in ("*", "**") for seg in parts))
         if not aims:
