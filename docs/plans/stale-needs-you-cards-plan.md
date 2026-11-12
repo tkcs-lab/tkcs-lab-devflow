@@ -123,7 +123,7 @@ A cancelled linked ask has no effect (the card is the ordinary `needs_you` card)
 
 ### 3.4 The page (`src/tld/board/web/board.html`)
 
-- `render` groups entries by `place(entry, lastAsks, now).section` and skips `linked`.
+- `render` groups entries by `place(entry, asks, now).section` and skips `linked`.
 - A record in `running` with badge `answer_received` is drawn by a new `answeredRow`: head line with the badge
   `✓ answer received`, then the meta line `Waiting for the session to continue · answered <ago(ask.answered_at)>`.
 - A `Dismiss` button (class `quiet`, `data-action="dismiss"`) is in the detail block of every `needs_you` card
@@ -151,7 +151,7 @@ A cancelled linked ask has no effect (the card is the ordinary `needs_you` card)
   fails `record.validate`. `resolve` never reads the network.
 - `playbooks/board.md` prune adds a second list: a record with `data.needs_you` true that is not in the stale
   output and that names at least one pull request number (`phases[].pr` or `pr.number`), where
-  `github.pr_read` says every one of them is merged or closed. One `ask_human` with a `confirm` question per list.
+  `github.pr_read` says every one of them is merged or closed. One `ask_human` with a `confirm` question per non-empty list; both lists empty: say `Nothing to prune` and stop.
   On yes, per record: `tld board client get <id>`, `tld board resolve` on its `data`, then
   `tld board client set <id> - --if-version <n>` (a `version_conflict`: leave the record, say so). A record with no
   pull request number, or with one still open, is never offered.
@@ -161,7 +161,7 @@ A cancelled linked ask has no effect (the card is the ordinary `needs_you` card)
 - `playbooks/land.md`: a new section 0 "Reconcile" (read the old record `<project>--land`, report each pull
   request it names as carried over (still open) or settled (merged or closed), never carry a `needs_you` over:
   the first write replaces the record). `needs_you` is set only for: the `land_order` error, a non-mechanical
-  conflict, red integration CI, the missing workflows permission, and the missing token. The integration draft
+  conflict, red integration CI, and the missing workflows permission. The integration draft
   and the workflow pull request are items (`integration`, `workflow`) with their `pr` number; no `needs_you`
   for `Review PR #<n>`. The final record is `pr_open` with `needs_you` false unless one of the blocking cases
   above happened.
@@ -190,7 +190,7 @@ A cancelled linked ask has no effect (the card is the ordinary `needs_you` card)
 ### 3.8 Existing tests this change touches
 
 `tests/core/test_board_store.py:122,123,139` (schema 3, whole-entry equality), `tests/core/test_board_deploy.py:101`
-(every route is in the guide), `tests/core/test_board_server.py:42` (the auth matrix lists every route),
+(every route is in the guide), `tests/core/test_board_server.py:44` (the auth matrix lists every route),
 `tests/core/test_board_inbox.py:49` (`schema` properties equal `ask.FIELDS` in order), `tests/core/test_board.py:59`
 (page writes no record). The 13-record fixture `tests/fixtures/board-records.json` and its three checks
 (`tests/board_rules_check.js`, `tests/board_render_check.js`, `tests/core/test_board_rules.py`) are not edited.
@@ -236,8 +236,7 @@ The new board uses database schema 4; an older image refuses it, so a backup is 
    card for it and no second card for the run.
 2. Answer the ask on the board. Within a minute the run moves to "Running" with "answer received"; it never shows
    "needs you".
-3. In a session, write a record that needs you (`/tld:land` with nothing to land is enough, or ask the session to
-   `board_set` a test record with `needs_you` true). On its card tap "Dismiss": it moves to "Hidden" with
+3. In a session, ask it to `board_set` a test record with `needs_you` true. On its card tap "Dismiss": it moves to "Hidden" with
    "dismissed". Tap "Restore": it returns to "Needs you".
 4. Run `/tld:board prune` in a session. It lists dismissed records and `needs_you` records whose pull requests are
    all merged or closed; say no, nothing is changed.
@@ -261,8 +260,7 @@ The new board uses database schema 4; an older image refuses it, so a backup is 
 - **Rolling the board back** needs the backup of ma1 (schema 4 is refused by an older image). The guide says so
   (phase p1).
 - **Mixed deploys**: a session on the new playbooks posts asks with `record` to an old board; the old board's ask
-  validation rejects the unknown field with 422. Deploy the board first (ma1), then update the plugin. A worker
-  that cannot make this order safe stops with `status=blocked`.
+  validation rejects the unknown field with 422. Deploy the board first (ma1), then update the plugin.
 - **Eval baselines**: the playbook edits change command hashes. Phase p5 refreshes the hashes in their own commit;
   a real re-run of the attended tasks costs money and is left to the owner.
 
@@ -286,7 +284,7 @@ manual_after:
     title: Try one card per wait, Dismiss, Restore and prune in the real board
     why: Only the real board with real sessions shows the wake timing and the owner's phone view
 verify_after_merge:
-  - .venv/bin/python -m pytest tests/core/test_board_store.py tests/core/test_board_server.py tests/core/test_board_inbox.py tests/core/test_board_links.py tests/core/test_board_resolve.py -q
+  - .venv/bin/python -m pytest tests/core/test_board_*.py -q
   - .venv/bin/python launcher/tld ops docs-index check --index docs/README.md
 final_checks:
   - docs/plans/stale-needs-you-cards-plan.md is deleted and nothing links to it
@@ -312,7 +310,8 @@ phases:
          step 3 block, before the `user_version` pragma. Add `Store.dismiss`, `Store.restore` and the dismissal
          delete inside `Store.delete`, as Design 3.1 says. Change `_row`, `_get` and `list` to the LEFT JOIN so every
          entry is `{"id", "version", "dismissed_at", "data"}`; `Store.set` keeps returning `{"id", "version"}` and a
-         `Conflict.current` is the same entry shape.
+         `Conflict.current` is the same entry shape. Update the module docstring ("Three tables") to four tables and name
+         `dismissals`.
       2. server.py: add the two routes to `ROUTES` (after the `record` row) and the two `POLICY` rows
          (`frozenset({OWNER})`). Add `_do_dismiss` (read the body with `_read_json`; it must be a dict with exactly
          the key `version`, an int >= 1 and not a bool, else 400 `bad_request`; map `NotFound` to 404, `Conflict` to
@@ -341,8 +340,8 @@ phases:
       7. docs/guides/board-server.md: add the two rows to the HTTP API table (`POST /api/records/<id>/dismiss`,
          owner only, body `{"version": n}`, errors 400, 404, 409 `version_conflict`, 409 `not_needs_you`, 403
          `csrf`; `POST /api/records/<id>/restore`, owner only, 404); add `dismissed_at` to the entry shape of the
-         `GET /api/records` rows and to the `board_list` and `board_get` rows of the MCP table; in the Security
-         notes next to `revoked_sessions` add one bullet: dismissals are kept in the database (`dismissals`, schema
+         `GET /api/records` rows and to the `board_list` and `board_get` rows of the MCP table; change `schema version 3` to `schema version 4` in the bullet about `revoked_sessions`, and in the Security
+         notes next to it add one bullet: dismissals are kept in the database (`dismissals`, schema
          version 4); the owner still writes no record; and in Backup and restore add: a database at schema 4 is
          refused by an older image, so keep the backup from before the upgrade to roll back. The line "can never
          write a record" stays true.
@@ -402,7 +401,7 @@ phases:
       2. tests/fixtures/board-links.json: one JSON object `{"now", "entries", "asks", "expected",
          "expected_stale"}`. `now` is `2026-11-09T12:00:00Z`. Build the entries from records of
          tests/fixtures/board-records.json (copy the `f-waiting` data for needs_you cases, `f-running-ok` for a plain
-         running case) with these ids and expectations (`expected` maps id to `{section, badge}`):
+         running case) with these ids and expectations (`expected` maps id to `{section, badge}`). Every entry has `data.project` equal to its id, `data.repo` `example-org/<id>` and `data.orchestrator_session` `session_<id>`, so no two entries share a session; an ask's `project` and `created_by` are `<id>` and `session_<id>` of the entry it is meant to link to, except `linked-open-other-project`, whose ask has `created_by` `session_linked-open-other-project` and `project` `other-project`; `dismissed-but-clear` and `stale-quiet` have `needs_you_reason` `""` and `needs_you_since` null:
          `plain-needs` needs_you, no ask: `needs_you`/null; `linked-open-record` (open ask with `record` equal to
          its id): `linked`/null; `linked-open-session` (open ask without `record`, `created_by` equal to the
          record's `orchestrator_session`, same project): `linked`/null; `linked-open-other-project` (same session
@@ -427,7 +426,7 @@ phases:
       - .venv/bin/python -m pytest tests/core/test_board_links.py tests/core/test_board_rules.py -q exits 0
   - id: p3b-page
     title: One card per wait, answer received, Dismiss and Restore on the page
-    depends_on: [p1-store-dismissals, p3a-placement-rules]
+    depends_on: [p1-store-dismissals, p2-ask-record, p3a-placement-rules]
     complexity: M
     touches:
       - src/tld/board/web/board.html
@@ -437,7 +436,7 @@ phases:
     brief: |
       Read first: docs/plans/stale-needs-you-cards-plan.md (section 3.4), src/tld/board/web/board.html,
       tests/board_poll_check.js, tests/core/test_board_page.py, tests/core/test_board.py.
-      1. board.html `render`: replace `groups[section(e.data, now)]` by `place(e, lastAsks, now)` (use the `asks`
+      1. board.html `render`: replace `groups[section(e.data, now)]` by `place(e, asks, now).section` (`asks` is the
          argument of `render`); skip entries placed `linked`; keep the count labels. Keep the fixture mode working
          (`render(validEntries(FIXTURE), [])`, no csrf, no buttons).
       2. Add `answeredRow(entry, placed, now)` as Design 3.4 says and draw it in the Running section before the
@@ -449,10 +448,11 @@ phases:
          element and call `load()`.
       4. Hidden row badge and the Hidden note as Design 3.4 says.
       5. tests/board_links_page_check.js (usage: `node tests/board_links_page_check.js BASE TOKEN PASSPHRASE`, copy
-         the login and `api` helpers of tests/board_poll_check.js): with the session token write a record R1 with
-         `needs_you` true and post an ask with `record` R1; after login assert R1 has no card in Needs you and the
+         the login and `api` helpers of tests/board_poll_check.js): with the session token write a record R1 (document id `links-one`, repo `example-org/links-one`) with
+         `needs_you` true and post an ask whose `project` is `links-one`, `repo` `example-org/links-one` and
+         `record` `links-one`; after login assert R1 has no card in Needs you and the
          ask card is there; answer the ask through the page form and assert R1 appears in Running with the text
-         `answer received`; write record R2 with `needs_you` true, assert its card has a `[data-action="dismiss"]`
+         `answer received`; write record R2 (document id `links-two`, repo `example-org/links-two`) with `needs_you` true, assert its card has a `[data-action="dismiss"]`
          button inside the details, tap Dismiss, assert R2 is in Hidden with `dismissed`; tap Restore and assert R2
          is in Needs you again; dismiss R2 again, rewrite R2 through the API with `if_version`, assert R2 is back
          in Needs you; assert no console errors and no dialogs. Print `OK`.
@@ -466,6 +466,7 @@ phases:
       - .venv/bin/python -m pytest tests/core/test_board_page.py tests/core/test_board.py -q exits 0
       - node tests/board_render_check.js prints OK
       - grep -c 'api("PUT"' src/tld/board/web/board.html prints 0
+      - grep -c 'data-action="dismiss"' src/tld/board/web/board.html and grep -c 'data-action="restore"' src/tld/board/web/board.html each print at least 1
   - id: p4-resolve-stale
     title: The resolve command and stale printing dismissed records
     depends_on: [p3a-placement-rules]
@@ -476,7 +477,6 @@ phases:
       - src/tld/cli.py
       - docs/reference/cli.md
       - tests/core/test_board_resolve.py
-      - tests/core/test_board_rules.py
     brief: |
       Read first: docs/plans/stale-needs-you-cards-plan.md (section 3.5), src/tld/board/stale.py,
       src/tld/board/record.py, src/tld/cli.py, docs/reference/cli.md, tests/fixtures/board-links.json.
@@ -499,7 +499,7 @@ phases:
          and a 201-character reason exit 1; stdin `-` works; the input is not changed. Parity: load
          tests/fixtures/board-links.json, run `tld board stale - --now <now>` on its `entries` and assert the printed
          ids equal `expected_stale`.
-      5. tests/core/test_board_rules.py: add a test that a dismissed needs_you entry is printed by `tld board stale`
+      5. tests/core/test_board_resolve.py: add a test that a dismissed needs_you entry is printed by `tld board stale`
          while the same entry without `dismissed_at` is not.
       Stop condition: if the parity test disagrees with the fixture, fix stale.py, never the fixture.
     acceptance:
@@ -524,10 +524,11 @@ phases:
       1. playbooks/land.md: add the section `## 0. Reconcile` before section 1 and edit sections 3, 4 and 5 and
          the Rules, all as Design 3.6 says: the integration draft is an item `integration` and the workflow pull
          request an item `workflow`, each with its `pr` number and `state` `done` once it exists; `needs_you` is
-         set only for the five cases listed; section 4.2 no longer sets `needs_you` for `Review PR #<n>`; the final
+         set only for the four cases listed; section 4.2 no longer sets `needs_you` for `Review PR #<n>`; the final
          record is `pr_open` with `needs_you` false unless a blocking case happened.
       2. playbooks/board.md: add the dismissed records to the prune list and the second list with its one
-         `ask_human` of two `confirm` questions and the per-record commands of Design 3.5; change the two sentences
+         `ask_human` of one `confirm` question per non-empty list (both lists empty: say `Nothing to prune` and stop)
+         and the per-record commands of Design 3.5; change the two sentences
          that say a `needs_you` record is never printed; add the line that nothing is cleared that is not on the
          confirmed list. Every `tld` call you write must parse with the real CLI (tests/core/test_contracts.py).
       3. playbooks/runtime.md: the ask example gains the `record` line and its sentence as Design 3.6 says, and
@@ -536,19 +537,21 @@ phases:
       4. playbooks/policies/status-board.md: the four additions of Design 3.6.
       5. adapters/claude/skills/runtime/SKILL.md: name `tld board resolve` in the prune sentence.
       6. tests/core/test_stale_cards_playbooks.py: assert land.md names `integration` and `workflow` items and
-         does not contain `Review PR #<n>` next to `needs_you`; board.md contains `tld board resolve` and
+         does not contain the string `Review PR`; board.md contains `tld board resolve` and
          `--if-version`; runtime.md's ask example JSON line contains `"record"`; status-board.md contains
          `current: null`; the ask example of runtime.md, with `record` set, passes `tld.board.ask.validate_new`
-         once its placeholders are replaced by real values.
+         once its placeholders are replaced by these values: project `example-project`, repo
+         `example-org/example-project`, record `example-project`, created_by `session_x`, context_url
+         `https://example.com/x`, question ids `q1`, `q2`, `q3`, option values `a`, `b`.
       7. Run `.venv/bin/python evals/run.py check-baseline`. When it exits 1, run
-         `python3 evals/run.py baseline --refresh-hashes` and commit evals/baselines/default.json alone in its own
+         `.venv/bin/python evals/run.py baseline --refresh-hashes` and commit evals/baselines/default.json alone in its own
          commit whose message says the playbook wording changed and a real re-run of the attended tasks is left to
          the owner.
       Stop condition: a test that pins the old land wording and is outside the touches: stop with
       `status=blocked` and name it.
     acceptance:
       - .venv/bin/python -m pytest tests/core/test_stale_cards_playbooks.py tests/core/test_contracts.py tests/core/test_no_project_words.py -q exits 0
-      - python3 evals/run.py check-baseline exits 0
+      - .venv/bin/python evals/run.py check-baseline exits 0
       - grep -n "Review PR" playbooks/land.md prints nothing
   - id: p6-retire
     title: Docs, changelog and retire the plan
@@ -564,14 +567,15 @@ phases:
       Read first: docs/plans/stale-needs-you-cards-plan.md, docs/guides/board-server.md,
       docs/guides/maintenance.md (the board section), CHANGELOG.md (the Unreleased part), README.md (the
       `/tld:board` row), docs/README.md.
-      1. docs/guides/board-server.md: add a section `## Cards that wait` after `## Answering in the session`,
-         saying in plain words: one card per wait and when `answer received` shows; the Dismiss and Restore
-         buttons and that a session's next write brings a still-needing record back; what prune lists and clears
-         now; that the board still never writes a record on the owner's behalf; that a cancelled ask brings the
-         record's card back until the session wakes. Fix the `/tld:board` sentence about prune where the guide
-         describes it.
-      2. docs/guides/maintenance.md: the two paragraphs about `/board prune` (the lines that say never one that
-         needs you) describe the dismissed records and the clearing after the confirm.
+      1. docs/guides/maintenance.md (162 lines; board-server.md is already near the 400-line limit): add a section
+         `## Cards that wait` after the board section, saying in plain words: one card per wait and when `answer
+         received` shows; the Dismiss and Restore buttons and that a session's next write brings a still-needing
+         record back; what prune lists and clears now; that the board still never writes a record on the owner's
+         behalf; that a cancelled ask brings the record's card back until the session wakes. Also update the two
+         paragraphs about `/board prune` (the lines that say never one that needs you) to describe the dismissed
+         records and the clearing after the confirm.
+      2. docs/guides/board-server.md: fix the `/tld:board` sentence about prune (MCP tools section, around line
+         293) and add one link to `maintenance.md#cards-that-wait`. Add no section.
       3. README.md: the `/tld:board [prune]` row says it also clears cards whose pull requests are done.
       4. CHANGELOG.md under `## [Unreleased]`: `### Fixed`: one line that a "needs you" card no longer outlives
          its reason (one card per wait, `answer received`, Dismiss and Restore, `/tld:board prune` clearing
@@ -587,5 +591,5 @@ phases:
     acceptance:
       - .venv/bin/python launcher/tld ops docs-index check --profile .tld/toolkit.yaml exits 0
       - test ! -e docs/plans/stale-needs-you-cards-plan.md
-      - grep -c "Unreleased" CHANGELOG.md prints at least 1 and grep -n "^## \[" CHANGELOG.md prints no version newer than 1.0.0
+      - grep -n "^## \[" CHANGELOG.md | head -2 prints `## [Unreleased]` and then `## [1.0.0] - 2026-11-11`
 ```
