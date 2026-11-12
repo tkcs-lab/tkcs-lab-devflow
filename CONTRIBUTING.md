@@ -37,7 +37,7 @@ Test rules:
 
 CI fails when the branch coverage of `src/tld` drops below the floor `fail_under` in `pyproject.toml`
 (`[tool.coverage.*]`; 91.3% measured, floor 90). Subprocesses count: `patch = ["subprocess"]` makes coverage
-measure every Python child the tests start (`launcher/tld`, the hook scripts) through a `.pth` file and an environment
+measure every Python child the tests start (`cli/tld`, the hook scripts) through a `.pth` file and an environment
 variable, so nothing else is needed. Same command locally:
 
 ```

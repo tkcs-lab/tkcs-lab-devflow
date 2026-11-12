@@ -38,8 +38,8 @@ def test_the_test_workflow_runs_every_check():
     assert "claude plugin validate ." in run and re.search(r'CLAUDE_CODE_VERSION: "\d+\.\d+\.\d+"', (WORKFLOWS / "test.yml").read_text())
     assert re.search(r'PLAYWRIGHT_VERSION: "\d+\.\d+\.\d+"', (WORKFLOWS / "test.yml").read_text())
     assert "playwright\" install --with-deps chromium" in run or "playwright install --with-deps chromium" in run
-    for check in ("launcher/tld profile validate", "launcher/tld plan validate-manifest", "launcher/tld board validate-record",
-                  "launcher/tld ops repo-admin validate-policy", "launcher/tld ops docs-index check",
+    for check in ("cli/tld profile validate", "cli/tld plan validate-manifest", "cli/tld board validate-record",
+                  "cli/tld ops repo-admin validate-policy", "cli/tld ops docs-index check",
                   "evals/run.py validate", "evals/run.py check-baseline", "--agent stub", "--require-pass"):
         assert check in run, check
 

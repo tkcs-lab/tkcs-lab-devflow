@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 TLD = SRC / "tld"                      # the core package
 CLAUDE = ROOT / "adapters" / "claude"  # the Claude Code adapter (commands, skills, agents, hooks, mcp.json)
-BIN = ROOT / "launcher" / "tld"             # the launcher; runs without installing the package
+BIN = ROOT / "cli" / "tld"             # the CLI script; runs without installing the package
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 for _p in (str(SRC), str(ROOT)):  # the tld package, and the evals/ package (the eval harness)
@@ -66,7 +66,7 @@ def frontmatter(path):
 
 
 def tld_cmd(*words: str) -> list[str]:
-    """The argv that runs `tld <words>` through the launcher, as a session would."""
+    """The argv that runs `tld <words>` through the CLI script, as a session would."""
     return [sys.executable, str(BIN), *words]
 
 

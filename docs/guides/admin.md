@@ -18,8 +18,8 @@ token is available:
 
 ```
 gh auth login                      # or: export GH_TOKEN=...
-launcher/tld ops repo-admin whoami --org your-org
-launcher/tld ops repo-admin audit --policy .tld/admin-policy.yaml
+cli/tld ops repo-admin whoami --org your-org
+cli/tld ops repo-admin audit --policy .tld/admin-policy.yaml
 ```
 
 The token comes from `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token`, in that order. It is sent only to

@@ -90,7 +90,7 @@ account never does.
 
 | Path | |
 |---|---|
-| `src/tld/`, `launcher/tld` | the core package and its launcher ([CLI reference](docs/reference/cli.md)); `schema/` holds the JSON schemas of the profile, the status record, the ask and the admin policy (the implementation manifest is checked in code by `tld plan validate-manifest`), and `templates/` the starter files |
+| `src/tld/`, `cli/tld` | the core package and its CLI script ([CLI reference](docs/reference/cli.md)); `schema/` holds the JSON schemas of the profile, the status record, the ask and the admin policy (the implementation manifest is checked in code by `tld plan validate-manifest`), and `templates/` the starter files |
 | `playbooks/`, `roles/`, `checklists/`, `stacks/` | the neutral procedures (with `runtime.md` and `policies/`), role cards, checklists and stack guides |
 | `adapters/claude/` | the Claude Code plugin: commands, agents, the runtime skill, hooks, `mcp.json` |
 | `.claude-plugin/` | the marketplace `tkcs-lab-devflow` and the plugin manifest (sourced from the repository root) |
