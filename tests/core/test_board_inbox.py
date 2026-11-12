@@ -83,13 +83,17 @@ def test_a_good_ask_is_valid():
     ({"record": "a" * 101}, "must be null, the project slug, or"),
     ({"record": 7}, "must be null, the project slug, or"),
     ({"record": "example-project--bogus"}, "must be null, the project slug, or"),
+    ({"record": "other-project--run--x"}, "must be null, the project slug, or"),
+    ({"record": "example-project--nope--abcdefgh"}, "must be null, the project slug, or"),
+    ({"record": "example-project--run--"}, "must be null, the project slug, or"),
 ])
 def test_bad_asks_are_refused(changes, needle):
     errors = ask_model.validate_new(ask_doc(**changes))
     assert any(needle in e for e in errors), errors
 
 
-@pytest.mark.parametrize("record", [None, "example-project", "example-project--make-plan"])
+@pytest.mark.parametrize("record", [None, "example-project", "example-project--make-plan",
+                                    "example-project--run--some-plan", "example-project--make-plan--abcdefgh"])
 def test_good_record_fields_are_valid(record):
     assert ask_model.validate_new(ask_doc(record=record)) == []
 

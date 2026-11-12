@@ -1,4 +1,4 @@
-// Asserts section() and isSilent() of src/tld/board/web/rules.js against the 13-record fixture.
+// Asserts section() and isSilent() of src/tld/board/web/rules.js against the 14-record fixture.
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
@@ -19,10 +19,11 @@ const EXPECTED = {
   "f-stale-quiet": ["hidden", false],
   "f-stale-needs": ["needs_you", false],
   "f-maint-deps": ["needs_you", false],
+  "f-legacy-needs": ["needs_you", false],
 };
 
 const docs = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "board-records.json"), "utf8"));
-assert.strictEqual(docs.length, 13);
+assert.strictEqual(docs.length, 14);
 for (const doc of docs) {
   const rec = doc.data;
   assert.ok(rec.project in EXPECTED, "unexpected project " + rec.project);

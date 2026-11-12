@@ -24,6 +24,7 @@ const EXPECTED = {
   "f-stale-quiet": "hidden",
   "f-stale-needs": "needs_you",
   "f-maint-deps": "needs_you",
+  "f-legacy-needs": "needs_you",
 };
 
 async function check(browser, file, scheme) {
