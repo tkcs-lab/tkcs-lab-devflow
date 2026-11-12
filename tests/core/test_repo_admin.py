@@ -123,6 +123,10 @@ def test_starter_policy_is_valid(ra):
     assert ra.validate_policy(yaml.safe_load(STARTER.read_text()), STARTER.parent) == []
 
 
+def test_starter_policy_keeps_the_admin_bypass_off():
+    assert yaml.safe_load(STARTER.read_text())["rulesets"]["default_branch"]["admin_bypass"] is False
+
+
 def test_starter_policy_matches_the_schema_it_documents():
     schema = json.loads((TLD / "schema" / "admin-policy.schema.json").read_text())
     starter = yaml.safe_load(STARTER.read_text())

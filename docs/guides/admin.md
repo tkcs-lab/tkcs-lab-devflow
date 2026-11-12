@@ -139,7 +139,7 @@ Every key is optional except `org`. The schema is the exact source of truth.
 | `branch_protection.branch` | A name, or `default` (the default) |
 | `branch_protection.require_pull_request`, `branch_protection.approvals`, `branch_protection.require_status_checks`, `branch_protection.strict` | Defaults true, 1, none, false |
 | `branch_protection.enforce_admins`, `branch_protection.linear_history`, `branch_protection.allow_force_pushes`, `branch_protection.allow_deletions` | Defaults false |
-| `rulesets.default_branch.required_status_checks`, `rulesets.default_branch.admin_bypass` | Checks that must pass (none: no checks rule); `admin_bypass: true` lets the admin role bypass `tld-main` through a pull request. Default false |
+| `rulesets.default_branch.required_status_checks`, `rulesets.default_branch.admin_bypass` | Checks that must pass (none: no checks rule); `admin_bypass: true` lets the admin role bypass `tld-main` through a pull request. Default false (the starter keeps it; this repository sets it true so its single owner can merge their own pull requests) |
 | `rulesets.tags` | true: the tag ruleset `tld-tags` (only the admin role may tag) |
 | `agent.agent_login` | **Required in `agent`.** The account sessions push as |
 | `release.reviewer_login` | **Required in `release`.** The owner: the one required reviewer of the release environment |
@@ -176,6 +176,11 @@ requests and the owner approves them.
   `admin_bypass` adds the admin role (`RepositoryRole` 5) in `pull_request` mode. So the agent cannot push to the
   default branch, force-push it, delete it or merge without the owner's approval, and an approval goes stale with
   the next push.
+  With `admin_bypass: true` (this repository, which has one human) the owner, who has the admin role, may merge a
+  pull request without a second reviewer. The bypass is in `pull_request` mode: no direct push, force push or
+  deletion. It skips every rule of `tld-main` for that pull request, the required checks included, so the owner
+  waits for green CI. The agent account keeps `write` and is never a bypass actor. Leave it `false` where a second
+  human can review (the starter does).
   Because of `require_last_push_approval`, the owner's approval counts only when the latest push to the pull request
   came from someone else. **Do not press "Update branch" on an agent's pull request**: that push is the owner's, so no
   approval of the owner can merge it until the agent pushes again. Ask the agent to bring the branch up to date (the

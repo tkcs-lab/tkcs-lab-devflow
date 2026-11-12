@@ -2,8 +2,10 @@
 import copy
 
 import pytest
+import yaml
 
 import test_repo_admin as base
+from conftest import ROOT
 from test_repo_admin import world
 
 
@@ -67,6 +69,17 @@ def test_main_ruleset_without_checks_and_with_admin_bypass(ra):
     main = bodies(ra, {"default_branch": {"admin_bypass": True}})["tld-main"]
     assert "required_status_checks" not in {r["type"] for r in main["rules"]}
     assert main["bypass_actors"] == [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"}]
+
+
+def test_this_repository_lets_only_the_admin_role_bypass_main_through_a_pull_request(ra):
+    policy_dir = ROOT / ".tld"
+    policy = yaml.safe_load((policy_dir / "admin-policy.yaml").read_text())
+    assert ra.validate_policy(policy, policy_dir) == []
+    main = bodies(ra, policy["rulesets"])["tld-main"]
+    assert main["bypass_actors"] == [{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"}]
+    checks = {c["context"] for r in main["rules"] if r["type"] == "required_status_checks"
+              for c in r["parameters"]["required_status_checks"]}
+    assert checks == {"test (3.11)", "test (3.13)"}
 
 
 def test_tag_ruleset_shape(ra):
