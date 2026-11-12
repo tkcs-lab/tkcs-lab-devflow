@@ -39,6 +39,18 @@ record: on `invalid`, fix the listed errors and retry once. On `version_conflict
 `tld board client get <id>`, merge in the fields this session owns, and retry once. A `version_conflict` on the
 very first write means a record of an earlier run exists: read it and write over it with its version.
 
+## Asks, alerts and the owner's cards
+
+- Every ask a playbook posts carries `record`, the document id of its status record ([runtime.md](../runtime.md)
+  `ask_human`), so the page shows one card per wait.
+- The final record never keeps `needs_you: true` unless the run stopped on something only the owner can fix.
+  Pull requests waiting for review are items of the record, not an alert.
+- The owner can Dismiss a stuck card on the page and Restore it; the board keeps that next to the record and
+  never rewrites it. Your next write brings the card back if `needs_you` is still true. The board playbook's prune also
+  clears the `needs_you` of a record whose pull requests are all merged or closed, after the owner confirms.
+- A `version_conflict` with `current: null` means the record was deleted (pruned): write it again without
+  `--if-version`.
+
 ## When to write
 
 - The first record, before any work starts.
