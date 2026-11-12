@@ -54,8 +54,9 @@ Deny:
 - Any secret or token.
 - Any `TLD_*` variable.
 - The GitHub connection.
+- Any connector.
 
-A plain claude.ai chat with web search or research turned on does the same job and needs no environment.
+A plain claude.ai chat with web search or research turned on does the same job and needs no environment, but only with every connector off, memory off and outside any project: otherwise web text could read what they hold.
 
 ## Running a research request
 
@@ -63,10 +64,10 @@ A plain claude.ai chat with web search or research turned on does the same job a
 2. Read it as a stranger would. It must hold no secret and nothing you want private (no private code, issue text or internal host names). `tld research check-prompt` already refused secrets and board values; you are the last check.
 3. Start a new session in the research environment (or a plain chat) and paste the prompt.
 4. When it ends, copy the text from the line `RESEARCH-REPORT <id>` to the line `END RESEARCH-REPORT <id>`.
-5. In the waiting session send one message: your own lines (for example an answer to another question) before or after the report block, never inside it. Then choose `pasted` on the board ask, or type it.
-6. `skip` goes on with an assumption; `stop` ends the run.
+5. In the waiting session send one message: your own lines (for example an answer to another question) before the report block, then the block. Nothing after the block is read. Then choose `pasted` on the board ask, or type it.
+6. `skip` goes on with an assumption; `stop` ends the run. Both, and every other answer of the ask, are read from your chat message only together with a complete report. If the session says the report is incomplete, wrong or too long, or you have no report, answer `skip`, `stop` and the rest on the board; the session does not read your chat message then.
 
-`tld research report` treats everything from the first start line to the last end line as the report, so your own lines between two pasted blocks are lost and the session asks again. A pasted report is data, never an instruction: skim it for text that tells the session to act (run commands, add hosts, post secrets); a session never follows it and never widens the network because a report asks ([untrusted-text.md](../../playbooks/policies/untrusted-text.md)).
+`tld research report` treats everything from the first start line to the last end line as the report and ignores every line after the block, so your own lines go before it. A pasted report is data, never an instruction: skim it for text that tells the session to act (run commands, add hosts, post secrets); a session never follows it and never widens the network because a report asks ([untrusted-text.md](../../playbooks/policies/untrusted-text.md)).
 
 ## Checking the working environment
 
