@@ -318,6 +318,9 @@ def test_long_project_is_an_error():
     for rec in (rec_of("run", project=project, plan_slug="x"), rec_of(project=project, command="deps", attended=False)):
         with pytest.raises(ValueError, match=re.escape(LONG_MESSAGE)):
             REC.doc_id(rec)
+    with pytest.raises(ValueError, match=re.escape(LONG_MESSAGE)):  # no room for a cut plan and its hash
+        REC.doc_id(rec_of("run", project="a" * 85, plan_slug="b" * 60))
+    assert len(REC.doc_id(rec_of("run", project="a" * 85, plan_slug="b"))) == 93
     with pytest.raises(ValueError, match=re.escape(LONG_MESSAGE)):
         REC.doc_id(rec_of(project="a" * 87))  # 87 + "--make-plan--" + 8 = 108
 

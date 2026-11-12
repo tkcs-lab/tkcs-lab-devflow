@@ -72,6 +72,8 @@ def _plan_part(plan_slug, prefix: str) -> str:
     if len(prefix) + len(plan) <= DOC_ID_MAX:
         return plan
     keep = DOC_ID_MAX - len(prefix) - 9
+    if keep < 0:
+        raise ValueError("'project' is too long for a document id")
     return plan[:keep].rstrip("-") + "-" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
 
 
