@@ -612,7 +612,7 @@
       }
     },
     {
-      "id": "null-session",
+      "id": "null-session--deps",
       "version": 1,
       "dismissed_at": null,
       "data": {
@@ -974,12 +974,13 @@
       "section": "hidden",
       "badge": null
     },
-    "null-session": {
+    "null-session--deps": {
       "section": "needs_you",
       "badge": null
     }
   },
   "expected_stale": [
+    "dismissed-and-linked",
     "dismissed-needs",
     "stale-quiet"
   ]
