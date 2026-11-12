@@ -12,6 +12,7 @@ repo_settings:
   allow_update_branch: true
 security:
   vulnerability_alerts: true
+  automated_security_fixes: true
   secret_scanning: true
   secret_push_protection: true
   private_vulnerability_reporting: true
@@ -29,3 +30,5 @@ agent:
 release:
   reviewer_login: andras-tkcs
   environment: tld-release
+workflows:
+  - template: land
