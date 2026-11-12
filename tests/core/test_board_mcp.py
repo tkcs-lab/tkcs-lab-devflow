@@ -104,6 +104,7 @@ def test_board_set_then_get_then_list(store):
     assert not is_error and got["version"] == 1 and got["data"] == record()
     listed, is_error = tool(store, "board_list")
     assert not is_error and [r["id"] for r in listed["records"]] == ["f-running-ok"]
+    assert listed["records"][0]["dismissed_at"] is None and got["dismissed_at"] is None
     missing, is_error = tool(store, "board_get", {"id": "nope"})
     assert (missing, is_error) == ({"error": "not_found"}, True)
 

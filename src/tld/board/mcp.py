@@ -24,12 +24,12 @@ ASK_ID = {"type": "string", "description": "The ask id board_ask returned."}
 TOOLS: list[dict] = [
     {
         "name": "board_list",
-        "description": "List every status record on the board with its id, version and data.",
+        "description": "List every status record on the board; each entry has id, version, dismissed_at and data.",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
     },
     {
         "name": "board_get",
-        "description": "Read one status record (id, version, data) by its document id.",
+        "description": "Read one status record by its document id; the entry has id, version, dismissed_at and data.",
         "inputSchema": {
             "type": "object",
             "properties": {"id": {"type": "string", "description": "Document id of the record."}},

@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 import sys
@@ -55,7 +56,7 @@ def test_page_builds_the_dom_from_text_only():
     page = (TLD / "board" / "web" / "board.html").read_text()
     for call in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function"):
         assert call not in page
-    # The page writes nothing but answers, cancels and the login: no record write path.
+    # The page writes nothing but answers, cancels, dismissals and the login: no record write path.
     assert 'api("PUT"' not in page and '"DELETE"' not in page
 
 
@@ -80,3 +81,23 @@ def test_render_check():
     result = subprocess.run(["node", str(ROOT / "tests" / "board_render_check.js")], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert result.stdout.strip() == "OK"
+
+
+@pytest.mark.slow
+def test_fixture_page_has_no_dismiss_or_restore_buttons(tmp_path):
+    need_browser()
+    result, out = build(tmp_path, "--fixture", str(FIXTURE), "--now", NOW)
+    assert result.returncode == 0, result.stderr
+    script = (
+        "const { chromium } = require('playwright');"
+        "(async () => { const b = await chromium.launch(); const p = await b.newPage();"
+        "await p.goto('file://' + process.argv[1]); await p.waitForSelector('[data-section]');"
+        "const a = await p.locator('[data-action]').count();"
+        "const n = await p.locator('[data-section=\"needs_you\"] .row').count();"
+        "await b.close(); console.log(JSON.stringify([a, n])); })().catch((e) => { console.error(e); process.exit(1); });"
+    )
+    run = subprocess.run(["node", "-e", script, str(out)], capture_output=True, text=True, timeout=60)
+    assert run.returncode == 0, run.stdout + run.stderr
+    actions, needs = json.loads(run.stdout)
+    assert actions == 0
+    assert needs > 0

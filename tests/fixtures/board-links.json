@@ -1,0 +1,987 @@
+{
+  "now": "2026-11-09T12:00:00Z",
+  "entries": [
+    {
+      "id": "plain-needs",
+      "version": 1,
+      "dismissed_at": null,
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "plain-needs",
+        "repo": "example-org/plain-needs",
+        "plan_slug": "plan-plain-needs",
+        "plan_url": "https://example.com/example-org/plain-needs/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-plain-needs",
+        "orchestrator_session": "session_plain-needs",
+        "attended": true,
+        "status": "waiting_user",
+        "needs_you": true,
+        "needs_you_reason": "Answer the open question about scope",
+        "needs_you_since": "2026-11-09T09:00:00Z",
+        "phases": [
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "waiting_user",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-11-09T09:00:00Z"
+      }
+    },
+    {
+      "id": "linked-open-record",
+      "version": 1,
+      "dismissed_at": null,
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "linked-open-record",
+        "repo": "example-org/linked-open-record",
+        "plan_slug": "plan-linked-open-record",
+        "plan_url": "https://example.com/example-org/linked-open-record/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-linked-open-record",
+        "orchestrator_session": "session_linked-open-record",
+        "attended": true,
+        "status": "waiting_user",
+        "needs_you": true,
+        "needs_you_reason": "Answer the open question about scope",
+        "needs_you_since": "2026-11-09T09:00:00Z",
+        "phases": [
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "waiting_user",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-11-09T09:00:00Z"
+      }
+    },
+    {
+      "id": "linked-open-session",
+      "version": 1,
+      "dismissed_at": null,
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "linked-open-session",
+        "repo": "example-org/linked-open-session",
+        "plan_slug": "plan-linked-open-session",
+        "plan_url": "https://example.com/example-org/linked-open-session/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-linked-open-session",
+        "orchestrator_session": "session_linked-open-session",
+        "attended": true,
+        "status": "waiting_user",
+        "needs_you": true,
+        "needs_you_reason": "Answer the open question about scope",
+        "needs_you_since": "2026-11-09T09:00:00Z",
+        "phases": [
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "waiting_user",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-11-09T09:00:00Z"
+      }
+    },
+    {
+      "id": "linked-open-other-project",
+      "version": 1,
+      "dismissed_at": null,
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "linked-open-other-project",
+        "repo": "example-org/linked-open-other-project",
+        "plan_slug": "plan-linked-open-other-project",
+        "plan_url": "https://example.com/example-org/linked-open-other-project/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-linked-open-other-project",
+        "orchestrator_session": "session_linked-open-other-project",
+        "attended": true,
+        "status": "waiting_user",
+        "needs_you": true,
+        "needs_you_reason": "Answer the open question about scope",
+        "needs_you_since": "2026-11-09T09:00:00Z",
+        "phases": [
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "waiting_user",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-11-09T09:00:00Z"
+      }
+    },
+    {
+      "id": "record-field-wins",
+      "version": 1,
+      "dismissed_at": null,
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "record-field-wins",
+        "repo": "example-org/record-field-wins",
+        "plan_slug": "plan-record-field-wins",
+        "plan_url": "https://example.com/example-org/record-field-wins/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-record-field-wins",
+        "orchestrator_session": "session_record-field-wins",
+        "attended": true,
+        "status": "waiting_user",
+        "needs_you": true,
+        "needs_you_reason": "Answer the open question about scope",
+        "needs_you_since": "2026-11-09T09:00:00Z",
+        "phases": [
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "waiting_user",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-11-09T09:00:00Z"
+      }
+    },
+    {
+      "id": "answered-after",
+      "version": 1,
+      "dismissed_at": null,
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "answered-after",
+        "repo": "example-org/answered-after",
+        "plan_slug": "plan-answered-after",
+        "plan_url": "https://example.com/example-org/answered-after/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-answered-after",
+        "orchestrator_session": "session_answered-after",
+        "attended": true,
+        "status": "waiting_user",
+        "needs_you": true,
+        "needs_you_reason": "Answer the open question about scope",
+        "needs_you_since": "2026-11-09T09:00:00Z",
+        "phases": [
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "waiting_user",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-11-09T09:00:00Z"
+      }
+    },
+    {
+      "id": "answered-before",
+      "version": 1,
+      "dismissed_at": null,
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "answered-before",
+        "repo": "example-org/answered-before",
+        "plan_slug": "plan-answered-before",
+        "plan_url": "https://example.com/example-org/answered-before/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-answered-before",
+        "orchestrator_session": "session_answered-before",
+        "attended": true,
+        "status": "waiting_user",
+        "needs_you": true,
+        "needs_you_reason": "Answer the open question about scope",
+        "needs_you_since": "2026-11-09T09:00:00Z",
+        "phases": [
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "waiting_user",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-11-09T09:00:00Z"
+      }
+    },
+    {
+      "id": "cancelled-ask",
+      "version": 1,
+      "dismissed_at": null,
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "cancelled-ask",
+        "repo": "example-org/cancelled-ask",
+        "plan_slug": "plan-cancelled-ask",
+        "plan_url": "https://example.com/example-org/cancelled-ask/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-cancelled-ask",
+        "orchestrator_session": "session_cancelled-ask",
+        "attended": true,
+        "status": "waiting_user",
+        "needs_you": true,
+        "needs_you_reason": "Answer the open question about scope",
+        "needs_you_since": "2026-11-09T09:00:00Z",
+        "phases": [
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "waiting_user",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-11-09T09:00:00Z"
+      }
+    },
+    {
+      "id": "open-and-answered",
+      "version": 1,
+      "dismissed_at": null,
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "open-and-answered",
+        "repo": "example-org/open-and-answered",
+        "plan_slug": "plan-open-and-answered",
+        "plan_url": "https://example.com/example-org/open-and-answered/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-open-and-answered",
+        "orchestrator_session": "session_open-and-answered",
+        "attended": true,
+        "status": "waiting_user",
+        "needs_you": true,
+        "needs_you_reason": "Answer the open question about scope",
+        "needs_you_since": "2026-11-09T09:00:00Z",
+        "phases": [
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "waiting_user",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-11-09T09:00:00Z"
+      }
+    },
+    {
+      "id": "dismissed-needs",
+      "version": 1,
+      "dismissed_at": "2026-11-09T10:00:00Z",
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "dismissed-needs",
+        "repo": "example-org/dismissed-needs",
+        "plan_slug": "plan-dismissed-needs",
+        "plan_url": "https://example.com/example-org/dismissed-needs/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-dismissed-needs",
+        "orchestrator_session": "session_dismissed-needs",
+        "attended": true,
+        "status": "waiting_user",
+        "needs_you": true,
+        "needs_you_reason": "Answer the open question about scope",
+        "needs_you_since": "2026-11-09T09:00:00Z",
+        "phases": [
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "waiting_user",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-11-09T09:00:00Z"
+      }
+    },
+    {
+      "id": "dismissed-and-linked",
+      "version": 1,
+      "dismissed_at": "2026-11-09T10:00:00Z",
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "dismissed-and-linked",
+        "repo": "example-org/dismissed-and-linked",
+        "plan_slug": "plan-dismissed-and-linked",
+        "plan_url": "https://example.com/example-org/dismissed-and-linked/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-dismissed-and-linked",
+        "orchestrator_session": "session_dismissed-and-linked",
+        "attended": true,
+        "status": "waiting_user",
+        "needs_you": true,
+        "needs_you_reason": "Answer the open question about scope",
+        "needs_you_since": "2026-11-09T09:00:00Z",
+        "phases": [
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "waiting_user",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-11-09T09:00:00Z"
+      }
+    },
+    {
+      "id": "dismissed-but-clear",
+      "version": 1,
+      "dismissed_at": "2026-11-09T10:00:00Z",
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "dismissed-but-clear",
+        "repo": "example-org/dismissed-but-clear",
+        "plan_slug": "plan-dismissed-but-clear",
+        "plan_url": "https://example.com/example-org/dismissed-but-clear/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-dismissed-but-clear",
+        "orchestrator_session": "session_dismissed-but-clear",
+        "attended": true,
+        "status": "running",
+        "needs_you": false,
+        "needs_you_reason": "",
+        "needs_you_since": null,
+        "phases": [
+          {
+            "id": "p0",
+            "title": "Phase zero",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "merged",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null,
+            "scope": {
+              "check": "ok",
+              "in_scope": 4,
+              "out_of_scope_count": 3,
+              "collision_count": 1,
+              "paths": [
+                "src/shared.py",
+                "docs/a.md",
+                "docs/b.md"
+              ],
+              "disposition": "accepted"
+            }
+          },
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [
+              "p0"
+            ],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "running",
+        "next_check_at": "2026-11-09T12:15:00Z",
+        "finished_at": null,
+        "updated_at": "2026-11-09T11:58:00Z"
+      }
+    },
+    {
+      "id": "stale-quiet",
+      "version": 1,
+      "dismissed_at": null,
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "stale-quiet",
+        "repo": "example-org/stale-quiet",
+        "plan_slug": "plan-stale-quiet",
+        "plan_url": "https://example.com/example-org/stale-quiet/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-stale-quiet",
+        "orchestrator_session": "session_stale-quiet",
+        "attended": true,
+        "status": "running",
+        "needs_you": false,
+        "needs_you_reason": "",
+        "needs_you_since": null,
+        "phases": [
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "running",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-10-30T12:00:00Z"
+      }
+    },
+    {
+      "id": "null-session--deps",
+      "version": 1,
+      "dismissed_at": null,
+      "data": {
+        "schema": 1,
+        "kind": "command",
+        "command": "deps",
+        "project": "null-session",
+        "repo": "example-org/null-session",
+        "plan_slug": null,
+        "plan_url": null,
+        "feature_branch": null,
+        "orchestrator_session": null,
+        "attended": false,
+        "status": "pr_open",
+        "needs_you": true,
+        "needs_you_reason": "Review deps PR #12 (CI red)",
+        "needs_you_since": "2026-11-09T04:20:00Z",
+        "phases": [
+          {
+            "id": "pip-security",
+            "title": "pip: security update group",
+            "depends_on": [],
+            "complexity": null,
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null,
+            "pr": 12
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "pr_open",
+        "next_check_at": null,
+        "finished_at": null,
+        "updated_at": "2026-11-09T04:20:00Z"
+      }
+    }
+  ],
+  "asks": [
+    {
+      "schema": 1,
+      "kind": "ask",
+      "id": "a-0000000000000001",
+      "project": "linked-open-record",
+      "repo": "example-org/linked-open-record",
+      "title": "Question for linked-open-record",
+      "created_by": "session_linked-open-record",
+      "context_url": null,
+      "questions": [
+        {
+          "id": "q1",
+          "text": "Continue?",
+          "kind": "confirm",
+          "required": true
+        }
+      ],
+      "state": "open",
+      "answers": {},
+      "created_at": "2026-11-09T08:00:00Z",
+      "answered_at": null,
+      "fallback_issue": null,
+      "record": "linked-open-record"
+    },
+    {
+      "schema": 1,
+      "kind": "ask",
+      "id": "a-0000000000000002",
+      "project": "linked-open-session",
+      "repo": "example-org/linked-open-session",
+      "title": "Question for linked-open-session",
+      "created_by": "session_linked-open-session",
+      "context_url": null,
+      "questions": [
+        {
+          "id": "q1",
+          "text": "Continue?",
+          "kind": "confirm",
+          "required": true
+        }
+      ],
+      "state": "open",
+      "answers": {},
+      "created_at": "2026-11-09T08:00:00Z",
+      "answered_at": null,
+      "fallback_issue": null
+    },
+    {
+      "schema": 1,
+      "kind": "ask",
+      "id": "a-0000000000000003",
+      "project": "other-project",
+      "repo": "example-org/other-project",
+      "title": "Question for linked-open-other-project",
+      "created_by": "session_linked-open-other-project",
+      "context_url": null,
+      "questions": [
+        {
+          "id": "q1",
+          "text": "Continue?",
+          "kind": "confirm",
+          "required": true
+        }
+      ],
+      "state": "open",
+      "answers": {},
+      "created_at": "2026-11-09T08:00:00Z",
+      "answered_at": null,
+      "fallback_issue": null
+    },
+    {
+      "schema": 1,
+      "kind": "ask",
+      "id": "a-0000000000000004",
+      "project": "record-field-wins",
+      "repo": "example-org/record-field-wins",
+      "title": "Question for record-field-wins",
+      "created_by": "session_record-field-wins",
+      "context_url": null,
+      "questions": [
+        {
+          "id": "q1",
+          "text": "Continue?",
+          "kind": "confirm",
+          "required": true
+        }
+      ],
+      "state": "open",
+      "answers": {},
+      "created_at": "2026-11-09T08:00:00Z",
+      "answered_at": null,
+      "fallback_issue": null,
+      "record": "record-field-wins--land"
+    },
+    {
+      "schema": 1,
+      "kind": "ask",
+      "id": "a-0000000000000005",
+      "project": "answered-after",
+      "repo": "example-org/answered-after",
+      "title": "Question for answered-after",
+      "created_by": "session_answered-after",
+      "context_url": null,
+      "questions": [
+        {
+          "id": "q1",
+          "text": "Continue?",
+          "kind": "confirm",
+          "required": true
+        }
+      ],
+      "state": "answered",
+      "answers": {
+        "q1": "yes"
+      },
+      "created_at": "2026-11-09T08:00:00Z",
+      "answered_at": "2026-11-09T09:00:00Z",
+      "fallback_issue": null
+    },
+    {
+      "schema": 1,
+      "kind": "ask",
+      "id": "a-0000000000000006",
+      "project": "answered-before",
+      "repo": "example-org/answered-before",
+      "title": "Question for answered-before",
+      "created_by": "session_answered-before",
+      "context_url": null,
+      "questions": [
+        {
+          "id": "q1",
+          "text": "Continue?",
+          "kind": "confirm",
+          "required": true
+        }
+      ],
+      "state": "answered",
+      "answers": {
+        "q1": "yes"
+      },
+      "created_at": "2026-11-09T08:00:00Z",
+      "answered_at": "2026-11-09T08:59:00Z",
+      "fallback_issue": null
+    },
+    {
+      "schema": 1,
+      "kind": "ask",
+      "id": "a-0000000000000007",
+      "project": "cancelled-ask",
+      "repo": "example-org/cancelled-ask",
+      "title": "Question for cancelled-ask",
+      "created_by": "session_cancelled-ask",
+      "context_url": null,
+      "questions": [
+        {
+          "id": "q1",
+          "text": "Continue?",
+          "kind": "confirm",
+          "required": true
+        }
+      ],
+      "state": "cancelled",
+      "answers": {},
+      "created_at": "2026-11-09T08:00:00Z",
+      "answered_at": null,
+      "fallback_issue": null
+    },
+    {
+      "schema": 1,
+      "kind": "ask",
+      "id": "a-0000000000000008",
+      "project": "open-and-answered",
+      "repo": "example-org/open-and-answered",
+      "title": "Question for open-and-answered",
+      "created_by": "session_open-and-answered",
+      "context_url": null,
+      "questions": [
+        {
+          "id": "q1",
+          "text": "Continue?",
+          "kind": "confirm",
+          "required": true
+        }
+      ],
+      "state": "open",
+      "answers": {},
+      "created_at": "2026-11-09T08:00:00Z",
+      "answered_at": null,
+      "fallback_issue": null
+    },
+    {
+      "schema": 1,
+      "kind": "ask",
+      "id": "a-0000000000000009",
+      "project": "open-and-answered",
+      "repo": "example-org/open-and-answered",
+      "title": "Question for open-and-answered",
+      "created_by": "session_open-and-answered",
+      "context_url": null,
+      "questions": [
+        {
+          "id": "q1",
+          "text": "Continue?",
+          "kind": "confirm",
+          "required": true
+        }
+      ],
+      "state": "answered",
+      "answers": {
+        "q1": "yes"
+      },
+      "created_at": "2026-11-09T08:00:00Z",
+      "answered_at": "2026-11-09T09:00:00Z",
+      "fallback_issue": null
+    },
+    {
+      "schema": 1,
+      "kind": "ask",
+      "id": "a-000000000000000a",
+      "project": "dismissed-and-linked",
+      "repo": "example-org/dismissed-and-linked",
+      "title": "Question for dismissed-and-linked",
+      "created_by": "session_dismissed-and-linked",
+      "context_url": null,
+      "questions": [
+        {
+          "id": "q1",
+          "text": "Continue?",
+          "kind": "confirm",
+          "required": true
+        }
+      ],
+      "state": "open",
+      "answers": {},
+      "created_at": "2026-11-09T08:00:00Z",
+      "answered_at": null,
+      "fallback_issue": null
+    },
+    {
+      "schema": 1,
+      "kind": "ask",
+      "id": "a-000000000000000b",
+      "project": "null-session",
+      "repo": "example-org/null-session",
+      "title": "Question for null-session",
+      "created_by": "deps",
+      "context_url": null,
+      "questions": [
+        {
+          "id": "q1",
+          "text": "Continue?",
+          "kind": "confirm",
+          "required": true
+        }
+      ],
+      "state": "open",
+      "answers": {},
+      "created_at": "2026-11-09T08:00:00Z",
+      "answered_at": null,
+      "fallback_issue": null
+    }
+  ],
+  "expected": {
+    "plain-needs": {
+      "section": "needs_you",
+      "badge": null
+    },
+    "linked-open-record": {
+      "section": "linked",
+      "badge": null
+    },
+    "linked-open-session": {
+      "section": "linked",
+      "badge": null
+    },
+    "linked-open-other-project": {
+      "section": "needs_you",
+      "badge": null
+    },
+    "record-field-wins": {
+      "section": "needs_you",
+      "badge": null
+    },
+    "answered-after": {
+      "section": "running",
+      "badge": "answer_received"
+    },
+    "answered-before": {
+      "section": "needs_you",
+      "badge": null
+    },
+    "cancelled-ask": {
+      "section": "needs_you",
+      "badge": null
+    },
+    "open-and-answered": {
+      "section": "linked",
+      "badge": null
+    },
+    "dismissed-needs": {
+      "section": "hidden",
+      "badge": "dismissed"
+    },
+    "dismissed-and-linked": {
+      "section": "hidden",
+      "badge": "dismissed"
+    },
+    "dismissed-but-clear": {
+      "section": "running",
+      "badge": null
+    },
+    "stale-quiet": {
+      "section": "hidden",
+      "badge": null
+    },
+    "null-session--deps": {
+      "section": "needs_you",
+      "badge": null
+    }
+  },
+  "expected_stale": [
+    "dismissed-and-linked",
+    "dismissed-needs",
+    "stale-quiet"
+  ]
+}

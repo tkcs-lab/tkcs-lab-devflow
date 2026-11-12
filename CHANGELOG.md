@@ -7,6 +7,11 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Added
 
+- The release workflow template (`template: release`) takes three new parameters, so one `tld-release` can cut
+  the tags of every repository: `version_style: pep440` accepts versions like `4.2.0a1`, `check_script` runs a
+  repository's own pre-release check with the version before the tag, and `create_release: false` only tags and
+  leaves the GitHub release to the repository's tag-triggered workflow. The defaults keep the 1.0 behaviour;
+  `validate-policy` checks the values.
 - `/ci`: an unattended CI watch for a scheduled task. It finds workflows whose newest run on the default branch
   failed (scheduled runs included, which no pull request announces), reads the logs, and sorts each failure into
   repo (reproduced and fixed on `chore/ci-<workflow>-<yyyymmdd>`, never merged), external (a CDN rule, secret or
@@ -19,16 +24,28 @@ entry of the released version at the top of the GitHub release, above the list o
 - The opt-in `plan-gate` hook (`hooks.plan_gate.enabled`): a session that no tld command started cannot write into the repository and is told to propose `/tld:make-plan`.
 - The `ask` skill (`/tld:ask`): answers without changing anything and turns a change request into a `/tld:make-plan` proposal.
 - Answer an ask in the chat: an attended session shows each ask in the conversation too (`tld board ask-text`), reads the owner's reply there (`tld board answers --from-reply`) and cancels the board copy, and checks the board on its own every 10 minutes for an hour, then hourly for 24 hours. Before, a board answer woke nothing and the owner had to message the session anyway.
+- `tld board resolve` clears the `needs_you` of a record whose pull requests are finished, and an ask has the
+  optional field `record`, the status record that posted it.
 - Install with curl: one line installs or upgrades the `tld` command, another the board server (Docker Compose). A release now carries the wheel, the sdist, `install.sh`, `compose.yaml` and `SHA256SUMS`, and the multi-arch board image `ghcr.io/tkcs-lab/tld-board` is pushed by the release workflow.
 
 ### Fixed
 
+- A "needs you" card on the board no longer outlives its reason: one card per wait, `answer received` once you
+  answered, Dismiss and Restore on the page, and `/tld:board prune` clears cards whose pull requests are all
+  merged or closed.
 - The board client and repo-admin send `User-Agent: tld/<version>` instead of urllib's default, which Cloudflare's
   Browser Integrity Check refuses (error 1010), so a board behind Cloudflare is reachable from a session.
 - The plan-gate now opens when a slash command reaches the hook expanded (`<command-name>/tld:...</command-name>` after `<system-reminder>` blocks), not only when it is typed as the first characters.
 
 ### Changed
 
+- `/land` asks only for what only you can fix and lists its pull requests as items of its record.
+- The board database moves to schema version 4 (dismissals). An older image refuses it: keep a backup from before
+  the upgrade to roll back.
+- `/implement` asks the `verify_after_merge` question only for commands the profile does not trust (a
+  `verify.fast`/`verify.dod` entry, a new `verify.after_merge_allow` prefix, a `ci.dispatchable` dispatch),
+  and asks nothing at the start when there are no manual steps either; new `tld plan check-commands`.
+  `/make-plan` no longer adds the standing `mb0-second-user` step: implement already checks the identity.
 - The CLI entry script moved from `bin/tld` to `cli/tld`: claude.ai refuses to sync a plugin with a top-level `bin/`
   directory. A session that was open during the plugin sync may need a restart. Call `cli/tld` from a checkout; the
   installed `tld` command is unchanged.

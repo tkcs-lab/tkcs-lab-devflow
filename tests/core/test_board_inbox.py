@@ -10,11 +10,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from board_helpers import WRITE, ask_doc, base, running
+from board_helpers import WRITE, ask_doc, base, call, running
 from conftest import ROOT, tld_cmd
 
 from tld.board import ask as ask_model
 from tld.board import inbox
+from tld.board import record as record_model
+from tld.board import store as store_model
 from tld.net import SameHostRedirects, same_origin
 
 
@@ -76,10 +78,35 @@ def test_a_good_ask_is_valid():
     ({"state": "answered"}, "'state'"),
     ({"answers": {"q": "x"}}, "'answers'"),
     ({"extra": 1}, "not a known field"),
+    ({"record": "other-project"}, "must be null, the project slug, or"),
+    ({"record": "Example-project"}, "must be null, the project slug, or"),
+    ({"record": "a" * 101}, "must be null, the project slug, or"),
+    ({"record": 7}, "must be null, the project slug, or"),
+    ({"record": "example-project--bogus"}, "must be null, the project slug, or"),
 ])
 def test_bad_asks_are_refused(changes, needle):
     errors = ask_model.validate_new(ask_doc(**changes))
     assert any(needle in e for e in errors), errors
+
+
+@pytest.mark.parametrize("record", [None, "example-project", "example-project--make-plan"])
+def test_good_record_fields_are_valid(record):
+    assert ask_model.validate_new(ask_doc(record=record)) == []
+
+
+def test_an_ask_keeps_its_record_field(server):
+    status, _, posted = call(server, "POST", "/api/asks", token=WRITE, body=ask_doc(record="example-project"))
+    assert status == 201, posted
+    status, _, got = call(server, "GET", f"/api/asks/{posted['id']}", token=WRITE)
+    assert status == 200 and got["record"] == "example-project"
+    status, _, plain = call(server, "POST", "/api/asks", token=WRITE, body=ask_doc())
+    assert status == 201, plain
+    status, _, got = call(server, "GET", f"/api/asks/{plain['id']}", token=WRITE)
+    assert status == 200 and got.get("record") is None
+
+
+def test_doc_id_pattern_matches_the_store():
+    assert store_model.ID_RE.pattern == record_model.DOC_ID_RE.pattern
 
 
 @pytest.mark.parametrize("question,needle", [

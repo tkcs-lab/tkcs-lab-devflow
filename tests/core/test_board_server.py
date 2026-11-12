@@ -54,6 +54,8 @@ MATRIX = [
     ("GET", "/api/asks/{ask}", None, (401, 200, 200)),
     ("POST", "/api/asks/{ask}/answer", "answers", (401, 403, 200)),
     ("POST", "/api/asks/{ask}/cancel", None, (401, 200, 200)),
+    ("POST", "/api/records/{rec}/dismiss", "dismiss", (401, 403, 200)),
+    ("POST", "/api/records/{rec}/restore", None, (401, 403, 200)),
     ("POST", "/mcp", "rpc", (401, 200, 403)),
     ("POST", "/logout", None, (401, 403, 200)),
 ]
@@ -61,13 +63,14 @@ MATRIX = [
 
 def _matrix_record(rec):
     data = record()
-    data.update(project=rec, repo=f"example-org/{rec}")
+    data.update(project=rec, repo=f"example-org/{rec}", needs_you=True, needs_you_reason="Answer the ask",
+                needs_you_since="2026-11-09T11:00:00Z", status="waiting_user", next_check_at=None)
     return data
 
 
 def _body(kind, server, rec="f-running-ok"):
     return {"record": {"data": _matrix_record(rec), "if_version": 1}, "ask": ask_doc(),
-            "answers": {"answers": {"SEC-1": "plan", "go": True}},
+            "dismiss": {"version": 1}, "answers": {"answers": {"SEC-1": "plan", "go": True}},
             "rpc": {"jsonrpc": "2.0", "id": 1, "method": "ping"}, None: None}[kind]
 
 
@@ -214,11 +217,20 @@ def test_passphrase_compare_is_constant_time_on_digests():
 
 # ---- cookies, CSRF and Origin -----------------------------------------------------------------------
 
-def test_owner_post_needs_the_csrf_token_and_the_origin(server, owner):
-    cookie, csrf = owner
+def _owner_post_cases(server):
     ask = new_ask(server)
-    path = f"/api/asks/{ask['id']}/answer"
-    body = {"answers": {"SEC-1": "plan", "go": True}}
+    call(server, "PUT", "/api/records/csrf-rec", token=WRITE, body={"data": _matrix_record("csrf-rec")})
+    return [("answer", f"/api/asks/{ask['id']}/answer", {"answers": {"SEC-1": "plan", "go": True}}),
+            ("cancel", f"/api/asks/{ask['id']}/cancel", None),
+            ("dismiss", "/api/records/csrf-rec/dismiss", {"version": 1}),
+            ("restore", "/api/records/csrf-rec/restore", None),
+            ("logout", "/logout", None)]
+
+
+@pytest.mark.parametrize("name", ["answer", "cancel", "dismiss", "restore", "logout"])
+def test_owner_post_needs_the_csrf_token_and_the_origin(server, owner, name):
+    cookie, csrf = owner
+    path, body = next((p, b) for n, p, b in _owner_post_cases(server) if n == name)
     assert call(server, "POST", path, body=body, cookie=cookie, origin=True)[2] == {"error": "csrf"}
     assert call(server, "POST", path, body=body, cookie=cookie, csrf="0" * 40, origin=True)[0] == 403
     assert call(server, "POST", path, body=body, cookie=cookie, csrf=csrf)[2] == {"error": "origin_not_allowed"}
@@ -554,3 +566,101 @@ def test_secret_file_is_generated_once_with_mode_0600(tmp_path):
     path.write_text("tiny")
     with pytest.raises(ValueError):
         board_server.load_secret(db, {})
+
+
+
+# ---- dismiss and restore ----------------------------------------------------------------------------
+
+def _put(server, doc_id, data, if_version=None):
+    body = {"data": data} if if_version is None else {"data": data, "if_version": if_version}
+    return call(server, "PUT", f"/api/records/{doc_id}", token=WRITE, body=body)
+
+
+def _owner_post(server, owner, path, body=None, **kwargs):
+    cookie, csrf = owner
+    return call(server, "POST", path, body=body, cookie=cookie, csrf=csrf, origin=True, **kwargs)
+
+
+def _listed(server, doc_id):
+    records = call(server, "GET", "/api/records", token=WRITE)[2]["records"]
+    return next(r for r in records if r["id"] == doc_id)
+
+
+def test_dismiss_shows_dismissed_at_and_a_session_write_clears_it(server, owner):
+    assert _put(server, "dis-one", _matrix_record("dis-one"))[0] == 200
+    status, _, body = _owner_post(server, owner, "/api/records/dis-one/dismiss", {"version": 1})
+    assert status == 200 and body["id"] == "dis-one" and body["version"] == 1 and body["dismissed_at"]
+    assert _listed(server, "dis-one")["dismissed_at"] == body["dismissed_at"]
+    assert call(server, "GET", "/api/records/dis-one", token=WRITE)[2]["dismissed_at"] == body["dismissed_at"]
+    assert _put(server, "dis-one", _matrix_record("dis-one"), 1)[0] == 200
+    assert _listed(server, "dis-one")["dismissed_at"] is None
+
+
+def test_dismiss_with_a_wrong_version_is_409_version_conflict(server, owner):
+    _put(server, "dis-two", _matrix_record("dis-two"))
+    status, _, body = _owner_post(server, owner, "/api/records/dis-two/dismiss", {"version": 5})
+    assert status == 409 and body["error"] == "version_conflict" and body["current"]["version"] == 1
+
+
+def test_dismiss_of_a_record_that_does_not_need_you_is_409_not_needs_you(server, owner):
+    quiet = record()
+    quiet.update(project="dis-three", repo="example-org/dis-three")
+    assert _put(server, "dis-three", quiet)[0] == 200
+    status, _, body = _owner_post(server, owner, "/api/records/dis-three/dismiss", {"version": 1})
+    assert (status, body) == (409, {"error": "not_needs_you"})
+
+
+def test_dismiss_with_an_extra_key_is_400(server, owner):
+    _put(server, "dis-four", _matrix_record("dis-four"))
+    status, _, body = _owner_post(server, owner, "/api/records/dis-four/dismiss", {"version": 1, "x": 1})
+    assert (status, body) == (400, {"error": "bad_request"})
+
+
+def test_dismiss_body_must_be_exactly_a_positive_int_version(server, owner):
+    _put(server, "dis-five", _matrix_record("dis-five"))
+    path = "/api/records/dis-five/dismiss"
+    for body in ({"version": True}, {"version": 0}, {"version": "1"}, {"version": 1.0}, [], {}):
+        status, _, payload = _owner_post(server, owner, path, body)
+        assert (status, payload) == (400, {"error": "bad_request"}), body
+    status, _, payload = _owner_post(server, owner, path, raw=b"{")
+    assert (status, payload) == (400, {"error": "bad_request"})
+    for action in ("dismiss", "restore"):
+        status, _, payload = _owner_post(server, owner, f"/api/records/no-such/{action}",
+                                         {"version": 1} if action == "dismiss" else None)
+        assert (status, payload) == (404, {"error": "not_found"})
+
+
+def test_restore_clears_the_dismissal(server, owner):
+    _put(server, "dis-six", _matrix_record("dis-six"))
+    _owner_post(server, owner, "/api/records/dis-six/dismiss", {"version": 1})
+    status, _, body = _owner_post(server, owner, "/api/records/dis-six/restore")
+    assert (status, body) == (200, {"id": "dis-six", "dismissed_at": None})
+    assert _listed(server, "dis-six")["dismissed_at"] is None
+
+
+def test_the_owner_still_cannot_write_a_record(server, owner):
+    cookie, csrf = owner
+    status, _, _ = call(server, "PUT", "/api/records/dis-seven", cookie=cookie, csrf=csrf, origin=True,
+                        body={"data": _matrix_record("dis-seven")})
+    assert status == 403
+
+
+def test_a_session_cannot_dismiss_through_put(server):
+    data = _matrix_record("dis-eight")
+    data["dismissed_at"] = "2026-11-09T12:00:00Z"
+    assert _put(server, "dis-eight", data)[0] in (200, 400, 422)
+    _put(server, "dis-eight", _matrix_record("dis-eight"))
+    entry = call(server, "GET", "/api/records/dis-eight", token=WRITE)[2]
+    assert entry["dismissed_at"] is None
+
+
+def test_the_matrix_covers_every_policy_entry():
+    covered = set()
+    for method, path, _, _ in MATRIX:
+        url = path.format(rec="x", ask="a-0000000000000000")
+        for pattern, name, methods in board_server.ROUTES:
+            if pattern.match(url) and method in methods:
+                covered.add((name, method))
+                break
+    # login is the one route outside the matrix: it has no principal, and its own tests cover it.
+    assert covered == set(board_server.POLICY) - {("login", "POST")}
