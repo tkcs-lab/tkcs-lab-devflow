@@ -8,6 +8,11 @@ from hooks_helpers import HOOKS, claude_adapter as ca, event, make_repo
 
 from tld.guard.action import Decision
 
+# The shape in which a client delivered /tld:make-plan to the hook: reminders, then the expanded command.
+EXPANDED_PROMPT = ("<system-reminder>\nx\n</system-reminder>\n<system-reminder>\ny\n</system-reminder>\n"
+                   "<command-message>tld:make-plan</command-message>\n<command-name>/tld:make-plan</command-name>\n"
+                   "<command-args>a\nb</command-args>")
+
 
 def test_known_commands_lists_commands_and_skills():
     names = ca.known_commands()
@@ -21,6 +26,36 @@ def test_invoked_command_reads_the_typed_line():
     assert ca.invoked_command("please /tld:make-plan") is None
     assert ca.invoked_command("/tld:nope") is None
     assert ca.invoked_command("make-plan") is None
+
+
+def test_expanded_command_with_reminders_is_invoked():
+    assert ca.invoked_command(EXPANDED_PROMPT) == "make-plan"
+
+
+def test_expanded_command_without_message_is_invoked():
+    assert ca.invoked_command("<command-name>/tld:make-plan</command-name>") == "make-plan"
+    assert ca.invoked_command("<command-name>/make-plan</command-name>") == "make-plan"
+
+
+def test_reminder_then_typed_slash_command_is_invoked():
+    assert ca.invoked_command("<system-reminder>x</system-reminder>/tld:make-plan a") == "make-plan"
+
+
+def test_command_name_later_in_the_text_is_not_invoked():
+    assert ca.invoked_command("hello <command-name>/tld:make-plan</command-name>") is None
+
+
+def test_unknown_expanded_command_is_none():
+    assert ca.invoked_command("<command-name>/tld:nope</command-name>") is None
+
+
+def test_command_name_inside_a_reminder_is_not_invoked():
+    assert ca.invoked_command("<system-reminder>x <command-name>/tld:make-plan</command-name></system-reminder>hello") is None
+    assert ca.invoked_command("<system-reminder>x<command-name>/tld:make-plan</command-name>") is None
+
+
+def test_reminder_then_prose_is_not_invoked():
+    assert ca.invoked_command("<system-reminder>x</system-reminder>please /tld:make-plan") is None
 
 
 def test_prompt_event_becomes_a_prompt_action(tmp_path):
@@ -89,6 +124,14 @@ def test_opening_prompt_opens_then_write_is_allowed(tmp_path):
     write = event("Write", repo, file_path=str(repo / "a.txt"), content="x")
     assert gate(repo, write).code == 2
     assert gate(repo, prompt_event(repo, "/tld:make-plan add a thing")) == ca.Result(0)
+    assert gate(repo, write).code == 0
+
+
+def test_expanded_prompt_opens_then_write_is_allowed(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo", ON)
+    write = event("Write", repo, file_path=str(repo / "a.txt"), content="x")
+    assert gate(repo, write).code == 2
+    assert gate(repo, prompt_event(repo, EXPANDED_PROMPT)) == ca.Result(0)
     assert gate(repo, write).code == 0
 
 

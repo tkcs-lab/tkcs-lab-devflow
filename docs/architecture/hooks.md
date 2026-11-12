@@ -229,7 +229,10 @@ to propose `/tld:make-plan` (the `ask` skill, `/tld:ask`, says how).
 - **Opens per session, from the prompt hook.** A prompt that starts with `make-plan`, `implement`, `review`, `setup`,
   `migrate`, `land`, `deps`, `upstream`, `docs` or `repo-admin` (`/tld:<name>` or `/<name>`) opens that session id. Other
   known commands (`/tld:dod`, `/tld:ask`) neither open it nor add context. A skill the model starts itself does not pass
-  through `UserPromptSubmit`, so it cannot open the gate.
+  through `UserPromptSubmit`, so it cannot open the gate. The prompt may also arrive expanded
+  (`<command-name>/tld:<name></command-name>` after any leading `<system-reminder>` blocks), which opens it too; a
+  literal `</system-reminder>` inside reminder text cannot be told apart, accepted because the marker is a deliberate
+  step, not a control.
 - **A prompt is never blocked and never erased** (exit 0 always). In a closed session it gets one sentence of context:
   `tld plan-gate: this session has no plan. Answer or research only; do not edit files or run commands that write. If the
   message asks for a change, restate it in one or two sentences and propose /tld:make-plan. The tld:ask skill describes
