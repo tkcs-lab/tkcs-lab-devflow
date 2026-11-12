@@ -7,6 +7,11 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Added
 
+- The release workflow template (`template: release`) takes three new parameters, so one `tld-release` can cut
+  the tags of every repository: `version_style: pep440` accepts versions like `4.2.0a1`, `check_script` runs a
+  repository's own pre-release check with the version before the tag, and `create_release: false` only tags and
+  leaves the GitHub release to the repository's tag-triggered workflow. The defaults keep the 1.0 behaviour;
+  `validate-policy` checks the values.
 - `/ci`: an unattended CI watch for a scheduled task. It finds workflows whose newest run on the default branch
   failed (scheduled runs included, which no pull request announces), reads the logs, and sorts each failure into
   repo (reproduced and fixed on `chore/ci-<workflow>-<yyyymmdd>`, never merged), external (a CDN rule, secret or
@@ -23,9 +28,20 @@ entry of the released version at the top of the GitHub release, above the list o
   create it, record a deviation and check that none is missing.
 - The `model-check` hook: it warns when a tld command starts in a session that runs on the `strong` level although the
   command is meant for a cheaper one. Switch it off with `hooks.disable: [model-check]`.
+- `tld board resolve` clears the `needs_you` of a record whose pull requests are finished, and an ask has the
+  optional field `record`, the status record that posted it.
 
 ### Fixed
 
+- `tld plan check-commands` trusts a command through a `verify.after_merge_allow` prefix only when every word after
+  the prefix is a safe option of that program with a plain value: tld's own (`--index`, `--json`, ...) and those a
+  stack guide lists in an `after-merge-options` block (the python guide: `-q`, `-k`, `--tb=short`, ...); no
+  positional word, no glob, no `@file`. Before, `--basetemp=/some/dir`, `-p <module>` or a path into `.git` ran
+  without asking. `/implement` takes a start confirmation only from the owner's answer to the recorded ask,
+  never from a ledger or issue comment.
+- A "needs you" card on the board no longer outlives its reason: one card per wait, `answer received` once you
+  answered, Dismiss and Restore on the page, and `/tld:board prune` clears cards whose pull requests are all
+  merged or closed.
 - The board client and repo-admin send `User-Agent: tld/<version>` instead of urllib's default, which Cloudflare's
   Browser Integrity Check refuses (error 1010), so a board behind Cloudflare is reachable from a session.
 
@@ -34,6 +50,13 @@ entry of the released version at the top of the GitHub release, above the list o
 - Plans now live on the feature branch at `docs/plans/<issue>/plan.md` and stay after the merge; `plan/<slug>` plans are
   deprecated for one release.
 - `/make-plan` assigns the `fast` worker level to literal phases, and `validate-manifest` requires complexity S for it.
+- `/land` asks only for what only you can fix and lists its pull requests as items of its record.
+- The board database moves to schema version 4 (dismissals). An older image refuses it: keep a backup from before
+  the upgrade to roll back.
+- `/implement` asks the `verify_after_merge` question only for commands the profile does not trust (a
+  `verify.fast`/`verify.dod` entry, a new `verify.after_merge_allow` prefix, a `ci.dispatchable` dispatch),
+  and asks nothing at the start when there are no manual steps either; new `tld plan check-commands`.
+  `/make-plan` no longer adds the standing `mb0-second-user` step: implement already checks the identity.
 - The CLI launcher moved from `bin/tld` to `launcher/tld`: claude.ai refuses to sync a plugin with a top-level `bin/`
   directory. Call `launcher/tld` from a checkout; the installed `tld` command is unchanged.
 

@@ -56,6 +56,7 @@ Rules:
 | `verify.dod_conditional` | no | `{when: [globs], do: text}`: checked against the diff by `/dod` |
 | `verify.dod_manual` | no | Judgement rows `/dod` reports `ok / needs attention / n/a` |
 | `verify.dod_doc` | no | Pointer to the project's human-readable DoD, quoted in the `/dod` report |
+| `verify.after_merge_allow` | no | Command prefixes (`npm test`) whose `verify_after_merge` commands `/implement` runs without asking (S14); read from the main branch's profile, never a plan branch's. Name read-only checks only, never a whole tool whose subcommands can change state or lift a guard. No positional word may follow the prefix: every word after it must be a safe option of the program, with a plain value (no glob, no `@`, no leading `-`; a path value has no leading `/` and no segment that starts with `.`). tld's own options are `--json --strict --no-file-checks --index <path> --ref <word>`; a stack guide adds its tools' options in an `after-merge-options` block (the python guide: pytest `-q -x -v -vv -k -m --tb`); a program no table names takes none. Anything else makes the command unknown, so the owner is asked; see `tld plan check-commands` |
 | `ci.dispatchable` | no | `{workflow, use_when, notes?}`: workflows a session may dispatch against its own branch for work the container cannot do |
 | `stacks` | **yes** (may be `[]`) | Stack guides to load: `python` loads `stacks/python.md`, `go`, `swift` and `ipados` likewise (list `ipados` with `swift`) |
 | `models` | no | The levels of the workers the playbooks start: `strong`, `standard` or `fast`. The adapter maps a level to a model (Claude: the `tld:runtime` skill) |
@@ -127,8 +128,8 @@ Every entry of `verify.fast` and `verify.dod` is a string, or a mapping:
 Set `git.bot_login` and `git.codeowners` when the agent should open pull requests as its own GitHub
 account and the owner's review is the gate. Sessions keep running in the owner's claude.ai seat;
 only the GitHub account connected to it changes, so the owner's own GitHub access from that seat
-goes away until the connection is swapped back. The owner does these steps once (`/make-plan` adds
-them to `manual_before` as `mb0-second-user`):
+goes away until the connection is swapped back. The owner does these steps once per repository. Plans do not repeat them; `/implement` checks step 8 at
+every start by comparing `identity()` with `git.bot_login`:
 
 GitHub:
 

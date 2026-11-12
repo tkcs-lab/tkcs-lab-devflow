@@ -41,7 +41,7 @@ from pathlib import Path
 
 import yaml
 
-from tld.ops.repo_admin import TEMPLATES, render_template
+from tld.ops.repo_admin import BUILTIN_TEMPLATES, TEMPLATES, render_template
 from tld.profile import validate as validate_mod
 
 OLD_PROFILE = ".claude/toolkit.yaml"
@@ -319,7 +319,7 @@ def rewrite_text(text: str) -> tuple[str, list[str]]:
 
 def _workflow(root: Path, name: str, profile: dict) -> str:
     template = (TEMPLATES / f"tld-{name}.yml").read_text()
-    params = {"main_branch": str((profile.get("git") or {}).get("main_branch") or "main")}
+    params = {**BUILTIN_TEMPLATES.get(name, (None, {}))[1], "main_branch": str((profile.get("git") or {}).get("main_branch") or "main")}
     if name == "release":
         old = (root / ".github" / "workflows" / f"devflow-{name}.yml").read_text(errors="replace")
         m = re.search(r'^\s*PREFIX:\s*"([^"]*)"', old, re.M)
