@@ -46,21 +46,21 @@ jobs:
           claude plugin validate .
       - name: Validators on the starter profile, this repository's profile and the fixtures
         run: |
-          python launcher/tld profile validate src/tld/templates/toolkit.yaml --no-file-checks
-          python launcher/tld profile validate .tld/toolkit.yaml
+          python cli/tld profile validate src/tld/templates/toolkit.yaml --no-file-checks
+          python cli/tld profile validate .tld/toolkit.yaml
           for p in tests/fixtures/*-toolkit.yaml; do
-            python launcher/tld profile validate "$p" --no-file-checks
+            python cli/tld profile validate "$p" --no-file-checks
           done
-          python launcher/tld ops repo-admin validate-policy src/tld/templates/admin-policy.yaml
-          python launcher/tld ops repo-admin validate-policy .tld/admin-policy.yaml
+          python cli/tld ops repo-admin validate-policy src/tld/templates/admin-policy.yaml
+          python cli/tld ops repo-admin validate-policy .tld/admin-policy.yaml
           for m in tests/fixtures/privacyfence-*-manifest.yaml; do
-            python launcher/tld plan validate-manifest "$m" --profile tests/fixtures/privacyfence-toolkit.yaml
+            python cli/tld plan validate-manifest "$m" --profile tests/fixtures/privacyfence-toolkit.yaml
           done
           for r in tests/fixtures/status-records/good-*.json; do
-            python launcher/tld board validate-record "$r"
+            python cli/tld board validate-record "$r"
           done
       - name: Docs index
-        run: python launcher/tld ops docs-index check --index docs/README.md
+        run: python cli/tld ops docs-index check --index docs/README.md
       - name: Evals in stub mode (every task, canned outcomes, no model call)
         run: |
           python evals/run.py validate

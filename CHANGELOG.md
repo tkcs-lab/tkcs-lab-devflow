@@ -27,8 +27,9 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Changed
 
-- The CLI launcher moved from `bin/tld` to `launcher/tld`: claude.ai refuses to sync a plugin with a top-level `bin/`
-  directory. Call `launcher/tld` from a checkout; the installed `tld` command is unchanged.
+- The CLI entry script moved from `bin/tld` to `cli/tld`: claude.ai refuses to sync a plugin with a top-level `bin/`
+  directory. A session that was open during the plugin sync may need a restart. Call `cli/tld` from a checkout; the
+  installed `tld` command is unchanged.
 
 ## [1.0.0] - 2026-11-11
 
@@ -48,7 +49,7 @@ gets no more changes. Migrate a repository with `/tld:migrate` or `tld migrate`;
 
 ### Added
 
-- A Python package and one CLI, `tld <group> <command>` (`pip install`, or `launcher/tld` from a checkout); every former
+- A Python package and one CLI, `tld <group> <command>` (`pip install`, or `bin/tld` from a checkout); every former
   script is a `tld` command ([docs/reference/cli.md](docs/reference/cli.md)). `tld migrate` moves a repository over.
 - A neutral core: playbooks (one per command, plus git-ops and repo-admin), ten roles (role card plus checklist),
   checklists, stack guides and policies. The Claude Code plugin is a thin adapter that maps the playbooks' runtime

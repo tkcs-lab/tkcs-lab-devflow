@@ -8,7 +8,7 @@ a `tld` command.
 
 ## Conventions
 
-- `tld <group> <command>` is the toolkit's command line (`launcher/tld` in the toolkit, see
+- `tld <group> <command>` is the toolkit's command line (`cli/tld` in the toolkit, see
   `docs/reference/cli.md`). The adapter's runtime map says how to call it.
 - `<tld root>` is the directory that holds `playbooks/`, `roles/`, `checklists/`, `stacks/` and
   `src/tld/templates/`. Playbooks name core files relative to it (`playbooks/policies/profile.md`).

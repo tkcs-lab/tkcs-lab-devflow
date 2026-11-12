@@ -24,7 +24,7 @@ A cloud session (claude.ai/code) does **not** install plugins that a repository 
 The plugin is the whole repository (its source is the root), so Claude Code sets `CLAUDE_PLUGIN_ROOT` to a copy
 of it: `~/.claude/plugins/cache/tkcs-lab-devflow/tld/<version>/` after an install,
 `~/.claude/plugins/synced/<id>/tld/` in a cloud session whose plugins come from the Project. The commands call
-`"${CLAUDE_PLUGIN_ROOT}/launcher/tld"`.
+`"${CLAUDE_PLUGIN_ROOT}/cli/tld"`.
 
 ## The plugin in a local Claude Code
 
@@ -39,7 +39,7 @@ of it: `~/.claude/plugins/cache/tkcs-lab-devflow/tld/<version>/` after an instal
 
 ```
 pip install git+https://github.com/tkcs-lab/tkcs-lab-devflow@v1.0.0   # a release tag; the console script tld
-launcher/tld --help                                                         # or, from a checkout, without installing
+cli/tld --help                                                         # or, from a checkout, without installing
 ```
 
 Python 3.11+ and PyYAML. [cli.md](../reference/cli.md) lists every command.

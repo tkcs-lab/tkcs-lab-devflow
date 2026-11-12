@@ -27,7 +27,7 @@ From a checkout of the tkcs-lab-devflow repository:
 ```bash
 export TLD_BOARD_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 read -rs TLD_BOARD_OWNER_PASSPHRASE && export TLD_BOARD_OWNER_PASSPHRASE   # type 16+ characters
-launcher/tld board server --port 8787 --insecure-cookie
+cli/tld board server --port 8787 --insecure-cookie
 ```
 
 `--insecure-cookie` drops the cookie's `Secure` flag so the login works over plain `http://127.0.0.1`; never use
@@ -41,11 +41,11 @@ cat > ask.json <<'JSON'
  "title": "Try the inbox", "created_by": "local-test",
  "questions": [{"id": "go", "text": "Does the inbox work?", "kind": "confirm"}]}
 JSON
-launcher/tld board ask ask.json            # prints the ask id
+cli/tld board ask ask.json            # prints the ask id
 ```
 
 Open `http://127.0.0.1:8787/`, log in, open the ask under "Needs you" and answer it; then
-`launcher/tld board answers <id>` prints `{"go":true}`. A status record is written with `tld board client set`;
+`cli/tld board answers <id>` prints `{"go":true}`. A status record is written with `tld board client set`;
 this one is valid (save it as `record.json`):
 
 ```json
@@ -117,7 +117,7 @@ this one is valid (save it as `record.json`):
 ```
 
 ```bash
-launcher/tld board client set example-project record.json
+cli/tld board client set example-project record.json
 ```
 
 The answer is `{"id":"example-project","version":1}`, and the run shows on the page.

@@ -191,7 +191,7 @@ repository root (`.github/workflows/**`); `**` crosses directories, `*` and `?` 
 Paths outside the repository are not this hook's business.
 
 **The `/setup` exemption.** `/setup` has to write `.tld/toolkit.yaml`. Before its first write it runs
-`"${CLAUDE_PLUGIN_ROOT}/launcher/tld" guard allow-profile`, which writes the marker
+`"${CLAUDE_PLUGIN_ROOT}/cli/tld" guard allow-profile`, which writes the marker
 `protect-paths-profile.json` into `<git dir>/tld/` (so it is per checkout and never committed). For two hours from
 that moment the hook lets the path `.tld/toolkit.yaml` (exactly) through and nothing else: `.env*`, lockfiles and
 workflow files stay denied. After its last write `/setup` runs `tld guard end-allow`, which removes the marker; a marker that
@@ -264,7 +264,7 @@ Decision: **a session is gated unless it marked itself exempt.** A command that 
 profile is loaded:
 
 ```
-"${CLAUDE_PLUGIN_ROOT}/launcher/tld" dod exempt
+"${CLAUDE_PLUGIN_ROOT}/cli/tld" dod exempt
 ```
 
 `tld dod exempt` writes `<git dir>/tld/dod-gate-exempt.json` (inside `.git`, so it is never committed). The marker is per checkout:
