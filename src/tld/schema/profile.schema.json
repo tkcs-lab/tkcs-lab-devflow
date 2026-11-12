@@ -511,7 +511,8 @@
               "secret-scan",
               "protect-paths",
               "dod-gate",
-              "plan-gate"
+              "plan-gate",
+              "model-check"
             ]
           },
           "x-hook-default": [],
