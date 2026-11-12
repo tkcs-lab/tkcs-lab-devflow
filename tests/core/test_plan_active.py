@@ -478,3 +478,14 @@ def test_playbook_active_run_calls_run(tmp_path):
         r = run(*args)
         assert r.returncode in (0, 4), (code, r.stderr)
         assert len(r.stdout.strip().splitlines()) == 1 and "state" in json.loads(r.stdout)
+
+
+def test_module_runs_as_a_script(tmp_path, monkeypatch):
+    import runpy
+    import sys
+    f = write(tmp_path, "c.json", [])
+    monkeypatch.setattr(sys, "argv", ["active", "--kind", "make-plan", "--comments", f, "--bot", BOT])
+    sys.modules.pop("tld.plan.active", None)
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_module("tld.plan.active", run_name="__main__")
+    assert exc.value.code == 0
