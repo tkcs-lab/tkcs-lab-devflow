@@ -144,6 +144,17 @@ def find_cycle(phases: dict[str, list[str]]) -> list[str] | None:
     return None
 
 
+def _names_record_file(last: str) -> bool:
+    """True when the last segment of a glob is plan.md or deviations.md, or a glob that picks one of them by
+    more than its extension (`plan.*`, `*an.md`, `[p]lan.md`); `*.md` and `plugin*.md` do not."""
+    if last in ("plan.md", "deviations.md"):
+        return True
+    if not any(c in last for c in WILDCARDS):
+        return False
+    literal = re.sub(r"[*?\[\]!]", "", re.sub(r"\.\w+$", "", last))
+    return len(literal) >= 2 and any(fnmatch.fnmatchcase(f, last) for f in ("plan.md", "deviations.md"))
+
+
 def _is_plan_record(entry: str, plan_dir: str, known: tuple[str, ...] = ()) -> bool:
     """True when a touches entry grants write scope over <plan_dir>/<slug>/plan.md or deviations.md.
 
@@ -155,8 +166,8 @@ def _is_plan_record(entry: str, plan_dir: str, known: tuple[str, ...] = ()) -> b
 
     Left alone on purpose: `<plan_dir>/` and any directory above it (`docs/` for `docs/plans`), and a glob that
     does not aim at the records (`docs/*.md`, `docs/adr/**` under a `plan_dir` of `docs`). A glob aims when its
-    literal prefix is inside `plan_dir` (two or more segments), starts with `<plan_dir>/<known name>/`, ends in
-    plan.md or deviations.md, or is `*`/`**`. Such broad entries are not caught here: the merge review of an
+    literal prefix is inside `plan_dir` (two or more segments), names a known name as a path segment
+    (`docs/14*`, `**/demo/*`), picks plan.md or deviations.md by more than the extension, or is `*`/`**`. Such broad entries are not caught here: the merge review of an
     implement run is the control for them."""
     name = _norm(entry)
     if not name:
@@ -181,7 +192,8 @@ def _is_plan_record(entry: str, plan_dir: str, known: tuple[str, ...] = ()) -> b
     if wild:
         prefix = _static_prefix(name)
         aims = ((depth >= 2 and prefix.startswith(base + "/")) or any(prefix.startswith(f"{base}/{k}/") for k in known)
-                or parts[-1] in ("plan.md", "deviations.md") or all(seg in ("*", "**") for seg in parts))
+                or any(re.search(r"(^|/)" + re.escape(k), name) for k in known)
+                or _names_record_file(parts[-1]) or all(seg in ("*", "**") for seg in parts))
         if not aims:
             return False
     return any(path_matches(f"{base}/{sl}/{f}", name) for sl in slugs for f in ("plan.md", "deviations.md"))

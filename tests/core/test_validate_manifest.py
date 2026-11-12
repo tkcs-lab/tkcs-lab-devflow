@@ -150,6 +150,12 @@ def test_a_plan_record_in_touches_is_an_error(vm):
     for bad in ("docs/plans/*", "docs/plans/1*", "docs/pl*/14/plan.md", "docs/*/plan.md", "**/plan.md",
                 "*", "**", "docs/plans/14/**"):
         assert any("is a plan record" in e for e in touching(bad)), bad
+    for bad in ("docs/demo*", "docs/14*", "docs/14**", "**/demo/*", "**/14/*", "*an.md"):
+        assert any("is a plan record" in e for e in touching(bad, plan_dir="docs")), bad
+    for bad in ("*/demo/*", "**/14/*", "docs/plans/*an.md"):
+        assert any("is a plan record" in e for e in touching(bad)), bad
+    for ok in ("docs/*.md", "docs/plugin*.md", "*.md"):
+        assert touching(ok, plan_dir="docs") == [], ok
     for bad in ("**", "*", "docs/*/plan.md", "docs/demo/", "docs/14/", "docs/14/*", "docs/demo/*"):
         assert any("is a plan record" in e for e in touching(bad, plan_dir="docs")), bad
     assert touching("docs/adr/**", plan_dir="docs") == []
