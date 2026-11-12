@@ -59,16 +59,15 @@ REMOTE = re.compile(r"github\.com[:/](?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z
 DISPATCH = re.compile(r"dispatch ([^\s]+)")
 PLAIN = re.compile(r"[A-Za-z0-9_./=:@%+,*?\[\]\- '\"]*")
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-TOKEN = re.compile(r"[A-Za-z0-9_./:@%+,*?\[\]=-]+")
+TOKEN = re.compile(r"[A-Za-z0-9_./:%+,=-]+")
+STACKS = Path(__file__).resolve().parents[3] / "stacks"
+OPTIONS_BLOCK = re.compile(r"^```yaml after-merge-options\n(.*?)^```", re.S | re.M)
 # The options a command may carry after a `verify.after_merge_allow` prefix, keyed by the program the prefix
-# names: None takes no value, "token" a plain word, "path" a repo-relative path, a set one of its words.
-# Everything else (pytest's --basetemp, -p, -c, --rootdir, -o; tld's --root; any unknown option) is unknown.
-SAFE_OPTIONS: dict[str, dict[str, object]] = {
-    "pytest": {"-q": None, "-x": None, "-v": None, "-vv": None, "-k": "token", "-m": "token",
-               "--tb": {"short", "line", "no"}},
-    "tld": {"--json": None, "--strict": None, "--no-file-checks": None, "--index": "path", "--profile": "path",
-            "--ref": "token"},
-}
+# names: null takes no value, "token" a plain word, "path" a plain repo-relative path, a list one of its words.
+# tld's own options are here; a stack guide adds its tools' options in an `after-merge-options` block. A
+# program no table names takes no option; no command takes a positional word after its prefix.
+TLD_OPTIONS: dict[str, object] = {"--json": None, "--strict": None, "--no-file-checks": None, "--index": "path",
+                                  "--ref": "token"}
 
 
 class PlanError(Exception):
@@ -260,48 +259,57 @@ def _entries(items: object) -> list[str]:
     return out
 
 
-def _program(prefix: list[str]) -> str:
-    """The program a prefix runs, for SAFE_OPTIONS: `pytest`, `tld`, or "" for any other."""
-    names = [w.rsplit("/", 1)[-1] for w in prefix]
-    if "pytest" in names:
-        return "pytest"
-    return "tld" if "tld" in names else ""
+def stack_options(stacks: object) -> dict[str, dict[str, object]]:
+    """The safe options per program: tld's own plus the `after-merge-options` block of each listed stack guide."""
+    table: dict[str, dict[str, object]] = {"tld": dict(TLD_OPTIONS)}
+    for name in stacks if isinstance(stacks, list) else []:
+        if not isinstance(name, str) or not SLUG.match(name):
+            continue
+        try:
+            text = (STACKS / f"{name}.md").read_text()
+        except (OSError, UnicodeError):
+            continue
+        m = OPTIONS_BLOCK.search(text)
+        if not m:
+            continue
+        data = yaml.safe_load(m.group(1))
+        if not isinstance(data, dict):
+            raise PlanError(f"stacks/{name}.md: the after-merge-options block must be a mapping")
+        for program, opts in data.items():
+            if not isinstance(program, str) or not isinstance(opts, dict) or not all(
+                    isinstance(o, str) and o.startswith("-") and (v is None or v in ("token", "path") or (
+                        isinstance(v, list) and all(isinstance(c, str) for c in v))) for o, v in opts.items()):
+                raise PlanError(f"stacks/{name}.md: bad after-merge-options entry '{program}'")
+            table.setdefault(program, {}).update(opts)
+    return table
 
 
-GLOB = re.compile(r"[*?\[\]]")
-LITERAL_START = re.compile(r"[A-Za-z0-9_]")
+def _program(prefix: list[str], table: dict) -> dict[str, object]:
+    """The safe options of the program a prefix runs (matched by a word's base name), or none."""
+    for word in prefix:
+        base = word.rsplit("/", 1)[-1]
+        if base in table:
+            return table[base]
+    return {}
 
 
-def _repo_path(word: str) -> bool:
-    """A repo-relative path: a plain word, no leading `/`, `~`, `-` or `@` (pytest's argument file), no `..`
-    segment. The shell expands a glob before the program sees it, so a glob may only stand in a segment after
-    the first one, and that segment must start with a letter, digit or `_`: it then can match neither an option,
-    an `@file` nor `.` or `..`."""
-    if not TOKEN.fullmatch(word) or word.startswith(("/", "~", "-", "@")):
+def _plain_value(word: str, kind: object) -> bool:
+    """An option's value: a plain word without a leading `-`; a path also has no leading `/` and no segment
+    that starts with `.` (no `..`, `.git`, `.env`)."""
+    if isinstance(kind, list):
+        return word in kind
+    if not TOKEN.fullmatch(word) or word.startswith("-"):
         return False
-    segments = word.split("/")
-    if ".." in segments or GLOB.search(segments[0]):
-        return False
-    return all(not GLOB.search(seg) or LITERAL_START.match(seg) for seg in segments[1:])
+    return kind != "path" or not (word.startswith("/") or any(seg.startswith(".") or not seg
+                                                              for seg in word.split("/")))
 
 
-def _plain_value(word: str) -> bool:
-    """An option's plain value: no glob (the shell would expand it), no leading `-` or `@`."""
-    return bool(TOKEN.fullmatch(word)) and not GLOB.search(word) and not word.startswith(("-", "@"))
-
-
-def _safe_tail(tail: list[str], program: str) -> bool:
-    """Whether every word after an allowed prefix is a safe option of the program or a repo-relative path."""
-    options = SAFE_OPTIONS.get(program, {})
+def _safe_tail(tail: list[str], options: dict[str, object]) -> bool:
+    """Whether every word after an allowed prefix is one of the program's safe options (with its value)."""
     i = 0
     while i < len(tail):
-        word = tail[i]
+        name, eq, value = tail[i].partition("=")
         i += 1
-        if not word.startswith("-"):
-            if not _repo_path(word):
-                return False
-            continue
-        name, eq, value = word.partition("=")
         if name not in options:
             return False
         kind = options[name]
@@ -314,13 +322,7 @@ def _safe_tail(tail: list[str], program: str) -> bool:
                 return False
             value = tail[i]
             i += 1
-        if isinstance(kind, set):
-            ok = value in kind
-        elif kind == "path":
-            ok = _repo_path(value)
-        else:
-            ok = _plain_value(value)
-        if not ok:
+        if not _plain_value(value, kind):
             return False
     return True
 
@@ -343,6 +345,7 @@ def check_commands(manifest: dict, profile: dict) -> dict:
         if words:
             prefixes.append(words)
     exact = set(_entries(verify.get("fast")) + _entries(verify.get("dod")))
+    table = stack_options(profile.get("stacks"))
     dispatchable = {d["workflow"] for d in ci.get("dispatchable") or [] if isinstance(d, dict)
                     and isinstance(d.get("workflow"), str)} if isinstance(ci.get("dispatchable"), list) else set()
 
@@ -358,7 +361,7 @@ def check_commands(manifest: dict, profile: dict) -> dict:
             words = shlex.split(cmd)
         except ValueError:
             return False
-        return any(words[:len(p)] == p and _safe_tail(words[len(p):], _program(p)) for p in prefixes)
+        return any(words[:len(p)] == p and _safe_tail(words[len(p):], _program(p, table)) for p in prefixes)
 
     result: dict = {"trusted": [], "unknown": []}
     for cmd in manifest.get("verify_after_merge") or []:

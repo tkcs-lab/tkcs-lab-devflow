@@ -293,7 +293,7 @@ def test_plan_started_needs_a_full_object_id(plan, feature_repo):
 
 
 # ---- check-commands (S14) -------------------------------------------------------------------
-BASE = ".venv/bin/python -m pytest tests -q"
+BASE = ".venv/bin/python -m pytest -q"
 PFX = ".venv/bin/python -m pytest"
 
 
@@ -304,8 +304,8 @@ def mf(cmds):
     return m
 
 
-def profile_with(allow=None, fast=("x",), dod=("y",), ci=None):
-    p = {"verify": {"fast": list(fast), "dod": list(dod)}}
+def profile_with(allow=None, fast=("x",), dod=("y",), ci=None, stacks=("python",)):
+    p = {"verify": {"fast": list(fast), "dod": list(dod)}, "stacks": list(stacks)}
     if allow is not None:
         p["verify"]["after_merge_allow"] = allow
     if ci is not None:
@@ -340,10 +340,11 @@ def test_check_commands_cwd_entry_not_trusted():
 
 
 def test_check_commands_trusts_allow_prefixes():
-    r = cc([".venv/bin/python -m pytest tests/core/test_board_*.py -q", BASE, ".venv/bin/python -m pytestx",
-            ".venv/bin/python -m"], allow=[PFX])
-    assert r["trusted"] == [".venv/bin/python -m pytest tests/core/test_board_*.py -q", BASE]
-    assert r["unknown"] == [".venv/bin/python -m pytestx", ".venv/bin/python -m"]
+    r = cc([".venv/bin/python -m pytest -k board -q", BASE, PFX, ".venv/bin/python -m pytestx",
+            ".venv/bin/python -m", ".venv/bin/python -m pytest tests/core/test_board_*.py -q"], allow=[PFX])
+    assert r["trusted"] == [".venv/bin/python -m pytest -k board -q", BASE, PFX]
+    assert r["unknown"] == [".venv/bin/python -m pytestx", ".venv/bin/python -m",
+                            ".venv/bin/python -m pytest tests/core/test_board_*.py -q"]
 
 
 def test_check_commands_rejects_shell_metacharacters():
@@ -431,7 +432,8 @@ def test_check_commands_cli_output(tmp_path):
 
 
 @pytest.mark.parametrize("cmd, ok", [
-    (".venv/bin/python -m pytest tests/core/test_board_*.py -q", True),
+    (".venv/bin/python -m pytest -k board -q", True),
+    (".venv/bin/python -m pytest tests/core/test_board_*.py -q", False),
     (".venv/bin/python launcher/tld ops docs-index check --index docs/README.md", True),
     (".venv/bin/python launcher/tld guard allow-profile", False),
     (".venv/bin/python launcher/tld guard allow-plan", False),
@@ -449,8 +451,7 @@ TLD = ".venv/bin/python launcher/tld"
 
 
 @pytest.mark.parametrize("tail", ["-q", "-x", "-v", "-vv", "-k test_a", "-k=test_a", "-m slow", "--tb=short",
-                                  "--tb=line", "--tb=no", "--tb short", "-q -x tests/core",
-                                  "tests/core/test_x.py::test_a -k a"])
+                                  "--tb=line", "--tb=no", "--tb short", "-q -x -k a"])
 def test_check_commands_pytest_safe_options_are_trusted(tail):
     cmd = f"{PFX} {tail}"
     assert cc([cmd], allow=[PFX])["trusted"] == [cmd]
@@ -459,7 +460,9 @@ def test_check_commands_pytest_safe_options_are_trusted(tail):
 @pytest.mark.parametrize("tail", ["--basetemp=/home/user -q", "--basetemp build", "-p x", "-pno:cacheprovider",
                                   "-c other.ini", "--rootdir=/", "--confcutdir=/", "-o addopts=x",
                                   "--pyargs os", "--junitxml=/root/.bashrc", "/etc", "tests/../../x", "../x",
-                                  "~/x", "--unknown", "--tb=long", "--tb=", "-k", "-k -p", "-q=1", "-- tests"])
+                                  "~/x", "--unknown", "--tb=long", "--tb=", "-k", "-k -p", "-q=1", "-- tests",
+                                  "tests", "-q tests/core", "tests/core/test_x.py::test_a -k a", ".git/config",
+                                  ".venv/lib/x"])
 def test_check_commands_pytest_other_options_are_unknown(tail):
     cmd = f"{PFX} {tail}"
     assert cc([cmd], allow=[PFX]) == {"trusted": [], "unknown": [cmd]}
@@ -467,9 +470,9 @@ def test_check_commands_pytest_other_options_are_unknown(tail):
 
 @pytest.mark.parametrize("cmd", [
     f"{TLD} ops docs-index check --index docs/README.md",
-    f"{TLD} ops docs-index check --profile .tld/toolkit.yaml --json --strict",
-    f"{TLD} profile validate .tld/toolkit.yaml --no-file-checks",
-    f"{TLD} plan validate-manifest tests/fixtures/p.yaml --profile tests/fixtures/t.yaml --ref feature/x",
+    f"{TLD} ops docs-index check --index docs/README.md --json --strict",
+    f"{TLD} profile validate --no-file-checks",
+    f"{TLD} plan validate-manifest --ref feature/x",
 ])
 def test_check_commands_tld_safe_options_are_trusted(cmd):
     prof = yaml.safe_load((ROOT / ".tld" / "toolkit.yaml").read_text())
@@ -483,6 +486,13 @@ def test_check_commands_tld_safe_options_are_trusted(cmd):
     f"{TLD} ops docs-index check --write",
     f"{TLD} profile validate /etc/x.yaml",
     f"{TLD} plan validate-manifest p.yaml --ref -x",
+    f"{TLD} plan validate-manifest --ref -x",
+    f"{TLD} profile validate .git/config",
+    f"{TLD} profile validate .tld/toolkit.yaml --no-file-checks",
+    f"{TLD} ops docs-index check --profile .tld/toolkit.yaml",
+    f"{TLD} ops docs-index check --index .git/config",
+    f"{TLD} ops docs-index check --index docs/.env",
+    f"{TLD} ops docs-index check --index docs//x",
 ])
 def test_check_commands_tld_other_options_are_unknown(cmd):
     prof = yaml.safe_load((ROOT / ".tld" / "toolkit.yaml").read_text())
@@ -490,8 +500,28 @@ def test_check_commands_tld_other_options_are_unknown(cmd):
 
 
 def test_check_commands_other_program_takes_no_options():
-    assert cc(["npm test web", "npm test --watch"], allow=["npm test"]) == {
-        "trusted": ["npm test web"], "unknown": ["npm test --watch"]}
+    assert cc(["npm test", "npm test web", "npm test --watch", "make check install"],
+              allow=["npm test", "make check"]) == {
+        "trusted": ["npm test"], "unknown": ["npm test web", "npm test --watch", "make check install"]}
+
+
+def test_check_commands_pytest_options_come_from_the_stack_guide():
+    assert cc([BASE], allow=[PFX], stacks=()) == {"trusted": [], "unknown": [BASE]}
+    assert cc([PFX], allow=[PFX], stacks=()) == {"trusted": [PFX], "unknown": []}
+    assert phases.stack_options(["python"])["pytest"]["--tb"] == ["short", "line", "no"]
+    assert "pytest" not in phases.stack_options(["go", "nonexistent", "../x", 3])
+
+
+def test_stack_options_block_must_be_well_formed(tmp_path, monkeypatch):
+    monkeypatch.setattr(phases, "STACKS", tmp_path)
+    (tmp_path / "s.md").write_text("x\n\n```yaml after-merge-options\nprog:\n  -a: maybe\n```\n")
+    with pytest.raises(phases.PlanError, match="bad after-merge-options entry 'prog'"):
+        phases.stack_options(["s"])
+    (tmp_path / "s.md").write_text("```yaml after-merge-options\n- a\n```\n")
+    with pytest.raises(phases.PlanError, match="must be a mapping"):
+        phases.stack_options(["s"])
+    (tmp_path / "s.md").write_text("```yaml after-merge-options\nprog:\n  -a: null\n  -b: [x]\n```\n")
+    assert phases.stack_options(["s"])["prog"] == {"-a": None, "-b": ["x"]}
 
 
 @pytest.mark.parametrize("tail", ["*", "@args.txt", "-k *", "-k @x", "-m t?", "tests/.?/.?/x", "tests/*/x",
