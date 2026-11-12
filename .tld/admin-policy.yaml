@@ -10,8 +10,10 @@ repos:
 repo_settings:
   delete_branch_on_merge: true
   allow_update_branch: true
+  allow_auto_merge: true
 security:
   vulnerability_alerts: true
+  automated_security_fixes: true
   secret_scanning: true
   secret_push_protection: true
   private_vulnerability_reporting: true
@@ -29,3 +31,5 @@ agent:
 release:
   reviewer_login: andras-tkcs
   environment: tld-release
+workflows:
+  - template: land

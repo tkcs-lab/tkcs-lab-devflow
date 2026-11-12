@@ -21,7 +21,9 @@ KINDS = {
     "profile": ("protect-paths-profile.json", 7200),            # /setup edits .tld/toolkit.yaml
     "workflow-install": ("protect-paths-workflow.json", 900),   # /land or repo-admin installs a tld workflow file
     "git-ops": ("git-ops-confirm.json", 600),                    # a real (dry_run false) git-ops run after the user's yes
+    "plan-open": ("plan-gate-open.json", 28800),                 # /implement workers: edits allowed in this checkout (plan-gate)
 }
+KEEP_ON_CLEAR = ("plan-open",)   # `end-allow` leaves these in place
 STAMP = "%Y-%m-%dT%H:%M:%SZ"
 
 
@@ -49,6 +51,8 @@ def read(project: str, kind: str) -> dict | None:
 
 def clear(project: str) -> None:
     for kind in KINDS:
+        if kind in KEEP_ON_CLEAR:
+            continue
         try:
             path(project, kind).unlink()
         except FileNotFoundError:
@@ -86,9 +90,13 @@ def cli(argv: list[str]) -> int:
         where = write(project, "git-ops")
         print(f"no-git-tag: git-ops may run with dry_run false for the next 10 minutes ({where})")
         return 0
+    if argv[:1] == ["--allow-plan"]:
+        where = write(project, "plan-open")
+        print(f"plan-gate: edits are allowed in this checkout for the next 8 hours ({where})")
+        return 0
     if argv[:1] == ["--end-allow"]:
         clear(project)
         print("protect-paths: .tld/toolkit.yaml is protected again; workflow installs and real git-ops runs are off")
         return 0
-    print("usage: tld guard allow-profile | allow-workflow-install <file>... | allow-git-ops | end-allow", file=sys.stderr)
+    print("usage: tld guard allow-profile | allow-workflow-install <file>... | allow-git-ops | allow-plan | end-allow", file=sys.stderr)
     return 2

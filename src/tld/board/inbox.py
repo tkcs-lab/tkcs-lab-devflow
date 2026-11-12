@@ -4,7 +4,9 @@
     tld board ask FILE|- [--fallback-issue OWNER/REPO[#N]] [--mention LOGIN] [--profile FILE]
     tld board answers ID [--wait SECONDS] [--interval SECONDS]
     tld board answers --from-issue COMMENTS.json --ask FILE --self LOGIN [--owner LOGIN]... [--repo O/R] [--profile F]
+    tld board answers --from-reply REPLY|- --ask FILE
     tld board cancel ID
+    tld board ask-text FILE|- [--id ID]
 
 `ask` validates the ask (src/tld/schema/ask.schema.json), posts it and prints its id. Exit 0 posted; 1 the ask
 is invalid or the board refused it; 3 no board configured (and no --fallback-issue); 5 the board is not
@@ -29,6 +31,14 @@ or no; a text: the rest of the line); a later answer overrides an earlier one. T
 that quotes someone else, never counts: fenced (```` ``` ```` or `~~~`) and indented code blocks, `>` quotes,
 HTML comments and `<blockquote>` / `<details>` blocks. Exit 0 with the answers JSON when every required question
 has an answer, else 3 (stderr names the missing ones); 2 without --self or with no owner to count.
+
+`ask-text` prints an ask as one chat message (Markdown) that an attended session shows unchanged, so the owner
+may answer in the conversation; --id is the board ask id, or the fallback comment URL. `answers --from-reply`
+reads the answers from REPLY, a text file (or - for stdin) with every message the owner typed since the ask was
+shown, oldest first: the same plain `<question id>: <answer>` lines as --from-issue (the later overriding), and
+for one choice or confirm question also the last line alone. A text question never takes a bare answer. No owner
+check: the session passes only text the owner typed. Exit 0 with the answers JSON when every required question
+has an answer, else 3; 2 with an ask id or --from-issue, without --ask, or with both inputs on stdin.
 
 `cancel ID` cancels an open ask and prints {"id", "state"}. Exit 0 cancelled (or already cancelled); 1 not
 found, already answered, or no board. Python 3.11+, stdlib + PyYAML.
@@ -92,6 +102,30 @@ def owner_login(repo: str, mention: str | None, profile: str | None) -> str:
     return repo.split("/", 1)[0]
 
 
+def _question_lines(n: int, q: dict, quiet: bool = True) -> list[str]:
+    esc = _quiet if quiet else (lambda t: t)
+    need = "required" if ask_model.is_required(q) else "optional"
+    text = esc(q["text"]).replace("\n", "\n   ")
+    lines = [f"{n}. `{q['id']}` ({q['kind']}, {need}): {text}"]
+    if q["kind"] == "choice":
+        opts = ", ".join(f"`{o['value']}`" + (f" ({esc(o['label'])})" if o.get("label") else "")
+                         for o in q["options"])
+        lines.append(f"   Options: {opts}")
+    elif q["kind"] == "confirm":
+        lines.append("   Answer `yes` or `no`.")
+    else:
+        lines.append("   Answer on one line.")
+    return lines
+
+
+def _example_line(q: dict) -> str:
+    if q["kind"] == "choice":
+        return f"{q['id']}: {q['options'][0]['value']}"
+    if q["kind"] == "confirm":
+        return f"{q['id']}: yes"
+    return f"{q['id']}: your answer on one line"
+
+
 def fallback_comment(ask: dict, mention: str) -> str:
     """The comment body that asks the owner on GitHub; `answers_from_comments` reads the replies."""
     lines = [MARKER, f"@{mention} a tld session ({_quiet(ask['created_by'])}) needs your answers: "
@@ -100,24 +134,34 @@ def fallback_comment(ask: dict, mention: str) -> str:
         lines += [f"Context: {ask['context_url']}", ""]
     example: list[str] = []
     for n, q in enumerate(ask["questions"], 1):
-        need = "required" if ask_model.is_required(q) else "optional"
-        text = _quiet(q["text"]).replace("\n", "\n   ")
-        lines.append(f"{n}. `{q['id']}` ({q['kind']}, {need}): {text}")
-        if q["kind"] == "choice":
-            opts = ", ".join(f"`{o['value']}`" + (f" ({_quiet(o['label'])})" if o.get("label") else "")
-                             for o in q["options"])
-            lines.append(f"   Options: {opts}")
-            example.append(f"{q['id']}: {q['options'][0]['value']}")
-        elif q["kind"] == "confirm":
-            lines.append("   Answer `yes` or `no`.")
-            example.append(f"{q['id']}: yes")
-        else:
-            lines.append("   Answer on one line.")
-            example.append(f"{q['id']}: your answer on one line")
+        lines += _question_lines(n, q)
+        example.append(_example_line(q))
     lines += ["", "Reply with one line per question, each at the start of its own line and not in a code block or a "
                   "quote. Example reply (copy the lines between the markers and change the answers):", "",
               "-- example reply --", "", *example, "", "-- end of example --",
               "", "Only replies by the repository owner or an admin count; the session's own account never does."]
+    return "\n".join(lines) + "\n"
+
+
+def ask_text(ask: dict, ask_id: str | None = None) -> str:
+    """The ask as one chat message for an attended session; the owner may answer it in the conversation."""
+    if not ask_id:
+        where = "Answer here in the chat."
+    elif ask_id.startswith("https://"):
+        where = f"Answer here in the chat, or on the issue ({ask_id})."
+    else:
+        where = f"Answer here in the chat, or on the board (ask {ask_id})."
+    lines = [f"**{ask['title']}**", where]
+    if ask.get("context_url"):
+        lines.append(f"Context: {ask['context_url']}")
+    lines.append("")
+    for n, q in enumerate(ask["questions"], 1):
+        lines += _question_lines(n, q, quiet=False)
+    lines += ["", "Reply with one line per question, `<question id>: <answer>`, for example:", "",
+              *[_example_line(q) for q in ask["questions"]]]
+    qs = ask["questions"]
+    if len(qs) == 1 and qs[0]["kind"] in ("choice", "confirm"):
+        lines += ["", "With one question, the answer alone is enough."]
     return "\n".join(lines) + "\n"
 
 
@@ -188,6 +232,30 @@ def answers_from_comments(ask: dict, comments: list, ignore: str | None = None,
     return found
 
 
+def answers_from_reply(ask: dict, reply: str) -> dict:
+    """The answers in the owner's reply typed in the conversation, the later overriding; for one choice or
+    confirm question also the last line alone (a text question never takes a bare answer)."""
+    questions = {q["id"]: q for q in ask["questions"]}
+    lines = [line for line in visible_lines(reply) if line]
+    found: dict[str, object] = {}
+    named: set[int] = set()
+    for i, line in enumerate(lines):
+        m = ANSWER_LINE.match(line)
+        if not m or m.group(1) not in questions:
+            continue
+        named.add(i)
+        value = _fits(questions[m.group(1)], m.group(2))
+        if value is not None:
+            found[m.group(1)] = value
+    qs = ask["questions"]
+    if not found and len(qs) == 1 and qs[0]["kind"] in ("choice", "confirm") and lines \
+            and len(lines) - 1 not in named:
+        value = _fits(qs[0], lines[-1])
+        if value is not None:
+            found[qs[0]["id"]] = value
+    return found
+
+
 # -- commands ------------------------------------------------------------------------------------
 
 def _config() -> board_client.Config | None:
@@ -250,7 +318,54 @@ def _get(config: board_client.Config, ask_id: str) -> tuple[int, object]:
     return board_client.call(config, "GET", "/api/asks/" + urllib.parse.quote(ask_id, safe=""))
 
 
+def cmd_text(args: argparse.Namespace) -> int:
+    try:
+        ask = _read_json(args.file)
+    except (OSError, ValueError) as exc:
+        _err(f"cannot read the ask ({exc})")
+        return 1
+    errors = ask_model.validate_new(ask)
+    if errors:
+        for e in errors:
+            print(f"ask: {e}", file=sys.stderr)
+        return 1
+    sys.stdout.write(ask_text(ask, args.id))
+    return 0
+
+
+def answers_from_reply_cmd(args: argparse.Namespace) -> int:
+    if args.id or args.from_issue:
+        _err("--from-reply takes no ask id and no --from-issue")
+        return 2
+    if not args.ask:
+        _err("--from-reply needs --ask FILE (the ask that was shown)")
+        return 2
+    if args.from_reply == "-" and args.ask == "-":
+        _err("--from-reply and --ask cannot both read stdin")
+        return 2
+    try:
+        ask = _read_json(args.ask)
+        reply = sys.stdin.read() if args.from_reply == "-" else Path(args.from_reply).read_text(encoding="utf-8")
+    except (OSError, ValueError) as exc:
+        _err(f"cannot read the input ({exc})")
+        return 1
+    errors = ask_model.validate_new(ask)
+    if errors:
+        for e in errors:
+            print(f"ask: {e}", file=sys.stderr)
+        return 1
+    found = answers_from_reply(ask, reply)
+    missing = [q["id"] for q in ask["questions"] if ask_model.is_required(q) and q["id"] not in found]
+    if missing:
+        _err("no answer yet for: " + ", ".join(missing))
+        return EXIT_OPEN
+    _emit(found)
+    return 0
+
+
 def cmd_answers(args: argparse.Namespace) -> int:
+    if args.from_reply:
+        return answers_from_reply_cmd(args)
     if args.from_issue:
         return answers_from_issue(args)
     if not args.id:
@@ -368,7 +483,9 @@ def build_parser() -> argparse.ArgumentParser:
     answers.add_argument("--interval", type=float, default=10, help="seconds between polls (at least 1)")
     answers.add_argument("--from-issue", dest="from_issue", metavar="COMMENTS.json",
                          help="read the answers from the replies to a fallback comment")
-    answers.add_argument("--ask", help="with --from-issue: the ask file that was posted")
+    answers.add_argument("--from-reply", dest="from_reply", metavar="REPLY",
+                         help="read the answers from the owner's reply in the conversation")
+    answers.add_argument("--ask", help="with --from-issue or --from-reply: the ask file that was posted")
     answers.add_argument("--self", "--ignore-author", dest="ignore_author", metavar="LOGIN",
                          help="with --from-issue (required): the session's own login, never an answer")
     answers.add_argument("--owner", action="append", default=[], metavar="LOGIN",
@@ -379,12 +496,16 @@ def build_parser() -> argparse.ArgumentParser:
     answers.add_argument("--profile", help="with --from-issue: the profile to read git.owner_login from")
     cancel = sub.add_parser("cancel", prog="tld board cancel", help="cancel an open ask")
     cancel.add_argument("id")
+    text = sub.add_parser("text", prog="tld board ask-text", help="print an ask as a chat message")
+    text.add_argument("file", help="the ask as JSON, or - for stdin")
+    text.add_argument("--id", help="the board ask id, or the fallback comment URL")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    return {"ask": cmd_ask, "answers": cmd_answers, "cancel": cmd_cancel}[args.cmd](args)
+    return {"ask": cmd_ask, "answers": cmd_answers, "cancel": cmd_cancel,
+            "text": cmd_text}[args.cmd](args)
 
 
 if __name__ == "__main__":

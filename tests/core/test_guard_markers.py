@@ -161,3 +161,47 @@ def test_the_marker_never_opens_the_release_workflow(fresh_repo):
     tld(fresh_repo, "allow-git-ops")
     r = run("no-git-tag", bash("gh workflow run tld-release.yml -f dry_run=false", fresh_repo))
     assert r.code == 2 and "only by the release workflow (tld-release), which the owner runs by hand" in r.stderr
+
+
+# --------------------------------------------------------------------------- plan-gate: the worker marker
+
+PLAN = "plan-gate-open.json"
+
+
+def test_allow_plan_writes_the_marker_in_the_git_dir(fresh_repo):
+    r = tld(fresh_repo, "allow-plan")
+    assert r.returncode == 0 and "edits are allowed in this checkout for the next 8 hours" in r.stdout, r.stderr
+    assert (fresh_repo / ".git" / "tld" / PLAN).is_file()
+
+
+def test_end_allow_does_not_remove_the_plan_marker(fresh_repo):
+    tld(fresh_repo, "allow-plan")
+    tld(fresh_repo, "allow-git-ops")
+    assert tld(fresh_repo, "end-allow").returncode == 0
+    assert (fresh_repo / ".git" / "tld" / PLAN).is_file()
+    assert not (fresh_repo / ".git" / "tld" / "git-ops-confirm.json").exists()
+
+
+def test_plan_marker_lapses_after_eight_hours(fresh_repo):
+    from tld.guard import markers
+    tld(fresh_repo, "allow-plan")
+    project = str(fresh_repo)
+    assert markers.read(project, "plan-open") is not None
+    age(fresh_repo, PLAN, 28801)
+    assert markers.read(project, "plan-open") is None
+
+
+def test_allow_plan_help_writes_no_marker(fresh_repo):
+    r = tld(fresh_repo, "allow-plan", "--help")
+    assert r.returncode == 0 and r.stdout.strip()
+    assert not (fresh_repo / ".git" / "tld" / PLAN).exists()
+
+
+def test_implement_playbook_tells_workers_to_open_the_plan_marker():
+    from conftest import ROOT
+
+    text = (ROOT / "playbooks" / "implement.md").read_text()
+    assert text.count("tld guard allow-plan") >= 2
+    start = text.index("> You are the final reviewer")
+    end = text.index("at least one blocking finding.", start)
+    assert "allow-plan" not in text[start:end]

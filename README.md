@@ -60,10 +60,10 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | `/tld:board [prune]` | checks the connection to your board, or prunes its stale records after you confirm |
 | `/tld:migrate` | moves a repository from claude-toolkit to tld: shows the plan, writes it on a branch after you confirm, one pull request |
 
-No command merges, approves, tags or force-pushes. Two procedures run on request through skills:
+No command merges, approves, tags or force-pushes. Three skills run on request:
 `tld:repo-admin` (audit and apply organisation and repository settings, rulesets, environments and workflows from
 a policy file; [guide](docs/guides/admin.md)) and `tld:git-ops` (delete a remote branch through a central workflow;
-[guide](docs/guides/git-ops.md)). The maintenance commands and scheduling: [docs/guides/maintenance.md](docs/guides/maintenance.md).
+[guide](docs/guides/git-ops.md)) and `tld:ask` (invoked as `/tld:ask`: answers a question or discusses an idea without changing anything and proposes `/tld:make-plan` for a change). The maintenance commands and scheduling: [docs/guides/maintenance.md](docs/guides/maintenance.md).
 
 ## Guardrails: seatbelt and control
 
@@ -82,7 +82,7 @@ See [docs/architecture/hooks.md](docs/architecture/hooks.md) and [SECURITY.md](S
 
 A small server you host ([docs/guides/board-server.md](docs/guides/board-server.md)) holds a status record of every
 run and the **asks**: questions, decisions and manual steps a playbook puts to you. You answer in the browser after
-logging in; a session cannot answer for you. Without a board, an ask becomes a comment on the tracking issue that
+logging in; a session cannot answer for you. When you started the session yourself, the ask also shows in the chat and you can answer there; the session also checks the board on its own, so an answer there is picked up within minutes. Without a board, an ask becomes a comment on the tracking issue that
 mentions you, and only replies by you (the repository owner or `git.owner_login`) or an admin count; the agent's own
 account never does.
 

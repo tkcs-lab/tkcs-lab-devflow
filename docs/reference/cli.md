@@ -39,13 +39,16 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld guard allow-profile` | `tld.guard.protect_paths` | let the session edit the profile for the next 2 hours |
 | `tld guard allow-workflow-install FILE...` | `tld.guard.protect_paths` | let the session write `tld-land.yml` / `tld-release.yml` for the next 15 minutes |
 | `tld guard allow-git-ops` | `tld.guard.protect_paths` | let a git-ops dispatch with `dry_run` false through for the next 10 minutes |
-| `tld guard end-allow` | `tld.guard.protect_paths` | end every allow marker: the profile, workflow installs, git-ops |
+| `tld guard allow-plan` | `tld.guard.protect_paths` | let every session in this checkout edit files for 8 hours (a plan-gate marker for /implement workers) |
+| `tld guard end-allow` | `tld.guard.protect_paths` | end the profile, workflow-install and git-ops markers; it does not end the plan marker |
 | `tld board server [--host H] [--port N] [--db F] [--insecure-cookie] ...` | `tld.board.server` | serve the board: status records, asks, the owner's page ([board-server.md](../guides/board-server.md)) |
 | `tld board client health\|list\|get\|set\|delete ...` | `tld.board.client` | status records on the board server |
 | `tld board ask FILE\|- [--fallback-issue O/R[#N]] [--mention LOGIN] [--profile P]` | `tld.board.inbox` | post an ask and print its id; exit 3 no board, 5 the fallback comment body is on stdout |
 | `tld board answers ID [--wait S] [--interval S]` | `tld.board.inbox` | print the answers JSON; exit 3 still open, 4 cancelled |
 | `tld board answers --from-issue COMMENTS.json --ask FILE --self LOGIN [--owner LOGIN]... [--repo O/R] [--profile P]` | `tld.board.inbox` | the answers in the owner's (`--owner`, else `git.owner_login`, else the repository owner) or an admin's replies to a fallback comment, never `--self`'s (required); exit 3 incomplete, 2 no `--self` or no owner |
+| `tld board answers --from-reply REPLY\|- --ask FILE` | `tld.board.inbox` | the answers in the owner's reply in the conversation; exit 3 incomplete, 2 with an id or --from-issue, or without --ask |
 | `tld board cancel ID` | `tld.board.inbox` | cancel an open ask |
+| `tld board ask-text FILE\|- [--id ID]` | `tld.board.inbox` | the ask as a chat message an attended session shows; the owner may answer there |
 | `tld board validate-ask FILE` | `tld.board.ask` | validate an ask (`schema/ask.schema.json`) |
 | `tld board mcp-stdio` | `tld.board.mcp_stdio` | MCP stdio bridge to the board server (the `tld-board` MCP server) |
 | `tld board stale [FILE] [--now T]` | `tld.board.stale` | print the ids of hidden status records |
