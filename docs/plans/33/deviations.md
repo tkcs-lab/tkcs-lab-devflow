@@ -17,7 +17,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-playbook-links
 
-- pending
+- None.
+- review: Open non-blocking: ask.md omits --forbid <owner>/<repo> on tld research check-prompt which the policy requires; scheduled playbooks do not say open research questions use public facts only; make-plan line on quoted research does not say it is data; ask.md says it posts no ask while research.md lists ask among attended runs
 
 ## p4-adapter-environment
 
