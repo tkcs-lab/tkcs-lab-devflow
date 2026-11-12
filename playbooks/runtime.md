@@ -18,6 +18,8 @@ a `tld` command.
   level to a model.
 - GitHub is a fixed assumption: issues, pull requests, workflows and permissions are GitHub's.
 - Every playbook follows [policies/untrusted-text.md](policies/untrusted-text.md).
+- A session's network may be limited and research goes through the owner:
+  [policies/research.md](policies/research.md).
 
 ## Workers
 
@@ -66,7 +68,7 @@ parallel. A role in `review` mode changes no file.
 
 ### run_helper(task, level)
 
-Run a read-only helper with a fresh context at `level`: a research sweep over the repository, a review of
+Run a read-only helper with a fresh context at `level`: a repository sweep, a review of
 a plan or a prompt, a verifier that tries to disprove findings. Returns its answer. It has no role card and
 changes no file.
 

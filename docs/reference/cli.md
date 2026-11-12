@@ -60,6 +60,8 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld board validate-record FILE [--doc-id ID]` | `tld.board.record` | validate a status record |
 | `tld board project-slug OWNER/NAME` | `tld.board.record` | the project slug of a repository, the only `project` a record may have |
 | `tld board record-id --repo OWNER/NAME (--run --plan-slug SLUG \| --command CMD (--session ID \| --unattended))` | `tld.board.record` | the document id of a status record: `<project>--run--<plan>`, `<project>--<command>--<session tail>`, or `<project>--<command>` when unattended |
+| `tld research check-prompt FILE [--forbid TEXT]...` | `tld.research` | check a research prompt (length, sections, secrets, board values) before it is posted; exit 1 lists the problems |
+| `tld research report --id ID --reply FILE\|- [--rest FILE]` | `tld.research` | the marked research report from the owner's reply; exit 3 no complete report, 1 wrong id, too long or no Answer line, 2 an unreadable reply, a bad --id or an unwritable --rest; --rest gets only the lines before the first start line (what follows a report may be web text) |
 | `tld ops land-order [FILE] [--max N]` | `tld.ops.land_order` | order the open pull requests for `/land` |
 | `tld ops pick-release --pattern RE ...` | `tld.ops.pick_release` | pick the newest eligible release tag |
 | `tld ops upstream-sync plan\|prepare ...` | `tld.ops.upstream_sync` | sync a fork to an upstream release |

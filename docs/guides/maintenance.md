@@ -125,6 +125,8 @@ session). Such a task has no repository, no `add_repo` and no GitHub tools, so i
 request and does nothing useful; only a task created in the UI with the repository attached can do the
 work.
 
+The environment these tasks run in (what to enable and deny) is in [cloud-environments.md](cloud-environments.md).
+
 ## The board
 
 The board is the self-hosted server described in [board-server.md](board-server.md): it stores the

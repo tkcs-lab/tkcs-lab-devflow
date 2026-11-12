@@ -14,7 +14,7 @@ The plan goes to the feature branch (the manifest's `feature_branch`) at `<plan_
 `<main>` with the feature in the feature pull request, where it stays as a historical record.
 
 Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text.md),
-[policies/status-board.md](policies/status-board.md). Runtime actions: [runtime.md](runtime.md).
+[policies/status-board.md](policies/status-board.md), [policies/research.md](policies/research.md). Runtime actions: [runtime.md](runtime.md).
 
 ## Setup
 
@@ -88,7 +88,8 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
 3. If a decision is genuinely the human's (scope, product behaviour, a trade-off with no default in the code or
    the ADRs), `ask_human` it now, all such questions in one ask (`choice` with your recommendation first, or
    `text`), with `context_url` the tracking issue. Do not ask what you can settle by reading the code. Write
-   nothing until they answer.
+   nothing until they answer. A fact that only the open web can settle is a research request, not a guess:
+   [policies/research.md](policies/research.md).
 4. **Decide the scope.** It is **small** when the whole change fits one phase of "Sizing" (section 2):
    complexity S or M, one coherent change, one pull request, nothing that has to be merged and reviewed in
    stages. Otherwise it is **large**. If the human said which, do that; when in doubt prefer small.
@@ -124,7 +125,8 @@ the pull request in one go. In this order:
    changelog line (changelog parts), the docs-index rows (index parts), and an ADR if the change meets
    `docs.adr_bar` (ADR parts).
 6. **Acceptance**: each item a named test, a grep or a command.
-7. **Stop conditions**: what the worker sees if this prompt is wrong, and that it then stops and asks.
+7. **Stop conditions**: what the worker sees if this prompt is wrong, and that it then stops and asks; a fact that
+   only the open web can settle, which the worker reports as blocked with a `Research:` line.
 8. **Finish**: the branch name (`<branch pattern>`), the comment `Implementation started.` on the tracking issue
    before the first change, the dod playbook, one pull request following the repository template whose body
    starts with `Closes #<n>` (the tracking issue; one more per issue the ask named), the comment
@@ -157,7 +159,8 @@ literal edit, or `strong` with the reason), the `manual_before` items if any, th
 2. **Current state**: what the code does today, with `path:line` references and measurements where they matter.
 3. **Design**: the spec. Every decision is made here: names of new modules, functions, config keys, routes,
    schema versions, exact user-visible strings and error texts. Where you chose between alternatives, say what
-   you rejected and why; that text becomes the ADRs in the last phase.
+   you rejected and why; that text becomes the ADRs in the last phase. Facts from outside research are quoted there with their URLs and
+   dates, so no worker has to research again.
 4. **ADRs** (ADR parts only): one bullet per decision that meets `docs.adr_bar`, with the number it will take
    (next free in `docs.adr_dir`) and its one-line decision, or "none".
 5. **Manual steps**: every `manual_before` and `manual_after` item with its step-by-step instructions (section 3).
