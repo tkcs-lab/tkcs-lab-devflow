@@ -9,8 +9,8 @@
 
 `report` prints the marked report block of ID from the owner's reply. A block starts at `RESEARCH-REPORT <id>`
 and ends at the last `END RESEARCH-REPORT <id>` after it, so a forged end line inside web text cannot end it
-early. With --rest FILE the reply without any block is written there (on every exit code except 2), so that
-lines pasted into a report can never answer an ask. Exit 0 the body; 1 the report is for another id, too long
+early. With --rest FILE only the lines before the first start line are written there (on every exit code
+except 2): whatever follows may be web text, so it can never answer an ask. Exit 0 the body; 1 the report is for another id, too long
 or has no `Answer:` line; 2 an unreadable reply, a bad --id; 3 no complete report for ID.
 Python 3.11+, stdlib + the toolkit.
 """
@@ -23,6 +23,7 @@ import sys
 import unicodedata
 from pathlib import Path
 from typing import NoReturn
+from urllib.parse import urlsplit
 
 from tld.board.ask import BAD_CHARS
 from tld.guard.secret_scan import ALLOW_MARK, scan_text
@@ -33,7 +34,10 @@ MAX_REPORT = 3500
 SECTIONS = ("Question:", "Public context:", "Constraints:", "What would settle it:",
             "Rules for the researcher:", "Report format")
 SECRET_ENV = ("TLD_BOARD_URL", "TLD_BOARD_TOKEN")
-INVISIBLE = re.compile(r"[\x80-\x9f\u2028\u2029]")  # C1 controls and line separators; the rest is category Cf
+# C1 controls, line separators, variation selectors, combining grapheme joiner and blank fillers; the rest of
+# what is hidden is found by category (Cf, Co, Cn, Cs)
+INVISIBLE = re.compile("[\x80-\x9f\u2028\u2029\u034f\u115f\u17b4\u17b5\u180b-\u180f\u1160\u2800\u3164\uffa0\ufe00-\ufe0f\U00013441\U00013442\U00016fe4\U000e0100-\U000e01ef]")
+HIDDEN_CATEGORIES = ("Cf", "Co", "Cn", "Cs")
 START = "RESEARCH-REPORT "
 END = "END RESEARCH-REPORT "
 
@@ -43,12 +47,18 @@ def _err(text: str) -> None:
 
 
 def _hidden(ch: str) -> bool:
-    return unicodedata.category(ch) == "Cf" or bool(INVISIBLE.match(ch))
+    return unicodedata.category(ch) in HIDDEN_CATEGORIES or bool(INVISIBLE.match(ch))
+
+
+def _squash(text: str) -> str:
+    return "".join(_plain(text).lower().split())
 
 
 def _plain(text: str) -> str:
-    """The text as a reader or a scanner sees it: no invisible character, compatibility forms folded."""
-    return unicodedata.normalize("NFKC", "".join(ch for ch in text if not _hidden(ch)))
+    """The text as a scanner sees it: no invisible character, no combining mark, compatibility forms folded."""
+    kept = "".join(ch for ch in text if not _hidden(ch))
+    decomposed = unicodedata.normalize("NFKD", kept)
+    return unicodedata.normalize("NFKC", "".join(ch for ch in decomposed if unicodedata.category(ch) not in ("Mn", "Me")))
 
 
 def _first_id(lines: list[str]) -> str | None:
@@ -78,12 +88,19 @@ def check_prompt(text: str, forbid: list[str], env: dict[str, str]) -> list[str]
         if ALLOW_MARK in line:
             problems.append(f"secret: line {n} has `{ALLOW_MARK}`, which lets a token past the scan")
     low = plain.lower()
+    squashed = _squash(plain)
     for i, value in enumerate(forbid, 1):
-        if _plain(value).lower() in low:
+        want = _squash(value)  # a value with nothing visible left in it matches nothing
+        if want and (_plain(value).lower() in low or want in squashed):
             problems.append(f"forbidden: --forbid {i} appears in the prompt")
     for name in SECRET_ENV:
-        value = env.get(name, "")
-        if len(value) >= 4 and value.lower() in low:
+        value = _plain(env.get(name, "")).strip()
+        try:
+            host = urlsplit(value).hostname or ""
+        except ValueError:  # a malformed URL has no host to compare, the value itself still counts
+            host = ""
+        needles = {value, value.rstrip("/"), host if len(host) >= 4 else ""}
+        if any(len(n) >= 4 and (n.lower() in low or _squash(n) in squashed) for n in needles):
             problems.append(f"forbidden: the value of {name} appears in the prompt")
     if rid is not None:
         stripped = {line.strip() for line in lines}
@@ -96,16 +113,17 @@ def split_reply(text: str, rid: str) -> tuple[str, str, str]:
     """(status, body, rest) of the reply: the report block of `rid`, and the reply without any block."""
     lines = text.splitlines()
     blocks: list[tuple[str, list[str], bool]] = []
-    rest: list[str] = []
+    rest: list[str] = []  # the lines before the first block; what follows is never the owner's
     i = 0
     while i < len(lines):
-        head = lines[i].strip()
+        head = _plain(lines[i]).strip()
         bid = head[len(START):] if head.startswith(START) else ""
         if not ID_RE.fullmatch(bid):
-            rest.append(lines[i])
+            if not blocks:
+                rest.append(lines[i])
             i += 1
             continue
-        end = max((j for j in range(i + 1, len(lines)) if lines[j].strip() == END + bid), default=-1)
+        end = max((j for j in range(i + 1, len(lines)) if _plain(lines[j]).strip() == END + bid), default=-1)
         if end < 0:
             blocks.append((bid, lines[i + 1:], False))
             break
