@@ -93,8 +93,23 @@ To release: in a pull request, bump the three to `X.Y.Z` and add a `## [X.Y.Z]` 
 requires one for a release version). After the merge the owner runs the workflow `release`
 (`.github/workflows/release.yml`) on `main`: a dry run first shows the tag `vX.Y.Z` and the notes (the changelog
 entry plus the pull requests merged since the previous tag); unticking `dry_run` publishes, after the owner approves
-the run in the environment `tld-release`, which holds `TLD_RELEASE_TOKEN`. The workflow's own token only reads. A
+the run in the environment `tld-release`, which holds `TLD_RELEASE_TOKEN`. The workflow's own token reads, and writes only packages (the board image). A
 breaking change to the profile raises the major version, and the release notes say how to update `tld.version`.
+
+The workflow also builds the release: it builds the wheel and the sdist, builds the board image for linux/amd64 and
+linux/arm64 and pushes it to `ghcr.io/tkcs-lab/tld-board` (the version and `latest`), and only then creates the tag and a
+draft release with five assets (`tld-X.Y.Z-py3-none-any.whl`, `tld-X.Y.Z.tar.gz`, `install.sh` and `compose.yaml` stamped
+with the version and the image digest, and `SHA256SUMS`), which it publishes last, so the release is public complete or not at all.
+A dry run builds everything and pushes nothing.
+
+One-time steps for the first release: enable release immutability (repository settings, General, Releases) before it,
+so assets cannot be replaced after publishing, and make the ghcr package `tld-board` public after the first push
+(package settings, Change visibility), or the board installer cannot pull it.
+
+If a real run fails, the image is pushed before the tag, so the ghcr tag `:latest` can be ahead of the last
+published release, not only an orphan `:<version>` tag; a re-run overwrites both. If the draft release was
+created but publishing it failed, re-running the printed `gh release create` fails: run only
+`gh release edit <tag> --draft=false`.
 
 ## Adding a hook case
 
