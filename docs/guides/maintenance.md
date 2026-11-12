@@ -37,8 +37,8 @@ failed job's logs and sorts each one:
   headers with the repository's expectation fails after the CDN rule was not updated; no commit fixes that.)
 - **transient**: a one-off `5xx` or runner error; recorded, no action. Three failures in a row count as external.
 
-It cannot stop GitHub's failure mails; fixing or reporting the cause does. Its record is `<project>--ci`,
-`attended: false`.
+It cannot stop GitHub's failure mails; fixing or reporting the cause does. Its record is `<project>--ci`
+(an unattended id, unchanged), `attended: false`.
 
 ### `/upstream`
 
@@ -71,7 +71,7 @@ Weekly docs cleanup (`/docs` has two more modes, `check` and `init`; see
 missing ADR-index row. The result is one pull request, or, when only judgement items remain (stale docs,
 docs over 400 lines, an index over 150 lines), an issue titled `Docs tidy: <n> items to decide` with a
 checklist. It never merges, deletes, moves or edits a doc body. It writes a record with `command: docs`
-and the document id `<project>--docs`; with nothing to fix the record says `docs clean`.
+and the document id `<project>--docs` (unattended, unchanged); with nothing to fix the record says `docs clean`.
 
 ## Profile sections
 
@@ -138,8 +138,13 @@ A phase chip shows `drift <n>` when the phase changed `n` files outside its `tou
 when the check was unavailable): a count only, the paths are in the pull request's Scope section. What
 is recorded, what is not and why it never blocks: [scope-drift.md](../architecture/scope-drift.md).
 
-Every command writes a record (D8): `/implement` a `run` record under the project slug, and `setup`, `review`,
-`make-plan`, `deps`, `ci`, `upstream`, `land`, `docs` and `migrate` a command record under `<project>--<command>`. The project slug is
+Every command writes a record (D8), and every run and every attended session has its own, so two runs or two
+sessions never replace each other's card. `/implement` writes a `run` record under `<project>--run--<plan>`; an
+attended `setup`, `review`, `make-plan`, `land`, `docs init` or `migrate` writes `<project>--<command>--<session tail>`
+(the last 8 letters and digits of its session id); the unattended `deps`, `ci`, `upstream` and `docs tidy` keep
+`<project>--<command>`. `tld board record-id` prints the id. Until tld 1.2.0 the old keys (`<project>` for a run,
+`<project>--<command>` for an attended command) are still accepted, so a run that started before the change can
+finish under its old id; `/land` no longer reads its previous record. The project slug is
 the repository name in lower case (`tld board project-slug <owner>/<repo>`). `attended` says whether you started the
 command (`/setup`, `/review`, `/make-plan`, `/implement`, `/land`, `/docs init`, `/migrate`: `true`) or a schedule did (`/deps`,
 `/upstream`, `/docs tidy`: `false`, with `orchestrator_session: null` when the session cannot read its own id). The
