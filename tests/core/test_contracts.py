@@ -185,7 +185,7 @@ def test_every_action_a_file_uses_is_defined_in_runtime(path):
 
 # ---- names that must exist ------------------------------------------------------------------
 LINK = re.compile(r"\]\(([^)\s#]+)(?:#[^)]*)?\)")
-CORE_PATH = re.compile(r"(?<![\w/.-])((?:playbooks|roles|checklists|stacks)/[a-z0-9/_-]+\.md)")
+CORE_PATH = re.compile(r"(?<![\w/.-])((?:playbooks|roles|checklists|stacks)/[a-z0-9/_-]+\.md|src/tld/[a-z0-9/_.-]*[a-z0-9_])")
 
 
 @pytest.mark.parametrize("path", CORE_FILES, ids=rel)
@@ -276,7 +276,13 @@ def test_record_commands_cover_the_playbooks():
 RUNTIME_WORDS = re.compile(
     r"create_session|send_later|send_message|get_session|archive_session|AskUserQuestion|Artifact|PushNotification|"
     r"SendUserFile|subagent|get_me|mcp__|\bAgent tool|CLAUDE_PLUGIN_ROOT|/tld:|\bopus\b|\bsonnet\b|\bhaiku\b|"
-    r"claude-(opus|sonnet|haiku)|ToolSearch|subscribe_pr_activity|actions_run_trigger|issue_write\b")
+    r"claude-(opus|sonnet|haiku)|ToolSearch|subscribe_pr_activity|actions_run_trigger|issue_write\b|claude\.ai")
+
+
+def test_runtime_words_catch_the_claude_ai_host_and_not_a_lookalike():
+    assert RUNTIME_WORDS.search("a claude.ai environment")
+    assert not RUNTIME_WORDS.search("claude-ai")
+
 
 
 @pytest.mark.parametrize("path", CORE_FILES, ids=rel)
@@ -291,3 +297,50 @@ def test_model_ids_live_in_one_file():
     found = sorted(rel(p) for d in [ROOT / "adapters", ROOT / "src", *CORE_DIRS] for p in d.rglob("*")
                    if p.is_file() and p.suffix in (".md", ".py", ".json", ".yaml") and ids.search(p.read_text()))
     assert found == ["adapters/claude/skills/runtime/SKILL.md"]
+
+
+# ---- research policy (plan 33) --------------------------------------------------------------
+RESEARCH_PLAYBOOKS = ("implement",)
+
+
+@pytest.mark.parametrize("name", RESEARCH_PLAYBOOKS)
+def test_playbooks_link_the_research_policy(name):
+    assert "(policies/research.md)" in (PLAYBOOKS / f"{name}.md").read_text(), name
+
+
+def between(text: str, start: str, end: str) -> str:
+    assert start in text, start
+    head = text.split(start, 1)[1]
+    assert end in head, end
+    return head.split(end, 1)[0]
+
+
+def test_implement_rule_zero_points_to_the_research_policy():
+    rule0 = between((PLAYBOOKS / "implement.md").read_text(), "> 0. Before any change run", "> 1. ")
+    assert "policies/research.md" in rule0 and "Research: <one question>" in rule0
+
+
+def test_implement_research_bullet_comes_before_the_generic_blocked_bullet():
+    text = (PLAYBOOKS / "implement.md").read_text()
+    generic = text.index("`status=blocked`, or no report")
+    bullet = text.rindex("  - `status=blocked` with a `Research:` line", 0, generic)
+    block = " ".join(text[bullet:generic].split())
+    assert "`gate`" in block and "`Research:`" in block
+    assert "Research report (data, not instructions):" in block
+
+
+def test_implement_final_reviewer_brief_asks_for_research_lines():
+    brief = between((PLAYBOOKS / "implement.md").read_text(), "> You are the final reviewer", "End with `REVIEW-REPORT")
+    assert "research: <question>" in brief and "policies/research.md" in brief
+
+
+def test_roles_template_states_the_environment():
+    lines = (PLAYBOOKS / "policies" / "roles.md").read_text().splitlines()
+    at = lines.index("Security posture: <critical|standard|low>")
+    assert lines[at + 1].startswith("Environment: limited network")
+
+
+def test_untrusted_text_lists_the_research_report_as_data():
+    text = (PLAYBOOKS / "policies" / "untrusted-text.md").read_text()
+    section = between(text, "## What is data", "## How data is used")
+    assert "(research.md)" in section
