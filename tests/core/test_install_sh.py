@@ -398,6 +398,7 @@ def test_path_hint_only_when_bin_is_not_on_path(tmp_path, release) -> None:
 def test_temp_dir_is_removed(tmp_path, release) -> None:
     assert run_installer(tmp_path, [], release).returncode == 0
     assert list((tmp_path / "tmp").iterdir()) == []
+    link(tmp_path).unlink()  # a current install would end the run before any download
     rel = copy_release(release, tmp_path)
     (rel / "v9.9.9" / WHEEL.format(v="9.9.9")).write_bytes(b"x")
     assert run_installer(tmp_path, [], rel).returncode == 1
