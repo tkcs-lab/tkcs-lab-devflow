@@ -5,6 +5,9 @@ name: tld-release
 # The tag is made with TLD_RELEASE_TOKEN, an owner token that is a secret of the environment
 # __RELEASE_ENVIRONMENT__: only __MAIN_BRANCH__ may use it and the owner approves every run. The workflow's own
 # GITHUB_TOKEN only reads; the tag ruleset tld-tags lets no workflow token create a tag.
+# Parameters (repo-admin `params`): tag_prefix, release_environment, version_style (semver or pep440),
+# check_script (a repository script run with the version before the tag; empty: none) and create_release
+# (false: only the tag; the repository's own tag-triggered workflow makes the GitHub release).
 
 on:
   workflow_dispatch:
@@ -58,14 +61,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PREFIX: "__TAG_PREFIX__"
+          VERSION_STYLE: "__VERSION_STYLE__"
+          CREATE_RELEASE: "__CREATE_RELEASE__"
           VERSION: ${{ inputs.version }}
           BUMP: ${{ inputs.bump }}
         run: |
           set -euo pipefail
+          case "$CREATE_RELEASE" in
+            true|false) ;;
+            *) echo "::error::create_release must be true or false (got: $CREATE_RELEASE)"; exit 1 ;;
+          esac
           num='(0|[1-9][0-9]*)'
+          case "$VERSION_STYLE" in
+            semver) pattern="^$num\.$num\.$num(-[0-9A-Za-z.]+)?$"; example="1.2.3 or 1.2.3-rc.1" ;;
+            pep440) pattern="^$num\.$num\.$num((a|b|rc)$num)?$"; example="1.2.3 or 1.2.3rc1" ;;
+            *) echo "::error::version_style must be semver or pep440 (got: $VERSION_STYLE)"; exit 1 ;;
+          esac
           if [ -n "$VERSION" ]; then
-            if ! [[ "$VERSION" =~ ^$num\.$num\.$num(-[0-9A-Za-z.]+)?$ ]]; then
-              echo "::error::version must look like 1.2.3 or 1.2.3-rc.1 (got: $VERSION)"
+            if ! [[ "$VERSION" =~ $pattern ]]; then
+              echo "::error::version must look like $example (got: $VERSION)"
               exit 1
             fi
             next="$VERSION"
@@ -92,6 +106,7 @@ jobs:
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
           echo "Release tag: $tag" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check that the commit is green
@@ -120,6 +135,45 @@ jobs:
           fi
           echo "checks on $SHA are green"
 
+      - name: Run the project's release check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SERVER: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          MAIN: "__MAIN_BRANCH__"
+          CHECK_SCRIPT: "__CHECK_SCRIPT__"
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CHECK_SCRIPT" ]; then
+            echo "no check_script: nothing to run"
+            exit 0
+          fi
+          case "$CHECK_SCRIPT" in
+            /*|-*|*..*) echo "::error::check_script must be a path inside the repository (got: $CHECK_SCRIPT)"; exit 1 ;;
+          esac
+          # A full clone with every tag, the main branch checked out at the commit to be tagged. The read-only
+          # workflow token is used for the fetch only and is not left in the clone or passed to the script.
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          git init -q checkout
+          cd checkout
+          git remote add origin "$SERVER/$REPO"
+          git -c http.extraheader="$auth" fetch -q --tags origin "+refs/heads/$MAIN:refs/remotes/origin/$MAIN"
+          git checkout -q -B "$MAIN" "$SHA"
+          git branch -q --set-upstream-to="origin/$MAIN" "$MAIN"
+          unset GH_TOKEN auth
+          if [ ! -f "$CHECK_SCRIPT" ]; then
+            echo "::error::check_script $CHECK_SCRIPT does not exist at $SHA"
+            exit 1
+          fi
+          case "$CHECK_SCRIPT" in
+            *.py) python3 "$CHECK_SCRIPT" "$VERSION" ;;
+            *.sh) bash "$CHECK_SCRIPT" "$VERSION" ;;
+            *) "./$CHECK_SCRIPT" "$VERSION" ;;
+          esac
+          echo "check_script $CHECK_SCRIPT passed for $VERSION" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Show the release notes
         env:
           GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN }}
@@ -145,10 +199,16 @@ jobs:
           SHA: ${{ github.sha }}
           TAG: ${{ steps.tag.outputs.tag }}
           PRERELEASE: ${{ inputs.prerelease }}
+          CREATE_RELEASE: "__CREATE_RELEASE__"
         run: |
           set -euo pipefail
           object=$(gh api -X POST "repos/$REPO/git/tags" -f tag="$TAG" -f message="Release $TAG" -f object="$SHA" -f type=commit --jq .sha)
           gh api -X POST "repos/$REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$object" > /dev/null
+          if [ "$CREATE_RELEASE" = "false" ]; then
+            echo "Tagged $TAG; the repository's tag workflows make the release" >> "$GITHUB_STEP_SUMMARY"
+            echo "tagged $TAG"
+            exit 0
+          fi
           flags=(--verify-tag --generate-notes --title "$TAG")
           if [ "$PRERELEASE" = "true" ]; then
             flags+=(--prerelease)

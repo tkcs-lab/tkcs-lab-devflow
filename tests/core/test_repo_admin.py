@@ -185,6 +185,24 @@ def test_unsafe_params_are_refused(ra, value):
     assert any("letters, digits" in e for e in errors), errors
 
 
+@pytest.mark.parametrize("params,needle", [
+    ({"version_style": "calver"}, "params.version_style': must be one of semver, pep440"),
+    ({"create_release": "no"}, "params.create_release': must be one of true, false"),
+    ({"check_script": "/etc/check.sh"}, "params.check_script': must be a path inside the repository"),
+    ({"check_script": "../check.sh"}, "params.check_script': must be a path inside the repository"),
+    ({"check_script": "-x"}, "params.check_script': must be a path inside the repository"),
+])
+def test_release_params_with_fixed_values_are_checked(ra, params, needle):
+    errors = ra.validate_policy({"org": "a", "workflows": [{"template": "release", "params": params}]})
+    assert any(needle in e for e in errors), errors
+
+
+def test_release_params_accept_their_values(ra):
+    params = {"version_style": "pep440", "create_release": "false", "check_script": "scripts/tag_release.py"}
+    assert ra.validate_policy({"org": "a", "workflows": [{"template": "release", "params": params}]}) == []
+    assert ra.validate_policy({"org": "a", "workflows": [{"template": "land", "params": {"version_style": "x"}}]}) == []
+
+
 def test_every_policy_key_is_documented():
     schema = json.loads((TLD / "schema" / "admin-policy.schema.json").read_text())
     reference = (ROOT / "docs" / "guides" / "admin.md").read_text()
@@ -858,6 +876,20 @@ def test_workflow_missing_is_added_with_the_branch_filled_in(ra):
     assert doc["jobs"]["release"]["if"] == "github.ref == 'refs/heads/trunk'"
     assert doc["jobs"]["release"]["steps"][0]["env"]["PREFIX"] == "rel-"
     assert "__" not in change["content"] and change["content"].endswith("\n") and not change["content"].endswith("\n\n")
+    steps = {s["name"]: s for s in doc["jobs"]["release"]["steps"]}
+    assert steps["Decide the tag"]["env"]["VERSION_STYLE"] == "semver", "the defaults keep the 1.0 behaviour"
+    assert steps["Decide the tag"]["env"]["CREATE_RELEASE"] == "true"
+    assert steps["Run the project's release check"]["env"]["CHECK_SCRIPT"] == ""
+
+
+def test_release_params_are_rendered(ra):
+    params = {"version_style": "pep440", "create_release": "false", "check_script": "scripts/tag_release.py"}
+    ctx, _ = world(ra, {"workflows": [release_entry(params=params)]}, files={"app": {}})
+    doc = yaml.safe_load(ra.check_files(ctx)[0].action.changes[0]["content"])
+    steps = {s["name"]: s for s in doc["jobs"]["release"]["steps"]}
+    assert steps["Decide the tag"]["env"]["VERSION_STYLE"] == "pep440"
+    assert steps["Publish the tag and the release"]["env"]["CREATE_RELEASE"] == "false"
+    assert steps["Run the project's release check"]["env"]["CHECK_SCRIPT"] == "scripts/tag_release.py"
 
 
 def test_workflow_up_to_date_is_left_alone_and_a_changed_one_is_updated(ra):
