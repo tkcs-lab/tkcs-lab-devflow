@@ -16,7 +16,7 @@ STALE = tld_cmd("board", "stale")
 
 def fixture_record(doc_id):
     docs = json.loads((FIXTURES / "board-records.json").read_text())
-    return copy.deepcopy(next(d["data"] for d in docs if d["id"] == doc_id))
+    return copy.deepcopy(next(d["data"] for d in docs if doc_id in (d["id"], d["data"]["project"])))
 
 
 def waiting():

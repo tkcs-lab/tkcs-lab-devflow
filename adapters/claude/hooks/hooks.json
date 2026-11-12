@@ -1,5 +1,5 @@
 {
-  "description": "tld guardrails: deterministic versions of the never-do-X rules, plus the opt-in plan-gate (docs/architecture/hooks.md in the tkcs-lab-devflow repo). Project facts come from .tld/toolkit.yaml; a hook can be switched off per repository with hooks.disable.",
+  "description": "tld guardrails: deterministic versions of the never-do-X rules, plus the opt-in plan-gate and board-gate (docs/architecture/hooks.md in the tkcs-lab-devflow repo). Project facts come from .tld/toolkit.yaml; a hook can be switched off per repository with hooks.disable.",
   "hooks": {
     "PreToolUse": [
       {
@@ -39,10 +39,23 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|mcp__.*tld-board.*__board_set",
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/adapters/claude/hooks/board_gate.py\"", "timeout": 10}
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
           {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/adapters/claude/hooks/plan_gate.py\"", "timeout": 10}
+        ]
+      },
+      {
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/adapters/claude/hooks/board_gate.py\"", "timeout": 10}
         ]
       },
       {
@@ -62,6 +75,11 @@
       {
         "hooks": [
           {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/adapters/claude/hooks/dod_gate.py\"", "timeout": 1800}
+        ]
+      },
+      {
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/adapters/claude/hooks/board_gate.py\"", "timeout": 20}
         ]
       }
     ]

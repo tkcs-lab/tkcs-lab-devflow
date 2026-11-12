@@ -12,8 +12,15 @@ Asks are [runtime.md](../runtime.md)'s `ask_human`. This file says where, how an
 `tld board client` talks to the board server when `TLD_BOARD_URL` and `TLD_BOARD_TOKEN` are set (an adapter
 may offer the same operations as tools; see its runtime map). The token lets a session write records and
 post, read and cancel asks; only the owner, logged in on the board's page, answers an ask, and the owner never
-writes a record. When neither works there is no board: skip every record step silently and carry on;
+writes a record. When there is no board (see "The write path"), skip every record step silently and carry on;
 `ask_human` then uses its issue fallback and `notify_human` still goes out.
+
+## The write path
+
+The session writes with the runtime's board tools when its tool list shows them; otherwise, or when one fails
+or says it is disconnected, with `tld board client set <id> - [--if-version <n>]`. Only exit 3 (no
+`TLD_BOARD_URL` or `TLD_BOARD_TOKEN`) means there is no board. A runtime tool that is missing or dropped is
+never a reason to skip the record.
 
 ## The record (C7)
 
@@ -22,7 +29,7 @@ writes a record. When neither works there is no board: skip every record step si
 | `kind` | `run` for implement; `command` for every other playbook (deps, upstream, land, setup, docs, review, make-plan, migrate) |
 | `command` | `null` for a run; else the playbook: `setup`, `review`, `make-plan`, `deps`, `upstream`, `land`, `docs`, `migrate` |
 | `project` | `tld board project-slug <owner>/<repo>`: the repository name, lower case, other characters as `-` |
-| document id | the project slug for a run, `<project>--<command>` for the others |
+| document id | from `tld board record-id` (see "Keys and a record that already exists"): `<project>--run--<plan>` for a run, `<project>--<command>--<tail>` for an attended command, `<project>--<command>` for a scheduled one |
 | `attended` | `true` when a person started the command and can answer; `false` for a scheduled run |
 | `orchestrator_session` | this session's id, or `null` when the session cannot read its own id (only when `attended` is `false`) |
 | `status` | `starting`, `running`, `waiting_user`, `reviewing`, then a final state: `done`, `failed` or `pr_open` (the run ended with a pull request waiting for the owner) |
@@ -30,6 +37,12 @@ writes a record. When neither works there is no board: skip every record step si
 | `phases` | implement's phases; for the others the items the playbook names |
 | `needs_you`, `needs_you_reason`, `needs_you_since` | true exactly while the owner is asked something or the run stopped on something only they can fix; the reason is one line starting with the verb the owner must do |
 | `next_check_at` | the armed check-in time, or `null` |
+
+## Keys and a record that already exists
+
+Build the id once with `tld board record-id` and keep it for the whole run. A session that resumes a run and
+finds its record under the old id (the project slug, or `<project>--<command>`) keeps writing that one.
+Hand-building an id is never right.
 
 ## Writing a record
 
@@ -53,7 +66,13 @@ very first write means a record of an earlier run exists: read it and write over
 
 ## When to write
 
-- The first record, before any work starts.
+- One exception to the first-record rule: the "already running?" check of implement (section 0 step 4) and of
+  make-plan (section 0, "already being planned") runs before the first record write and posts its `ask_human`
+  with no record written, because the run's record id is the live run's id. A board-gate block during
+  that check is answered by saying that the playbook says to write no record yet, and ending the turn. The `stop`
+  answer writes no record at all. Write the first record once the check lets the run go on.
+- The first record is written before the first ask, the first worker and any other work that can take more
+  than a minute; before `ask_human` the record is written with `needs_you`.
 - Every state change, and every check-in even when nothing changed (set `updated_at`).
 - The final state.
 

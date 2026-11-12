@@ -8,12 +8,13 @@ Decision back into whatever its runtime expects. Nothing here knows about a part
     Action(kind="github_op", project_dir="/w", cwd="/w", op="merge_pull_request", args={"pullNumber": 3})
     Action(kind="stop", project_dir="/w", cwd="/w", session_id="s1", continuing=True)
     Action(kind="prompt", project_dir="/w", cwd="/w", session_id="s1", prompt="/tld:make-plan x", invoked="make-plan")
+    Action(kind="tool_result", project_dir="/w", cwd="/w", session_id="s1", op="board_set", output='{"id": "x", "version": 2}')
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-KINDS = ("shell", "write", "github_op", "stop", "prompt", "session_start")
+KINDS = ("shell", "write", "github_op", "stop", "prompt", "session_start", "tool_result")
 VERDICTS = ("allow", "deny", "error")
 
 
@@ -25,14 +26,15 @@ class Action:
     command: str | None = None                      # shell
     path: str | None = None                         # write
     content: tuple[tuple[str, str], ...] = ()       # write: (where, text) pieces that would be written
-    op: str | None = None                           # github_op: operation name, e.g. merge_pull_request
-    args: dict = field(default_factory=dict)        # github_op: its arguments
+    op: str | None = None                           # github_op, tool_result: operation name, e.g. merge_pull_request
+    args: dict = field(default_factory=dict)        # github_op, tool_result: its arguments
     session_id: str | None = None                   # the runtime's session id; set for every kind that has one
     continuing: bool = False                        # stop: the runtime is already continuing after a block
     prompt: str | None = None                       # prompt: the text the user submitted
     invoked: str | None = None                      # prompt: the tld command or skill the runtime found at the start of it
     session_level: str | None = None                # session_start, prompt: strong | standard | fast of the session's model
     command_level: str | None = None                # prompt: the level the invoked command is meant for
+    output: str | None = None                       # tool_result: the text the tool returned
 
     def __post_init__(self):
         if self.kind not in KINDS:

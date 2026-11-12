@@ -119,7 +119,7 @@ def test_end_to_end_with_the_real_server(server):
     env["TLD_BOARD_URL"] = f"http://127.0.0.1:{server.server_address[1]}"
     env["TLD_BOARD_TOKEN"] = WRITE
     docs = json.loads((ROOT / "tests" / "fixtures" / "board-records.json").read_text())
-    rec = next(d["data"] for d in docs if d["id"] == "f-running-ok")
+    rec = next(d["data"] for d in docs if d["data"]["project"] == "f-running-ok")
     lines = [
         req(1, "initialize", {"protocolVersion": "2025-06-18"}),
         json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
