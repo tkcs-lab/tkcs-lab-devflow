@@ -131,7 +131,7 @@ def test_check_prompt_rejects_forbidden(tmp_path, monkeypatch):
         ["forbidden: the value of TLD_BOARD_TOKEN appears in the prompt"]
     assert research.check_prompt(text.replace("Python 3.11", "abc"), [], {"TLD_BOARD_TOKEN": "abc"}) == []
     named = text.replace("Python 3.11", "owner/repo")
-    assert research.check_prompt(named, ["Owner/Repo", ""], {}) == ["forbidden: --forbid 1 appears in the prompt"]
+    assert research.check_prompt(named, ["Owner/Repo"], {}) == ["forbidden: --forbid 1 appears in the prompt"]
     done = run("check-prompt", str(prompt_file(tmp_path, named)), "--forbid", "Owner/Repo")
     assert done.returncode == 1
     assert done.stdout == "forbidden: --forbid 1 appears in the prompt\n"
@@ -327,3 +327,30 @@ def test_the_module_runs_as_a_script(monkeypatch, capsys):
 def test_the_commands_have_help():
     assert re.search("check", run("check-prompt", "--help").stdout)
     assert run("report", "--help").returncode == 0
+
+
+def test_check_prompt_sees_through_invisible_characters():
+    zw = "\u200b"
+    split = TOKEN[:8] + zw + TOKEN[8:]
+    assert prefixes(fill().replace("Python 3.11", split)) == ["character:", "secret:"]
+    word = fill().replace("Python 3.11", "sec" + zw + "ret")
+    assert research.check_prompt(word, ["secret"], {}) == [
+        "character: a control, invisible or bidirectional character", "forbidden: --forbid 1 appears in the prompt"]
+    for char in ("\u0085", "\U000e0041", "\u2028"):
+        assert prefixes(fill().replace("Python 3.11", "a" + char + "b")) == ["character:"]
+
+
+def test_argument_errors_never_echo_a_forbidden_value(tmp_path):
+    path = prompt_file(tmp_path, fill())
+    done = run("check-prompt", str(path), "--forbid", "my", "secret")
+    assert done.returncode == 2 and "secret" not in done.stdout + done.stderr
+    assert done.stderr == "tld research: bad arguments (see --help)\n"
+    empty = run("check-prompt", str(path), "--forbid", "")
+    assert empty.returncode == 2 and empty.stdout == ""
+
+
+def test_report_rest_that_cannot_be_written_exits_2(tmp_path):
+    reply = tmp_path / "reply.txt"
+    reply.write_text(report(), encoding="utf-8")
+    done = run("report", "--id", RID, "--reply", str(reply), "--rest", str(tmp_path / "no" / "rest.txt"))
+    assert done.returncode == 2 and done.stdout == ""

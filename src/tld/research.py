@@ -20,7 +20,9 @@ import argparse
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
+from typing import NoReturn
 
 from tld.board.ask import BAD_CHARS
 from tld.guard.secret_scan import ALLOW_MARK, scan_text
@@ -31,12 +33,22 @@ MAX_REPORT = 3500
 SECTIONS = ("Question:", "Public context:", "Constraints:", "What would settle it:",
             "Rules for the researcher:", "Report format")
 SECRET_ENV = ("TLD_BOARD_URL", "TLD_BOARD_TOKEN")
+INVISIBLE = re.compile(r"[\x80-\x9f\u2028\u2029]")  # C1 controls and line separators; the rest is category Cf
 START = "RESEARCH-REPORT "
 END = "END RESEARCH-REPORT "
 
 
 def _err(text: str) -> None:
     print(f"tld research: {text}", file=sys.stderr)
+
+
+def _hidden(ch: str) -> bool:
+    return unicodedata.category(ch) == "Cf" or bool(INVISIBLE.match(ch))
+
+
+def _plain(text: str) -> str:
+    """The text as a reader or a scanner sees it: no invisible character, compatibility forms folded."""
+    return unicodedata.normalize("NFKC", "".join(ch for ch in text if not _hidden(ch)))
 
 
 def _first_id(lines: list[str]) -> str | None:
@@ -57,16 +69,17 @@ def check_prompt(text: str, forbid: list[str], env: dict[str, str]) -> list[str]
     at = [next((i for i, line in enumerate(lines) if line.startswith(name)), -1) for name in SECTIONS]
     if -1 in at or at != sorted(at):
         problems.append("sections: need these lines once, in this order: " + ", ".join(SECTIONS))
-    if BAD_CHARS.search(text):
-        problems.append("character: a control or bidirectional character")
-    for n, name, _ in scan_text(text):
+    if BAD_CHARS.search(text) or any(_hidden(ch) for ch in text):
+        problems.append("character: a control, invisible or bidirectional character")
+    plain = _plain(text)
+    for n, name, _ in scan_text(plain):
         problems.append(f"secret: line {n} looks like a credential ({name})")
     for n, line in enumerate(lines, 1):
         if ALLOW_MARK in line:
             problems.append(f"secret: line {n} has `{ALLOW_MARK}`, which lets a token past the scan")
-    low = text.lower()
+    low = plain.lower()
     for i, value in enumerate(forbid, 1):
-        if value and value.lower() in low:
+        if _plain(value).lower() in low:
             problems.append(f"forbidden: --forbid {i} appears in the prompt")
     for name in SECRET_ENV:
         value = env.get(name, "")
@@ -114,14 +127,17 @@ def split_reply(text: str, rid: str) -> tuple[str, str, str]:
 
 
 def _read(path: str) -> str:
-    return sys.stdin.read() if path == "-" else Path(path).read_bytes().decode("utf-8")
+    return sys.stdin.buffer.read().decode("utf-8") if path == "-" else Path(path).read_bytes().decode("utf-8")
 
 
 def _check_prompt(args: argparse.Namespace) -> int:
     try:
         text = Path(args.file).read_bytes().decode("utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        _err(f"cannot read {args.file} ({exc})")
+    except (OSError, UnicodeDecodeError):
+        _err("cannot read the prompt file")
+        return 2
+    if "" in args.forbid:
+        _err("--forbid needs a non-empty text")
         return 2
     problems = check_prompt(text, args.forbid, dict(os.environ))
     for problem in problems:
@@ -134,16 +150,20 @@ def _check_prompt(args: argparse.Namespace) -> int:
 
 def _report(args: argparse.Namespace) -> int:
     if not ID_RE.fullmatch(args.id):
-        _err(f"--id {args.id!r} is not an id like r-20261112-1")
+        _err("--id is not an id like r-20261112-1")
         return 2
     try:
         reply = _read(args.reply)
-    except (OSError, UnicodeDecodeError) as exc:
-        _err(f"cannot read the reply ({exc})")
+    except (OSError, UnicodeDecodeError):
+        _err("cannot read the reply")
         return 2
     status, body, rest = split_reply(reply, args.id)
     if args.rest:
-        Path(args.rest).write_text(rest + "\n" if rest else "", encoding="utf-8")
+        try:
+            Path(args.rest).write_text(rest + "\n" if rest else "", encoding="utf-8")
+        except OSError:
+            _err("cannot write --rest")
+            return 2
     if status == "ok":
         print(body)
         return 0
@@ -159,9 +179,15 @@ def _report(args: argparse.Namespace) -> int:
     return 1
 
 
+class _Parser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:  # a fixed text: the message may quote a --forbid value
+        _err("bad arguments (see --help)")
+        raise SystemExit(2)
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="tld research", description=__doc__.split("\n\n")[0])
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    parser = _Parser(prog="tld research", description=__doc__.split("\n\n")[0])
+    sub = parser.add_subparsers(dest="cmd", required=True, parser_class=_Parser)
     check = sub.add_parser("check-prompt", help="check a research prompt before it is posted")
     check.add_argument("file", help="the filled prompt")
     check.add_argument("--forbid", action="append", default=[], metavar="TEXT",
