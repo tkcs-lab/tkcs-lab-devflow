@@ -193,7 +193,7 @@ It creates `~/tld-board` (`TLD_BOARD_DIR`) with:
 - `.env`: created once (mode 0600) with a fresh `TLD_BOARD_TOKEN`, empty `TLD_BOARD_OWNER_PASSPHRASE` and
   `TLD_BOARD_PUBLIC_ORIGIN`, and `TLD_BOARD_SESSION_URL`. The installer never prints the token and never rewrites the file.
 
-Fill in `TLD_BOARD_OWNER_PASSPHRASE` and `TLD_BOARD_PUBLIC_ORIGIN`, then start the board: `docker compose up -d` in
+Fill in `TLD_BOARD_OWNER_PASSPHRASE` and `TLD_BOARD_PUBLIC_ORIGIN` (avoid `$` in `.env` values: Compose may expand it), then start the board: `docker compose up -d` in
 the directory. The installer starts it itself only when both are set. Upgrade: run the line again (it pulls the new
 image and restarts). Stop: `docker compose down` (the volume stays). The compose file uses the volume
 `tld-board-data`, so the data of an earlier `docker run` setup is reused. If a container named `tld-board` made by

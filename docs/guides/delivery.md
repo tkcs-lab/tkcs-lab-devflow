@@ -49,7 +49,7 @@ removed. A file `~/.local/bin/tld` that is not a link made by the installer is n
 of 3.11 or newer is found, set `TLD_PYTHON`. Other variables: `TLD_VERSION`, `TLD_BIN_DIR`, `TLD_BOARD_DIR`,
 `XDG_DATA_HOME`. Three more exist for the installer's own tests: `TLD_RELEASE_BASE` (where the files are downloaded from), `TLD_PIP_ARGS` and `TLD_VENV_ARGS` (extra arguments for pip and `venv`); do not set them outside tests: a `TLD_RELEASE_BASE` that is not https turns off the installer's TLS enforcement, and the checksum then proves nothing. The board is installed with `... | sh -s -- board` (see [board-server.md](board-server.md)).
 
-Upgrade = run the same line again. Without the installer, from the wheel:
+Upgrade = run the same line again (for the version already installed it leaves everything as it is). Without the installer, from the wheel:
 `pip install https://github.com/tkcs-lab/tkcs-lab-devflow/releases/download/vX.Y.Z/tld-X.Y.Z-py3-none-any.whl`. Do not `pip install tld`: that name on PyPI is
 another package. [cli.md](../reference/cli.md) lists every command.
 
