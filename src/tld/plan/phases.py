@@ -268,10 +268,26 @@ def _program(prefix: list[str]) -> str:
     return "tld" if "tld" in names else ""
 
 
+GLOB = re.compile(r"[*?\[\]]")
+LITERAL_START = re.compile(r"[A-Za-z0-9_]")
+
+
 def _repo_path(word: str) -> bool:
-    """A repo-relative path: a plain word, no leading `/`, `~` or `-`, no `..` segment."""
-    return (bool(TOKEN.fullmatch(word)) and not word.startswith(("/", "~", "-"))
-            and ".." not in word.split("/"))
+    """A repo-relative path: a plain word, no leading `/`, `~`, `-` or `@` (pytest's argument file), no `..`
+    segment. The shell expands a glob before the program sees it, so a glob may only stand in a segment after
+    the first one, and that segment must start with a letter, digit or `_`: it then can match neither an option,
+    an `@file` nor `.` or `..`."""
+    if not TOKEN.fullmatch(word) or word.startswith(("/", "~", "-", "@")):
+        return False
+    segments = word.split("/")
+    if ".." in segments or GLOB.search(segments[0]):
+        return False
+    return all(not GLOB.search(seg) or LITERAL_START.match(seg) for seg in segments[1:])
+
+
+def _plain_value(word: str) -> bool:
+    """An option's plain value: no glob (the shell would expand it), no leading `-` or `@`."""
+    return bool(TOKEN.fullmatch(word)) and not GLOB.search(word) and not word.startswith(("-", "@"))
 
 
 def _safe_tail(tail: list[str], program: str) -> bool:
@@ -303,7 +319,7 @@ def _safe_tail(tail: list[str], program: str) -> bool:
         elif kind == "path":
             ok = _repo_path(value)
         else:
-            ok = bool(TOKEN.fullmatch(value)) and not value.startswith("-")
+            ok = _plain_value(value)
         if not ok:
             return False
     return True
@@ -346,7 +362,7 @@ def check_commands(manifest: dict, profile: dict) -> dict:
 
     result: dict = {"trusted": [], "unknown": []}
     for cmd in manifest.get("verify_after_merge") or []:
-        result["trusted" if trusted(cmd) else "unknown"].append(cmd)
+        result["trusted" if isinstance(cmd, str) and trusted(cmd) else "unknown"].append(cmd)
     return result
 
 

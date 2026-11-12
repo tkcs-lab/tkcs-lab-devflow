@@ -35,7 +35,9 @@ entry of the released version at the top of the GitHub release, above the list o
 
 - `tld plan check-commands` trusts a command through a `verify.after_merge_allow` prefix only when every word after
   the prefix is a repo-relative path or a built-in safe option of that program (pytest `-q`, `-k`, `--tb=short`, ...;
-  tld `--index`, `--profile`, ...). Before, `pytest --basetemp=/some/dir` or `-p <module>` ran without asking.
+  tld `--index`, `--profile`, ...), with no `@file` and no glob the shell could turn into an option or `..`.
+  Before, `pytest --basetemp=/some/dir` or `-p <module>` ran without asking. `/implement` takes a confirmation only
+  from the owner's answer or its own ledger, never from someone else's issue comment.
 - A "needs you" card on the board no longer outlives its reason: one card per wait, `answer received` once you
   answered, Dismiss and Restore on the page, and `/tld:board prune` clears cards whose pull requests are all
   merged or closed.

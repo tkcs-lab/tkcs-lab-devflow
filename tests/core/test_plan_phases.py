@@ -492,3 +492,20 @@ def test_check_commands_tld_other_options_are_unknown(cmd):
 def test_check_commands_other_program_takes_no_options():
     assert cc(["npm test web", "npm test --watch"], allow=["npm test"]) == {
         "trusted": ["npm test web"], "unknown": ["npm test --watch"]}
+
+
+@pytest.mark.parametrize("tail", ["*", "@args.txt", "-k *", "-k @x", "-m t?", "tests/.?/.?/x", "tests/*/x",
+                                  "tests/?x", "tests/[.]", "t*/x", "tests/core/*"])
+def test_check_commands_shell_expansion_is_unknown(tail):
+    cmd = f"{PFX} {tail}"
+    assert cc([cmd], allow=[PFX]) == {"trusted": [], "unknown": [cmd]}
+
+
+def test_check_commands_argfile_path_is_unknown():
+    prof = yaml.safe_load((ROOT / ".tld" / "toolkit.yaml").read_text())
+    cmd = f"{TLD} profile validate --profile @x"
+    assert phases.check_commands(mf([cmd]), prof)["unknown"] == [cmd]
+
+
+def test_check_commands_non_string_entry_is_unknown():
+    assert cc([{"run": "x"}, 3], allow=[PFX]) == {"trusted": [], "unknown": [{"run": "x"}, 3]}
