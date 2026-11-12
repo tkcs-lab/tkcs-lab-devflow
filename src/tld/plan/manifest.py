@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import posixpath
 import re
 import sys
 from pathlib import Path
@@ -143,6 +144,34 @@ def find_cycle(phases: dict[str, list[str]]) -> list[str] | None:
     return None
 
 
+def _is_plan_record(entry: str, plan_dir: str) -> bool:
+    """True when a touches entry grants write scope over <plan_dir>/<slug>/plan.md or deviations.md.
+
+    The entry is read the way the scope matcher reads it (whitespace stripped, globs and directory prefixes
+    allowed), so `docs/plans/14/*.md`, `docs/plans/**`, `docs/plans/14/` and `src/../docs/plans/14/plan.md` count.
+    A bare `<plan_dir>/` entry is left alone, and the glob and directory spellings are only checked when
+    plan_dir is at least two segments deep."""
+    name = entry.strip()
+    if name.startswith("./"):
+        name = name[2:]
+    trailing = name.endswith("/")
+    name = posixpath.normpath(name) if name else name
+    base = plan_dir.rstrip("/").split("/")
+    parts = name.split("/")
+    if parts[:len(base)] != base:
+        return False
+    rem = parts[len(base):]
+    if re.fullmatch(r"[^/]+/(plan|deviations)\.md", "/".join(rem)):
+        return True
+    if len(base) < 2:  # plans directly under a shared dir such as docs/: globs there would ban unrelated docs
+        return False
+    if rem[:1] == ["**"]:
+        return True
+    if len(rem) == 2 and any(fnmatch.fnmatchcase(f, rem[1]) for f in ("plan.md", "deviations.md")):
+        return any(c in rem[1] for c in WILDCARDS)
+    return len(rem) == 1 and trailing and rem[0] not in ("", ".") and not rem[0].endswith(".md")
+
+
 def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/plans") -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
@@ -239,10 +268,8 @@ def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/pla
             errors.append(f"phase '{pid}': touches must be a list of paths")
         else:
             touches[pid] = t or []
-            record = re.compile(re.escape(plan_dir.rstrip("/")) + r"/[^/]+/(plan|deviations)\.md")
             for entry in t or []:
-                name = entry[2:] if entry.startswith("./") else entry
-                if record.fullmatch(name):
+                if _is_plan_record(entry, plan_dir):
                     errors.append(f"phase '{pid}': touches '{entry}' is a plan record; "
                                   "a phase never edits a plan or its deviations file")
         if "human_gate" in ph and not isinstance(ph["human_gate"], bool):

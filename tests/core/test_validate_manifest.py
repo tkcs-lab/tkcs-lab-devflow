@@ -144,6 +144,9 @@ def test_a_plan_record_in_touches_is_an_error(vm):
         return vm.validate(m, **kw)[0]
     for bad in ("docs/plans/14/plan.md", "docs/plans/14/deviations.md", "./docs/plans/14/plan.md"):
         assert any("is a plan record" in e for e in touching(bad)), bad
+    for bad in ("docs/plans/14/*.md", "docs/plans/14/plan.*", "docs/plans/**", "docs/plans/14/",
+                " docs/plans/14/plan.md ", "src/../docs/plans/14/plan.md", "docs/plans/*/deviations.md"):
+        assert any("is a plan record" in e for e in touching(bad)), bad
     for ok in ("docs/plans/", "docs/plans/x-plan.md", "docs/guides/plan.md"):
         assert touching(ok) == [], ok
     assert touching("docs/adr/x.md", plan_dir="docs") == []
