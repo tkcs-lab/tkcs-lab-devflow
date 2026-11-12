@@ -81,6 +81,7 @@ with `tld board validate-ask <file>`):
 ```json
 {"schema": 1, "kind": "ask", "project": "<project slug>", "repo": "<owner>/<repo>", "title": "<one line>",
  "created_by": "<this session's id, else the playbook's name>",
+ "record": "<the status record's document id>",
  "context_url": "<optional https link: the review, the plan, the pull request>",
  "questions": [
    {"id": "<id>", "text": "<question>", "kind": "choice",
@@ -92,7 +93,10 @@ with `tld board validate-ask <file>`):
 `project` is `tld board project-slug <owner>/<repo>`. A `choice` has 2 to 10 options, the recommended one
 first with ` (recommended)` in its label; a `confirm` is answered yes or no; a `text` is free text. A question
 is required unless `required` is `false`. At most 30 questions, each text at most 2000 characters and shown as
-plain text. Never put a secret in an ask. Steps, in order:
+plain text. Never put a secret in an ask. `record` is the document id of the status record the playbook writes
+(the project slug for a run, `<project>--<command>` for a command); leave it out when the playbook writes none.
+The page shows one card while the ask is open (the ask card; the record's card is hidden) and `answer received`
+on the record after the owner answers. Steps, in order:
 
 1. Write the ask to a file and post it: `tld board ask <file> --fallback-issue <owner>/<repo>[#<n>]` (`#<n>`
    the tracking issue, when the playbook has one). Exit 0: stdout is the ask id; record it where the playbook
@@ -100,7 +104,9 @@ plain text. Never put a secret in an ask. Steps, in order:
    listed errors once) or the board refused it. Exit 5: the board is not configured or cannot be reached; see
    the fallback below.
 2. Set `needs_you` on the status record ([policies/status-board.md](policies/status-board.md)) and
-   `notify_human`. The board wakes no session, so how the session waits depends on whether someone is there:
+   `notify_human`. The page hides the record's card while the ask is open and shows `answer received` after the
+   answer; the session still reads the answer on its wake. The board wakes no session, so how the session waits
+   depends on whether someone is there:
    - **Attended** (the status record's `attended` is `true`). Also show the ask in the conversation: the output
      of `tld board ask-text <file> --id <ask id>` (on the fallback, `--id` the comment URL), unchanged, as your
      message. Record `ask <id> posted <ISO time>` in `last_event`, `schedule_wakeup(10 minutes)`, put its time
