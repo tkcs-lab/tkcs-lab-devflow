@@ -28,7 +28,7 @@ def entries():
 
 def test_hooks_json_is_valid_and_every_script_exists():
     data = json.loads(HOOKS_JSON.read_text())
-    assert set(data["hooks"]) == {"PreToolUse", "Stop"}
+    assert set(data["hooks"]) == {"PreToolUse", "UserPromptSubmit", "Stop"}
     scripts = []
     for event_name, matcher, hook in entries():
         assert hook["type"] == "command" and isinstance(hook["timeout"], int) and hook["timeout"] > 0
@@ -40,7 +40,8 @@ def test_hooks_json_is_valid_and_every_script_exists():
             assert matcher and re.compile(matcher)
         else:
             assert matcher is None
-    assert sorted(scripts) == sorted(f"{m}.py" for m in MODULES.values()), "each hook is registered exactly once"
+    expected = sorted([f"{m}.py" for m in MODULES.values()] + ["plan_gate.py"])
+    assert sorted(scripts) == expected, "each hook is registered once, plan_gate.py twice (UserPromptSubmit and PreToolUse)"
 
 
 @pytest.mark.parametrize("script, tool, listens", [
@@ -58,10 +59,12 @@ def test_hooks_json_is_valid_and_every_script_exists():
     ("secret_scan.py", "Bash", True),  # S16: secrets written from Bash (echo ghp_... > f) are scanned too
     ("protect_paths.py", "Write", True), ("protect_paths.py", "Edit", True), ("protect_paths.py", "MultiEdit", True),
     ("protect_paths.py", "Bash", True), ("protect_paths.py", "Read", False),
+    ("plan_gate.py", "Write", True), ("plan_gate.py", "Bash", True), ("plan_gate.py", "mcp__github__push_files", True),
+    ("plan_gate.py", "mcp__github__create_branch", False), ("plan_gate.py", "Read", False),
 ])
 def test_matchers(script, tool, listens):
-    for _, matcher, hook in entries():
-        if hook["command"].endswith(f'/hooks/{script}"'):
+    for event_name, matcher, hook in entries():
+        if event_name == "PreToolUse" and hook["command"].endswith(f'/hooks/{script}"'):
             assert matcher_matches(matcher, tool) is listens, (script, matcher, tool)
 
 
@@ -140,6 +143,7 @@ def test_schema_defaults_equal_the_hooks_built_in_defaults():
     gate = props["dod_gate"]["properties"]
     assert gate["enabled"]["x-hook-default"] is False
     assert gate["max_attempts"]["x-hook-default"] == _common.DEFAULT_MAX_ATTEMPTS
+    assert props["plan_gate"]["properties"]["enabled"]["x-hook-default"] is False
 
 
 def test_template_documents_the_defaults_and_stays_valid(vp):
@@ -164,6 +168,7 @@ def test_template_documents_the_defaults_and_stays_valid(vp):
     ({"disable": ["no-such-hook"]}, "'hooks.disable[0]': must be one of"),
     ({"dod_gate": {"max_attempts": 0}}, "'hooks.dod_gate.max_attempts': must be at least 1"),
     ({"dod_gate": {"enabled": "yes"}}, "'hooks.dod_gate.enabled': must be true/false"),
+    ({"plan_gate": {"enabled": "yes"}}, "'hooks.plan_gate.enabled': must be true/false"),
     ({"protect_paths": ".env"}, "'hooks.protect_paths': must be a list"),
     ({"mystery": 1}, "unknown key 'hooks.mystery'"),
 ])

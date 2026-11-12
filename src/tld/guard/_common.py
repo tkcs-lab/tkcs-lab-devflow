@@ -17,7 +17,8 @@ from typing import Callable
 from tld.guard import trust
 from tld.guard.action import Action, Decision, Settings
 
-HOOK_NAMES = ("no-merge", "no-force-push", "no-git-tag", "secret-scan", "protect-paths", "dod-gate")
+HOOK_NAMES = ("no-merge", "no-force-push", "no-git-tag", "secret-scan", "protect-paths", "dod-gate",
+              "plan-gate")
 PROFILE = Path(".tld") / "toolkit.yaml"
 
 # Defaults of the `hooks` section. They are repeated in schema/profile.schema.json; a test keeps them equal.
@@ -74,6 +75,7 @@ class Ctx:
     profile_problem: str | None = None
     settings: Settings = field(default_factory=Settings)
     notice: str | None = None  # shown to the user when the guard allows
+    context: str | None = None  # added to the agent's context when the guard allows (prompt events)
     disable_error: ProfileError | None = None  # dod-gate only: a malformed hooks.disable, re-raised by its evaluate
     _trusted: trust.Trusted | None = None
 
@@ -227,7 +229,7 @@ def run_guard(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: boo
     try:
         ctx = make_ctx(action, settings)
         try:
-            if ctx.disabled(name):
+            if name != "plan-gate" and ctx.disabled(name):  # plan-gate looks it up itself, after its cheap checks
                 return Decision("allow")
         except ProfileError as exc:
             if name != "dod-gate":
@@ -246,7 +248,7 @@ def run_guard(name: str, evaluate: Callable[[Ctx], str | None], fail_closed: boo
         _disarm_budget(armed)
     if message:
         return Decision("deny", prefix + message)
-    return Decision("allow", "", prefix + ctx.notice if ctx.notice else None)
+    return Decision("allow", "", prefix + ctx.notice if ctx.notice else None, ctx.context)
 
 
 def problem(name: str, fail_closed: bool, text: str) -> Decision:

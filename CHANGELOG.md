@@ -16,6 +16,8 @@ entry of the released version at the top of the GitHub release, above the list o
   The release workflow takes the version from the `## [X.Y.Z]` heading, so the default `unreleased` denies a session
   opening a version heading, and `release-only` denies any edit, unless the change touches only the changelog (a
   separate pull request from the code and the version bump). With `release-only`, `section` is optional.
+- The opt-in `plan-gate` hook (`hooks.plan_gate.enabled`): a session that no tld command started cannot write into the repository and is told to propose `/tld:make-plan`.
+- The `ask` skill (`/tld:ask`): answers without changing anything and turns a change request into a `/tld:make-plan` proposal.
 
 ### Fixed
 

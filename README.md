@@ -60,10 +60,10 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | `/tld:board [prune]` | checks the connection to your board, or prunes its stale records after you confirm |
 | `/tld:migrate` | moves a repository from claude-toolkit to tld: shows the plan, writes it on a branch after you confirm, one pull request |
 
-No command merges, approves, tags or force-pushes. Two procedures run on request through skills:
+No command merges, approves, tags or force-pushes. Three skills run on request:
 `tld:repo-admin` (audit and apply organisation and repository settings, rulesets, environments and workflows from
 a policy file; [guide](docs/guides/admin.md)) and `tld:git-ops` (delete a remote branch through a central workflow;
-[guide](docs/guides/git-ops.md)). The maintenance commands and scheduling: [docs/guides/maintenance.md](docs/guides/maintenance.md).
+[guide](docs/guides/git-ops.md)) and `tld:ask` (invoked as `/tld:ask`: answers a question or discusses an idea without changing anything and proposes `/tld:make-plan` for a change). The maintenance commands and scheduling: [docs/guides/maintenance.md](docs/guides/maintenance.md).
 
 ## Guardrails: seatbelt and control
 

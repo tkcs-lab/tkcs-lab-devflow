@@ -37,7 +37,7 @@ survey, at text level (`tld profile patch`), so comments survive; the survey pro
 ### Playbooks
 
 Every procedure is a neutral playbook in `playbooks/` (D6): `setup`, `review`, `make-plan`, `implement`, `dod`,
-`land`, `deps`, `upstream`, `docs`, `board`, `migrate`, and `git-ops` and `repo-admin`, which run on request. A
+`land`, `deps`, `upstream`, `docs`, `board`, `migrate`, and `git-ops`, `repo-admin` and `ask` (`/tld:ask`: answers without changing anything and proposes `/make-plan`), which run on request. A
 playbook is plain steps: git, shell, `tld` commands, and named **runtime actions** for what only the runtime can do.
 Rules that several playbooks share live once in `playbooks/policies/`: the profile, untrusted text (D10), pull
 request stewardship, the status board, roles and docs.
@@ -79,7 +79,7 @@ pull request. Branch names come from `tld plan branch-name` (C12).
 
 ### Guard
 
-The guardrails are a neutral policy, `src/tld/guard/`: an `Action` (`shell`, `write`, `github_op`, `stop`) goes in,
+The guardrails are a neutral policy, `src/tld/guard/`: an `Action` (`shell`, `write`, `github_op`, `stop`, `prompt`) goes in,
 a `Decision` (`allow`, `deny`, `error`) comes out. The Claude hooks are thin shims over it. They are a seatbelt, not
 the control (D1): they deny merges, pushes to the main branch, force pushes, tags, credential-like writes and edits
 of protected paths before the call runs, and they read the protect lists from the profile on the remote default
