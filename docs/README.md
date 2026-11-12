@@ -1,7 +1,7 @@
 # Docs index
 
 Entry point for every doc in this repository. Read the row that matches your task, then only that doc.
-Plans (`<slug>-plan.md`) are transient and not listed; a finished plan's decisions land in the docs below.
+Plans (`<n>/plan.md`) and `deviations.md` are kept history, transient and not listed; a finished plan's decisions land in the docs below.
 
 ## Architecture
 
