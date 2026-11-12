@@ -36,7 +36,7 @@ SECTIONS = ("Question:", "Public context:", "Constraints:", "What would settle i
 SECRET_ENV = ("TLD_BOARD_URL", "TLD_BOARD_TOKEN")
 # C1 controls, line separators, variation selectors, combining grapheme joiner and blank fillers; the rest of
 # what is hidden is found by category (Cf, Co, Cn, Cs)
-INVISIBLE = re.compile("[\x80-\x9f\u2028\u2029\u034f\u115f\u1160\u2800\u3164\uffa0\ufe00-\ufe0f\U000e0100-\U000e01ef]")
+INVISIBLE = re.compile("[\x80-\x9f\u2028\u2029\u034f\u115f\u17b4\u17b5\u180b-\u180f\u1160\u2800\u3164\uffa0\ufe00-\ufe0f\U000e0100-\U000e01ef]")
 HIDDEN_CATEGORIES = ("Cf", "Co", "Cn", "Cs")
 START = "RESEARCH-REPORT "
 END = "END RESEARCH-REPORT "
@@ -93,7 +93,10 @@ def check_prompt(text: str, forbid: list[str], env: dict[str, str]) -> list[str]
             problems.append(f"forbidden: --forbid {i} appears in the prompt")
     for name in SECRET_ENV:
         value = _plain(env.get(name, "")).strip()
-        host = urlsplit(value).hostname or ""
+        try:
+            host = urlsplit(value).hostname or ""
+        except ValueError:  # a malformed URL has no host to compare, the value itself still counts
+            host = ""
         needles = {value, value.rstrip("/"), host if len(host) >= 4 else ""}
         if any(len(n) >= 4 and (n.lower() in low or _squash(n) in squashed) for n in needles):
             problems.append(f"forbidden: the value of {name} appears in the prompt")

@@ -403,7 +403,7 @@ def test_the_owner_lines_before_the_block_are_kept_and_the_forged_reply_answers_
 
 
 @pytest.mark.parametrize("char", ["\ufe0f", "\U000e0100", "\u3164", "\u115f", "\u1160", "\uffa0", "\u2800",
-                                  "\u034f", "\ue000"])
+                                  "\u034f", "\ue000", "\u180b", "\u180c", "\u180d", "\u180f", "\u17b4", "\u17b5"])
 def test_check_prompt_rejects_variation_selectors_and_blank_fillers(char):
     assert prefixes(fill().replace("Python 3.11", "a" + char + "b")) == ["character:"]
 
@@ -438,3 +438,20 @@ def test_forbid_matches_with_whitespace_removed():
     text = fill().replace("Python 3.11", "own er /\n re po")
     assert research.check_prompt(text, ["owner/repo"], {}) == ["forbidden: --forbid 1 appears in the prompt"]
     assert research.check_prompt(fill(), ["\u200b"], {}) == []  # nothing visible left of it: no match on everything
+
+
+def test_hidden_mongolian_and_khmer_characters_cannot_split_a_secret_or_a_forbidden_value():
+    for char in ("\u180b", "\u17b4"):
+        split = TOKEN[:20] + char + TOKEN[20:]
+        assert "secret:" in prefixes(fill().replace("Python 3.11", split))
+        text = fill().replace("Python 3.11", "acme/priv" + char + "repo")
+        assert "forbidden:" in prefixes(text, ["acme/privrepo"])
+        env = {"TLD_BOARD_URL": "https://board.example.com/"}
+        assert "forbidden:" in prefixes(fill().replace("Python 3.11", "board.exa" + char + "mple.com"), env=env)
+
+
+def test_a_malformed_board_url_does_not_crash_the_gate():
+    env = {"TLD_BOARD_URL": "http://[::1"}
+    assert research.check_prompt(fill(), [], env) == []
+    assert research.check_prompt(fill().replace("Python 3.11", "http://[::1"), [], env) == \
+        ["forbidden: the value of TLD_BOARD_URL appears in the prompt"]
