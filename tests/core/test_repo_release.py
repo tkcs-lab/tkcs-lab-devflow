@@ -22,8 +22,17 @@ def doc():
     return yaml.safe_load(WORKFLOW.read_text())
 
 
+BUILD_STEPS = ["Read the version", "Check that the tag is new and find the previous one", "Set up Python",
+               "Build the wheel and the sdist", "Set up QEMU", "Set up Buildx", "Log in to ghcr",
+               "Build the board image", "Collect the release assets", "Upload the release assets"]
+PUBLISH_STEPS = ["Download the release assets", "Check the release assets against SHA256SUMS",
+                 "Check that the commit is green", "Write the release notes", "Publish the tag and the release"]
+
+
 def step(doc, name):
-    return next(s for s in doc["jobs"]["release"]["steps"] if s.get("name") == name)
+    """The step called NAME, looked up in the job that owns it (the names are unique across both jobs)."""
+    job = "publish" if name in PUBLISH_STEPS else "build"
+    return next(s for s in doc["jobs"][job]["steps"] if s.get("name") == name)
 
 
 def test_one_version_and_its_changelog_entry():
@@ -39,15 +48,18 @@ def test_triggers_environment_and_tokens(doc):
     assert list(on) == ["workflow_dispatch"]
     assert on["workflow_dispatch"]["inputs"]["dry_run"]["default"] is True
     assert doc["permissions"] == {"contents": "read"}
-    job = doc["jobs"]["release"]
-    assert job["environment"] == "tld-release" and job["if"] == "github.ref == 'refs/heads/main'"
+    assert list(doc["jobs"]) == ["build", "publish"]
+    for job in doc["jobs"].values():
+        assert job["environment"] == "tld-release" and job["if"] == "github.ref == 'refs/heads/main'"
+    assert doc["jobs"]["publish"]["needs"] == "build" and "needs" not in doc["jobs"]["build"]
     publish = step(doc, "Publish the tag and the release")
     assert publish["if"] == "inputs.dry_run == false"
     assert publish["env"]["GH_TOKEN"] == "${{ secrets.TLD_RELEASE_TOKEN }}"
-    for s in job["steps"]:
-        assert "${{" not in s.get("run", ""), s.get("name")
-        if "git/tags" in s.get("run", "") or "release create" in s.get("run", ""):
-            assert s["env"]["GH_TOKEN"] == "${{ secrets.TLD_RELEASE_TOKEN }}", s["name"]
+    for job in doc["jobs"].values():
+        for s in job["steps"]:
+            assert "${{" not in s.get("run", ""), s.get("name")
+            if "git/tags" in s.get("run", "") or "release create" in s.get("run", ""):
+                assert s["env"]["GH_TOKEN"] == "${{ secrets.TLD_RELEASE_TOKEN }}", s["name"]
     notes = step(doc, "Write the release notes")["run"]
     assert "generate-notes" in notes and "previous_tag_name" in notes
 
@@ -85,19 +97,24 @@ def test_version_step_refuses(doc, tmp_path, edit, needle):
 
 # ---- the steps that build the assets and the image (Design D4) ----
 
-STEP_NAMES = [s["name"] for s in yaml.safe_load(WORKFLOW.read_text())["jobs"]["release"]["steps"] if "name" in s]
+def names(job):
+    return [s["name"] for s in yaml.safe_load(WORKFLOW.read_text())["jobs"][job]["steps"] if "name" in s]
+
+
 NEW_STEPS = ["Set up Python", "Build the wheel and the sdist", "Set up QEMU", "Set up Buildx", "Log in to ghcr",
-             "Build the board image", "Collect the release assets"]
+             "Build the board image", "Collect the release assets", "Upload the release assets"]
 
 
-def test_new_steps_come_in_order_between_the_green_check_and_the_notes():
-    start = STEP_NAMES.index("Check that the commit is green")
-    assert STEP_NAMES[start + 1:start + 1 + len(NEW_STEPS)] == NEW_STEPS
-    assert STEP_NAMES[start + 1 + len(NEW_STEPS)] == "Write the release notes"
+def test_each_job_has_its_steps_in_order(doc):
+    assert names("build") == BUILD_STEPS
+    assert names("publish") == PUBLISH_STEPS
+    assert BUILD_STEPS[2:] == NEW_STEPS
 
 
 def test_image_is_built_before_the_tag_and_pushed_only_when_not_a_dry_run(doc):
-    assert STEP_NAMES.index("Build the board image") < STEP_NAMES.index("Publish the tag and the release")
+    # the image is built in the build job, which publish needs: so it precedes the tag
+    assert "Build the board image" in names("build") and "Publish the tag and the release" in names("publish")
+    assert doc["jobs"]["publish"]["needs"] == "build"
     assert step(doc, "Build the board image")["with"]["push"] == "${{ inputs.dry_run == false }}"
     assert step(doc, "Log in to ghcr")["if"] == "inputs.dry_run == false"
 
@@ -115,6 +132,8 @@ def test_new_actions_are_the_pinned_shas_of_d4(doc):
     expected = {
         "Set up Python": "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
         "Set up QEMU": "docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130",
+        "Upload the release assets": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+        "Download the release assets": "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
         "Set up Buildx": "docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f",
         "Log in to ghcr": "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9",
         "Build the board image": "docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8",
@@ -126,21 +145,87 @@ def test_new_actions_are_the_pinned_shas_of_d4(doc):
     assert login == {"registry": "ghcr.io", "username": "${{ github.actor }}", "password": "${{ github.token }}"}
 
 
-def test_job_permissions_are_exactly_contents_read_and_packages_write(doc):
-    assert doc["jobs"]["release"]["permissions"] == {"contents": "read", "packages": "write"}
+def test_job_permissions(doc):
+    assert doc["jobs"]["build"]["permissions"] == {"contents": "read", "packages": "write"}
+    assert doc["jobs"]["publish"]["permissions"] == {"contents": "read"}
 
 
-def test_release_token_is_only_in_the_steps_that_use_it_today(doc):
-    using = [s["name"] for s in doc["jobs"]["release"]["steps"] if "secrets.TLD_RELEASE_TOKEN" in yaml.safe_dump(s)]
-    assert using == ["Check that the commit is green", "Write the release notes", "Publish the tag and the release"]
+def test_the_build_job_never_references_the_release_token(doc):
+    build = yaml.safe_dump(doc["jobs"]["build"])
+    assert "TLD_RELEASE_TOKEN" not in build and "secrets." not in build
+    text = WORKFLOW.read_text()
+    assert "TLD_RELEASE_TOKEN" not in text.split("\n  build:\n")[1].split("\n  publish:\n")[0]
+
+
+def test_release_token_is_only_in_the_publish_job_steps_that_use_it(doc):
+    using = [(name, s["name"]) for name, job in doc["jobs"].items() for s in job["steps"]
+             if "secrets.TLD_RELEASE_TOKEN" in yaml.safe_dump(s)]
+    assert using == [("publish", n) for n in
+                     ("Check that the commit is green", "Write the release notes", "Publish the tag and the release")]
+    assert WORKFLOW.read_text().count("secrets.") == 3
+
+
+def test_publish_job_runs_no_third_party_build_code(doc):
+    uses = [s["uses"] for s in doc["jobs"]["publish"]["steps"] if "uses" in s]
+    assert uses == ["actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333"]
+    run = "\n".join(s.get("run", "") for s in doc["jobs"]["publish"]["steps"])
+    for word in ("pip install", "docker ", "python -m", "setup.py"):
+        assert word not in run, word
+
+
+def test_build_exposes_what_publish_needs(doc):
+    out = doc["jobs"]["build"]["outputs"]
+    assert out["version"] == "${{ steps.version.outputs.version }}" and out["tag"] == "${{ steps.version.outputs.tag }}"
+    assert out["digest"] == "${{ steps.image.outputs.digest }}"
+    assert out["previous"] == "${{ steps.previous.outputs.previous }}"
+    assert step(doc, "Publish the tag and the release")["env"]["TAG"] == "${{ needs.build.outputs.tag }}"
+    assert step(doc, "Write the release notes")["env"]["PREVIOUS"] == "${{ needs.build.outputs.previous }}"
+
+
+def test_artifact_carries_dist_and_the_notes_and_is_kept_explicitly(doc):
+    up = step(doc, "Upload the release assets")["with"]
+    assert up["name"] == "release-dist" and up["path"].split() == ["dist/", "release-notes.md"]
+    assert up["retention-days"] == 14 and up["if-no-files-found"] == "error"
+    assert step(doc, "Download the release assets")["with"] == {"name": "release-dist", "path": "."}
+
+
+def test_qemu_image_is_pinned_by_digest(doc):
+    assert re.fullmatch(r"docker\.io/tonistiigi/binfmt@sha256:[0-9a-f]{64}", step(doc, "Set up QEMU")["with"]["image"])
+
+
+def test_green_check_skips_its_own_job(doc):
+    assert step(doc, "Check that the commit is green")["env"]["SELF"] == "publish"
 
 
 def test_publish_creates_a_draft_with_every_asset_then_publishes(doc):
     run = step(doc, "Publish the tag and the release")["run"]
     for needle in ("--verify-tag", "--draft", "--repo", "dist/*", "--draft=false"):
         assert needle in run, needle
-    assert run.index("release create") < run.index("--draft=false")
+    assert run.index("git/tags") < run.index("release create") < run.index("--draft=false")
     assert "release edit" in run
+
+
+def test_publish_failure_names_the_artifact_and_the_summary_links_the_public_release(doc):
+    s = step(doc, "Publish the tag and the release")
+    assert s["env"]["RUN_ID"] == "${{ github.run_id }}"
+    assert "release-dist" in s["run"] and "gh run download" in s["run"]
+    assert 'gh release view "$TAG" --repo "$REPO" --json url -q .url' in s["run"]
+    assert s["run"].index("release edit") < s["run"].index("release view")
+
+
+def test_publish_checks_the_checksums_and_fails_on_a_mismatch(doc, tmp_path):
+    need_tool("sha256sum")
+    s = step(doc, "Check the release assets against SHA256SUMS")
+    assert names("publish").index(s["name"]) < names("publish").index("Check that the commit is green")
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "a.txt").write_text("a")
+    subprocess.run("sha256sum a.txt > SHA256SUMS", shell=True, cwd=dist, check=True)
+    ok = subprocess.run(["bash", "-c", s["run"]], cwd=tmp_path, capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
+    assert ok.returncode == 0, ok.stderr
+    (dist / "a.txt").write_text("tampered")
+    bad = subprocess.run(["bash", "-c", s["run"]], cwd=tmp_path, capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
+    assert bad.returncode != 0 and "::error::" in bad.stdout + bad.stderr
 
 
 def fake_python(directory, writes_dist):
