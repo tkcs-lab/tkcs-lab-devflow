@@ -176,6 +176,10 @@ requests and the owner approves them.
   `admin_bypass` adds the admin role (`RepositoryRole` 5) in `pull_request` mode. So the agent cannot push to the
   default branch, force-push it, delete it or merge without the owner's approval, and an approval goes stale with
   the next push.
+  Because of `require_last_push_approval`, the owner's approval counts only when the latest push to the pull request
+  came from someone else. **Do not press "Update branch" on an agent's pull request**: that push is the owner's, so no
+  approval of the owner can merge it until the agent pushes again. Ask the agent to bring the branch up to date (the
+  `tld-land` workflow does this with the agent's token).
 - **`tld-tags`** on every tag (`~ALL`; `refs/tags/*` would miss names with a slash): `creation`, `update`,
   `deletion`. The one bypass actor is the admin role (`RepositoryRole` 5, `always`): the owner. No workflow is a
   bypass actor, so no workflow's `GITHUB_TOKEN` can tag, whatever permissions it asks for.
