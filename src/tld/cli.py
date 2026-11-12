@@ -22,6 +22,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("plan", "validate-manifest"): ("tld.plan.manifest", (), "validate a plan's implementation manifest"),
     ("plan", "scope-check"): ("tld.plan.scope", (), "check | disposition | record | section: scope drift"),
     ("plan", "check-url"): ("tld.plan.phases", ("check-url",), "accept a plan URL only from main or plan/* of this repo"),
+    ("plan", "check-commands"): ("tld.plan.phases", ("check-commands",), "which verify_after_merge commands the profile trusts"),
     ("plan", "branch-name"): ("tld.plan.phases", ("branch-name",), "print a plan, review, feature, phase or fix branch"),
     ("plan", "phase-status"): ("tld.plan.phases", ("phase-status",), "done, gated, ready and waiting phases, as JSON"),
     ("roles", "required"): ("tld.roles.dispatch", ("required",), "the roles required at a point, as JSON"),

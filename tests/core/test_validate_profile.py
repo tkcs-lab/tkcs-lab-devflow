@@ -63,11 +63,20 @@ def test_unknown_key_is_an_error(vp):
     (lambda p: p["docs"].update(changelog={"file": "C.md"}), "missing required key 'docs.changelog.section'"),
     (lambda p: p.update(ci={"dispatchable": [{"workflow": "a.yml"}]}), "missing required key 'ci.dispatchable[0].use_when'"),
     (lambda p: p["git"].update(main_branch=""), "'git.main_branch': must not be empty"),
+    (lambda p: p["verify"].update(after_merge_allow=[""]), "'verify.after_merge_allow[0]': must not be empty"),
+    (lambda p: p["verify"].update(after_merge_allow="npm test"), "'verify.after_merge_allow': must be a list (got str)"),
+    (lambda p: p["verify"].update(after_merge_allow=[3]), "'verify.after_merge_allow[0]': must be a string (got int)"),
 ])
 def test_type_errors(vp, mutate, fragment):
     p = copy.deepcopy(MINIMAL)
     mutate(p)
     assert any(fragment in e for e in errs(vp, p)), errs(vp, p)
+
+
+def test_after_merge_allow_accepted(vp):
+    p = copy.deepcopy(MINIMAL)
+    p["verify"]["after_merge_allow"] = ["npm test"]
+    assert errs(vp, p) == []
 
 
 def test_defaults_are_the_only_defaults(vp):
