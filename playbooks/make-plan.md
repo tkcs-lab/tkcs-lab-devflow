@@ -1,18 +1,17 @@
 # Playbook: make-plan
 
 Research a change, then write either a single-session prompt (small scope) or a plan document with an
-implementation manifest on its own `plan/<slug>` branch (large scope), with step-by-step instructions for
+implementation manifest on its feature branch (large scope), with step-by-step instructions for
 anything only a human can do.
 
 Input: what to build: a prompt, an issue number, a review document URL, or a mix.
 
 You are the **planner**. You research and plan; you implement none of it. The human started you with this
-command: that is their permission to create and push the `plan/<slug>` branch. It is not permission to push
+command: that is their permission to create and push the feature branch. It is not permission to push
 anywhere else, open a pull request, or change `<main>`.
 
-A plan branch is never proposed for merge. The implement playbook cuts the feature branch from it, so the plan
-travels with the work, and the plan's last phase deletes the plan document; that deletion reaches `<main>` in
-the feature pull request.
+The plan goes to the feature branch (the manifest's `feature_branch`) at `<plan_dir>/<n>/plan.md` and reaches
+`<main>` with the feature in the feature pull request, where it stays as a historical record.
 
 Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text.md),
 [policies/status-board.md](policies/status-board.md). Runtime actions: [runtime.md](runtime.md).
@@ -67,8 +66,8 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
    `project_steward` file if any. Index parts: then open the docs index and only the rows that match the
    change, and, with ADRs, the ADR index and only the ADRs whose decision touches the change. Without
    `docs.index`: the ADR index and every ADR (with ADRs), and every reference doc the change touches. Read
-   every source module the change touches. Broad sweeps go to `run_helper(<question>, standard)`; read the
-   files that matter yourself. The plan's quality depends on this step: a worker executes what the plan says
+   every source module the change touches. Broad sweeps go to `run_helper(<question>, <level>)`: `fast` when the
+   sweep only locates or enumerates, `standard` when it explains behaviour; read the files that matter yourself. The plan's quality depends on this step: a worker executes what the plan says
    and does not rediscover what it leaves out.
 3. If a decision is genuinely the human's (scope, product behaviour, a trade-off with no default in the code or
    the ADRs), `ask_human` it now, all such questions in one ask (`choice` with your recommendation first, or
@@ -118,22 +117,25 @@ the pull request in one go. In this order:
 
 The Sizing rules apply to the prompt as to a phase brief. Before you hand it over,
 `run_helper(<review the prompt against the Sizing rules and the code>, <the reviewer level>)` and fix what it
-finds. Final reply: one line with the level to start the new session at (the worker level, or `strong` with the
-reason), the `manual_before` items if any, then the prompt in one fenced code block, ready to paste.
+finds. Final reply: one line with the level to start the new session at (the worker level, `fast` when every step is a
+literal edit, or `strong` with the reason), the `manual_before` items if any, then the prompt in one fenced code block, ready to paste.
 
-## 1. The plan branch
+## 1. The feature branch
 
-- Slug: short kebab-case (`deny-with-feedback`). Branch: `tld plan branch-name --plan-slug <slug>`. Plan file:
-  `<plan_dir>/<slug>-plan.md`.
-- If `plan/<slug>` exists on origin, this is a revision: check it out and revise the plan in place.
-- Otherwise `git fetch origin <main> && git checkout -b plan/<slug> origin/<main>` and
-  `git push -u origin plan/<slug>`. If the push is refused, create the branch with `github.branch_create` from
-  `origin/<main>`'s SHA and push again; if it is still refused, stop and say so (implement accepts plans only
-  from `<main>` or a `plan/<slug>` branch).
+- Slug: short kebab-case (`deny-with-feedback`). `<n>` is the tracking issue number (the slug when issue
+  creation was refused). The manifest's `feature_branch` follows `<branch pattern>`. Plan file:
+  `<plan_dir>/<n>/plan.md`.
+- If the feature branch exists on origin: when `tld plan phase-status <plan file> --ref origin/<feature>` prints
+  `"started": true`, stop and tell the human the plan is already running and a change needs a new plan.
+  Otherwise check it out and revise the plan in place.
+- If it does not exist: `git fetch origin <main> && git checkout -b <feature> origin/<main>`. After the plan is
+  written, commit it and `git push -u origin <feature>`. If the push is refused, create the branch with
+  `github.branch_create` from `origin/<main>`'s SHA and push again; if it is still refused, stop and say so.
 
 ## 2. Write the plan
 
-`<plan_dir>/<slug>-plan.md` has these sections, in order:
+`<plan_dir>/<n>/plan.md` has these sections, in order. Its first line under the title is
+`> Historical record once merged: read it only to understand why a change was made.`
 
 1. **Goal**: what changes for the user, in a paragraph, with the issue link.
 2. **Current state**: what the code does today, with `path:line` references and measurements where they matter.
@@ -171,7 +173,7 @@ verify_after_merge:                     # commands run after each merge, in addi
   - <command that exercises this plan's tests; the stack guide says how to write it>
 screenshots_after_merge: <command>      # optional
 final_checks:                           # checked before the PR opens
-  - <plan_dir>/<slug>-plan.md is deleted and nothing links to it
+  - <`tld plan deviations check --file <plan_dir>/<n>/deviations.md --plan <plan_dir>/<n>/plan.md --all` exits 0>
   - <each ADR from the ADRs section exists, is Accepted, and is in docs.adr_index>   # ADR parts only
   - <the changelog has entries under docs.changelog.section and no version heading>   # changelog parts only
   - <`tld ops docs-index check --profile .tld/toolkit.yaml` exits 0>   # index parts only
@@ -189,10 +191,10 @@ phases:
       - <each one checkable by a named test or a command>
 ```
 
-Optional per phase, rarely: `human_gate: true` (section 3) and `worker_level: strong` with
-`worker_level_reason:` (below). The last phase is always the retirement phase: it writes the ADRs (ADR parts),
-updates the reference docs, deletes the plan document, adds the changelog entry if earlier phases did not
-(changelog parts), and does only the parts of that list that apply.
+Optional per phase, rarely: `human_gate: true` (section 3), `worker_level: fast` and `worker_level: strong` with
+`worker_level_reason:` (below). A phase's `touches` never names the plan or its deviations file. The last phase
+is always the retirement phase: it writes the ADRs (ADR parts), updates the reference docs, adds the changelog entry if earlier phases
+did not (changelog parts), and does only the parts of that list that apply.
 
 Index parts: the retirement phase also updates the docs index: one row per doc the plan added, moved or deleted
 (the plan document is never indexed), the ADR-index rows, and the entry-file lines a change made untrue; it runs
@@ -202,7 +204,7 @@ entry file ([policies/docs.md](policies/docs.md)); a phase that adds, moves or d
 
 ### Sizing
 
-Every phase runs in a worker at the worker level. You are the strong level in this pipeline: do the judgement
+Every phase runs in a worker at the worker level unless it names another. You are the strong level in this pipeline: do the judgement
 here so the worker only has to execute. Every phase passes all of these:
 
 - **Complexity S** (up to about 3 source files and 150 changed lines, tests excluded) or **M** (up to about 8
@@ -221,6 +223,11 @@ here so the worker only has to execute. Every phase passes all of these:
   with `status=blocked`.
 - **`verify_after_merge` holds only commands this repository defines** (its test runner, its scripts, a
   `dispatch <workflow>` of `ci.dispatchable`): the owner confirms them before implement runs them (S14).
+
+- **`worker_level: fast`** is allowed only for a phase that is complexity `S`, whose brief gives the literal text
+  or the literal edit for every change (docs, strings, config values, renames, fixture or baseline refreshes),
+  contains no new control flow or function, and whose acceptance is a named test or a grep. The default is the
+  worker level (omit the key). A `fast` phase that is sent back once reruns at `standard`.
 
 `worker_level: strong` is the escape hatch for a phase that cannot be made mechanical (a subtle concurrency fix,
 a security-sensitive parser). Use it only with a `worker_level_reason` the human can read, and prefer
@@ -257,7 +264,7 @@ Its instructions follow the checklist in `docs/reference/profile-reference.md#se
 **The Manual steps section.** For each item a numbered section with a numbered list of steps, one action each,
 under two parts, **Before implementation** and **After implementation**. Every step that happens somewhere has a
 direct link: the exact console or settings page, not a home page, and the repository's own setup docs as
-`https://github.com/<owner>/<repo>/blob/plan/<slug>/<path>.md` links where they exist. Say what the human sees
+`https://github.com/<owner>/<repo>/blob/<feature branch>/<path>.md` links where they exist. Say what the human sees
 after each step, what to type or pick, and where a value goes, with a rough time per item. End each
 `manual_before` item with its `done_when` and each `manual_after` item with what to report back (a pass/fail
 line for the pull request). Secrets never travel through chat, the plan or an ask: a step that produces a
@@ -270,15 +277,15 @@ secret says exactly where it is stored (`secrets_help()` for the runtime's envir
 list with severities of anything that: fails Sizing; leaves a decision open in a brief; lets two phases in one
 wave share a path in `touches`; puts a manual step in the middle or calls something manual that the dispatch
 table can do; contradicts a must-read doc, an accepted ADR or the code; leaves the retirement phase without the
-index rows for the docs the plan adds, or a brief without a `Read first:` line (index parts); or would fail
+index rows for the docs the plan adds, or a brief without a `Read first:` line (index parts); a `fast` phase that does not meet the fast bullet; or would fail
 `tld plan validate-manifest`. Fix what you agree with; say why for the rest in your final reply.
 
-Then `tld plan validate-manifest <plan file> --profile .tld/toolkit.yaml`. Fix every error; never push a plan
+Then `tld plan validate-manifest <plan file> --profile .tld/toolkit.yaml --ref <feature branch>`. Fix every error; never push a plan
 it rejects.
 
 ## 5. Commit, push and hand over
 
-1. Commit the plan to `plan/<slug>` with a message saying what it is for, and push.
+1. Commit the plan to the feature branch with a message saying what it is for, and push.
 2. **The issue** (with a tracking issue). Rewrite its body (`github.issue_update`), keeping the original ask,
    with the plan in plain words and **no YAML**, under exactly these headings in order: `## Request`, `## Goal`,
    `## What changes` (one bullet per phase: `<phase id> - <title> (<S|M>): <one plain sentence>`), `## Order`
@@ -287,7 +294,7 @@ it rejects.
    S14), `## Risks`, `## Machine-readable plan` (the plan URL and the line `Run: implement <plan URL>`). A
    revision updates the body the same way. Then post `Plan ready: <plan URL>. Next: implement <plan URL>.`
 3. Final reply, short: the tracking issue link; the plan URL in the exact form implement takes,
-   `https://github.com/<owner>/<repo>/blob/plan/<slug>/<plan_dir>/<slug>-plan.md`; the `manual_before` items; a
+   `https://github.com/<owner>/<repo>/blob/<feature branch>/<plan_dir>/<n>/plan.md`; the `manual_before` items; a
    table of phases (id, title, complexity, depends_on, any `worker_level: strong` with its reason); what the
    reviewer flagged that you did not change, and why; without `docs.index` the line `No docs index: run docs
    init to build one (it cuts the tokens every session reads).`
@@ -295,5 +302,5 @@ it rejects.
    owner as one `confirm` question of its `Start <plan slug>` ask before anything starts, and a small scope's
    worker asks the same way. The steps themselves live in the plan's Manual steps section and the issue.
 
-Never: implement a phase; open a pull request; push to `<main>` or to any branch but `plan/<slug>`; put a
+Never: implement a phase; open a pull request; push to `<main>` or to any branch but the feature branch; put a
 secret in the plan or an ask.

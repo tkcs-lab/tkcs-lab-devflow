@@ -11,9 +11,9 @@ index; the index routes to leaf docs that are opened only when a row matches the
 - `docs/README.md` (the profile key `docs.index`): the index, at most 150 lines, one row per doc.
 - `docs/architecture/` how it is built and why; `docs/guides/` how to do things; `docs/reference/` lookups.
 - `docs/adr/`: `README.md` (the ADR index) and `NNNN-<kebab>.md`, only when the project uses ADRs.
-- `docs/plans/` (`docs.plan_dir`): active plans and reviews only, deleted when they land, never indexed.
+- `docs/plans/` (`docs.plan_dir`): `<n>/plan.md` and `<n>/deviations.md` per change, kept as history, never indexed, never read by default; reviews are deleted when they land.
 - `docs/archive/`: superseded docs, kept for history, never read by default.
-- Transient docs (`*-plan.md`, `*-review.md`) are never indexed. A doc over 400 lines is a warning: split it.
+- Transient docs (`*-plan.md`, `*-review.md`, `<n>/plan.md`, `<n>/deviations.md`) are never indexed. A doc over 400 lines is a warning: split it.
 - The entry file holds the title with a two-line description, a layout list (at most 8 lines), the commands
   (at most 10), the hard rules (at most 10) and a `## Docs` section:
   `Open [docs/README.md](docs/README.md) first, then only the rows that match your task.` (with the profile's
