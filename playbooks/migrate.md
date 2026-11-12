@@ -12,7 +12,7 @@ toolkit) applies: the profile is not a tld profile yet, so it is not loaded befo
 
 ## Status record
 
-`kind: command`, `command: migrate`, document id `<project>--migrate`, `attended: true`, `orchestrator_session`
+`kind: command`, `command: migrate`, document id from `tld board record-id --repo <owner>/<repo> --command migrate --session <this session's id>`, `attended: true`, `orchestrator_session`
 this session's id, items `plan`, `confirm`, `write`, `pr`, `checklist`. No board yet is the normal case here:
 then skip the record steps as the policy says.
 

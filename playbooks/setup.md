@@ -27,7 +27,7 @@ and stop; never invent a key.
 
 ## Status record
 
-`kind: command`, `command: setup`, document id `<project>--setup`, `attended: true`, `orchestrator_session`
+`kind: command`, `command: setup`, document id from `tld board record-id --repo <owner>/<repo> --command setup --session <this session's id>`, `attended: true`, `orchestrator_session`
 this session's id, items `survey`, `confirm`, `write`, `verify`, `pr`.
 
 ## 1. Survey
