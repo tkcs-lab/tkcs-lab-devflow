@@ -52,7 +52,8 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld board ask-text FILE\|- [--id ID]` | `tld.board.inbox` | the ask as a chat message an attended session shows; the owner may answer there |
 | `tld board validate-ask FILE` | `tld.board.ask` | validate an ask (`schema/ask.schema.json`) |
 | `tld board mcp-stdio` | `tld.board.mcp_stdio` | MCP stdio bridge to the board server (the `tld-board` MCP server) |
-| `tld board stale [FILE] [--now T]` | `tld.board.stale` | print the ids of hidden status records |
+| `tld board stale [FILE] [--now T]` | `tld.board.stale` | print the ids of hidden and dismissed status records |
+| `tld board resolve FILE\|- --now T --reason TEXT` | `tld.board.resolve` | clear needs_you of a record whose pull requests are all merged or closed |
 | `tld board build --title T --out F ...` | `tld.board.build` | build the self-contained board page |
 | `tld board validate-record FILE [--doc-id ID]` | `tld.board.record` | validate a status record |
 | `tld board project-slug OWNER/NAME` | `tld.board.record` | the project slug of a repository, the only `project` a record may have |
