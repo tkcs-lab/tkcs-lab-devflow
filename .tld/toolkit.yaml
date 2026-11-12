@@ -40,3 +40,34 @@ stacks: [python]
 
 admin:
   policy: .tld/admin-policy.yaml
+
+hooks:
+  dod_gate:
+    enabled: true
+    max_attempts: 3
+  plan_gate:
+    enabled: true
+
+ci:
+  time_budget_minutes: 60
+  lookback_hours: 36
+
+deps:
+  cooldown_days: 3
+  time_budget_minutes: 90
+  audit:
+    - ecosystem: pip
+      run: ".venv/bin/python -m pip install -q pip-audit && .venv/bin/python -m pip_audit -r tests/requirements.txt"
+
+land:
+  max_prs: 10
+
+roles:
+  posture:
+    security: critical
+  required:
+    - {role: security-reviewer, at: [implement_phase, implement_final], blocking: true}
+    - {role: code-reviewer, at: [implement_final], blocking: true}
+    - {role: test-architect, at: [make_plan]}
+    - {role: tech-writer, at: [dod, review]}
+    - {role: dependency-auditor, at: [dod], when: ["pyproject.toml", "tests/requirements.txt"]}
