@@ -48,6 +48,11 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - final: blocking 6 (p3): the D8 placement test for make-plan.md Research: and review.md decisions ask is missing
 - final: blocking 7: deviations file lacked entries for p1 and p5 and listed None next to review entries (fixed by the orchestrator)
 - final: review 2: approve; no blocking finding; open non-blocking items go to the pull request: stale --rest help and docstring in research.py, a private repository named like a template word makes check-prompt reject every prompt, step 5 does not say what follows exit 3 of board answers, step 5 wording has no pinning test, and a malformed (bold or heading) start line lets web text between it and a forged inner start line into the rest file
+- scope: playbooks/ask.md
+- scope: docs/guides/cloud-environments.md
+- scope: docs/reference/cli.md
+- scope: evals/baselines/default.json
+- scope: playbooks/policies/research.md
 
 ## Finishing
 
