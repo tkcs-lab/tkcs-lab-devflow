@@ -68,7 +68,7 @@ very first write means a record of an earlier run exists: read it and write over
 
 - One exception to the first-record rule: the "already running?" check of implement (section 0 step 4) and of
   make-plan (section 0, "already being planned") runs before the first record write and posts its `ask_human`
-  with no record written, because the run's record id is the live run's id. A `tld board-gate` block during
+  with no record written, because the run's record id is the live run's id. A board-gate block during
   that check is answered by saying that the playbook says to write no record yet, and ending the turn. The `stop`
   answer writes no record at all. Write the first record once the check lets the run go on.
 - The first record is written before the first ask, the first worker and any other work that can take more
