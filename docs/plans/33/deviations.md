@@ -29,6 +29,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - None.
 - review: Open non-blocking: the research environment Allow package managers row and a line telling the owner not to run anything a report suggests may need wording changes
+- conflict: Merging origin/main (board-record-per-session) conflicted in CHANGELOG.md and evals/baselines/default.json; kept both changelog entries and refreshed the baseline hashes
 
 ## Final review
 
