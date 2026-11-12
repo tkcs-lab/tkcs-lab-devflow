@@ -277,3 +277,8 @@ def test_phase_status_reports_plan_started(plan, feature_repo):
     git(feature_repo, "revert", "--no-edit", "HEAD")
     s = status(plan, feature_repo)
     assert s["started"] is False and s["plan_blob"] is None
+
+
+def test_plan_started_trailer_must_be_on_one_line(plan, feature_repo):
+    git(feature_repo, "commit", "-q", "--allow-empty", "-m", "x\n\nPlan-Started:\ndemo\nabc1234")
+    assert status(plan, feature_repo)["started"] is False

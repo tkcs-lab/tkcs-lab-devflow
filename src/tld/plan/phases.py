@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """The mechanical parts of running a plan: where it may come from, branch names, which phases to start.
 
-    tld plan check-url URL [--repo OWNER/NAME] [--main BRANCH]
+    tld plan check-url URL [--repo OWNER/NAME] [--main BRANCH] [--plan-dir DIR]
     tld plan branch-name (--plan-slug SLUG | --review-slug SLUG | --manifest PLAN [--phase ID [--rev N] | --fix N])
     tld plan phase-status PLAN [--ref REF] [--running ID]... [--approved ID]... [--repo DIR]
 
 `check-url` (S14) parses `https://github.com/<owner>/<repo>/blob/<ref>/<path>` and accepts it only when
 `<owner>/<repo>` is this repository (`--repo`, default: the `origin` remote of the current directory) and
-`<ref>` is the main branch (`--main`, default `main`) or a `plan/<slug>` branch. It prints
-`{"owner", "repo", "ref", "path"}` as JSON. A plan from anywhere else is refused (exit 1): its
+`<ref>` is the main branch (`--main`, default `main`) or a `<type>/<kebab>` feature branch and the path ends in
+`<plan-dir>/<n>/plan.md` (`--plan-dir`, default `docs/plans`); the old `main/` and `plan/<slug>` layouts are still
+accepted with `"legacy": true`. It prints `{"owner", "repo", "ref", "path", "legacy"}` as JSON. `phase-status`
+also prints `started` and `plan_blob` (from the newest `Plan-Started: <slug> <blob>` trailer). A plan from anywhere else is refused (exit 1): its
 `verify_after_merge` commands would run on this machine.
 
 `branch-name` prints one branch name (C12): `plan/<slug>`, `review/<slug>`, the manifest's
@@ -81,7 +83,7 @@ def check_url(url: str, repo: str, main: str, plan_dir: str = "docs/plans") -> d
     if sm:
         ref, path = sm["ref"], sm["path"]
         if ref != main and (not FEATURE_REF.match(ref) or "--" in ref):
-            raise PlanError(f"the plan must be on '{main}' or on a <type>/<kebab> feature branch, not on '{ref}'")
+            raise PlanError(f"the plan must be on '{main}' or on a <type>/<kebab> feature branch, not on {ref!r}")
     elif rest.startswith(f"{main}/"):
         ref, path = main, rest[len(main) + 1:]
     elif rest.startswith("plan/"):
@@ -180,7 +182,7 @@ def trailers(ref: str, slug: str, cwd: str | None) -> tuple[set[str], set[str], 
 
     phase_rx = re.compile(r"^Plan-Phase:\s*" + re.escape(slug) + r"/(\S+)\s*$", re.M)
     gate_rx = re.compile(r"^Plan-Gate-Approved:\s*" + re.escape(slug) + r"/(\S+)\s*$", re.M)
-    started_rx = re.compile(r"^Plan-Started:\s*" + re.escape(slug) + r"\s+([0-9a-f]{7,40})\s*$", re.M)
+    started_rx = re.compile(r"^Plan-Started:[ \t]*" + re.escape(slug) + r"[ \t]+([0-9a-f]{7,40})[ \t]*$", re.M)
     plan_blob = None
     merged_at: dict[str, int] = {}  # phase -> index of its newest counted merge (0 = newest commit)
     approved_at: dict[str, int] = {}
