@@ -48,6 +48,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("board", "ask"): ("tld.board.inbox", ("ask",), "post an ask to the owner's inbox; prints its id"),
     ("board", "answers"): ("tld.board.inbox", ("answers",), "print an ask's answers (or read them from an issue)"),
     ("board", "cancel"): ("tld.board.inbox", ("cancel",), "cancel an open ask"),
+    ("board", "ask-text"): ("tld.board.inbox", ("text",), "the ask as a chat message for an attended session"),
     ("ops", "land-order"): ("tld.ops.land_order", (), "order open pull requests for /land"),
     ("ops", "pick-release"): ("tld.ops.pick_release", (), "pick the newest eligible release tag"),
     ("ops", "upstream-sync"): ("tld.ops.upstream_sync", (), "plan | prepare: sync a fork to an upstream release"),
