@@ -32,6 +32,7 @@ You are the <role> role, running at <point>.
 Mode: <review|edit>
 Scope: <diff range or paths>
 Security posture: <critical|standard|low>
+Environment: limited network; a question you cannot settle offline goes on a line "research: <question>" before the AGENT-REPORT line; the session that ran you decides ([research.md](research.md)).
 Extra context:
 - <each roles.extra_context line>
 Must-read docs: <paths>
