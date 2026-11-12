@@ -103,7 +103,7 @@ signed in.
    runner makes a bare `origin.git` from it and a fresh clone, so a `git push` goes to a local
    directory and nowhere else.
 2. The plugin is exported from the task's `plugin.ref` (default `HEAD`, via `git archive`; `worktree`
-   copies the working tree): `.claude-plugin/`, `adapters/`, `launcher/`, `src/` and the neutral content the commands
+   copies the working tree): `.claude-plugin/`, `adapters/`, `cli/`, `src/` and the neutral content the commands
    follow (`playbooks/`, `roles/`, `checklists/`, `stacks/`). It is loaded with `--plugin-dir`. The record
    carries the resolved sha and the command hashes (see "Baselines and staleness").
 3. The agent adapter starts a headless session in the clone and runs the command; it returns the result text,

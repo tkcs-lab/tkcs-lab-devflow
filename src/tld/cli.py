@@ -26,6 +26,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("plan", "check-commands"): ("tld.plan.phases", ("check-commands",), "which verify_after_merge commands the profile trusts"),
     ("plan", "branch-name"): ("tld.plan.phases", ("branch-name",), "print a plan, review, feature, phase or fix branch"),
     ("plan", "phase-status"): ("tld.plan.phases", ("phase-status",), "done, gated, ready and waiting phases, as JSON"),
+    ("plan", "active-run"): ("tld.plan.active", (), "is another run of make-plan or implement already going"),
     ("roles", "required"): ("tld.roles.dispatch", ("required",), "the roles required at a point, as JSON"),
     ("roles", "verify"): ("tld.roles.dispatch", ("verify",), "check a report against `tld roles required`"),
     ("dod", "exempt"): ("tld.dod.gate", ("--exempt",), "mark this checkout's session exempt from the DoD gate"),

@@ -7,6 +7,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Added
 
+- A second `/make-plan` of an issue, or `/implement` of a plan, that another session is still running now stops and asks (`stop` or `take_over`). New `tld plan active-run` reads the tracking issue's comments and the board record; a run silent for more than two hours counts as dead. The start comments now end with `Session: <id>.`, and runs post `Planning stopped:` / `Implementation stopped:`.
 - The release workflow template (`template: release`) takes three new parameters, so one `tld-release` can cut
   the tags of every repository: `version_style: pep440` accepts versions like `4.2.0a1`, `check_script` runs a
   repository's own pre-release check with the version before the tag, and `create_release: false` only tags and
@@ -30,6 +31,7 @@ entry of the released version at the top of the GitHub release, above the list o
   command is meant for a cheaper one. Switch it off with `hooks.disable: [model-check]`.
 - `tld board resolve` clears the `needs_you` of a record whose pull requests are finished, and an ask has the
   optional field `record`, the status record that posted it.
+- Install with curl: one line installs or upgrades the `tld` command, another the board server (Docker Compose). A release now carries the wheel, the sdist, `install.sh`, `compose.yaml` and `SHA256SUMS`, and the multi-arch board image `ghcr.io/tkcs-lab/tld-board` is pushed by the release workflow.
 
 ### Fixed
 
@@ -44,12 +46,15 @@ entry of the released version at the top of the GitHub release, above the list o
   merged or closed.
 - The board client and repo-admin send `User-Agent: tld/<version>` instead of urllib's default, which Cloudflare's
   Browser Integrity Check refuses (error 1010), so a board behind Cloudflare is reachable from a session.
+- The plan-gate now opens when a slash command reaches the hook expanded (`<command-name>/tld:...</command-name>` after `<system-reminder>` blocks), not only when it is typed as the first characters.
 
 ### Changed
 
 - Plans now live on the feature branch at `docs/plans/<issue>/plan.md` and stay after the merge; `plan/<slug>` plans are
   deprecated for one release.
 - `/make-plan` assigns the `fast` worker level to literal phases, and `validate-manifest` requires complexity S for it.
+- Board: sending the answers of an ask (or cancelling it) returns to the inbox and confirms it there, instead of
+  staying on the answered ask; the "← Inbox" link sits above the ask card.
 - `/land` asks only for what only you can fix and lists its pull requests as items of its record.
 - The board database moves to schema version 4 (dismissals). An older image refuses it: keep a backup from before
   the upgrade to roll back.
@@ -57,8 +62,9 @@ entry of the released version at the top of the GitHub release, above the list o
   `verify.fast`/`verify.dod` entry, a new `verify.after_merge_allow` prefix, a `ci.dispatchable` dispatch),
   and asks nothing at the start when there are no manual steps either; new `tld plan check-commands`.
   `/make-plan` no longer adds the standing `mb0-second-user` step: implement already checks the identity.
-- The CLI launcher moved from `bin/tld` to `launcher/tld`: claude.ai refuses to sync a plugin with a top-level `bin/`
-  directory. Call `launcher/tld` from a checkout; the installed `tld` command is unchanged.
+- The CLI entry script moved from `launcher/tld` (1.0.0; `bin/tld` before) to `cli/tld`: claude.ai refuses to sync a
+  plugin with a top-level `bin/` directory. A session that was open during the plugin sync may need a restart. Call
+  `cli/tld` from a checkout; the installed `tld` command is unchanged.
 
 ## [1.0.0] - 2026-11-11
 

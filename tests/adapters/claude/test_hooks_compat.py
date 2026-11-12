@@ -83,9 +83,9 @@ COMPAT = {
     "upstream": [
         ("git ls-remote --tags https://github.com/o/r.git", "git ls-remote --tags"),
         ("git fetch origin main", "git fetch origin <main>"),
-        ('"${CLAUDE_PLUGIN_ROOT}/launcher/tld" ops upstream-sync plan --upstream-url https://github.com/o/r.git '
+        ('"${CLAUDE_PLUGIN_ROOT}/cli/tld" ops upstream-sync plan --upstream-url https://github.com/o/r.git '
          "--version-file UPSTREAM --pattern '^v[0-9.]+$'", "ops upstream-sync plan"),
-        ('"${CLAUDE_PLUGIN_ROOT}/launcher/tld" ops upstream-sync prepare --upstream-url https://github.com/o/r.git '
+        ('"${CLAUDE_PLUGIN_ROOT}/cli/tld" ops upstream-sync prepare --upstream-url https://github.com/o/r.git '
          "--version-file UPSTREAM --tag v1.2.3 --branch chore/upstream-v1-2-3 --base origin/main", "ops upstream-sync prepare"),
         ("git commit -m 'Sync o/r v1.2.2 to v1.2.3'", "Sync <upstream.repo> <old> to <new>"),
         ("git push -u origin chore/upstream-v1-2-3", "git push -u origin <branch>"),
@@ -112,8 +112,8 @@ COMPAT = {
     "migrate": [
         ("git fetch origin main", "git fetch origin <main>"),
         ("git checkout -b chore/tld-migrate origin/main", "git checkout -b chore/tld-migrate origin/<main>"),
-        ('"${CLAUDE_PLUGIN_ROOT}/launcher/tld" migrate .', "tld migrate ."),
-        ('"${CLAUDE_PLUGIN_ROOT}/launcher/tld" migrate . --write', "tld migrate . --write"),
+        ('"${CLAUDE_PLUGIN_ROOT}/cli/tld" migrate .', "tld migrate ."),
+        ('"${CLAUDE_PLUGIN_ROOT}/cli/tld" migrate . --write', "tld migrate . --write"),
         ("git commit -m 'chore: migrate from claude-toolkit to tld'", "chore: migrate from claude-toolkit to tld"),
         ("git push -u origin chore/tld-migrate", "git push -u origin chore/tld-migrate"),
     ],
