@@ -288,6 +288,12 @@ record to the board once before it ends a turn. It is a nudge, not a control.
 - **Fails open.** No board configured, a malformed `hooks.board_gate`, an unreadable state file, any error: allow. The hook
   never calls the board. `enabled` is read from the working tree, `hooks.disable` from the trusted copy, and only on
   `Stop`, so a malformed `hooks.disable` can never make it block.
+- **The block message** (the guard runner puts `tld board-gate: ` in front; `<command>` comes from the state file):
+  `this session was started by /tld:<command> and has not written its status record to the board. Write it now: use the board_set tool, or when that tool is missing or fails run "tld board client set <id> - " with the record on stdin (the id comes from "tld board record-id"). If the board cannot be reached, say so in your final reply and stop. This check blocks only once.`
+- **Rejected alternatives.** (1) The board client and the MCP bridge writing the marker: the bridge may not inherit the
+  session id, outlives `/clear` and has to pair replies to requests. (2) The hook asking the board: it would need the
+  network and a token inside a hook, and a record cannot be tied to a hook session id, because `orchestrator_session`
+  is the cloud id and the hook sees a different one.
 
 ## How the dod-gate recognises a session
 
@@ -406,6 +412,7 @@ How a command is parsed, and the commands of the playbooks the guards must allow
 
 ## What the hooks do not protect
 
+- **`board-gate` is a nudge:** a session that can write files can write its state file.
 - **A second run of the same command.** No hook can see another session, so make-plan and implement check the tracking issue's comments and the board record themselves (`tld plan active-run`); two runs that start before the first one's start comment is visible can both pass the check, and a run that sits more than two hours without a comment or a board update counts as dead.
 - **Sessions without the plugin.** Hooks exist only where `tld` is enabled. A session that does not load the plugin, a
   person at a terminal, another tool, and a CI job are not covered.
