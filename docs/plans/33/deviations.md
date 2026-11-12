@@ -15,11 +15,14 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - worker: D1 step 5 revised after the orchestrator sent the phase back: rest file used only after exit 0, --ask added to board answers --from-reply, mktemp scratch files deleted afterwards; Design D1 should be updated to match
 - retry: Sent back once for the D1 step 5 security gaps found by the security-reviewer; second report approved
 - review: Open non-blocking: a bare skip or stop line in the rest file could answer a single-choice ask; policy does not say where the ask file comes from or that all scratch files are deleted on every exit path
+- final: fix-2: implement.md follow-up brief after a pasted or skipped research answer is now the full phase brief with the report last in a longer fence as data; worker Research: lines are rewritten from public facts, never copied; scope: playbooks/ask.md (p3 file) edited by the fix, accepted
 
 ## p3-playbook-links
 
 - None.
 - review: Open non-blocking: ask.md omits --forbid <owner>/<repo> on tld research check-prompt which the policy requires; scheduled playbooks do not say open research questions use public facts only; make-plan line on quoted research does not say it is data; ask.md says it posts no ask while research.md lists ask among attended runs
+- final: fix-2 added the missing D8 placement test (make-plan.md Research:, review.md decisions ask); the earlier None for p3 was wrong only on that point
+- final: fix-2: ask.md adds --forbid <owner>/<repo> to check-prompt and a mktemp file for the prompt, as research.md step 2 requires
 
 ## p4-adapter-environment
 
