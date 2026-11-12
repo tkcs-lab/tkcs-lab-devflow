@@ -31,12 +31,20 @@ its own settings). In a local Claude Code:
 /plugin install tld --marketplace tkcs-lab/tkcs-lab-devflow
 ```
 
-The command line alone, for scripts, CI or a migration from a plain checkout (Python 3.11+, PyYAML):
+The command line alone, for scripts, CI or a migration from a plain checkout (Python 3.11+), and the board server (Docker):
 
 ```
-pip install git+https://github.com/tkcs-lab/tkcs-lab-devflow@v1.0.0
+curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download/install.sh | sh              # the tld command
+curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download/install.sh | sh -s -- board  # the board (Docker)
 tld --help
 ```
+
+What the checksum does and does not prove: [SECURITY.md](SECURITY.md). To read the script first, download it with `curl -fsSLO <url>`, then `sh install.sh`.
+Running the same line again upgrades to the latest release. To pin a version, run that release's own installer
+(`curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/download/vX.Y.Z/install.sh | sh`), which installs its own version.
+Uninstall with `... | sh -s -- uninstall`. Without the installer:
+`pip install https://github.com/tkcs-lab/tkcs-lab-devflow/releases/download/vX.Y.Z/tld-X.Y.Z-py3-none-any.whl`. Do not `pip install tld`: that name on PyPI is
+another package.
 
 Then run `/tld:setup` in a session to create `.tld/toolkit.yaml` (one pull request, never merged), or copy
 [`src/tld/templates/toolkit.yaml`](src/tld/templates/toolkit.yaml) and fill it in. The profile's `tld.version`
@@ -90,7 +98,7 @@ account never does.
 
 | Path | |
 |---|---|
-| `src/tld/`, `launcher/tld` | the core package and its launcher ([CLI reference](docs/reference/cli.md)); `schema/` holds the JSON schemas of the profile, the status record, the ask and the admin policy (the implementation manifest is checked in code by `tld plan validate-manifest`), and `templates/` the starter files |
+| `src/tld/`, `cli/tld` | the core package and its CLI script ([CLI reference](docs/reference/cli.md)); `schema/` holds the JSON schemas of the profile, the status record, the ask and the admin policy (the implementation manifest is checked in code by `tld plan validate-manifest`), and `templates/` the starter files |
 | `playbooks/`, `roles/`, `checklists/`, `stacks/` | the neutral procedures (with `runtime.md` and `policies/`), role cards, checklists and stack guides |
 | `adapters/claude/` | the Claude Code plugin: commands, agents, the runtime skill, hooks, `mcp.json` |
 | `.claude-plugin/` | the marketplace `tkcs-lab-devflow` and the plugin manifest (sourced from the repository root) |

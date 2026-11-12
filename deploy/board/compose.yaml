@@ -1,0 +1,15 @@
+# The board server. Installed by install.sh (board) into ~/tld-board; the release stamps the image reference.
+# Local changes go in compose.override.yaml next to this file, never here: an upgrade overwrites this file.
+name: tld-board
+services:
+  board:
+    image: "@TLD_IMAGE@"
+    container_name: tld-board
+    restart: unless-stopped
+    ports: ["127.0.0.1:8787:8787"]
+    env_file: .env
+    volumes:
+      - data:/data
+volumes:
+  data:
+    name: tld-board-data

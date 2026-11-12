@@ -4,4 +4,4 @@ description: Answer a question or discuss an idea about this repository without 
 ---
 
 Follow `${CLAUDE_PLUGIN_ROOT}/playbooks/ask.md`. Load the `tld:runtime` skill first and map every runtime action
-the playbook names with it; its `tld ...` commands run as `"${CLAUDE_PLUGIN_ROOT}/launcher/tld" ...`.
+the playbook names with it; its `tld ...` commands run as `"${CLAUDE_PLUGIN_ROOT}/cli/tld" ...`.

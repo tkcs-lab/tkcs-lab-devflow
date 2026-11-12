@@ -5,11 +5,13 @@ import ast
 import json
 import re
 
+import yaml
 from conftest import ROOT
 from tld.board import record as validate_status_record
 
 DOCKERFILE = ROOT / "deploy" / "board" / "Dockerfile"
 DOC = ROOT / "docs" / "guides" / "board-server.md"
+COMPOSE = ROOT / "deploy" / "board" / "compose.yaml"
 
 def _copied() -> set[str]:
     """Repository paths the Dockerfile copies (the build context is the repository root)."""
@@ -44,6 +46,23 @@ def test_dockerfile_basics() -> None:
     cmd = [line for line in text.splitlines() if line.startswith("CMD ")]
     assert len(cmd) == 1 and '"tld.board.server"' in cmd[0]
     assert "PYTHONPATH=/app/src" in text
+    assert re.search(r'^LABEL org\.opencontainers\.image\.source="https://github\.com/tkcs-lab/tkcs-lab-devflow"$', text, re.M)
+    assert re.search(r'^LABEL org\.opencontainers\.image\.description="[^"]+"$', text, re.M)
+    assert re.search(r'^LABEL org\.opencontainers\.image\.licenses="Apache-2\.0"$', text, re.M)
+
+
+def test_compose_file_shape() -> None:
+    doc = yaml.safe_load(COMPOSE.read_text())
+    assert doc["name"] == "tld-board"
+    board = doc["services"]["board"]
+    assert board["image"] == "@TLD_IMAGE@"
+    assert board["container_name"] == "tld-board"
+    assert board["restart"] == "unless-stopped"
+    assert board["ports"] == ["127.0.0.1:8787:8787"]
+    assert board["env_file"] == ".env"
+    assert board["volumes"] == ["data:/data"]
+    assert doc["volumes"]["data"]["name"] == "tld-board-data"
+    assert "TLD_BOARD_TOKEN" not in str(board.get("environment", ""))
 
 
 def test_dockerfile_copies_every_module_the_server_imports() -> None:

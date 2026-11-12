@@ -14,9 +14,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 EVALS = ROOT / "evals"
 PLUGIN = ROOT  # the tld plugin is sourced from the repository root
-# what the plugin needs at run time: its manifest, the adapters, the launcher, the core package and the
+# what the plugin needs at run time: its manifest, the adapters, the CLI script, the core package and the
 # neutral content the commands follow (playbooks, roles, checklists, stacks)
-PLUGIN_PATHS = (".claude-plugin", "adapters", "launcher", "src", "playbooks", "roles", "checklists", "stacks")
+PLUGIN_PATHS = (".claude-plugin", "adapters", "cli", "src", "playbooks", "roles", "checklists", "stacks")
 CORE_MODULES = {"validate_profile": "tld.profile.validate", "validate_manifest": "tld.plan.manifest",
                 "validate_status_record": "tld.board.record", "docs_index": "tld.ops.docs_index"}
 TASKS_DIR = EVALS / "tasks"

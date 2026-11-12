@@ -21,8 +21,8 @@ config, including `!shell` aliases). Mentions are not commands: `echo "gh pr mer
 
 Two whole-command checks run first, on every destructive guard (`src/tld/guard/integrity.py`): a command whose **name**
 is only known at run time followed by a git/gh write word (`G=git; $G push --force …`) is denied (S3), unless the name
-is the toolkit's launcher `"${CLAUDE_PLUGIN_ROOT}/launcher/tld"` (also `"${CLAUDE_PLUGIN_ROOT}"/launcher/tld`) on a command line
-that does not set `CLAUDE_PLUGIN_ROOT` itself, which the commands use; any other `$X/launcher/tld` or `$X/tld` is denied (S20); and a git command that pulls configuration from a file or the
+is the toolkit's CLI script `"${CLAUDE_PLUGIN_ROOT}/cli/tld"` (also `"${CLAUDE_PLUGIN_ROOT}"/cli/tld`) on a command line
+that does not set `CLAUDE_PLUGIN_ROOT` itself, which the commands use; any other `$X/cli/tld` or `$X/tld` is denied (S20); and a git command that pulls configuration from a file or the
 environment (`-c include.*` / `includeIf.*`, `GIT_CONFIG_GLOBAL` / `GIT_CONFIG_SYSTEM` / `GIT_CONFIG_PARAMETERS`,
 `GIT_DIR`) is denied, because it can set a push destination or an alias the parser cannot see (S4).
 

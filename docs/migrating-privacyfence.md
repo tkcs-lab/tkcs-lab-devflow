@@ -46,7 +46,7 @@ whether a toolkit change breaks the project's real profile. The two real manifes
 To check the live file from a checkout of both repositories:
 
 ```
-launcher/tld profile validate ../privacyfence/.claude/toolkit.yaml --root ../privacyfence
+cli/tld profile validate ../privacyfence/.claude/toolkit.yaml --root ../privacyfence
 ```
 
 This also checks that every file the profile lists exists.

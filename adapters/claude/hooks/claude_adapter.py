@@ -34,6 +34,9 @@ PROTECTED = ("~/.claude/**", ".claude/settings.json", ".claude/settings.local.js
 
 # A prompt that starts with a tld command or skill: `/tld:make-plan x` or `/make-plan x`.
 INVOKED = re.compile(r"^\s*/(?:tld:)?([a-z][a-z-]*)(?:\s|$)")
+# The same command when the client delivers it expanded, after any number of <system-reminder> blocks.
+REMINDER = re.compile(r"\A\s*<system-reminder>.*?</system-reminder>\s*", re.S)
+EXPANDED = re.compile(r"\A\s*(?:<command-message>[^<]*</command-message>\s*)?<command-name>/(?:tld:)?([a-z][a-z-]*)</command-name>")
 
 
 class Result(NamedTuple):
@@ -58,8 +61,18 @@ def known_commands() -> frozenset[str]:
 
 
 def invoked_command(prompt: str) -> str | None:
-    """The tld command or skill a prompt starts with, or None."""
+    """The tld command or skill a prompt starts with, or None.
+
+    Two shapes count: the typed line (`/tld:make-plan x` or `/make-plan x`) and the expanded form
+    (`<command-message>..</command-message><command-name>/tld:make-plan</command-name>`), each after any
+    leading `<system-reminder>` blocks. A command named later in the text does not count.
+    """
     m = INVOKED.match(prompt)
+    if not m:
+        text = prompt
+        while (r := REMINDER.match(text)):
+            text = text[r.end():]
+        m = INVOKED.match(text) or EXPANDED.match(text)
     return m.group(1) if m and m.group(1) in known_commands() else None
 
 
