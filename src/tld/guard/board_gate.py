@@ -1,7 +1,8 @@
 """board-gate (UserPromptSubmit, PostToolUse, Stop): a session that a record-writing tld command started cannot end
 its turn before it has written its status record to the board once.
 
-Opt-in (`hooks.board_gate.enabled: true`) and only when a board is configured. A prompt that starts a record-writing
+Opt-in (`hooks.board_gate.enabled: true`) and only when a board is configured. The gate covers the commands that always
+write a record; `docs` counts only in its `init` and `tidy` modes (`check` writes none). A prompt that starts such a
 command opens a per-session state file; a successful record write (the `board_set` tool or `tld board client set`)
 marks it written; the first Stop without a write is blocked once. It is a nudge, not a control, and it never makes a
 network call. See docs/architecture/hooks.md.
@@ -21,13 +22,19 @@ from tld.guard.action import Action
 
 NAME = "board-gate"
 RECORD_COMMANDS = ("make-plan", "implement", "review", "setup", "migrate", "land", "deps", "upstream", "docs", "ci")
+RECORD_MODES = {"docs": ("init", "tidy")}  # commands that write a record only in some modes
 SESSION_TTL_SECONDS = 24 * 3600
 CLIENT_SET = re.compile(r"\bboard\s+client\s+set\b")
+_REMINDER = re.compile(r"\A\s*<system-reminder>.*?</system-reminder>\s*", re.S)
+_ARG_TYPED = re.compile(r"\A\s*/(?:tld:)?[a-z][a-z-]*(?:\s+(\S+))?")
+_ARG_EXPANDED = re.compile(r"\A\s*(?:<command-message>[^<]*</command-message>\s*)?<command-name>/[^<]*</command-name>"
+                           r"(?:\s*<command-args>\s*([^\s<]+))?")
 
 MESSAGE = ('this session was started by /tld:{command} and has not written its status record to the board. '
            'Write it now: use the board_set tool, or when that tool is missing or fails run "tld board client set '
            '<id> - " with the record on stdin (the id comes from "tld board record-id"). If the board cannot be '
-           'reached, say so in your final reply and stop. This check blocks only once.')
+           'reached, say so in your final reply and stop. '
+           'If the playbook says to write no record yet, say so and stop. This check blocks only once.')
 
 
 def enabled(ctx: Ctx) -> bool:
@@ -90,6 +97,23 @@ def is_record_write(action: Action) -> bool:
     return False
 
 
+def _first_argument(prompt: str | None) -> str | None:
+    """The first word after the command name in a typed (`/tld:docs init x`) or expanded prompt, or None."""
+    text = prompt or ""
+    while (r := _REMINDER.match(text)):
+        text = text[r.end():]
+    m = _ARG_TYPED.match(text) or _ARG_EXPANDED.match(text)
+    return m.group(1) if m else None
+
+
+def writes_record(command: str | None, prompt: str | None) -> bool:
+    """Whether a prompt of this command writes a status record."""
+    if command not in RECORD_COMMANDS:
+        return False
+    modes = RECORD_MODES.get(command)
+    return modes is None or _first_argument(prompt) in modes
+
+
 def evaluate(ctx: Ctx) -> str | None:
     try:
         return _evaluate(ctx)
@@ -108,7 +132,7 @@ def _evaluate(ctx: Ctx) -> str | None:
         return None
     path = state_file(ctx.project_dir, a.session_id)
     if a.kind == "prompt":
-        if a.invoked in RECORD_COMMANDS:
+        if writes_record(a.invoked, a.prompt):
             state = _load(path)
             if state is None or state["command"] != a.invoked:
                 _save(path, {"command": a.invoked, "opened_at": time.time(), "written": False, "blocked": False})

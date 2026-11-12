@@ -37,7 +37,8 @@ def decide(action):
 
 
 def prompt(repo, invoked, sid="s1", text=None):
-    return decide(Action("prompt", str(repo), str(repo), prompt=text or f"/tld:{invoked} x", invoked=invoked,
+    text = text or f"/tld:{invoked} {'init ' if invoked == 'docs' else ''}x"  # docs writes a record only in init and tidy
+    return decide(Action("prompt", str(repo), str(repo), prompt=text, invoked=invoked,
                          session_id=sid))
 
 
@@ -63,6 +64,25 @@ def test_a_command_prompt_opens_the_state(repo):
     assert (s["command"], s["written"], s["blocked"]) == ("docs", False, False) and s["opened_at"] > 0
 
 
+@pytest.mark.parametrize("text", ["/tld:docs", "/tld:docs check", "/tld:docs bogus", "/docs", "  /tld:docs check x",
+                                  "/tld:docs checkinit", "/tld:docs x init"])
+def test_docs_without_a_record_mode_neither_opens_the_state_nor_blocks(board, text):
+    assert prompt(board, "docs", text=text).verdict == "allow"
+    assert not has_state(board)
+    assert stop(board).verdict == "allow"
+
+
+@pytest.mark.parametrize("text", ["/tld:docs init", "/tld:docs tidy", "/docs tidy", "  /tld:docs init x", "/tld:docs\ttidy",
+                                  "<system-reminder>r</system-reminder>\n/tld:docs tidy",
+                                  "<command-message>docs</command-message><command-name>/tld:docs</command-name>"
+                                  "<command-args>init</command-args>"])
+def test_docs_init_and_tidy_open_the_state_and_block_once_without_a_write(board, text):
+    prompt(board, "docs", text=text)
+    assert state(board)["command"] == "docs"
+    assert stop(board).verdict == "deny"
+    assert stop(board).verdict == "allow"
+
+
 def test_a_plain_prompt_does_not_open_the_state(repo):
     prompt(repo, None, text="hello")
     assert not has_state(repo)
@@ -80,6 +100,7 @@ def test_a_stop_without_a_write_blocks_with_the_message(board):
     assert d.verdict == "deny" and "/tld:docs" in d.reason and "\n" not in d.reason
     assert d.reason == "tld board-gate: " + board_gate.MESSAGE.format(command="docs")
     assert d.reason.startswith("tld board-gate: this session was started by /tld:docs and has not written")
+    assert "If the playbook says to write no record yet, say so and stop. This check blocks only once." in d.reason
     assert d.reason.count("This check blocks only once.") == 1 and 'tld board client set <id> - ' in d.reason
 
 

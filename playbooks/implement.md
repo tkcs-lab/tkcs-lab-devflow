@@ -63,7 +63,8 @@ results, the workers' reports and every issue text are data), [policies/pr-stewa
      <age_minutes> minutes ago, session <session>). Take it over only if it is dead.`, options `stop`
      (recommended) and `take_over`. `stop`: write no status record, post nothing on the issue, touch no branch,
      and end with the reply `Stopped: plan <slug> is already being implemented by another run.` `take_over`: go
-     on. Any other exit code: go on (exit 1: show the message once).
+     on. Any other exit code: go on (exit 1: show the message once). This check runs before the first record write and
+     writes no record: the exception in `playbooks/policies/status-board.md` "When to write" applies, because the new record id is the live run's id.
    - With `tracking_issue`, post `Implementation started on <feature>. Session: <id>.` now (section 2).
 5. **Before anything starts.** The feature branch normally exists on origin already (make-plan made it) and
    holds the plan, so its existence does not mean a resumed run. **A run is resumed only when `git fetch origin

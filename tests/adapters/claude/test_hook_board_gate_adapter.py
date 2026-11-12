@@ -67,7 +67,7 @@ def repo(tmp_path, monkeypatch):
 
 
 def test_prompt_then_board_set_then_stop_allows(repo):
-    assert run_script("board-gate", prompt(repo, "/tld:docs x")).returncode == 0
+    assert run_script("board-gate", prompt(repo, "/tld:docs init x")).returncode == 0
     r = run_script("board-gate", post(MCP_SET, repo, {"content": [{"type": "text", "text": '{"id":"p--docs","version":1}'}]}))
     assert r.returncode == 0
     r = run_script("board-gate", stop(repo))
@@ -75,7 +75,7 @@ def test_prompt_then_board_set_then_stop_allows(repo):
 
 
 def test_prompt_then_client_set_then_stop_allows(repo):
-    run_script("board-gate", prompt(repo, "/tld:docs x"))
+    run_script("board-gate", prompt(repo, "/tld:docs init x"))
     response = {"stdout": '{"id":"p--docs","version":2}\n', "stderr": "", "interrupted": False}
     run_script("board-gate", post("Bash", repo, response, command="tld board client set p--docs - --if-version 1"))
     r = run_script("board-gate", stop(repo))
@@ -83,7 +83,7 @@ def test_prompt_then_client_set_then_stop_allows(repo):
 
 
 def test_prompt_then_failed_board_set_then_stop_blocks(repo):
-    run_script("board-gate", prompt(repo, "/tld:docs x"))
+    run_script("board-gate", prompt(repo, "/tld:docs init x"))
     run_script("board-gate", post(MCP_SET, repo, {"content": [{"type": "text", "text": '{"error":"version_conflict"}'}]}))
     r = run_script("board-gate", stop(repo))
     assert r.returncode == 2 and r.stderr.startswith("tld board-gate:"), r
@@ -101,5 +101,5 @@ def test_a_malformed_hooks_disable_never_blocks(tmp_path, monkeypatch):
     monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
     monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
     repo = make_repo_with_origin(tmp_path / "repo", "feature/demo", ON + "  disable: board-gate\n")
-    run_script("board-gate", prompt(repo, "/tld:docs x"))
+    run_script("board-gate", prompt(repo, "/tld:docs init x"))
     assert run_script("board-gate", stop(repo)).returncode == 0
