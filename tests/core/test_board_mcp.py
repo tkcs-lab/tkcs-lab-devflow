@@ -109,6 +109,18 @@ def test_board_set_then_get_then_list(store):
     assert (missing, is_error) == ({"error": "not_found"}, True)
 
 
+def test_board_set_with_a_per_session_id(store):
+    rec = record("f-running-ok")
+    rec.update(project="p", repo="o/p", kind="command", command="make-plan", plan_slug=None, plan_url=None,
+               feature_branch=None, next_check_at=None, attended=True, orchestrator_session="session_01ABcdEFghIJkl",
+               pr={"number": None, "url": None, "state": None, "ci": None, "awaiting": None})
+    rec["phases"] = []
+    payload, is_error = tool(store, "board_set", {"id": "p--make-plan--efghijkl", "data": rec})
+    assert (payload, is_error) == ({"id": "p--make-plan--efghijkl", "version": 1}, False)
+    payload, is_error = tool(store, "board_set", {"id": "p--make-plan--zzzzzzzz", "data": rec})
+    assert is_error and payload["error"] == "invalid" and "'--doc-id'" in payload["errors"][0]
+
+
 def test_board_set_conflict_is_an_error_result(store):
     tool(store, "board_set", {"id": "f-running-ok", "data": record()})
     payload, is_error = tool(store, "board_set", {"id": "f-running-ok", "data": record(), "if_version": 5})
