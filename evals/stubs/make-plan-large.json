@@ -2,18 +2,18 @@
   "model": "stub",
   "turns": 3,
   "cost_usd": 0.0,
-  "branch": "plan/tags",
+  "branch": "feature/tags",
   "commit_message": "plan: tags",
   "files": {
-    "docs/tags-plan.md": "# Plan\n\n## Goal\nx\n\n## Implementation manifest\n\n```yaml\nplan_slug: tags\nfeature_branch: feature/tags\ntracking_issue: 1\nphases:\n- id: p1-store\n  title: Tags in the store\n  depends_on: []\n  complexity: S\n  touches:\n  - notes/store.py\n  - tests/test_store.py\n  brief: 1. Add tags.\n  acceptance:\n  - '`python3 -m unittest tests.test_store`'\n- id: p2-cli\n  title: CLI filter\n  depends_on:\n  - p1-store\n  complexity: S\n  touches:\n  - notes/cli.py\n  brief: 1. Add --tag.\n  acceptance:\n  - tests/test_cli.py::test_tag_filter passes\n- id: p2-export\n  title: Markdown export\n  depends_on:\n  - p1-store\n  complexity: S\n  touches:\n  - notes/export_md.py\n  brief: 1. Export.\n  acceptance:\n  - grep -c 'def export' notes/export_md.py prints 1\n- id: p3-docs\n  title: Docs\n  depends_on:\n  - p2-cli\n  - p2-export\n  complexity: S\n  touches:\n  - README.md\n  - docs/\n  brief: 1. Docs.\n  acceptance:\n  - '`grep -q ''--tag'' README.md`'\n```\n"
+    "docs/1/plan.md": "# Plan\n\n## Goal\nx\n\n## Implementation manifest\n\n```yaml\nplan_slug: tags\nfeature_branch: feature/tags\ntracking_issue: 1\nphases:\n- id: p1-store\n  title: Tags in the store\n  depends_on: []\n  complexity: S\n  touches:\n  - notes/store.py\n  - tests/test_store.py\n  brief: 1. Add tags.\n  acceptance:\n  - '`python3 -m unittest tests.test_store`'\n- id: p2-cli\n  title: CLI filter\n  depends_on:\n  - p1-store\n  complexity: S\n  touches:\n  - notes/cli.py\n  brief: 1. Add --tag.\n  acceptance:\n  - tests/test_cli.py::test_tag_filter passes\n- id: p2-export\n  title: Markdown export\n  depends_on:\n  - p1-store\n  complexity: S\n  touches:\n  - notes/export_md.py\n  brief: 1. Export.\n  acceptance:\n  - grep -c 'def export' notes/export_md.py prints 1\n- id: p3-docs\n  title: Docs\n  depends_on:\n  - p2-cli\n  - p2-export\n  complexity: S\n  touches:\n  - README.md\n  - docs/\n  brief: 1. Docs.\n  acceptance:\n  - '`grep -q ''--tag'' README.md`'\n```\n"
   },
-  "result_text": "Plan on plan/tags.",
+  "result_text": "Plan on feature/tags.",
   "actions": [
     {
       "id": "t1",
       "kind": "shell",
       "tool": "shell",
-      "command": "git checkout -b plan/tags origin/main",
+      "command": "git checkout -b feature/tags origin/main",
       "error": false,
       "output": ""
     },
@@ -21,7 +21,7 @@
       "id": "t2",
       "kind": "shell",
       "tool": "shell",
-      "command": "git push -u origin plan/tags",
+      "command": "git push -u origin feature/tags",
       "error": false,
       "output": ""
     }
