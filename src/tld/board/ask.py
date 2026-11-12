@@ -19,10 +19,10 @@ import json
 import re
 import sys
 
-from tld.board.record import REPO, SLUG, TIMESTAMP, project_slug
+from tld.board.record import COMMANDS, DOC_ID_RE, REPO, SLUG, TIMESTAMP, project_slug
 
 FIELDS = ("schema", "kind", "id", "project", "repo", "title", "created_by", "context_url", "questions",
-          "state", "answers", "created_at", "answered_at", "fallback_issue")
+          "state", "answers", "created_at", "answered_at", "fallback_issue", "record")
 REQUIRED = ("schema", "kind", "project", "repo", "title", "created_by", "questions")
 SERVER_FIELDS = ("id", "created_at", "answered_at")
 QUESTION_FIELDS = ("id", "text", "kind", "options", "required")
@@ -151,6 +151,11 @@ def _check(ask, errors: list[str]) -> None:
     issue = ask.get("fallback_issue")
     if issue is not None and not (isinstance(issue, str) and ISSUE_RE.match(issue)):
         errors.append("'fallback_issue' must be null, owner/repo or owner/repo#<n>")
+    record = ask.get("record")
+    if "record" in ask and record is not None:
+        allowed = {project} | {f"{project}--{c}" for c in COMMANDS} if isinstance(project, str) and SLUG.match(project) else None
+        if not (isinstance(record, str) and DOC_ID_RE.match(record) and (allowed is None or record in allowed)):
+            errors.append("'record' must be null, the project slug, or '<project>--<command>'")
     questions = ask.get("questions")
     if "questions" in ask:
         if not isinstance(questions, list) or not 1 <= len(questions) <= MAX_QUESTIONS:

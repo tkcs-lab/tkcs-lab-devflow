@@ -2,6 +2,7 @@
 """The mechanical parts of running a plan: where it may come from, branch names, which phases to start.
 
     tld plan check-url URL [--repo OWNER/NAME] [--main BRANCH] [--plan-dir DIR]
+    tld plan check-commands PLAN --profile PROFILE
     tld plan branch-name (--plan-slug SLUG | --review-slug SLUG | --manifest PLAN [--phase ID [--rev N] | --fix N])
     tld plan phase-status PLAN [--ref REF] [--running ID]... [--approved ID]... [--repo DIR]
 
@@ -12,6 +13,13 @@
 accepted with `"legacy": true`. It prints `{"owner", "repo", "ref", "path", "legacy"}` as JSON. `phase-status`
 also prints `started` and `plan_blob` (from the newest `Plan-Started: <slug> <blob>` trailer). A plan from anywhere else is refused (exit 1): its
 `verify_after_merge` commands would run on this machine.
+
+`check-commands` (S14, part two) sorts the manifest's `verify_after_merge` commands into those the profile
+trusts and those the owner must see first. PROFILE is the main branch's profile, never a plan branch's. A
+command is trusted when it is `dispatch <workflow>` for a `ci.dispatchable` workflow, equals a `verify.fast`
+or `verify.dod` entry (a mapping entry with `cwd` never counts), or starts, word by word, with a
+`verify.after_merge_allow` prefix and has no shell metacharacter. It prints `{"trusted", "unknown"}` as
+JSON, both in manifest order. A `verify.after_merge_allow` that is not a list of strings is an error (exit 1).
 
 `branch-name` prints one branch name (C12): `plan/<slug>`, `review/<slug>`, the manifest's
 `feature_branch`, a phase branch `<feature>--<phase>`, a revision `<feature>--<phase>-rev<n>` or a fix
@@ -37,6 +45,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -47,6 +56,8 @@ from tld.plan import manifest as vm
 
 URL = re.compile(r"^https://github\.com/(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+)/blob/(?P<rest>.+)$")
 REMOTE = re.compile(r"github\.com[:/](?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?/?$")
+DISPATCH = re.compile(r"dispatch ([^\s]+)")
+PLAIN = re.compile(r"[A-Za-z0-9_./=:@%+,*?\[\]\- '\"]*")
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
@@ -228,6 +239,58 @@ def phase_status(manifest: dict, done_ids: set[str], running: list[str], approve
             "started": plan_blob is not None, "plan_blob": plan_blob}
 
 
+def _entries(items: object) -> list[str]:
+    """The stripped command strings of a verify list; items that are no command, or run elsewhere, are skipped."""
+    out = []
+    for item in items if isinstance(items, list) else []:
+        if isinstance(item, str):
+            out.append(item.strip())
+        elif isinstance(item, dict) and isinstance(item.get("run"), str) and "cwd" not in item:
+            out.append(item["run"].strip())
+    return out
+
+
+def check_commands(manifest: dict, profile: dict) -> dict:
+    """Split `verify_after_merge` into the commands the profile trusts and the unknown ones (S14)."""
+    verify = profile.get("verify")
+    verify = verify if isinstance(verify, dict) else {}
+    ci = profile.get("ci")
+    ci = ci if isinstance(ci, dict) else {}
+    allow = verify.get("after_merge_allow", [])
+    if not isinstance(allow, list) or not all(isinstance(a, str) for a in allow):
+        raise PlanError("verify.after_merge_allow must be a list of strings")
+    prefixes = []
+    for a in allow:
+        try:
+            words = shlex.split(a)
+        except ValueError:
+            continue
+        if words:
+            prefixes.append(words)
+    exact = set(_entries(verify.get("fast")) + _entries(verify.get("dod")))
+    dispatchable = {d["workflow"] for d in ci.get("dispatchable") or [] if isinstance(d, dict)
+                    and isinstance(d.get("workflow"), str)} if isinstance(ci.get("dispatchable"), list) else set()
+
+    def trusted(cmd: str) -> bool:
+        m = DISPATCH.fullmatch(cmd.strip())
+        if m and m.group(1) in dispatchable:
+            return True
+        if cmd.strip() in exact:
+            return True
+        if not PLAIN.fullmatch(cmd):
+            return False
+        try:
+            words = shlex.split(cmd)
+        except ValueError:
+            return False
+        return any(words[:len(p)] == p for p in prefixes)
+
+    result: dict = {"trusted": [], "unknown": []}
+    for cmd in manifest.get("verify_after_merge") or []:
+        result["trusted" if trusted(cmd) else "unknown"].append(cmd)
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="tld plan", description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -236,6 +299,9 @@ def main(argv: list[str] | None = None) -> int:
     cu.add_argument("--repo", help="owner/name of this repository (default: the origin remote)")
     cu.add_argument("--main", default="main", help="the main branch (git.main_branch)")
     cu.add_argument("--plan-dir", default="docs/plans", help="the directory that holds <n>/plan.md")
+    cc = sub.add_parser("check-commands", help="which verify_after_merge commands the profile trusts, as JSON")
+    cc.add_argument("plan", help="plan file (.md) or manifest (.yaml)")
+    cc.add_argument("--profile", required=True, help="the main branch's profile (never a plan branch's copy)")
     bn = sub.add_parser("branch-name", help="print a plan, review, feature, phase, revision or fix branch name")
     grp = bn.add_mutually_exclusive_group(required=True)
     grp.add_argument("--plan-slug", help="deprecated: plans now live on the feature branch")
@@ -258,6 +324,14 @@ def main(argv: list[str] | None = None) -> int:
                 print("tld plan: warning: old-layout plans are deprecated; make-plan now commits the plan "
                       "to the feature branch", file=sys.stderr)
             print(json.dumps(result))
+        elif args.cmd == "check-commands":
+            try:
+                profile = yaml.safe_load(Path(args.profile).read_text())
+            except (OSError, UnicodeError, yaml.YAMLError):
+                raise PlanError(f"cannot read the profile '{args.profile}'") from None
+            if not isinstance(profile, dict):
+                raise PlanError(f"cannot read the profile '{args.profile}'")
+            print(json.dumps(check_commands(load_manifest(args.plan), profile)))
         elif args.cmd == "branch-name":
             if (args.rev is not None and args.rev < 1) or (args.fix is not None and args.fix < 1):
                 raise PlanError("--rev and --fix count from 1")

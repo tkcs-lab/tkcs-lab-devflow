@@ -35,6 +35,11 @@ verify:
   dod_manual:
     - "Every tld command a playbook or adapter names parses with the real CLI, and every behaviour it promises of a script is covered by a test that runs the script (tests/core/test_contracts.py)."
     - "No project-specific word was added to src/, launcher/, adapters/, .claude-plugin/, playbooks/, roles/, checklists/ or stacks/ (tests/core/test_no_project_words.py)."
+  after_merge_allow:
+    - ".venv/bin/python -m pytest"
+    - ".venv/bin/python launcher/tld ops docs-index check"
+    - ".venv/bin/python launcher/tld profile validate"
+    - ".venv/bin/python launcher/tld plan validate-manifest"
 
 stacks: [python]
 

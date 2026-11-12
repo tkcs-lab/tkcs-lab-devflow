@@ -242,7 +242,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
   }
 
   // A row is a tappable card: a summary that is always visible and the per-project detail on tap.
-  function row(entry, kind, now, summaryBuilder) {
+  function row(entry, kind, now, summaryBuilder, extraBuilder) {
     var rec = entry.data;
     var box = el("details", "row " + kind);
     box.setAttribute("data-project", rec.project);
@@ -250,8 +250,44 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     var sum = el("summary");
     summaryBuilder(sum, rec);
     box.appendChild(sum);
-    box.appendChild(detail(rec, now));
+    var body = detail(rec, now);
+    box.appendChild(body);
+    if (extraBuilder && csrf) extraBuilder(body, entry);
     return box;
+  }
+
+  // The owner's buttons (shown only after the login): a dismissal is kept next to the record, the record is not written.
+  function ownerButton(label, action, entry, onClick) {
+    var b = el("button", "quiet", label);
+    b.type = "button";
+    b.setAttribute("data-action", action);
+    b.addEventListener("click", function () {
+      b.disabled = true;
+      onClick().then(function (r) {
+        if (r.status === 409) { load().then(function () { fail("The record changed. Look at it again."); }); return; }
+        if (r.status !== 200) { b.disabled = false; fail("Not done: HTTP " + r.status); return; }
+        load();
+      }).catch(function (err) {
+        if (err instanceof Unauthorized) { showLogin("Your session ended. Log in again."); return; }
+        b.disabled = false;
+        fail("Not done: the board cannot be reached.");
+      });
+    });
+    var wrap = el("div", "actions");
+    wrap.appendChild(b);
+    return wrap;
+  }
+  // The button carries data-action="dismiss" (in the details of a needs-you card, shown after the login).
+  function dismissButton(body, entry) {
+    body.appendChild(ownerButton("Dismiss", "dismiss", entry, function () {
+      return api("POST", "api/records/" + encodeURIComponent(entry.id) + "/dismiss", { version: entry.version });
+    }));
+  }
+  // The button carries data-action="restore" (in the details of a dismissed card in Hidden).
+  function restoreButton(body, entry) {
+    body.appendChild(ownerButton("Restore", "restore", entry, function () {
+      return api("POST", "api/records/" + encodeURIComponent(entry.id) + "/restore");
+    }));
   }
 
   function headLine(rec, extra) {
@@ -265,7 +301,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
       add(sum, headLine(rec, span("⚑ needs you", "badge failed")),
         el("div", "reason", rec.needs_you_reason),
         span(waited(rec.needs_you_since || rec.updated_at, now)));
-    });
+    }, dismissButton);
   }
   function prRow(entry, now) {
     return row(entry, "pr", now, function (sum, rec) {
@@ -298,10 +334,17 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
       add(sum, headLine(rec, mark), span("finished " + ago(rec.finished_at, now)));
     });
   }
-  function hiddenRow(entry, now) {
-    return row(entry, "hid", now, function (sum, rec) {
-      add(sum, headLine(rec, span(rec.status, "badge")), span("updated " + ago(rec.updated_at, now)));
+  function answeredRow(entry, placed, now) {
+    return row(entry, "run", now, function (sum, rec) {
+      add(sum, headLine(rec, span("✓ answer received", "badge")),
+        span("Waiting for the session to continue · answered " + ago(placed.ask.answered_at, now)));
     });
+  }
+  function hiddenRow(entry, placed, now) {
+    return row(entry, "hid", now, function (sum, rec) {
+      add(sum, headLine(rec, span(placed.badge === "dismissed" ? "dismissed" : rec.status, "badge")),
+        span("updated " + ago(rec.updated_at, now)));
+    }, placed.badge === "dismissed" ? restoreButton : null);
   }
 
   function sect(name, title, count) {
@@ -339,7 +382,14 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     var closedAsks = asks.filter(function (a) { return a.state !== "open"; });
     var now = nowMs();
     var groups = { needs_you: [], pr_open: [], running: [], done: [], hidden: [] };
-    entries.forEach(function (e) { groups[section(e.data, now)].push(e); });
+    var placed = {};
+    entries.forEach(function (e) {
+      var p;
+      // A bad item must not stop the whole board: fall back to the plain rule.
+      try { p = place(e, asks, now); } catch (err) { p = { section: section(e.data, now), badge: null, ask: null }; }
+      placed[e.id] = p;
+      if (p.section !== "linked") groups[p.section].push(e);
+    });
     groups.needs_you.sort(function (a, b) {
       return Date.parse(a.data.needs_you_since || a.data.updated_at) - Date.parse(b.data.needs_you_since || b.data.updated_at);
     });
@@ -370,7 +420,12 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
       main.appendChild(pr);
     }
     var run = sect("running", "Running", groups.running.length);
-    if (groups.running.length) groups.running.forEach(function (e) { run.appendChild(runRow(e, now)); });
+    var answered = groups.running.filter(function (e) { return placed[e.id].badge === "answer_received"; });
+    var plain = groups.running.filter(function (e) { return placed[e.id].badge !== "answer_received"; });
+    if (groups.running.length) {
+      answered.forEach(function (e) { run.appendChild(answeredRow(e, placed[e.id], now)); });
+      plain.forEach(function (e) { run.appendChild(runRow(e, now)); });
+    }
     else run.appendChild(el("div", "empty", "Nothing is running"));
     main.appendChild(run);
 
@@ -380,8 +435,8 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     var hidden = el("details", "card");
     hidden.setAttribute("data-section", "hidden");
     hidden.appendChild(el("summary", null, "Hidden: " + groups.hidden.length));
-    hidden.appendChild(el("div", "meta", "No update for more than 7 days, or finished earlier. Still stored."));
-    groups.hidden.sort(newestFirst("updated_at")).forEach(function (e) { hidden.appendChild(hiddenRow(e, now)); });
+    hidden.appendChild(el("div", "meta", "No update for more than 7 days, finished earlier, or dismissed. Still stored."));
+    groups.hidden.sort(newestFirst("updated_at")).forEach(function (e) { hidden.appendChild(hiddenRow(e, placed[e.id], now)); });
     done.appendChild(hidden);
     main.appendChild(done);
 

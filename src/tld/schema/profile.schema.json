@@ -264,6 +264,11 @@
         "dod_doc": {
           "type": "string",
           "minLength": 1
+        },
+        "after_merge_allow": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "description": "Command prefixes /implement runs after a merge without asking the owner first (S14)."
         }
       }
     },

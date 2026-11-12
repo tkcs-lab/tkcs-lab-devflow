@@ -115,7 +115,7 @@ workflow_lint:                     # read only: what to fix by hand in the workf
 
 workflows:                         # installed or updated through a pull request; the script never merges it
   - template: release              # cut a release: annotated tag plus GitHub release (run by hand; starts as a dry run)
-    params: { tag_prefix: "v" }
+    params: { tag_prefix: "v" }    # also version_style (semver | pep440), check_script (run before the tag), create_release (true | false)
   # - template: land               # the /land workflow, if you use /land
   # - path: workflows/ci.yml       # your own template (relative to this file); __UPPER_CASE__ placeholders come from params
   #   dest: .github/workflows/ci.yml

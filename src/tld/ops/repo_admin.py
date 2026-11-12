@@ -55,12 +55,15 @@ DOCS_HELP = "see docs/guides/admin.md in the tkcs-lab-devflow repo"
 
 # Built-in workflow templates: policy name -> (file, default parameters).
 BUILTIN_TEMPLATES = {
-    "release": ("tld-release.yml", {"tag_prefix": "v", "release_environment": "tld-release"}),
+    "release": ("tld-release.yml", {"tag_prefix": "v", "release_environment": "tld-release", "version_style": "semver",
+                                    "check_script": "", "create_release": "true"}),
     "land": ("tld-land.yml", {}),
 }
 KNOWN_DOT_DIRS = (".github", ".claude", ".tld", ".devcontainer", ".vscode", ".husky", ".config", ".changeset", ".githooks")
 SEVERITIES = ("fix", "warn", "info", "unavailable", "error")
 SAFE_PARAM = re.compile(r"^[A-Za-z0-9._/-]*$")
+# Parameters of a built-in template that take one of a few values.
+TEMPLATE_CHOICES = {"release": {"version_style": ("semver", "pep440"), "create_release": ("true", "false")}}
 PLACEHOLDER = re.compile(r"__([A-Z][A-Z0-9_]*)__")
 
 
@@ -302,6 +305,13 @@ def validate_policy(policy, base_dir: Path | None = None) -> list[str]:
         for key, value in wf.get("params", {}).items():
             if not isinstance(value, str) or not SAFE_PARAM.match(value):
                 errors.append(f"'{where}.params.{key}': must be a string of letters, digits and . _ / - only")
+                continue
+            choices = TEMPLATE_CHOICES.get(wf.get("template"), {}).get(key)
+            if choices and value not in choices:
+                errors.append(f"'{where}.params.{key}': must be one of {', '.join(choices)}")
+            if wf.get("template") == "release" and key == "check_script" and (
+                    value.startswith(("/", "-")) or ".." in value):
+                errors.append(f"'{where}.params.check_script': must be a path inside the repository")
         if "path" in wf and "dest" not in wf and not re.match(r"^[A-Za-z0-9._-]+\.ya?ml$", Path(wf["path"]).name):
             errors.append(f"'{where}.path': the file name must end in .yml or .yaml, or set 'dest'")
     return errors

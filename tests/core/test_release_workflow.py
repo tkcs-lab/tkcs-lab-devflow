@@ -64,7 +64,8 @@ def test_triggers_and_settings(doc):
     assert job["environment"] == "__RELEASE_ENVIRONMENT__", "every run waits for the owner, the environment's reviewer"
     assert job["if"] == "github.ref == 'refs/heads/__MAIN_BRANCH__'"
     assert [s["name"] for s in job["steps"]] == [
-        "Decide the tag", "Check that the commit is green", "Show the release notes", "Publish the tag and the release"]
+        "Decide the tag", "Check that the commit is green", "Run the project's release check", "Show the release notes",
+        "Publish the tag and the release"]
     assert step(doc, "Publish the tag and the release")["if"] == "inputs.dry_run == false"
     assert step(doc, "Check that the commit is green")["if"] == "inputs.skip_checks == false"
 
@@ -76,12 +77,14 @@ def test_no_third_party_action_and_no_expression_in_scripts(doc):
 
 
 def test_only_known_placeholders():
-    assert set(re.findall(r"__([A-Z_]+)__", TEMPLATE.read_text())) == {"MAIN_BRANCH", "TAG_PREFIX", "RELEASE_ENVIRONMENT"}
+    assert set(re.findall(r"__([A-Z_]+)__", TEMPLATE.read_text())) == {"MAIN_BRANCH", "TAG_PREFIX", "RELEASE_ENVIRONMENT",
+                                                                         "VERSION_STYLE", "CHECK_SCRIPT", "CREATE_RELEASE"}
 
 
 def test_reads_use_the_workflow_token_and_writes_the_release_token(doc):
     tokens = {s["name"]: s["env"]["GH_TOKEN"] for s in doc["jobs"]["release"]["steps"]}
     assert tokens == {"Decide the tag": "${{ github.token }}", "Check that the commit is green": "${{ github.token }}",
+                      "Run the project's release check": "${{ github.token }}",
                       "Show the release notes": "${{ secrets.TLD_RELEASE_TOKEN }}",
                       "Publish the tag and the release": "${{ secrets.TLD_RELEASE_TOKEN }}"}
     assert "|| github.token" not in TEMPLATE.read_text(), "no fallback: the workflow token cannot tag"
@@ -101,7 +104,8 @@ def test_no_forbidden_words():
 @pytest.mark.parametrize("prefix", ["v", "", "release-"])
 def test_renders_to_valid_yaml(ra, prefix):
     text = ra.render_template(TEMPLATE.read_text(), {"main_branch": "trunk", "tag_prefix": prefix,
-                                                      "release_environment": "tld-release"})
+                                                      "release_environment": "tld-release", "version_style": "semver",
+                                                      "check_script": "", "create_release": "true"})
     rendered = yaml.safe_load(text)
     assert rendered["jobs"]["release"]["if"] == "github.ref == 'refs/heads/trunk'"
     assert rendered["jobs"]["release"]["environment"] == "tld-release"
@@ -133,8 +137,9 @@ def run_step(doc, name, env, tmp_path):
     return subprocess.run(["bash", str(f)], env=env, capture_output=True, text=True)
 
 
-def decide(doc, tmp_path, refs=(), version="", bump="patch", prefix="v", existing=""):
-    env, d, out, _ = stub_env(tmp_path, refs, EXISTING=existing, VERSION=version, BUMP=bump, PREFIX=prefix)
+def decide(doc, tmp_path, refs=(), version="", bump="patch", prefix="v", existing="", style="semver", create="true"):
+    env, d, out, _ = stub_env(tmp_path, refs, EXISTING=existing, VERSION=version, BUMP=bump, PREFIX=prefix,
+                              VERSION_STYLE=style, CREATE_RELEASE=create)
     p = run_step(doc, "Decide the tag", env, tmp_path)
     return p, out.read_text().strip()
 
@@ -145,26 +150,26 @@ def test_bump_uses_the_highest_version_not_the_last_one_listed(doc, tmp_path, bu
     refs = ["refs/tags/v1.9.0", "refs/tags/v1.10.0", "refs/tags/v1.2.3", "refs/tags/v2.0.0-rc.1", "refs/tags/vnext", "refs/tags/v1.10"]
     p, out = decide(doc, tmp_path, refs, bump=bump)
     assert p.returncode == 0, p.stdout + p.stderr
-    assert out == f"tag={expected}"
+    assert out.splitlines() == [f"tag={expected}", f"version={expected[1:]}"]
 
 
 @needs_jq
 def test_prefix_is_matched_literally(doc, tmp_path):
     refs = ["refs/tags/release-1.4.0", "refs/tags/release-1.3.0", "refs/tags/v9.9.9"]
     p, out = decide(doc, tmp_path, refs, prefix="release-")
-    assert p.returncode == 0 and out == "tag=release-1.4.1"
+    assert p.returncode == 0 and out.splitlines()[0] == "tag=release-1.4.1"
 
 
 @needs_jq
 def test_empty_prefix(doc, tmp_path):
     p, out = decide(doc, tmp_path, ["refs/tags/1.0.0", "refs/tags/0.9.0"], prefix="", bump="minor")
-    assert p.returncode == 0 and out == "tag=1.1.0"
+    assert p.returncode == 0 and out.splitlines() == ["tag=1.1.0", "version=1.1.0"]
 
 
 @needs_jq
 def test_explicit_version_wins(doc, tmp_path):
     p, out = decide(doc, tmp_path, ["refs/tags/v1.0.0"], version="3.0.0-rc.1")
-    assert p.returncode == 0 and out == "tag=v3.0.0-rc.1"
+    assert p.returncode == 0 and out.splitlines() == ["tag=v3.0.0-rc.1", "version=3.0.0-rc.1"]
 
 
 @needs_jq
@@ -217,8 +222,9 @@ def test_commit_status(doc, tmp_path, state, statuses, code):
     assert run_check(doc, tmp_path, [run_("test")], status=state, statuses=statuses).returncode == code
 
 
-def publish(doc, tmp_path, prerelease="false", fail=False):
-    env, d, *_ = stub_env(tmp_path, SHA="abc", TAG="v1.2.3", PRERELEASE=prerelease, FAIL_RELEASE="1" if fail else "")
+def publish(doc, tmp_path, prerelease="false", fail=False, create="true"):
+    env, d, *_ = stub_env(tmp_path, SHA="abc", TAG="v1.2.3", PRERELEASE=prerelease, FAIL_RELEASE="1" if fail else "",
+                          CREATE_RELEASE=create)
     p = run_step(doc, "Publish the tag and the release", env, tmp_path)
     return p, (d / "calls.log").read_text().splitlines()
 
@@ -251,3 +257,116 @@ def test_notes_step_stops_without_the_release_token(doc, tmp_path):
     env["GH_TOKEN"] = ""
     p = run_step(doc, "Show the release notes", env, tmp_path)
     assert p.returncode == 1 and "::error::secret TLD_RELEASE_TOKEN is not set in the release environment" in p.stdout
+
+
+@needs_jq
+@pytest.mark.parametrize("version", ["1.2.3", "4.2.0a1", "4.2.0b2", "4.2.0rc1"])
+def test_pep440_versions(doc, tmp_path, version):
+    p, out = decide(doc, tmp_path, ["refs/tags/v1.0.0"], version=version, style="pep440")
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert out.splitlines() == [f"tag=v{version}", f"version={version}"]
+
+
+@needs_jq
+@pytest.mark.parametrize("version", ["4.2.0-rc.1", "4.2.0.dev1", "4.2.0c1", "4.2.0rc01", "4.2.0rc"])
+def test_pep440_rejects_other_forms(doc, tmp_path, version):
+    p, out = decide(doc, tmp_path, ["refs/tags/v1.0.0"], version=version, style="pep440")
+    assert p.returncode == 1 and "::error::version must look like 1.2.3 or 1.2.3rc1" in p.stdout and out == ""
+
+
+@needs_jq
+def test_semver_rejects_pep440_prerelease(doc, tmp_path):
+    p, out = decide(doc, tmp_path, ["refs/tags/v1.0.0"], version="4.2.0a1")
+    assert p.returncode == 1 and out == ""
+
+
+@needs_jq
+@pytest.mark.parametrize("style,create,needle", [("calver", "true", "version_style must be semver or pep440"),
+                                                 ("semver", "yes", "create_release must be true or false")])
+def test_bad_parameter_values_stop_before_anything(doc, tmp_path, style, create, needle):
+    p, out = decide(doc, tmp_path, ["refs/tags/v1.0.0"], version="1.0.1", style=style, create=create)
+    assert p.returncode == 1 and needle in p.stdout and out == ""
+
+
+@needs_jq
+def test_publish_without_release_only_tags(doc, tmp_path):
+    p, calls = publish(doc, tmp_path, create="false")
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert len(calls) == 2 and calls[1] == "api -X POST repos/o/r/git/refs -f ref=refs/tags/v1.2.3 -f sha=objsha"
+    assert not any(c.startswith("release ") for c in calls)
+    assert "tagged v1.2.3" in p.stdout
+
+
+def git(cwd, *args):
+    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+
+
+@pytest.fixture
+def origin(tmp_path):
+    """A repository served from the file system as <server>/o/r: main with two commits and a tag."""
+    repo = tmp_path / "server" / "o" / "r"
+    repo.mkdir(parents=True)
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "config", "user.email", "t@example.test")
+    git(repo, "config", "user.name", "t")
+    (repo / "scripts").mkdir()
+    (repo / "scripts" / "check.py").write_text(
+        "import os, subprocess, sys\n"
+        "assert 'GH_TOKEN' not in os.environ, 'the token leaked into the check'\n"
+        "branch = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True).stdout.strip()\n"
+        "tags = subprocess.run(['git', 'tag'], capture_output=True, text=True).stdout.split()\n"
+        "print(f'checked {sys.argv[1]} on {branch} with {tags}')\n"
+        "sys.exit(0 if sys.argv[1] != '9.9.9' else 3)\n")
+    (repo / "scripts" / "check.sh").write_text('echo "sh got $1"\n')
+    git(repo, "add", ".")
+    git(repo, "commit", "-q", "-m", "one")
+    git(repo, "tag", "v1.0.0")
+    (repo / "f").write_text("2")
+    git(repo, "add", ".")
+    git(repo, "commit", "-q", "-m", "two")
+    return tmp_path / "server", git(repo, "rev-parse", "HEAD")
+
+
+def run_project_check(doc, tmp_path, origin, script, version="1.0.1"):
+    server, sha = origin
+    work = tmp_path / "work"
+    work.mkdir(exist_ok=True)
+    env, _, _, summary = stub_env(tmp_path, SERVER=f"file://{server}", REPO="o/r", SHA=sha, MAIN="main",
+                                  CHECK_SCRIPT=script, VERSION=version)
+    f = tmp_path / "check-step.sh"
+    f.write_text(step(doc, "Run the project's release check")["run"])
+    p = subprocess.run(["bash", str(f)], cwd=work, env=env, capture_output=True, text=True)
+    return p, summary.read_text(), work
+
+
+def test_project_check_is_skipped_without_a_script(doc, tmp_path, origin):
+    p, summary, work = run_project_check(doc, tmp_path, origin, "")
+    assert p.returncode == 0 and "nothing to run" in p.stdout and not (work / "checkout").exists()
+
+
+def test_project_check_runs_on_main_at_the_commit_with_every_tag(doc, tmp_path, origin):
+    p, summary, work = run_project_check(doc, tmp_path, origin, "scripts/check.py")
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "checked 1.0.1 on main with ['v1.0.0']" in p.stdout
+    assert git(work / "checkout", "rev-parse", "HEAD") == origin[1]
+    assert "check_script scripts/check.py passed for 1.0.1" in summary
+    assert "extraheader" not in (work / "checkout" / ".git" / "config").read_text(), "no credential left in the clone"
+
+
+def test_project_check_runs_a_shell_script(doc, tmp_path, origin):
+    p, *_ = run_project_check(doc, tmp_path, origin, "scripts/check.sh")
+    assert p.returncode == 0 and "sh got 1.0.1" in p.stdout
+
+
+def test_a_failing_project_check_stops_the_release(doc, tmp_path, origin):
+    p, summary, _ = run_project_check(doc, tmp_path, origin, "scripts/check.py", version="9.9.9")
+    assert p.returncode == 3 and "passed" not in summary
+
+
+@pytest.mark.parametrize("script,needle", [("/etc/x.sh", "must be a path inside the repository"),
+                                           ("../x.sh", "must be a path inside the repository"),
+                                           ("-x", "must be a path inside the repository"),
+                                           ("scripts/missing.py", "does not exist")])
+def test_project_check_refuses_bad_paths(doc, tmp_path, origin, script, needle):
+    p, *_ = run_project_check(doc, tmp_path, origin, script)
+    assert p.returncode == 1 and needle in p.stdout
