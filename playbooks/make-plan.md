@@ -220,7 +220,9 @@ here so the worker only has to execute. Every phase passes all of these:
 - **A stop condition** for each risky step: what the worker sees if the brief is wrong, and that it then stops
   with `status=blocked`.
 - **`verify_after_merge` holds only commands this repository defines** (its test runner, its scripts, a
-  `dispatch <workflow>` of `ci.dispatchable`): the owner confirms them before implement runs them (S14).
+  `dispatch <workflow>` of `ci.dispatchable`). Prefer commands `tld plan check-commands` trusts (a `verify.fast`
+  or `verify.dod` entry, a prefix in `verify.after_merge_allow`, or such a dispatch): implement runs them
+  without a question; any other command is put to the owner before implement runs it (S14).
 
 `worker_level: strong` is the escape hatch for a phase that cannot be made mechanical (a subtle concurrency fix,
 a security-sensitive parser). Use it only with a `worker_level_reason` the human can read, and prefer
@@ -242,17 +244,6 @@ final verification exercise the real thing. `human_gate: true` is the last resor
 make every later phase wrong if skipped; say why in the plan. Before calling a step manual, check the dispatch
 table: whatever a runner can do (packaged builds, live external checks, other operating systems) belongs in a
 phase's brief.
-
-**Standing item.** With `git.bot_login`, the first `manual_before` item is this one (no other plan adds it):
-
-```yaml
-  - id: mb0-second-user
-    title: Second GitHub user ready
-    why: The agent opens PRs as git.bot_login and the code owner's review is the gate
-    done_when: identity() in a new session returns <bot_login> and the main branch requires a Code Owner review
-```
-
-Its instructions follow the checklist in `docs/reference/profile-reference.md#second-github-user`.
 
 **The Manual steps section.** For each item a numbered section with a numbered list of steps, one action each,
 under two parts, **Before implementation** and **After implementation**. Every step that happens somewhere has a
