@@ -44,6 +44,18 @@
         "hooks": [
           {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/adapters/claude/hooks/plan_gate.py\"", "timeout": 10}
         ]
+      },
+      {
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/adapters/claude/hooks/model_check.py\"", "timeout": 10}
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/adapters/claude/hooks/model_check.py\"", "timeout": 10}
+        ]
       }
     ],
     "Stop": [
