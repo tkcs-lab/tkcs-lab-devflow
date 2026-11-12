@@ -292,8 +292,8 @@ variables in a remote server's headers are not expanded in a plugin's `.mcp.json
 | `board_answers` | `id` (string) | `{"id", "state", "answers", "answered_at"}` |
 | `board_cancel` | `id` (string) | `{"id", "state"}`; error `{"error": "not_open"}` for an answered ask |
 
-Errors come back as a tool result with `isError` true. There is no delete tool: `/tld:board prune` deletes
-stale records with `tld board client delete`, after you confirmed the list.
+Errors come back as a tool result with `isError` true. There is no delete tool: `/tld:board prune` deletes and
+clears records after you confirmed ([Cards that wait](maintenance.md#cards-that-wait)).
 
 ## The issue fallback
 
