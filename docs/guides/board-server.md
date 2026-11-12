@@ -27,7 +27,7 @@ From a checkout of the tkcs-lab-devflow repository:
 ```bash
 export TLD_BOARD_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 read -rs TLD_BOARD_OWNER_PASSPHRASE && export TLD_BOARD_OWNER_PASSPHRASE   # type 16+ characters
-launcher/tld board server --port 8787 --insecure-cookie
+cli/tld board server --port 8787 --insecure-cookie
 ```
 
 `--insecure-cookie` drops the cookie's `Secure` flag so the login works over plain `http://127.0.0.1`; never use
@@ -41,11 +41,11 @@ cat > ask.json <<'JSON'
  "title": "Try the inbox", "created_by": "local-test",
  "questions": [{"id": "go", "text": "Does the inbox work?", "kind": "confirm"}]}
 JSON
-launcher/tld board ask ask.json            # prints the ask id
+cli/tld board ask ask.json            # prints the ask id
 ```
 
 Open `http://127.0.0.1:8787/`, log in, open the ask under "Needs you" and answer it; then
-`launcher/tld board answers <id>` prints `{"go":true}`. A status record is written with `tld board client set`;
+`cli/tld board answers <id>` prints `{"go":true}`. A status record is written with `tld board client set`;
 this one is valid (save it as `record.json`):
 
 ```json
@@ -117,7 +117,7 @@ this one is valid (save it as `record.json`):
 ```
 
 ```bash
-launcher/tld board client set example-project record.json
+cli/tld board client set example-project record.json
 ```
 
 The answer is `{"id":"example-project","version":1}`, and the run shows on the page.
@@ -156,7 +156,7 @@ Server flags (secrets come from the environment only):
 
 ## Docker
 
-Build from the repository root (the image holds only the server, its modules and the page):
+This is the development route; to run a release use the installer (next section). Build from the repository root (the image holds only the server, its modules and the page):
 
 ```bash
 docker build -f deploy/board/Dockerfile -t tld-board .
@@ -176,6 +176,30 @@ docker run -d --name tld-board --restart unless-stopped \
 container runs as an unprivileged user (uid 10001), keeps `/data/board.sqlite3` and `/data/board.sqlite3.secret`
 in the volume, rate-limits logins per client behind the proxy (`--trust-proxy`), and has a health check on
 `/healthz`. Publish the port on `127.0.0.1` only: the proxy is the one way in.
+
+## Docker Compose (the installer)
+
+The release carries the image `ghcr.io/tkcs-lab/tld-board` (linux/amd64 and linux/arm64) and a compose file that
+pins it by digest. The installer sets it up (needs Docker with the compose plugin):
+
+```
+curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download/install.sh | sh -s -- board
+```
+
+It creates `~/tld-board` (`TLD_BOARD_DIR`) with:
+
+- `compose.yaml`: overwritten on every upgrade. Put local changes in `compose.override.yaml`, which compose merges
+  and the installer never touches.
+- `.env`: created once (mode 0600) with a fresh `TLD_BOARD_TOKEN`, empty `TLD_BOARD_OWNER_PASSPHRASE` and
+  `TLD_BOARD_PUBLIC_ORIGIN`, and `TLD_BOARD_SESSION_URL`. The installer never prints the token and never rewrites the file.
+
+Fill in `TLD_BOARD_OWNER_PASSPHRASE` and `TLD_BOARD_PUBLIC_ORIGIN` (avoid `$` in `.env` values: Compose may expand it), then start the board: `docker compose up -d` in
+the directory. The installer starts it itself only when both are set. Upgrade: run the line again (it pulls the new
+image and restarts). Stop: `docker compose down` (the volume stays). The compose file uses the volume
+`tld-board-data`, so the data of an earlier `docker run` setup is reused. If a container named `tld-board` made by
+`docker run` still exists, the installer stops with a message: run `docker rm -f tld-board` once and run the line
+again. If the pull is denied, the package must be made public once by the repository owner
+([CONTRIBUTING.md](../../CONTRIBUTING.md)).
 
 ## TLS and a reverse proxy
 
@@ -200,13 +224,12 @@ port 8787 itself.
 
 The steps you follow once, about 30 minutes:
 
-1. On a host with Docker and a DNS name (`board.example.org` below), clone this repository and build the image
-   (section Docker).
-2. Make the two secrets in a shell on that host, and keep them in your password manager:
-   `export TLD_BOARD_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"`, then
-   `read -rs TLD_BOARD_OWNER_PASSPHRASE && export TLD_BOARD_OWNER_PASSPHRASE` and type a passphrase of four or
-   more random words.
-3. Start the container with the `docker run` above (your host name in `TLD_BOARD_PUBLIC_ORIGIN`).
+1. On a host with Docker and a DNS name (`board.example.org` below), run the installer
+   (`curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download/install.sh | sh -s -- board`, section Docker Compose).
+2. The installer made the token in `~/tld-board/.env`; keep a copy in your password manager. Put a passphrase of
+   four or more random words in `TLD_BOARD_OWNER_PASSPHRASE` there.
+3. Put your host name in `TLD_BOARD_PUBLIC_ORIGIN` (`https://board.example.org`) and start the board:
+   `docker compose up -d` in `~/tld-board`.
 4. Install Caddy, put the Caddyfile above in `/etc/caddy/Caddyfile` with your host name, and reload it
    (`systemctl reload caddy`). `curl -sS https://board.example.org/healthz` answers `{"ok": true}`.
 5. Open `https://board.example.org/` and log in with the passphrase. The page is empty until a session writes.

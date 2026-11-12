@@ -52,7 +52,7 @@ def code_texts(text: str) -> list[str]:
 
 GROUPS = sorted({g for g, _ in cli.COMMANDS} | set(cli.TOP))
 # Any word after `tld` (C8): an unknown group is caught by the test instead of going unseen.
-TLD_CALL = re.compile(r'(?:"\$\{CLAUDE_PLUGIN_ROOT\}/launcher/tld"|(?<![\w/.<-])tld)\s+(--help|--version|'
+TLD_CALL = re.compile(r'(?:"\$\{CLAUDE_PLUGIN_ROOT\}/cli/tld"|(?<![\w/.<-])tld)\s+(--help|--version|'
                       r'[a-z][a-z-]*)(?![\w:-])(?:\s+([a-z][a-z-]*))?(.*)')
 
 
