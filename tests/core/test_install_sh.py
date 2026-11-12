@@ -315,6 +315,36 @@ def test_missing_release_says_no_assets(tmp_path) -> None:
     assert "cannot download" in r.stderr and "has none" in r.stderr
 
 
+FAKE_CURL = """#!/bin/sh
+printf '%s\\n' "$*" >> "$CURL_LOG"
+exit 22
+"""
+
+
+def curl_args(tmp_path: Path, base: str) -> str:
+    """The arguments the installer gives `curl`, recorded by a fake `curl` that always fails the download."""
+    tools = tools_dir(tmp_path)
+    curl = tools / "curl"
+    curl.write_text(FAKE_CURL)
+    curl.chmod(0o755)
+    log = tmp_path / "curl.log"
+    r = run_installer(tmp_path, [], tmp_path, script=INSTALL, TLD_VERSION="9.9.9", TLD_RELEASE_BASE=base,
+                      CURL_LOG=str(log))
+    assert r.returncode == 1 and "cannot download" in r.stderr
+    return log.read_text()
+
+
+def test_https_download_is_pinned_to_https_and_tls_1_2(tmp_path) -> None:
+    args = curl_args(tmp_path, "https://example.invalid")
+    for flag in ("--proto =https", "--proto-redir =https", "--tlsv1.2"):
+        assert flag in args, flag
+
+
+def test_file_download_has_no_protocol_pins(tmp_path) -> None:
+    args = curl_args(tmp_path, f"file://{tmp_path}")
+    assert "--proto" not in args and "--tlsv1.2" not in args
+
+
 def test_old_python3_only_is_refused(tmp_path, release) -> None:
     tools = tools_dir(tmp_path)
     for name in ("python3.13", "python3.12", "python3.11", "python3"):

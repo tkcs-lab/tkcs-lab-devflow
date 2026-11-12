@@ -17,12 +17,15 @@ def steps(doc, job):
     return [s.get("run", "") for s in doc["jobs"][job]["steps"]]
 
 
-ALLOWED_JOB_PERMISSIONS = {("contents", "read"), ("packages", "write"), ("id-token", "write"), ("attestations", "write")}
+BUILD_PERMISSIONS = {"contents": "read", "packages": "write"}
+PUBLISH_PERMISSIONS = {"contents": "read"}
+ALLOWED_JOB_PERMISSIONS = [BUILD_PERMISSIONS, PUBLISH_PERMISSIONS]
 
 
 def permission_problems(doc) -> list[str]:
     """Why a workflow breaks the permission rule: top-level `{contents: read}` everywhere; a job may add its own
-    `permissions` only under `environment: tld-release`, and only from ALLOWED_JOB_PERMISSIONS."""
+    `permissions` only under `environment: tld-release`, and only one of the two shapes of ALLOWED_JOB_PERMISSIONS (the
+    release workflow's build job and publish job)."""
     problems = []
     if not isinstance(doc, dict):
         return ["the workflow is not a mapping"]
@@ -38,9 +41,8 @@ def permission_problems(doc) -> list[str]:
         if not isinstance(perms, dict):
             problems.append(f"job {name} permissions are {perms!r}, not a mapping")
             continue
-        for key, value in perms.items():
-            if (key, value) not in ALLOWED_JOB_PERMISSIONS:
-                problems.append(f"job {name} permission {key}: {value} is not allowed")
+        if perms not in ALLOWED_JOB_PERMISSIONS:
+            problems.append(f"job {name} permissions {perms!r} are neither {BUILD_PERMISSIONS} nor {PUBLISH_PERMISSIONS}")
     return problems
 
 
@@ -61,7 +63,7 @@ def job_doc(permissions, environment="tld-release", top=None):
     return {"permissions": {"contents": "read"} if top is None else top, "jobs": {"release": job}}
 
 
-RELEASE_PERMISSIONS = {"contents": "read", "packages": "write"}
+RELEASE_PERMISSIONS = BUILD_PERMISSIONS
 
 
 @pytest.mark.parametrize("doc", [
@@ -73,14 +75,19 @@ RELEASE_PERMISSIONS = {"contents": "read", "packages": "write"}
     job_doc("write-all"),
     job_doc(RELEASE_PERMISSIONS, top={"contents": "read", "packages": "write"}),
     {"jobs": {"release": {"runs-on": "ubuntu-latest", "steps": []}}},
+    job_doc(PUBLISH_PERMISSIONS, environment=None),
+    job_doc({"packages": "write"}),
+    job_doc({"contents": "read", "packages": "write", "id-token": "write"}),
 ], ids=["no-environment", "other-environment", "contents-write", "extra-write", "top-write-all",
-        "job-write-all", "top-packages-write", "no-top-level"])
+        "job-write-all", "top-packages-write", "no-top-level", "publish-shape-without-environment",
+        "packages-without-contents", "third-permission"])
 def test_permission_rule_rejects(doc):
     assert permission_problems(doc)
 
 
-def test_permission_rule_accepts_the_release_job():
-    assert permission_problems(job_doc(RELEASE_PERMISSIONS)) == []
+@pytest.mark.parametrize("permissions", [BUILD_PERMISSIONS, PUBLISH_PERMISSIONS], ids=["build", "publish"])
+def test_permission_rule_accepts_the_two_release_jobs(permissions):
+    assert permission_problems(job_doc(permissions)) == []
 
 
 def test_the_test_workflow_runs_every_check():
