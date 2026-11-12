@@ -34,21 +34,31 @@ def plan(tmp_path):
 
 
 # ---- check-url (S14) ------------------------------------------------------------------------
-@pytest.mark.parametrize("url, ref, path", [
-    ("https://github.com/o/r/blob/main/docs/plans/x-plan.md", "main", "docs/plans/x-plan.md"),
-    ("https://github.com/o/r/blob/plan/x-y/docs/plans/x-y-plan.md", "plan/x-y", "docs/plans/x-y-plan.md"),
-    ("https://github.com/O/R/blob/plan/x/p.md", "plan/x", "p.md"),
+@pytest.mark.parametrize("url, ref, path, legacy", [
+    ("https://github.com/o/r/blob/main/docs/plans/14/plan.md", "main", "docs/plans/14/plan.md", False),
+    ("https://github.com/o/r/blob/feature/my-thing/docs/plans/14/plan.md", "feature/my-thing",
+     "docs/plans/14/plan.md", False),
+    ("https://github.com/o/r/blob/fix/a-b/docs/plans/3/plan.md", "fix/a-b", "docs/plans/3/plan.md", False),
+    ("https://github.com/o/r/blob/main/docs/plans/x-plan.md", "main", "docs/plans/x-plan.md", True),
+    ("https://github.com/o/r/blob/plan/x-y/docs/plans/x-y-plan.md", "plan/x-y", "docs/plans/x-y-plan.md", True),
+    ("https://github.com/o/r/blob/plan/tags/docs/tags-plan.md", "plan/tags", "docs/tags-plan.md", True),
+    ("https://github.com/O/R/blob/plan/x/p.md", "plan/x", "p.md", True),
 ])
-def test_check_url_accepts_main_and_plan_branches_of_this_repo(url, ref, path):
+def test_check_url_accepts_main_feature_and_legacy_plan_branches_of_this_repo(url, ref, path, legacy):
     r = run("check-url", url, "--repo", "o/r")
     assert r.returncode == 0, r.stderr
-    assert json.loads(r.stdout)["ref"] == ref and json.loads(r.stdout)["path"] == path
+    out = json.loads(r.stdout)
+    assert out["ref"] == ref and out["path"] == path and out["legacy"] is legacy
+    assert ("old-layout plans are deprecated" in r.stderr) is legacy
 
 
 @pytest.mark.parametrize("url, message", [
     ("https://github.com/other/r/blob/main/p.md", "not in this repository"),
-    ("https://github.com/o/r/blob/feature/x/p.md", "must be on 'main' or on a plan/<slug> branch"),
-    ("https://github.com/o/r/blob/claude/abc/p.md", "must be on 'main'"),
+    ("https://github.com/o/r/blob/feature/x/p.md", "the plan must be at docs/plans/<n>/plan.md on 'main'"),
+    ("https://github.com/o/r/blob/claude/abc/p.md", "the plan must be at docs/plans/<n>/plan.md"),
+    ("https://github.com/o/r/blob/plans/x/p.md", "the plan must be at docs/plans/<n>/plan.md"),
+    ("https://github.com/o/r/blob/feature/Upper/docs/plans/3/plan.md", "not on 'feature/Upper'"),
+    ("https://github.com/o/r/blob/feature/x--p1/docs/plans/3/plan.md", "not on 'feature/x--p1'"),
     ("https://github.com/o/r/blob/plan/Bad_Slug/p.md", "kebab-case slug"),
     ("https://github.com/o/r/blob/main/../x.md", "'..'"),
     ("https://gitlab.com/o/r/blob/main/p.md", "not a plan URL"),
@@ -254,3 +264,16 @@ def test_gate_approval_is_read_from_an_empty_commit_trailer_and_a_later_revision
     s = status(plan, feature_repo, "--ref", "feature/demo")
     assert s["gated"] == ["p2"] and s["approved"] == []
     assert status(plan, feature_repo, "--ref", "feature/demo", "--approved", "p2")["approved"] == ["p2"]
+
+
+def test_phase_status_reports_plan_started(plan, feature_repo):
+    git(feature_repo, "commit", "-q", "--allow-empty", "-m", "work")
+    assert status(plan, feature_repo)["started"] is False
+    (feature_repo / "plan.md").write_text("plan\n")
+    git(feature_repo, "add", "plan.md")
+    git(feature_repo, "commit", "-q", "-m", "Start plan\n\nPlan-Started: demo abc1234")
+    s = status(plan, feature_repo)
+    assert s["started"] is True and s["plan_blob"] == "abc1234"
+    git(feature_repo, "revert", "--no-edit", "HEAD")
+    s = status(plan, feature_repo)
+    assert s["started"] is False and s["plan_blob"] is None

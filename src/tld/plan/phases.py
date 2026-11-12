@@ -64,7 +64,10 @@ def origin_repo(cwd: str | None = None) -> str:
     return f"{m['owner']}/{m['repo']}"
 
 
-def check_url(url: str, repo: str, main: str) -> dict:
+FEATURE_REF = re.compile(r"^[a-z0-9]+/[a-z0-9-]+$")
+
+
+def check_url(url: str, repo: str, main: str, plan_dir: str = "docs/plans") -> dict:
     m = URL.match(url.strip())
     if not m:
         raise PlanError("not a plan URL of the form https://github.com/<owner>/<repo>/blob/<ref>/<path>")
@@ -72,7 +75,14 @@ def check_url(url: str, repo: str, main: str) -> dict:
         raise PlanError(f"the plan is in {m['owner']}/{m['repo']}, not in this repository ({repo}): "
                         "only plans of this repository run here")
     rest = m["rest"]
-    if rest.startswith(f"{main}/"):
+    suffix = re.compile(r"^(?P<ref>.+)/(?P<path>" + re.escape(plan_dir.strip("/")) + r"/[^/]+/plan\.md)$")
+    sm = suffix.match(rest)
+    legacy = sm is None
+    if sm:
+        ref, path = sm["ref"], sm["path"]
+        if ref != main and (not FEATURE_REF.match(ref) or "--" in ref):
+            raise PlanError(f"the plan must be on '{main}' or on a <type>/<kebab> feature branch, not on '{ref}'")
+    elif rest.startswith(f"{main}/"):
         ref, path = main, rest[len(main) + 1:]
     elif rest.startswith("plan/"):
         slug, _, path = rest[len("plan/"):].partition("/")
@@ -80,11 +90,10 @@ def check_url(url: str, repo: str, main: str) -> dict:
             raise PlanError("a plan branch is plan/<kebab-case slug> followed by the file path")
         ref = f"plan/{slug}"
     else:
-        raise PlanError(f"the plan must be on '{main}' or on a plan/<slug> branch (the owner reviews those), "
-                        f"not on '{rest.split('/', 1)[0]}'")
+        raise PlanError(f"the plan must be at {plan_dir}/<n>/plan.md on '{main}' or on its feature branch")
     if not path or ".." in path.split("/"):
         raise PlanError("the URL names no file, or a path with '..'")
-    return {"owner": m["owner"], "repo": m["repo"], "ref": ref, "path": path}
+    return {"owner": m["owner"], "repo": m["repo"], "ref": ref, "path": path, "legacy": legacy}
 
 
 def load_manifest(path: str) -> dict:
@@ -150,8 +159,9 @@ def history(ref: str, cwd: str | None) -> list[tuple[str, str]]:
     return commits
 
 
-def trailers(ref: str, slug: str, cwd: str | None) -> tuple[set[str], set[str]]:
-    """The done phases and the phases whose gate approval is newer than their latest counted merge."""
+def trailers(ref: str, slug: str, cwd: str | None) -> tuple[set[str], set[str], str | None]:
+    """The done phases, the phases whose gate approval is newer than their latest counted merge, and the
+    plan blob of the newest active non-revert commit with a Plan-Started trailer (None when there is none)."""
     commits = history(ref, cwd)
     shas = [sha for sha, _ in commits]
     reverters: dict[str, list[str]] = {}
@@ -170,6 +180,8 @@ def trailers(ref: str, slug: str, cwd: str | None) -> tuple[set[str], set[str]]:
 
     phase_rx = re.compile(r"^Plan-Phase:\s*" + re.escape(slug) + r"/(\S+)\s*$", re.M)
     gate_rx = re.compile(r"^Plan-Gate-Approved:\s*" + re.escape(slug) + r"/(\S+)\s*$", re.M)
+    started_rx = re.compile(r"^Plan-Started:\s*" + re.escape(slug) + r"\s+([0-9a-f]{7,40})\s*$", re.M)
+    plan_blob = None
     merged_at: dict[str, int] = {}  # phase -> index of its newest counted merge (0 = newest commit)
     approved_at: dict[str, int] = {}
     for i, (sha, body) in enumerate(commits):
@@ -179,13 +191,18 @@ def trailers(ref: str, slug: str, cwd: str | None) -> tuple[set[str], set[str]]:
             approved_at.setdefault(pid, i)
         if REVERTS.search(body):
             continue
+        if plan_blob is None:
+            started = started_rx.findall(body)
+            if started:
+                plan_blob = started[0]
         for pid in phase_rx.findall(body):
             merged_at.setdefault(pid, i)
     approved = {pid for pid, i in approved_at.items() if pid in merged_at and i < merged_at[pid]}
-    return set(merged_at), approved
+    return set(merged_at), approved, plan_blob
 
 
-def phase_status(manifest: dict, done_ids: set[str], running: list[str], approved: list[str]) -> dict:
+def phase_status(manifest: dict, done_ids: set[str], running: list[str], approved: list[str],
+                 plan_blob: str | None = None) -> dict:
     phases = manifest["phases"]
     by_id = {ph["id"]: ph for ph in phases}
     done = [ph["id"] for ph in phases if ph["id"] in done_ids]
@@ -205,19 +222,21 @@ def phase_status(manifest: dict, done_ids: set[str], running: list[str], approve
     return {"plan_slug": manifest["plan_slug"], "feature_branch": manifest["feature_branch"],
             "done": done, "approved": [pid for pid in gates if pid in approved], "gated": gated,
             "running": list(running), "ready": ready, "waiting": waiting,
-            "start": ready[:room], "all_done": len(done) == len(phases)}
+            "start": ready[:room], "all_done": len(done) == len(phases),
+            "started": plan_blob is not None, "plan_blob": plan_blob}
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="tld plan", description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    cu = sub.add_parser("check-url", help="accept a plan URL only from this repository's main or plan/* branch")
+    cu = sub.add_parser("check-url", help="accept a plan URL (<plan_dir>/<n>/plan.md on main or its feature branch; plan/* deprecated)")
     cu.add_argument("url")
     cu.add_argument("--repo", help="owner/name of this repository (default: the origin remote)")
     cu.add_argument("--main", default="main", help="the main branch (git.main_branch)")
+    cu.add_argument("--plan-dir", default="docs/plans", help="the directory that holds <n>/plan.md")
     bn = sub.add_parser("branch-name", help="print a plan, review, feature, phase, revision or fix branch name")
     grp = bn.add_mutually_exclusive_group(required=True)
-    grp.add_argument("--plan-slug")
+    grp.add_argument("--plan-slug", help="deprecated: plans now live on the feature branch")
     grp.add_argument("--review-slug")
     grp.add_argument("--manifest", help="plan file (.md) or manifest (.yaml)")
     bn.add_argument("--phase")
@@ -232,7 +251,11 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         if args.cmd == "check-url":
-            print(json.dumps(check_url(args.url, args.repo or origin_repo(), args.main)))
+            result = check_url(args.url, args.repo or origin_repo(), args.main, args.plan_dir)
+            if result["legacy"]:
+                print("tld plan: warning: old-layout plans are deprecated; make-plan now commits the plan "
+                      "to the feature branch", file=sys.stderr)
+            print(json.dumps(result))
         elif args.cmd == "branch-name":
             if (args.rev is not None and args.rev < 1) or (args.fix is not None and args.fix < 1):
                 raise PlanError("--rev and --fix count from 1")
@@ -243,9 +266,9 @@ def main(argv: list[str] | None = None) -> int:
             for pid in [*args.running, *args.approved]:
                 if pid not in ids:
                     raise PlanError(f"no phase '{pid}' in the manifest")
-            done, gate_ok = trailers(args.ref, manifest["plan_slug"], args.repo)
+            done, gate_ok, plan_blob = trailers(args.ref, manifest["plan_slug"], args.repo)
             approved = sorted((gate_ok & ids) | set(args.approved))
-            print(json.dumps(phase_status(manifest, done & ids, args.running, approved), indent=2))
+            print(json.dumps(phase_status(manifest, done & ids, args.running, approved, plan_blob), indent=2))
         return 0
     except PlanError as exc:
         print(f"plan: {exc}", file=sys.stderr)
