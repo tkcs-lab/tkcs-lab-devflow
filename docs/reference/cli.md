@@ -52,6 +52,8 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld board answers --from-reply REPLY\|- --ask FILE` | `tld.board.inbox` | the answers in the owner's reply in the conversation; exit 3 incomplete, 2 with an id or --from-issue, or without --ask |
 | `tld board cancel ID` | `tld.board.inbox` | cancel an open ask |
 | `tld board ask-text FILE\|- [--id ID]` | `tld.board.inbox` | the ask as a chat message an attended session shows; the owner may answer there |
+| `tld research check-prompt FILE [--forbid TEXT]...` | `tld.research` | check a research prompt (length, sections, secrets, board values) before it is posted; exit 1 lists the problems |
+| `tld research report --id ID --reply FILE\|- [--rest FILE]` | `tld.research` | the marked research report from the owner's reply; exit 3 no complete report, 1 wrong id, too long or no Answer line; --rest is the reply without the block |
 | `tld board validate-ask FILE` | `tld.board.ask` | validate an ask (`schema/ask.schema.json`) |
 | `tld board mcp-stdio` | `tld.board.mcp_stdio` | MCP stdio bridge to the board server (the `tld-board` MCP server) |
 | `tld board stale [FILE] [--now T]` | `tld.board.stale` | print the ids of hidden and dismissed status records |

@@ -256,6 +256,8 @@ then Edit):
 You type the token into the settings form yourself, never into a chat. Anyone who holds it can write records
 and post asks, but cannot answer them.
 
+The whole environment, including the research environment, is in [cloud-environments.md](cloud-environments.md).
+
 ## Rotating the token and the passphrase
 
 * **Token:** make a new one, restart the container with it (`docker rm -f tld-board`, then the `docker run`
