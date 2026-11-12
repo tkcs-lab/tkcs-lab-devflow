@@ -119,8 +119,8 @@ def test_an_old_database_is_migrated_and_keeps_its_records(tmp_path):
     db.commit()
     db.close()
     store = Store(str(path))
-    assert store.schema_version() == 3
-    assert store.get("f-running-ok") == {"id": "f-running-ok", "version": 7, "data": record()}
+    assert store.schema_version() == 4
+    assert store.get("f-running-ok") == {"id": "f-running-ok", "version": 7, "dismissed_at": None, "data": record()}
     ask = store.create_ask(ask_doc())
     reopened = Store(str(path))  # idempotent on a migrated database
     assert reopened.get_ask(ask["id"]) == ask and reopened.count() == 1
@@ -136,7 +136,7 @@ def test_a_version_2_database_gains_the_revoked_sessions_table(tmp_path):
     db.commit()
     db.close()
     store = Store(str(path))
-    assert store.schema_version() == 3 and not store.session_revoked("a" * 32)
+    assert store.schema_version() == 4 and not store.session_revoked("a" * 32)
     store.revoke_session("a" * 32, 2000, now=1000)
     store.revoke_session("b" * 32, 1500, now=1000)
     assert Store(str(path)).session_revoked("a" * 32)  # kept across a reopen (a server restart)
@@ -192,3 +192,91 @@ def test_open_asks_are_capped(tmp_path, monkeypatch):
         store.create_ask(ask_doc())
     store.cancel_ask(first["id"])
     store.create_ask(ask_doc())
+
+
+# ---- the owner's dismissals -------------------------------------------------------------------------
+
+def needs_record(doc_id="f-waiting"):
+    return record(doc_id)
+
+
+def test_a_version_3_database_opens_at_schema_4_and_keeps_its_data(tmp_path):
+    import sqlite3
+    path = tmp_path / "v3.sqlite3"
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE records(id TEXT PRIMARY KEY, version INTEGER NOT NULL, data TEXT NOT NULL)")
+    db.execute("CREATE TABLE asks(id TEXT PRIMARY KEY, state TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL)")
+    db.execute("CREATE TABLE revoked_sessions(nonce TEXT PRIMARY KEY, expires INTEGER NOT NULL)")
+    db.execute("INSERT INTO records VALUES (?, ?, ?)", ("f-running-ok", 2, json.dumps(record())))
+    db.execute("PRAGMA user_version = 3")
+    db.commit()
+    db.close()
+    store = Store(str(path))
+    assert store.schema_version() == 4
+    assert store.get("f-running-ok") == {"id": "f-running-ok", "version": 2, "dismissed_at": None,
+                                         "data": record()}
+    ask = store.create_ask(ask_doc())
+    assert Store(str(path)).get_ask(ask["id"]) == ask
+
+
+def test_dismiss_then_get_shows_dismissed_at_and_a_new_version_clears_it(tmp_path):
+    store = Store(str(tmp_path / "d.sqlite3"), clock=lambda: "2026-11-09T12:00:00Z")
+    store.set("f-waiting", needs_record(), None)
+    assert store.dismiss("f-waiting", 1)["dismissed_at"] == "2026-11-09T12:00:00Z"
+    assert store.get("f-waiting")["dismissed_at"] == "2026-11-09T12:00:00Z"
+    assert store.list()[0]["dismissed_at"] == "2026-11-09T12:00:00Z"
+    store.set("f-waiting", needs_record(), 1)
+    assert store.get("f-waiting")["dismissed_at"] is None
+
+
+def test_a_conflict_after_a_dismissal_carries_dismissed_at(tmp_path):
+    store = Store(str(tmp_path / "d.sqlite3"), clock=lambda: "2026-11-09T12:00:00Z")
+    store.set("f-waiting", needs_record(), None)
+    store.dismiss("f-waiting", 1)
+    with pytest.raises(Conflict) as exc:
+        store.set("f-waiting", needs_record(), 7)
+    assert exc.value.current["dismissed_at"] == "2026-11-09T12:00:00Z"
+
+
+def test_dismiss_with_a_wrong_version_raises_conflict(store):
+    store.set("f-waiting", needs_record(), None)
+    with pytest.raises(Conflict) as exc:
+        store.dismiss("f-waiting", 2)
+    assert exc.value.current["version"] == 1
+
+
+def test_dismiss_of_a_record_that_does_not_need_you_raises_invalid(store):
+    store.set("f-running-ok", record(), None)
+    with pytest.raises(Invalid, match="does not need you"):
+        store.dismiss("f-running-ok", 1)
+
+
+def test_dismiss_of_a_missing_record_raises_not_found(store):
+    with pytest.raises(NotFound):
+        store.dismiss("nope", 1)
+
+
+def test_restore_clears_the_dismissal_and_a_missing_record_raises_not_found(store):
+    store.set("f-waiting", needs_record(), None)
+    store.dismiss("f-waiting", 1)
+    assert store.restore("f-waiting") == {"id": "f-waiting", "dismissed_at": None}
+    assert store.get("f-waiting")["dismissed_at"] is None
+    assert store.restore("f-waiting")["dismissed_at"] is None  # no dismissal: still fine
+    with pytest.raises(NotFound):
+        store.restore("nope")
+
+
+def test_delete_drops_the_dismissal(store):
+    store.set("f-waiting", needs_record(), None)
+    store.dismiss("f-waiting", 1)
+    assert store.delete("f-waiting")
+    store.set("f-waiting", needs_record(), None)
+    assert store.get("f-waiting")["version"] == 1 and store.get("f-waiting")["dismissed_at"] is None
+
+
+def test_dismiss_and_restore_leave_data_and_version_alone(store):
+    store.set("f-waiting", needs_record(), None)
+    before = store.get("f-waiting")
+    store.dismiss("f-waiting", 1)
+    store.restore("f-waiting")
+    assert store.get("f-waiting") == before
