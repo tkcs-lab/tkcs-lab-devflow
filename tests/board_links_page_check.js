@@ -72,9 +72,7 @@ function needsRecord(base_, id) {
     await page.waitForSelector("#ask-form", { timeout: 5000 });
     await page.check("#askview input[name=q0][value=yes]");
     await page.click("#ask-submit");
-    await page.waitForFunction(() => !document.getElementById("ask-form") &&
-      document.getElementById("askview").textContent.includes("Answered"), null, { timeout: 5000 });
-    await page.click("#askview a[href='#']");
+    await page.waitForSelector("#main:not(.hidden-view)", { timeout: 5000 });
     await page.waitForSelector('[data-section="running"] [data-doc="links-one"]', { timeout: 5000 });
     assert.ok((await page.textContent('[data-doc="links-one"]')).includes("answer received"), "answer received");
     assert.strictEqual(await page.locator('[data-section="needs_you"] [data-doc="links-one"]').count(), 0);
