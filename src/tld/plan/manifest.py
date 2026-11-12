@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate a plan's implementation manifest, for /make-plan (before it pushes) and /implement (before it starts).
 
-    tld plan validate-manifest PLAN.md|MANIFEST.yaml [--profile .tld/toolkit.yaml]
+    tld plan validate-manifest PLAN.md|MANIFEST.yaml [--profile .tld/toolkit.yaml] [--ref REF]
 
 PLAN.md: the first fenced yaml block under the '## Implementation manifest' heading is checked.
 Exit 0 (warnings go to stderr) or 1 with one error per line. Python 3.11+, PyYAML.
@@ -143,7 +143,7 @@ def find_cycle(phases: dict[str, list[str]]) -> list[str] | None:
     return None
 
 
-def validate(manifest, profile: dict | None = None) -> tuple[list[str], list[str]]:
+def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/plans") -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
     if not isinstance(manifest, dict):
@@ -227,6 +227,8 @@ def validate(manifest, profile: dict | None = None) -> tuple[list[str], list[str
             errors.append(f"phase '{pid}': worker_level must be one of {', '.join(LEVELS)} (got {wl!r})")
         if wl == "strong" and not _nonempty(ph.get("worker_level_reason")):
             errors.append(f"phase '{pid}': worker_level: strong needs a worker_level_reason")
+        if wl == "fast" and cx != "S":
+            errors.append(f"phase '{pid}': worker_level: fast needs complexity S")
         d = ph.get("depends_on") or []
         if not isinstance(d, list):
             errors.append(f"phase '{pid}': depends_on must be a list")
@@ -237,6 +239,12 @@ def validate(manifest, profile: dict | None = None) -> tuple[list[str], list[str
             errors.append(f"phase '{pid}': touches must be a list of paths")
         else:
             touches[pid] = t or []
+            record = re.compile(re.escape(plan_dir.rstrip("/")) + r"/[^/]+/(plan|deviations)\.md")
+            for entry in t or []:
+                name = entry[2:] if entry.startswith("./") else entry
+                if record.fullmatch(name):
+                    errors.append(f"phase '{pid}': touches '{entry}' is a plan record; "
+                                  "a phase never edits a plan or its deviations file")
         if "human_gate" in ph and not isinstance(ph["human_gate"], bool):
             errors.append(f"phase '{pid}': human_gate must be true or false")
 
@@ -274,6 +282,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("plan")
     ap.add_argument("--profile", help="resolved or raw .tld/toolkit.yaml, to check feature_branch against git.branch_types")
+    ap.add_argument("--ref", help="the branch the plan file is on: it may only be on main or on its own feature branch")
     args = ap.parse_args(argv)
 
     path = Path(args.plan)
@@ -294,13 +303,29 @@ def main(argv: list[str] | None = None) -> int:
     profile = None
     if args.profile:
         profile = yaml.safe_load(Path(args.profile).read_text())
-    errors, warnings = validate(manifest, profile)
+    plan_dir = "docs/plans"
+    main_branch = "main"
+    if isinstance(profile, dict):
+        docs, git = profile.get("docs"), profile.get("git")
+        if isinstance(docs, dict) and docs.get("plan_dir"):
+            plan_dir = str(docs["plan_dir"])
+        if isinstance(git, dict) and git.get("main_branch"):
+            main_branch = str(git["main_branch"])
+    errors, warnings = validate(manifest, profile, plan_dir=plan_dir.rstrip("/") or plan_dir)
     for w in warnings:
         print(f"manifest: warning: {w}", file=sys.stderr)
     for e in errors:
         print(f"manifest: {e}", file=sys.stderr)
     if errors:
         return 1
+    if args.ref:
+        ref = args.ref
+        if ref == "plan/" + manifest["plan_slug"]:
+            print(f"manifest: old-layout plan on '{ref}' (deprecated)", file=sys.stderr)
+        elif ref not in (main_branch, manifest["feature_branch"]):
+            print(f"manifest: the plan is on '{ref}', but it may only be on '{main_branch}' "
+                  f"or on its own feature branch '{manifest['feature_branch']}'", file=sys.stderr)
+            return 1
     n = len(manifest["phases"])
     print(f"manifest: OK ({manifest['plan_slug']}, {n} phase{'s' if n != 1 else ''})")
     return 0

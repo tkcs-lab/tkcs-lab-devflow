@@ -131,6 +131,35 @@ def test_worker_level_is_a_level(vm):
     assert any("worker_level must be one of strong, standard, fast" in e for e in errors(m, vm))
 
 
+def test_fast_worker_level_needs_complexity_s(vm):
+    m = mutated(lambda m: m["phases"][1].update(worker_level="fast"))
+    assert any("phase 'p2-api': worker_level: fast needs complexity S" in e for e in errors(m, vm))
+    m = mutated(lambda m: m["phases"][0].update(worker_level="fast"))
+    assert errors(m, vm) == []
+
+
+def test_a_plan_record_in_touches_is_an_error(vm):
+    def touching(path, **kw):
+        m = mutated(lambda m: m["phases"][0].update(touches=[path]))
+        return vm.validate(m, **kw)[0]
+    for bad in ("docs/plans/14/plan.md", "docs/plans/14/deviations.md", "./docs/plans/14/plan.md"):
+        assert any("is a plan record" in e for e in touching(bad)), bad
+    for ok in ("docs/plans/", "docs/plans/x-plan.md", "docs/guides/plan.md"):
+        assert touching(ok) == [], ok
+    assert touching("docs/adr/x.md", plan_dir="docs") == []
+    assert touching("docs/adr/x.md", plan_dir="docs/") == []
+
+
+def test_ref_must_be_main_or_the_feature_branch_or_the_legacy_plan_branch(vm, tmp_path, capsys):
+    f = tmp_path / "m.yaml"
+    f.write_text(yaml.safe_dump(GOOD))
+    for ref in ("main", "feature/demo", "plan/demo"):
+        assert vm.main([str(f), "--ref", ref]) == 0, ref
+    assert "old-layout plan on 'plan/demo' (deprecated)" in capsys.readouterr().err
+    assert vm.main([str(f), "--ref", "plan/other"]) == 1
+    assert "the plan is on 'plan/other', but it may only be on 'main' or on its own feature branch 'feature/demo'" in capsys.readouterr().err
+
+
 def test_complexity_must_be_s_or_m(vm):
     m = mutated(lambda m: m["phases"][0].update(complexity="L"))
     assert any("complexity must be S or M" in e for e in errors(m, vm))
