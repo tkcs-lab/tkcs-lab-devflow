@@ -349,3 +349,8 @@ def test_untrusted_text_lists_the_research_report_as_data():
     text = (PLAYBOOKS / "policies" / "untrusted-text.md").read_text()
     section = between(text, "## What is data", "## How data is used")
     assert "(research.md)" in section
+
+
+def test_make_plan_and_review_state_the_research_rules():
+    assert "Research:" in (PLAYBOOKS / "make-plan.md").read_text()
+    assert "decisions ask" in (PLAYBOOKS / "review.md").read_text()
