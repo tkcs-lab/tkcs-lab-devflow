@@ -300,12 +300,17 @@ def test_model_ids_live_in_one_file():
 
 
 # ---- research policy (plan 33) --------------------------------------------------------------
-RESEARCH_PLAYBOOKS = ("implement",)
+RESEARCH_PLAYBOOKS = ("implement", "make-plan", "review", "ask", "deps", "ci", "upstream", "docs")
 
 
 @pytest.mark.parametrize("name", RESEARCH_PLAYBOOKS)
 def test_playbooks_link_the_research_policy(name):
     assert "(policies/research.md)" in (PLAYBOOKS / f"{name}.md").read_text(), name
+
+
+@pytest.mark.parametrize("name", ("deps", "ci", "upstream", "docs"))
+def test_unattended_playbooks_report_open_research_questions(name):
+    assert "Open research questions:" in (PLAYBOOKS / f"{name}.md").read_text(), name
 
 
 def between(text: str, start: str, end: str) -> str:
