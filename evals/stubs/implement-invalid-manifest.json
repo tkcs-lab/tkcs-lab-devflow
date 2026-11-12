@@ -9,7 +9,7 @@
       "id": "t1",
       "kind": "shell",
       "tool": "shell",
-      "command": "tld plan check-url https://github.com/example-org/notes-demo/blob/plan/tags/docs/tags-plan.md --repo example-org/notes-demo --main main",
+      "command": "tld plan check-url https://github.com/example-org/notes-demo/blob/feature/tags/docs/1/plan.md --repo example-org/notes-demo --main main",
       "error": null,
       "output": ""
     },
@@ -17,7 +17,7 @@
       "id": "t2",
       "kind": "shell",
       "tool": "shell",
-      "command": "git fetch origin plan/tags",
+      "command": "git fetch origin feature/tags",
       "error": null,
       "output": ""
     },

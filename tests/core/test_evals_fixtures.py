@@ -119,7 +119,7 @@ def test_implement_fixture_plan_passes_check_url_and_fails_validation(tmp_path):
                         cwd=r, capture_output=True, text=True)
     assert ok.returncode == 0, ok.stderr
     plan = tmp_path / "plan.md"
-    plan.write_text(git("show", f"plan/tags:{commands.PLAN_PATH}", cwd=r))
+    plan.write_text(git("show", f"feature/tags:{commands.PLAN_PATH}", cwd=r))
     bad = subprocess.run([*tld_cmd("plan", "validate-manifest", str(plan), "--profile", str(r / ".tld" / "toolkit.yaml"))],
                          cwd=r, capture_output=True, text=True)
     assert bad.returncode == 1 and expected["stop_message"] in bad.stdout + bad.stderr
