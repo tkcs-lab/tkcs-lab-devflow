@@ -85,3 +85,10 @@ def test_other_kinds_are_silent(repo):
 def test_the_notice_names_no_model():
     import re
     assert not re.search("opus|sonnet|haiku", model_check.NOTICE, re.I)
+
+
+def test_a_malformed_disable_list_never_denies(tmp_path):
+    text = hh.PROFILE + "hooks:\n  disable: model-check\n"
+    repo = make_repo_with_origin(tmp_path / "r", committed=text, working=text)
+    d = prompt(repo, level="strong", cmd_level="standard")
+    assert d.verdict == "allow" and d.notice is None

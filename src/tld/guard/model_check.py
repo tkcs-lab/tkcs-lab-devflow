@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from tld.dod.gate import state_dir
-from tld.guard._common import Ctx
+from tld.guard._common import Ctx, ProfileError
 
 NAME = "model-check"
 NOTICE = ("this session runs at the strong level, the most expensive. /tld:{cmd} is meant for the {level} level, "
@@ -37,7 +37,7 @@ def _stored(project: str, sid: object) -> str | None:
 
 
 def evaluate(ctx: Ctx) -> None:
-    ctx.notice = None
+    ctx.notice = None   # a notice set before this point is not ours; a trust-lookup notice below is kept
     a = ctx.action
     if a.kind == "session_start":
         if a.session_level and a.session_id:
@@ -51,6 +51,13 @@ def evaluate(ctx: Ctx) -> None:
     level = a.session_level
     if level is None and a.session_id:
         level = _stored(ctx.project_dir, a.session_id)
-    if level == "strong" and a.command_level != "strong" and not ctx.disabled(NAME):
-        ctx.notice = NOTICE.format(cmd=a.invoked, level=a.command_level or "standard")
+    if level != "strong" or a.command_level == "strong":
+        return None
+    try:
+        off = ctx.disabled(NAME)
+    except ProfileError:   # an advisory hook never denies on a malformed profile
+        return None
+    if not off:
+        warning = NOTICE.format(cmd=a.invoked, level=a.command_level or "standard")
+        ctx.notice = f"{ctx.notice}; {warning}" if ctx.notice else warning
     return None
