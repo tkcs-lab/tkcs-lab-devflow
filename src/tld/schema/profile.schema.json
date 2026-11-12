@@ -517,7 +517,8 @@
               "protect-paths",
               "dod-gate",
               "plan-gate",
-              "model-check"
+              "model-check",
+              "board-gate"
             ]
           },
           "x-hook-default": [],
@@ -567,6 +568,17 @@
               "type": "boolean",
               "x-hook-default": false,
               "description": "Opt in: a session that no tld command started cannot write into the repository; it is told to answer and propose /tld:make-plan."
+            }
+          }
+        },
+        "board_gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "x-hook-default": false,
+              "description": "Opt in: a session that a record-writing tld command started cannot end its turn before it has written its status record to the board once."
             }
           }
         }
