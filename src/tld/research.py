@@ -36,7 +36,7 @@ SECTIONS = ("Question:", "Public context:", "Constraints:", "What would settle i
 SECRET_ENV = ("TLD_BOARD_URL", "TLD_BOARD_TOKEN")
 # C1 controls, line separators, variation selectors, combining grapheme joiner and blank fillers; the rest of
 # what is hidden is found by category (Cf, Co, Cn, Cs)
-INVISIBLE = re.compile("[\x80-\x9f\u2028\u2029\u034f\u115f\u17b4\u17b5\u180b-\u180f\u1160\u2800\u3164\uffa0\ufe00-\ufe0f\U000e0100-\U000e01ef]")
+INVISIBLE = re.compile("[\x80-\x9f\u2028\u2029\u034f\u115f\u17b4\u17b5\u180b-\u180f\u1160\u2800\u3164\uffa0\ufe00-\ufe0f\U00013441\U00013442\U00016fe4\U000e0100-\U000e01ef]")
 HIDDEN_CATEGORIES = ("Cf", "Co", "Cn", "Cs")
 START = "RESEARCH-REPORT "
 END = "END RESEARCH-REPORT "
@@ -55,8 +55,10 @@ def _squash(text: str) -> str:
 
 
 def _plain(text: str) -> str:
-    """The text as a reader or a scanner sees it: no invisible character, compatibility forms folded."""
-    return unicodedata.normalize("NFKC", "".join(ch for ch in text if not _hidden(ch)))
+    """The text as a scanner sees it: no invisible character, no combining mark, compatibility forms folded."""
+    kept = "".join(ch for ch in text if not _hidden(ch))
+    decomposed = unicodedata.normalize("NFKD", kept)
+    return unicodedata.normalize("NFKC", "".join(ch for ch in decomposed if unicodedata.category(ch) not in ("Mn", "Me")))
 
 
 def _first_id(lines: list[str]) -> str | None:

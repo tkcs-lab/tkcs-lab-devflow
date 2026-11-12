@@ -455,3 +455,10 @@ def test_a_malformed_board_url_does_not_crash_the_gate():
     assert research.check_prompt(fill(), [], env) == []
     assert research.check_prompt(fill().replace("Python 3.11", "http://[::1"), [], env) == \
         ["forbidden: the value of TLD_BOARD_URL appears in the prompt"]
+
+
+@pytest.mark.parametrize("char", ["\U00016fe4", "\U00013441", "\U00013442", "\u0301"])
+def test_blank_and_combining_characters_cannot_split_a_forbidden_value(char):
+    text = fill().replace("Python 3.11", "s" + char + "ecretvalue99")
+    assert "forbidden:" in prefixes(text, ["secretvalue99"])
+    assert research.split_reply(report(body="Answer: caf\u00e9"), RID)[1] == "Answer: caf\u00e9"
