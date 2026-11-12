@@ -115,7 +115,7 @@ def test_implement_fixture_plan_passes_check_url_and_fails_validation(tmp_path):
     from evals.fixtures import commands
     expected = builder("commands").build(tmp_path / "r", command="implement")
     r = tmp_path / "r"
-    ok = subprocess.run([*tld_cmd("plan", "check-url", expected["plan_url"], "--repo", commands.REPO, "--main", "main")],
+    ok = subprocess.run([*tld_cmd("plan", "check-url", expected["plan_url"], "--repo", commands.REPO, "--main", "main", "--plan-dir", "docs")],
                         cwd=r, capture_output=True, text=True)
     assert ok.returncode == 0, ok.stderr
     plan = tmp_path / "plan.md"

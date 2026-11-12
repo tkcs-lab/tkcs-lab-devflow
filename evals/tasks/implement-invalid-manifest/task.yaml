@@ -1,5 +1,5 @@
 id: implement-invalid-manifest
-description: /implement of a plan whose manifest has a dependency cycle must report the cycle and stop before it starts a worker or starts a worker.
+description: /implement of a plan whose manifest has a dependency cycle must report the cycle and stop before it starts a worker.
 command: /tld:implement
 arguments: >-
   https://github.com/example-org/notes-demo/blob/feature/tags/docs/1/plan.md
