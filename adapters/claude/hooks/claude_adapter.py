@@ -11,6 +11,7 @@ import importlib
 import json
 import os
 import re
+import stat
 import sys
 from pathlib import Path
 from typing import NamedTuple
@@ -81,6 +82,8 @@ def transcript_level(path: object) -> str | None:
     """The level of the newest assistant entry in the tail of a transcript file, or None."""
     try:
         if not isinstance(path, str) or not path:
+            return None
+        if not stat.S_ISREG(os.stat(path).st_mode):  # a FIFO would block the hook
             return None
         with open(path, "rb") as fh:
             size = fh.seek(0, os.SEEK_END)

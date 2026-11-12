@@ -1,5 +1,6 @@
 """The Claude adapter of model-check: model names to levels, the transcript, command front matter, the events."""
 import json
+import os
 
 import hooks_helpers as hh
 from hooks_helpers import claude_adapter as ca, make_repo
@@ -67,3 +68,9 @@ def test_the_warning_is_a_system_message_only(tmp_path):
                                               "prompt": "/tld:implement x", "transcript_path": str(t)}))
     out = json.loads(r.stdout)
     assert r.code == 0 and "systemMessage" in out and "hookSpecificOutput" not in out
+
+
+def test_transcript_level_ignores_a_fifo(tmp_path):
+    fifo = tmp_path / "pipe"
+    os.mkfifo(fifo)
+    assert ca.transcript_level(str(fifo)) is None
