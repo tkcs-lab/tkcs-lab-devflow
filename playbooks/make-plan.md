@@ -65,7 +65,7 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
    <started_at> (last sign of life <age_minutes> minutes ago, session <session>). Take it over only if it is
    dead.`, options `stop` (recommended) and `take_over`. `stop`: write no status record, post nothing on the
    issue, and end with the reply `Stopped: plan #<n> is already being planned by another run.` `take_over`: go
-   on. Any other exit code: go on (exit 1: show the message once). Then post `Planning started. Session: <id>.`
+   on. Any other exit code: go on (exit 1: show the message once). This check writes no record: the exception in `playbooks/policies/status-board.md` "When to write" applies. Then post `Planning started. Session: <id>.`
    on the issue (`github.issue_comment`); `<id>` is this session's id, or `unknown` when it cannot be read.
 
    **A review document as the ask.** If the input is the URL of a document written by the review playbook (a

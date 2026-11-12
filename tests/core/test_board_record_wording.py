@@ -51,3 +51,12 @@ def test_runtime_map_has_the_fallback():
 def test_record_commands_match_the_playbooks():
     named = {f.stem for f in PLAYBOOKS.glob("*.md") if "tld board record-id" in _text(f)}
     assert named == set(board_gate.RECORD_COMMANDS)
+
+
+def test_status_board_policy_names_the_already_running_exception():
+    t = " ".join(_text(POLICY).split())
+    assert any(("already running" in s or "already being planned" in s) and "no record" in s
+               for s in t.split(". ")), "the 'already running' exception to the first-record rule is missing"
+    assert "write no record yet" in board_gate.MESSAGE
+    for name in ("implement", "make-plan"):
+        assert 'status-board.md` "When to write"' in _text(PLAYBOOKS / f"{name}.md")

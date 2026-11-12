@@ -273,11 +273,13 @@ the working tree, `disable` from the trusted copy.
 
 ### `board-gate`
 
-Opt-in, off by default: set `hooks.board_gate.enabled` to `true`. A session that a record-writing tld command started
-(`make-plan`, `implement`, `review`, `setup`, `migrate`, `land`, `deps`, `upstream`, `docs`, `ci`) must write its status
-record to the board once before it ends a turn. It is a nudge, not a control.
+Opt-in, off by default: set `hooks.board_gate.enabled` to `true`. The gate covers the commands that always write a status
+record (`make-plan`, `implement`, `review`, `setup`, `migrate`, `land`, `deps`, `upstream`, `ci`), and `docs` only in its
+`init` and `tidy` modes (`/tld:docs` and `/tld:docs check` write none, so they neither open the state nor block). A
+session that one of them started must write its status record to the board once before it ends a turn. It is a nudge,
+not a control.
 
-- **Three events.** `UserPromptSubmit`: a prompt that starts with one of those commands opens a record of the session
+- **Three events.** `UserPromptSubmit`: a prompt that starts with one of those commands (for `docs`: with `init` or `tidy`) opens a record of the session
   (`written` false). `PostToolUse` (matcher `Bash|mcp__.*tld-board.*__board_set`): a successful record write sets
   `written`: the `board_set` tool returned an object with an `id` and a `version`, or a `tld board client set` command
   printed one. It never denies. `Stop`: if the session has not written and a board is configured (`TLD_BOARD_URL` and
@@ -289,7 +291,7 @@ record to the board once before it ends a turn. It is a nudge, not a control.
   never calls the board. `enabled` is read from the working tree, `hooks.disable` from the trusted copy, and only on
   `Stop`, so a malformed `hooks.disable` can never make it block.
 - **The block message** (the guard runner puts `tld board-gate: ` in front; `<command>` comes from the state file):
-  `this session was started by /tld:<command> and has not written its status record to the board. Write it now: use the board_set tool, or when that tool is missing or fails run "tld board client set <id> - " with the record on stdin (the id comes from "tld board record-id"). If the board cannot be reached, say so in your final reply and stop. This check blocks only once.`
+  `this session was started by /tld:<command> and has not written its status record to the board. Write it now: use the board_set tool, or when that tool is missing or fails run "tld board client set <id> - " with the record on stdin (the id comes from "tld board record-id"). If the board cannot be reached, say so in your final reply and stop. If the playbook says to write no record yet, say so and stop. This check blocks only once.`
 - **Rejected alternatives.** (1) The board client and the MCP bridge writing the marker: the bridge may not inherit the
   session id, outlives `/clear` and has to pair replies to requests. (2) The hook asking the board: it would need the
   network and a token inside a hook, and a record cannot be tied to a hook session id, because `orchestrator_session`
