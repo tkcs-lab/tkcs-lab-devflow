@@ -37,7 +37,7 @@ function needsRecord(base_, id) {
 
 (async () => {
   const docs = JSON.parse(fs.readFileSync(FIXTURE, "utf8"));
-  const template = docs.find((d) => d.id === "f-waiting").data;
+  const template = docs.find((d) => d.data.project === "f-waiting").data;
   const browser = await chromium.launch();
   try {
     const context = await browser.newContext();

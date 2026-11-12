@@ -41,7 +41,7 @@ def test_login_poll_and_answer_an_ask_in_a_browser(tmp_path):
     need_browser()
     with running(tmp_path) as srv:
         docs = json.loads((FIXTURES / "board-records.json").read_text())
-        rec = copy.deepcopy(next(d["data"] for d in docs if d["id"] == "f-running-ok"))
+        rec = copy.deepcopy(next(d["data"] for d in docs if d["data"]["project"] == "f-running-ok"))
         rec["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         rec["next_check_at"] = None
         srv.store.set("f-running-ok", rec, None)

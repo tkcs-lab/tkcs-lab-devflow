@@ -93,7 +93,7 @@
     }
   },
   {
-    "id": "p--make-plan--ab",
+    "id": "p--make-plan",
     "data": {
       "schema": 1,
       "kind": "command",
