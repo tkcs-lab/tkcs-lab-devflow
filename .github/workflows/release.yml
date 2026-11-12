@@ -202,8 +202,23 @@ jobs:
           path: .
 
       - name: Check the release assets against SHA256SUMS
+        env:
+          TAG: ${{ needs.build.outputs.tag }}
+          PREVIOUS: ${{ needs.build.outputs.previous }}
         run: |
           set -euo pipefail
+          # TAG and PREVIOUS come from the build job, which runs third-party code: trust nothing it wrote.
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if [[ ! "$TAG" =~ $semver ]] || { [ -n "$PREVIOUS" ] && [[ ! "$PREVIOUS" =~ $semver ]]; }; then
+            echo "::error::the build job gave a tag or a previous tag that is not vX.Y.Z"
+            exit 1
+          fi
+          version=${TAG#v}
+          expected=$(printf '%s\n' SHA256SUMS compose.yaml install.sh "tld-$version-py3-none-any.whl" "tld-$version.tar.gz" | sort)
+          if [ -n "$(find dist ! -type f ! -path dist)" ] || [ "$(ls -1A dist | sort)" != "$expected" ]; then
+            echo "::error::dist/ does not hold exactly the five release assets for $TAG"
+            exit 1
+          fi
           cd dist
           if ! sha256sum -c SHA256SUMS; then
             echo "::error::dist/ does not match SHA256SUMS; the artifact release-dist is not what the build job collected"
@@ -229,7 +244,7 @@ jobs:
             | "\(.name): \(.status) \(.conclusion // "")"')
           if [ -n "$bad" ]; then
             echo "::error::checks on $SHA are not all green:"
-            echo "$bad"
+            printf '  %s\n' "$bad"
             exit 1
           fi
           echo "checks on $SHA are green"
@@ -266,7 +281,7 @@ jobs:
           set -euo pipefail
           object=$(gh api -X POST "repos/$REPO/git/tags" -f tag="$TAG" -f message="Release $TAG" -f object="$SHA" -f type=commit --jq .sha)
           gh api -X POST "repos/$REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$object" > /dev/null
-          if ! gh release create "$TAG" --verify-tag --draft --repo "$REPO" --title "$TAG" --notes-file release-notes.md dist/*; then
+          if ! gh release create --verify-tag --draft --repo "$REPO" --title "$TAG" --notes-file release-notes.md -- "$TAG" ./dist/*; then
             echo "::error::tag $TAG was created but the release was not; dist/ is in the artifact release-dist of run $RUN_ID (kept 14 days). Run: gh run download $RUN_ID --repo $REPO --name release-dist  then: gh release create $TAG --verify-tag --draft --repo $REPO --title $TAG --notes-file release-notes.md dist/*  then: gh release edit $TAG --draft=false --repo $REPO"
             exit 1
           fi

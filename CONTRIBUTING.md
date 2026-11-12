@@ -104,7 +104,7 @@ wheel and the sdist, builds the board image for linux/amd64 and linux/arm64 and 
 and uploads them as the artifact `release-dist` (kept 14 days). `publish` (`needs: build`, read only, holds the
 token) downloads it, runs `sha256sum -c SHA256SUMS`, checks that the commit is green, and only then creates the tag
 and a draft release with the assets, which it publishes last, so the release is public complete or not at all. The
-owner approves each of the two jobs. A dry run builds everything, pushes nothing and tags nothing.
+owner approves each of the two jobs. The green-commit check runs in `publish`, after `build` has pushed the image, so a red commit can leave a moved `:latest`. The QEMU binfmt image is pinned by digest in `release.yml`; to refresh it, resolve `docker.io/tonistiigi/binfmt:latest` (the current digest was read through `mirror.gcr.io` and not checked against docker.io) and update the digest by hand. A dry run builds everything, pushes nothing and tags nothing.
 
 One-time steps for the first release: enable release immutability (repository settings, General, Releases) before it,
 so assets cannot be replaced after publishing, and make the ghcr package `tld-board` public after the first push

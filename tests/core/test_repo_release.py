@@ -152,9 +152,9 @@ def test_job_permissions(doc):
 
 def test_the_build_job_never_references_the_release_token(doc):
     build = yaml.safe_dump(doc["jobs"]["build"])
-    assert "TLD_RELEASE_TOKEN" not in build and "secrets." not in build
+    assert "secrets" not in build.lower() and "env" not in doc
     text = WORKFLOW.read_text()
-    assert "TLD_RELEASE_TOKEN" not in text.split("\n  build:\n")[1].split("\n  publish:\n")[0]
+    assert "secrets" not in text.split("\n  build:\n")[1].split("\n  publish:\n")[0]
 
 
 def test_release_token_is_only_in_the_publish_job_steps_that_use_it(doc):
@@ -199,7 +199,7 @@ def test_green_check_skips_its_own_job(doc):
 
 def test_publish_creates_a_draft_with_every_asset_then_publishes(doc):
     run = step(doc, "Publish the tag and the release")["run"]
-    for needle in ("--verify-tag", "--draft", "--repo", "dist/*", "--draft=false"):
+    for needle in ("--verify-tag", "--draft", "--repo", "dist/*", "--draft=false", '-- "$TAG" ./dist/*'):
         assert needle in run, needle
     assert run.index("git/tags") < run.index("release create") < run.index("--draft=false")
     assert "release edit" in run
@@ -213,18 +213,50 @@ def test_publish_failure_names_the_artifact_and_the_summary_links_the_public_rel
     assert s["run"].index("release edit") < s["run"].index("release view")
 
 
+def run_check(doc, work, tag="v9.9.9", previous=""):
+    s = step(doc, "Check the release assets against SHA256SUMS")
+    return subprocess.run(["bash", "-c", s["run"]], cwd=work, capture_output=True, text=True,
+                          env={"PATH": "/usr/bin:/bin", "TAG": tag, "PREVIOUS": previous})
+
+
+def good_dist(work):
+    dist = work / "dist"
+    dist.mkdir()
+    names = ["compose.yaml", "install.sh", "tld-9.9.9-py3-none-any.whl", "tld-9.9.9.tar.gz"]
+    for n in names:
+        (dist / n).write_text(n)
+    subprocess.run("sha256sum " + " ".join(names) + " > SHA256SUMS", shell=True, cwd=dist, check=True)
+    return dist
+
+
+@pytest.mark.parametrize("tag, previous", [("--foo", ""), ("v9.9.9\nx", ""), ("v9.9", ""), ("v9.9.9", "v1.0"),
+                                           ("v9.9.9", "-x"), ("v9.9.8", "")])
+def test_publish_refuses_a_tag_the_build_job_made_up(doc, tmp_path, tag, previous):
+    need_tool("sha256sum")
+    good_dist(tmp_path)
+    r = run_check(doc, tmp_path, tag, previous)
+    assert r.returncode != 0 and "::error::" in r.stdout + r.stderr
+
+
+def test_publish_accepts_a_clean_dist_and_refuses_extra_files(doc, tmp_path):
+    need_tool("sha256sum")
+    dist = good_dist(tmp_path)
+    assert run_check(doc, tmp_path, previous="v9.9.8").returncode == 0
+    (dist / "extra.sh").write_text("x")
+    assert run_check(doc, tmp_path).returncode != 0
+    (dist / "extra.sh").unlink()
+    (dist / "link").symlink_to("install.sh")
+    assert run_check(doc, tmp_path).returncode != 0
+
+
 def test_publish_checks_the_checksums_and_fails_on_a_mismatch(doc, tmp_path):
     need_tool("sha256sum")
     s = step(doc, "Check the release assets against SHA256SUMS")
     assert names("publish").index(s["name"]) < names("publish").index("Check that the commit is green")
-    dist = tmp_path / "dist"
-    dist.mkdir()
-    (dist / "a.txt").write_text("a")
-    subprocess.run("sha256sum a.txt > SHA256SUMS", shell=True, cwd=dist, check=True)
-    ok = subprocess.run(["bash", "-c", s["run"]], cwd=tmp_path, capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
-    assert ok.returncode == 0, ok.stderr
-    (dist / "a.txt").write_text("tampered")
-    bad = subprocess.run(["bash", "-c", s["run"]], cwd=tmp_path, capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
+    dist = good_dist(tmp_path)
+    assert run_check(doc, tmp_path).returncode == 0
+    (dist / "install.sh").write_text("tampered")
+    bad = run_check(doc, tmp_path)
     assert bad.returncode != 0 and "::error::" in bad.stdout + bad.stderr
 
 
