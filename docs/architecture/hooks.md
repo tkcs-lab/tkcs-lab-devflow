@@ -286,7 +286,7 @@ record to the board once before it ends a turn. It is a nudge, not a control.
 - **State.** `<git dir>/tld/board-gate/<hash>.json`, named by a hash of the session id (`command`, `opened_at`,
   `written`, `blocked`); it lapses after 24 hours. No session id: nothing is written and nothing blocks.
 - **Fails open.** No board configured, a malformed `hooks.board_gate`, an unreadable state file, any error: allow. The hook
-  makes no network call. `enabled` is read from the working tree, `hooks.disable` from the trusted copy, and only on
+  never calls the board. `enabled` is read from the working tree, `hooks.disable` from the trusted copy, and only on
   `Stop`, so a malformed `hooks.disable` can never make it block.
 
 ## How the dod-gate recognises a session
