@@ -140,7 +140,7 @@ def test_fast_worker_level_needs_complexity_s(vm):
 
 def test_a_plan_record_in_touches_is_an_error(vm):
     def touching(path, **kw):
-        m = mutated(lambda m: m["phases"][0].update(touches=[path]))
+        m = mutated(lambda m: (m["phases"][0].update(touches=[path]), m.update(tracking_issue=14)))
         return vm.validate(m, **kw)[0]
     for bad in ("docs/plans/14/plan.md", "docs/plans/14/deviations.md", "./docs/plans/14/plan.md"):
         assert any("is a plan record" in e for e in touching(bad)), bad
@@ -150,7 +150,7 @@ def test_a_plan_record_in_touches_is_an_error(vm):
     for bad in ("docs/plans/*", "docs/plans/1*", "docs/pl*/14/plan.md", "docs/*/plan.md", "**/plan.md",
                 "*", "**", "docs/plans/14/**"):
         assert any("is a plan record" in e for e in touching(bad)), bad
-    for bad in ("**", "*", "docs/*/plan.md"):
+    for bad in ("**", "*", "docs/*/plan.md", "docs/demo/", "docs/14/", "docs/14/*", "docs/demo/*"):
         assert any("is a plan record" in e for e in touching(bad, plan_dir="docs")), bad
     assert touching("docs/adr/**", plan_dir="docs") == []
     assert touching("docs/", plan_dir="docs/plans") == []
@@ -166,6 +166,9 @@ def test_ref_must_be_main_or_the_feature_branch_or_the_legacy_plan_branch(vm, tm
     for ref in ("main", "feature/demo", "plan/demo"):
         assert vm.main([str(f), "--ref", ref]) == 0, ref
     assert "old-layout plan on 'plan/demo' (deprecated)" in capsys.readouterr().err
+    for empty in ("", "  "):
+        assert vm.main([str(f), "--ref", empty]) == 1
+    assert "--ref is empty" in capsys.readouterr().err
     assert vm.main([str(f), "--ref", "plan/other"]) == 1
     assert "the plan is on 'plan/other', but it may only be on 'main' or on its own feature branch 'feature/demo'" in capsys.readouterr().err
 

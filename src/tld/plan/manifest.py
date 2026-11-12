@@ -144,16 +144,20 @@ def find_cycle(phases: dict[str, list[str]]) -> list[str] | None:
     return None
 
 
-def _is_plan_record(entry: str, plan_dir: str, plan_slug: str = "") -> bool:
+def _is_plan_record(entry: str, plan_dir: str, known: tuple[str, ...] = ()) -> bool:
     """True when a touches entry grants write scope over <plan_dir>/<slug>/plan.md or deviations.md.
 
-    Judged with `path_matches`, the matcher that enforces scope, so globs (`docs/plans/*`, `**/plan.md`),
-    directory prefixes (`docs/plans/14/`), whitespace and `..` spellings count. A glob or directory counts only when it aims
-    at the plan records (its literal prefix is inside `plan_dir`, it ends in plan.md or deviations.md, or it is `*`/`**`);
-    a broad docs glob such as `docs/*.md` is left to the overlap check. The records tried are those of
-    this plan's slug, of a placeholder slug and of the slug the entry itself names. A bare `<plan_dir>/` entry
-    is left alone. Under a `plan_dir` of one segment (`docs/`) the slug named by the entry is not tried, so
-    `docs/adr/**` stays valid."""
+    `known` are the names a plan's record directory can have: its plan_slug and its tracking_issue number.
+    The entry is judged with `path_matches`, the matcher that enforces scope, so globs (`docs/plans/*`,
+    `**/plan.md`), directory prefixes (`docs/plans/14/`), whitespace and `..` spellings count. The records
+    tried are those of the known names, of a placeholder and of the name the entry itself gives (under a
+    `plan_dir` of two or more segments).
+
+    Left alone on purpose: `<plan_dir>/` and any directory above it (`docs/` for `docs/plans`), and a glob that
+    does not aim at the records (`docs/*.md`, `docs/adr/**` under a `plan_dir` of `docs`). A glob aims when its
+    literal prefix is inside `plan_dir` (two or more segments), starts with `<plan_dir>/<known name>/`, ends in
+    plan.md or deviations.md, or is `*`/`**`. Such broad entries are not caught here: the merge review of an
+    implement run is the control for them."""
     name = _norm(entry)
     if not name:
         return False
@@ -161,22 +165,23 @@ def _is_plan_record(entry: str, plan_dir: str, plan_slug: str = "") -> bool:
     wild = any(c in name for c in WILDCARDS)
     if not wild:
         name = posixpath.normpath(name) + ("/" if name.endswith("/") else "")
-    if name == base + "/":
-        return False
+    if (base + "/").startswith(name) and name.endswith("/"):
+        return False  # plan_dir/ itself or a strict ancestor of it
     if re.fullmatch(re.escape(base) + r"/[^/]+/(plan|deviations)\.md", name):
         return True
     def clean(seg: str) -> str:
         return re.sub(r"[*?\[\]]+", "a", seg)
     parts = name.split("/")
-    slugs = {plan_slug or "x", "x"}
+    slugs = {"x", *known}
     depth = len(base.split("/"))
     if depth >= 2 and len(parts) > depth:
         slugs.add(clean(parts[depth]))
     if len(parts) >= 2 and re.search(r"[A-Za-z]", parts[-1]):
         slugs.add(clean(parts[-2]))
-    if wild or name.endswith("/"):  # `docs/*.md` and `docs/` are ordinary docs phases: they count only when aimed
-        aims = ((depth >= 2 and _static_prefix(name).startswith(base + "/")) or parts[-1] in ("plan.md", "deviations.md")
-                or all(seg in ("*", "**") for seg in parts))
+    if wild:
+        prefix = _static_prefix(name)
+        aims = ((depth >= 2 and prefix.startswith(base + "/")) or any(prefix.startswith(f"{base}/{k}/") for k in known)
+                or parts[-1] in ("plan.md", "deviations.md") or all(seg in ("*", "**") for seg in parts))
         if not aims:
             return False
     return any(path_matches(f"{base}/{sl}/{f}", name) for sl in slugs for f in ("plan.md", "deviations.md"))
@@ -278,8 +283,10 @@ def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/pla
             errors.append(f"phase '{pid}': touches must be a list of paths")
         else:
             touches[pid] = t or []
+            known = tuple(str(v) for v in (manifest.get("plan_slug"), manifest.get("tracking_issue"))
+                          if v and not isinstance(v, bool))
             for entry in t or []:
-                if _is_plan_record(entry, plan_dir, str(manifest.get("plan_slug") or "")):
+                if _is_plan_record(entry, plan_dir, known):
                     errors.append(f"phase '{pid}': touches '{entry}' is a plan record; "
                                   "a phase never edits a plan or its deviations file")
         if "human_gate" in ph and not isinstance(ph["human_gate"], bool):
@@ -355,8 +362,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"manifest: {e}", file=sys.stderr)
     if errors:
         return 1
-    if args.ref:
-        ref = args.ref
+    if args.ref is not None:
+        ref = args.ref.strip()
+        if not ref:
+            print("manifest: --ref is empty", file=sys.stderr)
+            return 1
         if ref == "plan/" + manifest["plan_slug"]:
             print(f"manifest: old-layout plan on '{ref}' (deprecated)", file=sys.stderr)
         elif ref not in (main_branch, manifest["feature_branch"]):
