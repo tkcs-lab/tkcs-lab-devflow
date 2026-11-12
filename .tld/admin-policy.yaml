@@ -23,7 +23,7 @@ actions:
 rulesets:
   default_branch:
     required_status_checks: ["test (3.11)", "test (3.13)"]
-    admin_bypass: false
+    admin_bypass: true           # the one owner (admin role) may merge their own pull request; the agent (write) cannot
   tags: true
 agent:
   agent_login: andras-tkcs-agent
