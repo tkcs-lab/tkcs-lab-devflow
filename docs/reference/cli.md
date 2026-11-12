@@ -7,9 +7,9 @@ codes are those documented in the module's docstring. `tld --help` lists the com
 
 How to run it:
 
-- From a checkout: `launcher/tld ...` (puts `src/` on `sys.path`; Python 3.11+ and PyYAML).
+- From a checkout: `cli/tld ...` (puts `src/` on `sys.path`; Python 3.11+ and PyYAML).
 - Installed: `pip install .` gives the console script `tld`.
-- In the Claude Code plugin: `"${CLAUDE_PLUGIN_ROOT}/launcher/tld" ...` (the plugin is sourced from the repository
+- In the Claude Code plugin: `"${CLAUDE_PLUGIN_ROOT}/cli/tld" ...` (the plugin is sourced from the repository
   root). The hooks run `adapters/claude/hooks/<name>.py`, thin shims over the same modules.
 
 The playbooks call these commands as `tld ...`; `tests/core/test_contracts.py` checks that every call in

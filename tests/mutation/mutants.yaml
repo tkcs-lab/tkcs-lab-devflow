@@ -400,9 +400,9 @@ mutants:
   new: "    names = positional[:1]"
 - id: IN4
   file: src/tld/guard/integrity.py
-  why: any $X/launcher/tld exempt from the run-time command check
-  old: "    if stripped not in PLUGIN_LAUNCHERS:\n        return False"
-  new: "    if not stripped.endswith(\"/launcher/tld\"):\n        return False"
+  why: any $X/cli/tld exempt from the run-time command check
+  old: "    if stripped not in PLUGIN_CLI_PATHS:\n        return False"
+  new: "    if not stripped.endswith(\"/cli/tld\"):\n        return False"
 - id: IN5
   file: src/tld/guard/integrity.py
   why: shell writes into .git/refs allowed for the destructive guards

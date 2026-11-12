@@ -30,6 +30,27 @@ page or a tool result). Two layers, with different jobs:
 Not in scope of the design: sessions without the plugin, a person at a terminal, a compromised owner account, and
 the security of the runtime itself.
 
+## The curl installer
+
+`install.sh` (the curl line in [docs/guides/delivery.md](docs/guides/delivery.md)) downloads the release wheel
+and checks it against `SHA256SUMS`. That file comes from the same release over the same TLS connection, so the check
+shows integrity (a corrupt or truncated download), not authenticity (a tampered release). `install.sh` itself is
+unverified, as with every `curl | sh`, and neither it nor `compose.yaml` is signed. PyYAML is installed from PyPI
+without a hash. The release workflow's isolated build installs the setuptools of `[build-system]` in pyproject.toml (a
+lower bound only) without hashes, and `pip install build` pulls unpinned dependencies, so a compromise there reaches
+users through a correctly checksummed wheel. Releases should be made immutable (the owner
+enables this once before the first release, see CONTRIBUTING.md), so assets cannot be replaced after publishing,
+and the compose file pins the board image by digest because a ghcr tag can be overwritten. The digest pin protects
+against a moved tag, not against a tampered release; the image is not signed.
+
+The release workflow has two jobs, both behind the `tld-release` environment, where the owner approves every run.
+The `build` job runs the third-party build code (pip, setuptools, the docker actions, QEMU, whose binfmt image is
+pinned by digest); it holds `packages: write` (to push the image), the one exception to the read-only workflow
+token, and never references `TLD_RELEASE_TOKEN`. The `publish` job holds that owner token, which can create tags,
+and the read-only token only; it runs `gh` and the shell, with no third-party build code on that runner. It checks
+the downloaded `dist/` against `SHA256SUMS`, which catches a corrupt transfer but not a compromised `build` job,
+since that job wrote the sums.
+
 ## What a report can be about
 
 - A way past a GitHub-side control that tld sets up or documents (a ruleset, environment or workflow that lets an

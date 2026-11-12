@@ -4,4 +4,4 @@ description: Audit and update a GitHub organisation and its repositories against
 ---
 
 Follow `${CLAUDE_PLUGIN_ROOT}/playbooks/repo-admin.md`. Load the `tld:runtime` skill first and map every runtime action
-the playbook names with it; its `tld ...` commands run as `"${CLAUDE_PLUGIN_ROOT}/launcher/tld" ...`.
+the playbook names with it; its `tld ...` commands run as `"${CLAUDE_PLUGIN_ROOT}/cli/tld" ...`.

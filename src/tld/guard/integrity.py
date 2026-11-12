@@ -36,17 +36,17 @@ GUARD_REF_PREFIXES = ("refs/tld/", "refs/replace/")
 GIT_DIR_PARTS = ("refs", "packed-refs", "objects", "info", "hooks", "config", "tld", "shallow")
 
 
-PLUGIN_LAUNCHERS = ("${CLAUDE_PLUGIN_ROOT}/launcher/tld", "$CLAUDE_PLUGIN_ROOT/launcher/tld")
+PLUGIN_CLI_PATHS = ("${CLAUDE_PLUGIN_ROOT}/cli/tld", "$CLAUDE_PLUGIN_ROOT/cli/tld")
 
 
-def is_tld_launcher(word: str, command: str = "") -> bool:
-    """The toolkit's own launcher, which the commands call: `"${CLAUDE_PLUGIN_ROOT}/launcher/tld"` (also written
-    `"${CLAUDE_PLUGIN_ROOT}"/launcher/tld` or `$CLAUDE_PLUGIN_ROOT/launcher/tld`) or a bare `tld`. Not any other `$X/.../tld`,
+def is_tld_cli(word: str, command: str = "") -> bool:
+    """The toolkit's own CLI script, which the commands call: `"${CLAUDE_PLUGIN_ROOT}/cli/tld"` (also written
+    `"${CLAUDE_PLUGIN_ROOT}"/cli/tld` or `$CLAUDE_PLUGIN_ROOT/cli/tld`) or a bare `tld`. Not any other `$X/.../tld`,
     and not when the same command line assigns CLAUDE_PLUGIN_ROOT itself."""
     stripped = word.strip("\"'")
     if stripped == "tld":
         return True
-    if stripped not in PLUGIN_LAUNCHERS:
+    if stripped not in PLUGIN_CLI_PATHS:
         return False
     rest = command.replace("${CLAUDE_PLUGIN_ROOT}", "").replace("$CLAUDE_PLUGIN_ROOT", "")
     return "CLAUDE_PLUGIN_ROOT" not in rest
@@ -56,7 +56,7 @@ def dynamic_command(command: str) -> str | None:
     """S3: the command name is a run-time value and the rest looks like a git/gh write."""
     for _, cmd in walk_commands(command):
         words = cmd.words
-        if not words or not is_dynamic(words[0]) or is_tld_launcher(words[0], command):
+        if not words or not is_dynamic(words[0]) or is_tld_cli(words[0], command):
             continue
         rest = {w for w in words[1:] if not is_dynamic(w)}
         hit = rest & WRITE_WORDS

