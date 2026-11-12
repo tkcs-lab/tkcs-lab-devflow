@@ -51,4 +51,4 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Finishing
 
-- pending
+- final: Scope disposition: fix-1 and fix-2 edits to files of other phases accepted; p1 scope check skipped (ran after the local merge). dod: suite 4022 passed with the one owner-chosen deselect (plan.md broken relative links, owner never chose between fix_link and deselect after the first answer deselect; the later fix_link message was held because fixing needs three plan lines and a re-pin); docs index 0 errors and 9 warnings, all in docs/plans/33/plan.md; baseline current. No board record written (the
