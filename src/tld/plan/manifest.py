@@ -144,32 +144,42 @@ def find_cycle(phases: dict[str, list[str]]) -> list[str] | None:
     return None
 
 
-def _is_plan_record(entry: str, plan_dir: str) -> bool:
+def _is_plan_record(entry: str, plan_dir: str, plan_slug: str = "") -> bool:
     """True when a touches entry grants write scope over <plan_dir>/<slug>/plan.md or deviations.md.
 
-    The entry is read the way the scope matcher reads it (whitespace stripped, globs and directory prefixes
-    allowed), so `docs/plans/14/*.md`, `docs/plans/**`, `docs/plans/14/` and `src/../docs/plans/14/plan.md` count.
-    A bare `<plan_dir>/` entry is left alone, and the glob and directory spellings are only checked when
-    plan_dir is at least two segments deep."""
-    name = entry.strip()
-    if name.startswith("./"):
-        name = name[2:]
-    trailing = name.endswith("/")
-    name = posixpath.normpath(name) if name else name
-    base = plan_dir.rstrip("/").split("/")
+    Judged with `path_matches`, the matcher that enforces scope, so globs (`docs/plans/*`, `**/plan.md`),
+    directory prefixes (`docs/plans/14/`), whitespace and `..` spellings count. A glob counts only when it aims
+    at the plan records (its literal prefix is inside `plan_dir`, it ends in plan.md or deviations.md, or it is `*`/`**`);
+    a broad docs glob such as `docs/*.md` is left to the overlap check. The records tried are those of
+    this plan's slug, of a placeholder slug and of the slug the entry itself names. A bare `<plan_dir>/` entry
+    is left alone. Under a `plan_dir` of one segment (`docs/`) the slug named by the entry is not tried, so
+    `docs/adr/**` stays valid."""
+    name = _norm(entry)
+    if not name:
+        return False
+    base = plan_dir.rstrip("/")
+    wild = any(c in name for c in WILDCARDS)
+    if not wild:
+        name = posixpath.normpath(name) + ("/" if name.endswith("/") else "")
+    if name == base + "/":
+        return False
+    if re.fullmatch(re.escape(base) + r"/[^/]+/(plan|deviations)\.md", name):
+        return True
+    def clean(seg: str) -> str:
+        return re.sub(r"[*?\[\]]+", "a", seg)
     parts = name.split("/")
-    if parts[:len(base)] != base:
-        return False
-    rem = parts[len(base):]
-    if re.fullmatch(r"[^/]+/(plan|deviations)\.md", "/".join(rem)):
-        return True
-    if len(base) < 2:  # plans directly under a shared dir such as docs/: globs there would ban unrelated docs
-        return False
-    if rem[:1] == ["**"]:
-        return True
-    if len(rem) == 2 and any(fnmatch.fnmatchcase(f, rem[1]) for f in ("plan.md", "deviations.md")):
-        return any(c in rem[1] for c in WILDCARDS)
-    return len(rem) == 1 and trailing and rem[0] not in ("", ".") and not rem[0].endswith(".md")
+    slugs = {plan_slug or "x", "x"}
+    depth = len(base.split("/"))
+    if depth >= 2 and len(parts) > depth:
+        slugs.add(clean(parts[depth]))
+    if len(parts) >= 2 and re.search(r"[A-Za-z]", parts[-1]):
+        slugs.add(clean(parts[-2]))
+    if wild:  # `docs/*.md` is an ordinary docs phase: a glob counts only when it aims at the plan records
+        aims = ((depth >= 2 and _static_prefix(name).startswith(base + "/")) or parts[-1] in ("plan.md", "deviations.md")
+                or all(seg in ("*", "**") for seg in parts))
+        if not aims:
+            return False
+    return any(path_matches(f"{base}/{sl}/{f}", name) for sl in slugs for f in ("plan.md", "deviations.md"))
 
 
 def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/plans") -> tuple[list[str], list[str]]:
@@ -269,7 +279,7 @@ def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/pla
         else:
             touches[pid] = t or []
             for entry in t or []:
-                if _is_plan_record(entry, plan_dir):
+                if _is_plan_record(entry, plan_dir, str(manifest.get("plan_slug") or "")):
                     errors.append(f"phase '{pid}': touches '{entry}' is a plan record; "
                                   "a phase never edits a plan or its deviations file")
         if "human_gate" in ph and not isinstance(ph["human_gate"], bool):
