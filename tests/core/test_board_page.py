@@ -51,6 +51,16 @@ def test_login_poll_and_answer_an_ask_in_a_browser(tmp_path):
         assert result.stdout.strip() == "OK"
 
 
+@pytest.mark.slow
+def test_cards_are_per_document_and_tagged_with_the_session_tail(tmp_path):
+    need_browser()
+    with running(tmp_path) as srv:
+        result = subprocess.run(["node", str(ROOT / "tests" / "board_cards_check.js"), base(srv), WRITE, PASSPHRASE],
+                                capture_output=True, text=True, timeout=120)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert result.stdout.strip() == "OK"
+
+
 def test_links_dismiss_and_restore_in_a_browser(tmp_path):
     need_browser()
     with running(tmp_path) as srv:

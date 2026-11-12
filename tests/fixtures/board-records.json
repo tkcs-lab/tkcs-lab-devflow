@@ -1,6 +1,6 @@
 [
   {
-    "id": "f-starting",
+    "id": "f-starting--run--plan-f-starting",
     "data": {
       "schema": 1,
       "kind": "run",
@@ -43,7 +43,7 @@
     }
   },
   {
-    "id": "f-running-ok",
+    "id": "f-running-ok--run--plan-f-running-ok",
     "data": {
       "schema": 1,
       "kind": "run",
@@ -111,7 +111,7 @@
     }
   },
   {
-    "id": "f-running-silent",
+    "id": "f-running-silent--run--plan-f-running-silent",
     "data": {
       "schema": 1,
       "kind": "run",
@@ -154,7 +154,7 @@
     }
   },
   {
-    "id": "f-running-nocheck",
+    "id": "f-running-nocheck--run--plan-f-running-nocheck",
     "data": {
       "schema": 1,
       "kind": "run",
@@ -197,7 +197,7 @@
     }
   },
   {
-    "id": "f-waiting",
+    "id": "f-waiting--run--plan-f-waiting",
     "data": {
       "schema": 1,
       "kind": "run",
@@ -240,7 +240,7 @@
     }
   },
   {
-    "id": "f-reviewing",
+    "id": "f-reviewing--run--plan-f-reviewing",
     "data": {
       "schema": 1,
       "kind": "run",
@@ -291,7 +291,7 @@
     }
   },
   {
-    "id": "f-pr-open",
+    "id": "f-pr-open--run--plan-f-pr-open",
     "data": {
       "schema": 1,
       "kind": "run",
@@ -334,7 +334,7 @@
     }
   },
   {
-    "id": "f-done-recent",
+    "id": "f-done-recent--run--plan-f-done-recent",
     "data": {
       "schema": 1,
       "kind": "run",
@@ -377,7 +377,7 @@
     }
   },
   {
-    "id": "f-done-old",
+    "id": "f-done-old--run--plan-f-done-old",
     "data": {
       "schema": 1,
       "kind": "run",
@@ -420,7 +420,7 @@
     }
   },
   {
-    "id": "f-failed",
+    "id": "f-failed--run--plan-f-failed",
     "data": {
       "schema": 1,
       "kind": "run",
@@ -463,7 +463,7 @@
     }
   },
   {
-    "id": "f-stale-quiet",
+    "id": "f-stale-quiet--run--plan-f-stale-quiet",
     "data": {
       "schema": 1,
       "kind": "run",
@@ -506,7 +506,7 @@
     }
   },
   {
-    "id": "f-stale-needs",
+    "id": "f-stale-needs--run--plan-f-stale-needs",
     "data": {
       "schema": 1,
       "kind": "run",
@@ -590,6 +590,49 @@
       "next_check_at": null,
       "finished_at": null,
       "updated_at": "2026-11-09T04:20:00Z"
+    }
+  },
+  {
+    "id": "f-legacy-needs",
+    "data": {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "f-legacy-needs",
+      "repo": "example-org/f-legacy-needs",
+      "plan_slug": "plan-f-legacy-needs",
+      "plan_url": "https://example.com/example-org/f-legacy-needs/blob/plan/docs/plan.md",
+      "feature_branch": "feature/plan-f-legacy-needs",
+      "orchestrator_session": "session_f-legacy-needs",
+      "attended": true,
+      "status": "waiting_user",
+      "needs_you": true,
+      "needs_you_reason": "Answer the open question about scope",
+      "needs_you_since": "2026-11-01T12:00:00Z",
+      "phases": [
+        {
+          "id": "p1",
+          "title": "Phase one",
+          "depends_on": [],
+          "complexity": "S",
+          "state": "running",
+          "session": null,
+          "branch": null,
+          "started_at": null,
+          "finished_at": null
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "waiting_user",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-06T12:00:00Z"
     }
   }
 ]
