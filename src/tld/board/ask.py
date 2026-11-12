@@ -19,7 +19,7 @@ import json
 import re
 import sys
 
-from tld.board.record import COMMANDS, DOC_ID_RE, REPO, SLUG, TIMESTAMP, project_slug
+from tld.board.record import DOC_ID_RE, REPO, SLUG, TIMESTAMP, owns_doc_id, project_slug
 
 FIELDS = ("schema", "kind", "id", "project", "repo", "title", "created_by", "context_url", "questions",
           "state", "answers", "created_at", "answered_at", "fallback_issue", "record")
@@ -153,8 +153,8 @@ def _check(ask, errors: list[str]) -> None:
         errors.append("'fallback_issue' must be null, owner/repo or owner/repo#<n>")
     record = ask.get("record")
     if "record" in ask and record is not None:
-        allowed = {project} | {f"{project}--{c}" for c in COMMANDS} if isinstance(project, str) and SLUG.match(project) else None
-        if not (isinstance(record, str) and DOC_ID_RE.match(record) and (allowed is None or record in allowed)):
+        valid_project = isinstance(project, str) and SLUG.match(project)
+        if not (isinstance(record, str) and (owns_doc_id(project, record) if valid_project else DOC_ID_RE.match(record))):
             errors.append("'record' must be null, the project slug, or '<project>--<command>'")
     questions = ask.get("questions")
     if "questions" in ask:

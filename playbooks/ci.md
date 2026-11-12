@@ -23,7 +23,7 @@ the defaults.
 - **Time budget.** Note the start time. Start no new workflow after 80% of `ci.time_budget_minutes` has passed:
   mark the unstarted ones `pending` and set `needs_you` with `Run ci again: time budget used`.
 - **Status record** ([policies/status-board.md](policies/status-board.md)): `kind: command`, `command: ci`,
-  document id `<project>--ci`, `attended: false`, one item per failing workflow.
+  document id from `tld board record-id --repo <owner>/<repo> --command ci --unattended`, `attended: false`, one item per failing workflow.
 
 ## 1. Find the failing workflows
 

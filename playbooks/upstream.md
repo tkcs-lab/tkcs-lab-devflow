@@ -23,7 +23,7 @@ upstream, not the fork), `upstream.tag_pattern` and `upstream.version_file`; a m
   list each open question under `Open research questions:` in the final report and go on without it.
 - **Never merge.** Do not merge, approve or enable auto-merge on any pull request.
 - **Status record** ([policies/status-board.md](policies/status-board.md)): `kind: command`,
-  `command: upstream`, document id `<project>--upstream`, `attended: false`, one item for the sync; written first
+  `command: upstream`, document id from `tld board record-id --repo <owner>/<repo> --command upstream --unattended`, `attended: false`, one item for the sync; written first
   (`starting`), at every state change and at the end.
 
 ## 1. Find the release

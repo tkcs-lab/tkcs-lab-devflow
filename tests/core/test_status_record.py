@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import sys
 
@@ -87,7 +88,8 @@ def test_attended_replaces_the_scheduled_literal():
 
 @pytest.mark.parametrize("command", ["review", "make-plan"])
 def test_review_and_make_plan_write_records(command):
-    result = setup_record("--doc-id", f"tkcs-lab-devflow--{command}", command=command)
+    # setup_record's session id is "session_01abc": its tail is "ion01abc"
+    result = setup_record("--doc-id", f"tkcs-lab-devflow--{command}--ion01abc", command=command)
     assert result.returncode == 0, result.stdout
 
 
@@ -109,13 +111,13 @@ def test_pr_open_is_a_final_state():
 
 
 def test_doc_id_for_setup():
-    assert setup_record("--doc-id", "tkcs-lab-devflow--setup").returncode == 0
+    assert setup_record("--doc-id", "tkcs-lab-devflow--setup--ion01abc").returncode == 0
     wrong = setup_record("--doc-id", "tkcs-lab-devflow--deps")
     assert wrong.returncode == 1 and "--doc-id" in wrong.stdout
 
 
 def test_doc_id_for_run():
-    assert run(RECORDS / "good-run.json", "--doc-id", "tkcs-lab-devflow").returncode == 0
+    assert run(RECORDS / "good-run.json", "--doc-id", "tkcs-lab-devflow--run--example-plan").returncode == 0
     assert run(RECORDS / "good-run.json", "--doc-id", "tkcs-lab-devflow--deps").returncode == 1
 
 
@@ -247,3 +249,192 @@ def test_the_old_kind_maintenance_is_refused():
     """The record kind for every command but implement is `command`; nothing reads the old name."""
     result = command_record(kind="maintenance")
     assert result.returncode == 1 and "'kind' must be 'run' or 'command'" in result.stdout
+
+
+# --- document ids per run and per session (tld board record-id) ----------------------------------
+
+import tld  # noqa: E402
+
+REC = _load("tld.board.record")
+LONG_MESSAGE = "'project' is too long for a document id"
+SHORT_MESSAGE = "'orchestrator_session' needs at least 6 letters or digits to key an attended command record"
+SESSION = "session_01ABcdEFghIJkl"
+
+
+def rec_of(kind="command", command="make-plan", project="tkcs-lab-devflow", plan_slug=None, attended=True, session=SESSION):
+    return {"project": project, "kind": kind, "command": None if kind == "run" else command,
+            "plan_slug": plan_slug, "attended": attended, "orchestrator_session": session}
+
+
+def run_id(plan_slug, project="p"):
+    return REC.doc_id(rec_of("run", project=project, plan_slug=plan_slug))
+
+
+def record_id(*args):
+    return subprocess.run([*tld_cmd("board", "record-id"), *args], capture_output=True, text=True)
+
+
+def test_run_id_uses_the_plan_slug():
+    assert REC.doc_id(rec_of("run", plan_slug="stale-needs-you-cards")) == "tkcs-lab-devflow--run--stale-needs-you-cards"
+
+
+def test_attended_command_id_uses_the_session_tail():
+    assert REC.doc_id(rec_of()) == "tkcs-lab-devflow--make-plan--efghijkl"
+
+
+def test_unattended_command_id_is_unchanged():
+    assert REC.doc_id(rec_of(command="deps", attended=False, session=None)) == "tkcs-lab-devflow--deps"
+    assert REC.doc_id(rec_of(command="deps", attended=False, session="session_01abc")) == "tkcs-lab-devflow--deps"
+
+
+def test_plan_slug_is_made_safe():
+    assert run_id("Plan_X  y!") == "p--run--plan-x-y"
+    assert run_id("") == "p--run--plan"
+    assert run_id("---") == "p--run--plan"
+    assert run_id(None) == "p--run--plan"
+
+
+def test_plan_slug_at_the_limit_is_not_cut():
+    prefix = "p--run--"
+    plan = "a" * (100 - len(prefix))
+    assert run_id(plan) == prefix + plan and len(run_id(plan)) == 100
+
+
+def test_plan_slug_one_over_the_limit_is_cut():
+    prefix = "p--run--"
+    result = run_id("a" * (101 - len(prefix)))
+    assert len(result) == 100 and REC.DOC_ID_RE.match(result)
+    assert re.fullmatch(r"p--run--a+-[0-9a-f]{8}", result)
+
+
+def test_two_long_slugs_with_one_prefix_get_two_ids():
+    first, second = run_id("a" * 100 + "x" * 50), run_id("a" * 100 + "y" * 50)
+    assert first != second and len(first) == len(second) == 100
+    assert REC.DOC_ID_RE.match(first) and REC.DOC_ID_RE.match(second)
+
+
+def test_long_project_is_an_error():
+    project = "a" * 95
+    for rec in (rec_of("run", project=project, plan_slug="x"), rec_of(project=project, command="deps", attended=False)):
+        with pytest.raises(ValueError, match=re.escape(LONG_MESSAGE)):
+            REC.doc_id(rec)
+    with pytest.raises(ValueError, match=re.escape(LONG_MESSAGE)):  # no room for a cut plan and its hash
+        REC.doc_id(rec_of("run", project="a" * 85, plan_slug="b" * 60))
+    assert len(REC.doc_id(rec_of("run", project="a" * 85, plan_slug="b"))) == 93
+    with pytest.raises(ValueError, match=re.escape(LONG_MESSAGE)):
+        REC.doc_id(rec_of(project="a" * 87))  # 87 + "--make-plan--" + 8 = 108
+
+
+def test_six_character_tail_is_enough():
+    assert REC.doc_id(rec_of(session="ab-cd_ef")) == "tkcs-lab-devflow--make-plan--abcdef"
+
+
+def test_five_character_tail_is_an_error():
+    with pytest.raises(ValueError, match=re.escape(SHORT_MESSAGE)):
+        REC.doc_id(rec_of(session="ab-cd_e"))
+    with pytest.raises(ValueError, match=re.escape(SHORT_MESSAGE)):
+        REC.doc_id(rec_of(session=None))
+
+
+def test_run_is_not_a_command():
+    assert "run" not in REC.COMMANDS
+
+
+def test_two_runs_get_two_ids():
+    assert run_id("first-plan") != run_id("second-plan")
+
+
+def test_legacy_ids_are_still_accepted():
+    assert setup_record("--doc-id", "tkcs-lab-devflow--setup").returncode == 0
+    assert run(RECORDS / "good-run.json", "--doc-id", "tkcs-lab-devflow").returncode == 0
+    third = setup_record("--doc-id", "tkcs-lab-devflow")
+    assert third.returncode == 1 and "'--doc-id'" in third.stdout
+    third = run(RECORDS / "good-run.json", "--doc-id", "tkcs-lab-devflow--run")
+    assert third.returncode == 1 and "'--doc-id'" in third.stdout
+
+
+def test_unattended_command_has_no_legacy_id():
+    assert REC.legacy_ids(rec_of(command="deps", attended=False, session=None)) == ()
+    assert REC.legacy_ids(rec_of()) == ("tkcs-lab-devflow--make-plan",)
+    assert REC.legacy_ids(rec_of("run", plan_slug="x")) == ("tkcs-lab-devflow",)
+    assert command_record("--doc-id", "tkcs-lab-devflow--deps").returncode == 0
+
+
+def test_wrong_id_gets_the_message_of_3_1():
+    result = run(RECORDS / "good-run.json", "--doc-id", "tkcs-lab-devflow--run--other")
+    assert result.returncode == 1
+    assert ("status-record: '--doc-id' is 'tkcs-lab-devflow--run--other' but the document id of this record is "
+            "'tkcs-lab-devflow--run--example-plan'") in result.stdout
+    short = setup_record("--doc-id", "tkcs-lab-devflow--setup--abcdefgh", orchestrator_session="ab")
+    assert short.returncode == 1 and f"status-record: {SHORT_MESSAGE}" in short.stdout
+
+
+def test_broken_record_gets_no_id_error():
+    rec = json.loads((RECORDS / "good-run.json").read_text())
+    del rec["project"]
+    result = run("-", "--doc-id", "x", stdin=json.dumps(rec))
+    assert result.returncode == 1 and "'--doc-id'" not in result.stdout
+    for change in ({"kind": "maintenance"}, {"project": "A b"}, {"project": "a--b"}):
+        result = run("-", "--doc-id", "x", stdin=json.dumps({**json.loads((RECORDS / "good-run.json").read_text()), **change}))
+        assert result.returncode == 1 and "'--doc-id'" not in result.stdout
+    result = command_record("--doc-id", "x", command="nope")
+    assert result.returncode == 1 and "'--doc-id'" not in result.stdout
+
+
+def test_validate_without_doc_id_ignores_the_tail():
+    assert setup_record(orchestrator_session="ab").returncode == 0
+
+
+def test_attended_record_rewritten_by_a_new_session():
+    old = REC.doc_id(rec_of(command="setup", session="session_01abc"))
+    assert setup_record("--doc-id", old).returncode == 0
+    result = setup_record("--doc-id", old, orchestrator_session="session_01xyzxyz")
+    assert result.returncode == 1
+    assert (f"status-record: '--doc-id' is '{old}' but the document id of this record is "
+            "'tkcs-lab-devflow--setup--01xyzxyz'") in result.stdout
+
+
+def test_owns_doc_id():
+    for good in ("p", "p--run--x", "p--deps", "p--make-plan--abcdefgh"):
+        assert REC.owns_doc_id("p", good), good
+    for bad in ("p--run--", "p--run", "p--nope--abcdefgh", "q--run--x", "p--deps--a--b", "p--run--a--b", "",
+                "P--run--x", "p--run--" + "x" * 93):
+        assert not REC.owns_doc_id("p", bad), bad
+    assert len("p--run--" + "x" * 93) == 101
+
+
+def test_record_id_cli():
+    repo = ["--repo", "tkcs-lab/tkcs-lab-devflow"]
+    ok = record_id(*repo, "--run", "--plan-slug", "stale-needs-you-cards")
+    assert (ok.returncode, ok.stdout) == (0, "tkcs-lab-devflow--run--stale-needs-you-cards\n")
+    ok = record_id(*repo, "--command", "make-plan", "--session", SESSION)
+    assert (ok.returncode, ok.stdout) == (0, "tkcs-lab-devflow--make-plan--efghijkl\n")
+    ok = record_id(*repo, "--command", "deps", "--unattended")
+    assert (ok.returncode, ok.stdout) == (0, "tkcs-lab-devflow--deps\n")
+    for args in (
+        [*repo, "--run"],
+        [*repo, "--command", "x"],
+        [*repo, "--command", "make-plan"],
+        [*repo, "--run", "--command", "make-plan"],
+        [*repo, "--command", "make-plan", "--session", SESSION, "--unattended"],
+        ["--repo", "no-slash", "--command", "deps", "--unattended"],
+        [*repo, "--command", "nope", "--unattended"],
+        [*repo, "--command", "make-plan", "--session", "abc"],
+        [*repo],
+    ):
+        bad = record_id(*args)
+        assert bad.returncode == 1 and bad.stdout == "" and bad.stderr.startswith("status-record: "), (args, bad.stderr)
+
+
+def window_over(version):
+    return tuple(int(x) for x in version.split(".")[:3]) >= (1, 2, 0)
+
+
+def test_version_compare_reads_two_digit_parts():
+    assert window_over("1.10.0") and window_over("1.2.0") and window_over("2.0.0")
+    assert not window_over("1.1.9") and not window_over("1.0.0")
+
+
+def test_legacy_window_ends():
+    assert REC.LEGACY_UNTIL == "1.2.0"
+    assert not window_over(tld.__version__), "remove LEGACY_UNTIL and legacy_ids from tld.board.record"

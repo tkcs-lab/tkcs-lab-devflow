@@ -22,15 +22,16 @@ import claude_adapter  # noqa: E402  (the Claude adapter: event JSON -> Action -
 # hook name -> entry script stem in adapters/claude/hooks/
 MODULES = {"no-merge": "no_merge", "no-force-push": "no_force_push", "no-git-tag": "no_git_tag",
            "secret-scan": "secret_scan", "protect-paths": "protect_paths", "dod-gate": "dod_gate",
-           "plan-gate": "plan_gate", "model-check": "model_check"}
+           "plan-gate": "plan_gate", "model-check": "model_check", "board-gate": "board_gate"}
 # hook name -> core module that holds its policy
 CORE = {"no-merge": "tld.guard.no_merge", "no-force-push": "tld.guard.no_force_push",
         "no-git-tag": "tld.guard.no_git_tag", "secret-scan": "tld.guard.secret_scan",
         "protect-paths": "tld.guard.protect_paths", "dod-gate": "tld.dod.gate",
-        "plan-gate": "tld.guard.plan_gate", "model-check": "tld.guard.model_check"}
+        "plan-gate": "tld.guard.plan_gate", "model-check": "tld.guard.model_check",
+        "board-gate": "tld.guard.board_gate"}
 FAIL_CLOSED = {"no-merge": True, "no-force-push": True, "no-git-tag": True, "secret-scan": False,
                "protect-paths": False, "dod-gate": False, "plan-gate": False,
-               "model-check": False}
+               "model-check": False, "board-gate": False}
 BASH_GUARDS = ("no-merge", "no-force-push", "no-git-tag", "protect-paths")
 PROFILE = "git:\n  main_branch: main\n  branch_pattern: \"<type>/<kebab-case>\"\n"
 

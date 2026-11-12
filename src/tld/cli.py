@@ -48,6 +48,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("board", "build"): ("tld.board.build", (), "build the self-contained board page"),
     ("board", "validate-record"): ("tld.board.record", (), "validate a status record"),
     ("board", "project-slug"): ("tld.board.record", ("project-slug",), "the project slug of owner/name"),
+    ("board", "record-id"): ("tld.board.record", ("record-id",), "the document id of a status record"),
     ("board", "validate-ask"): ("tld.board.ask", (), "validate an ask before posting it"),
     ("board", "ask"): ("tld.board.inbox", ("ask",), "post an ask to the owner's inbox; prints its id"),
     ("board", "answers"): ("tld.board.inbox", ("answers",), "print an ask's answers (or read them from an issue)"),

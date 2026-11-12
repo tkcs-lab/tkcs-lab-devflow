@@ -1,0 +1,126 @@
+[
+  {
+    "id": "p--make-plan--efghijkl",
+    "data": {
+      "schema": 1,
+      "kind": "command",
+      "command": "make-plan",
+      "project": "p",
+      "repo": "example-org/p",
+      "plan_slug": null,
+      "plan_url": null,
+      "feature_branch": null,
+      "orchestrator_session": "session_01ABcdEFghIJkl",
+      "attended": true,
+      "status": "running",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "running",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-09T12:00:00Z"
+    }
+  },
+  {
+    "id": "p--make-plan--xxwwvvuu",
+    "data": {
+      "schema": 1,
+      "kind": "command",
+      "command": "make-plan",
+      "project": "p",
+      "repo": "example-org/p",
+      "plan_slug": null,
+      "plan_url": null,
+      "feature_branch": null,
+      "orchestrator_session": "session_01ZZyyXXwwVVuu",
+      "attended": true,
+      "status": "running",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "running",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-09T12:00:00Z"
+    }
+  },
+  {
+    "id": "p--deps",
+    "data": {
+      "schema": 1,
+      "kind": "command",
+      "command": "deps",
+      "project": "p",
+      "repo": "example-org/p",
+      "plan_slug": null,
+      "plan_url": null,
+      "feature_branch": null,
+      "orchestrator_session": null,
+      "attended": false,
+      "status": "running",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "running",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-09T12:00:00Z"
+    }
+  },
+  {
+    "id": "p--make-plan",
+    "data": {
+      "schema": 1,
+      "kind": "command",
+      "command": "make-plan",
+      "project": "p",
+      "repo": "example-org/p",
+      "plan_slug": null,
+      "plan_url": null,
+      "feature_branch": null,
+      "orchestrator_session": "ab",
+      "attended": true,
+      "status": "running",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "running",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-09T12:00:00Z"
+    }
+  }
+]

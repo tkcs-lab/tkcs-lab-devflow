@@ -96,7 +96,7 @@ with `tld board validate-ask <file>`):
 first with ` (recommended)` in its label; a `confirm` is answered yes or no; a `text` is free text. A question
 is required unless `required` is `false`. At most 30 questions, each text at most 2000 characters and shown as
 plain text. Never put a secret in an ask. `record` is the document id of the status record the playbook writes
-(the project slug for a run, `<project>--<command>` for a command); leave it out when the playbook writes none.
+(the id the playbook's Status record line names); leave it out when the playbook writes none.
 The page shows one card while the ask is open (the ask card; the record's card is hidden) and `answer received`
 on the record after the owner answers. Steps, in order:
 

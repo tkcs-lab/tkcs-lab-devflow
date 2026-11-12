@@ -22,7 +22,7 @@ a `failed` record with `needs_you` when a board exists.
   `deps.time_budget_minutes` has passed: mark the unstarted groups `pending` and set `needs_you` with
   `Run deps again: time budget used`.
 - **Status record** ([policies/status-board.md](policies/status-board.md)): `kind: command`,
-  `command: deps`, document id `<project>--deps`, `attended: false`, items the update groups.
+  `command: deps`, document id from `tld board record-id --repo <owner>/<repo> --command deps --unattended`, `attended: false`, items the update groups.
 
 ## 1. Pre-check
 

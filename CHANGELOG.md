@@ -8,6 +8,7 @@ entry of the released version at the top of the GitHub release, above the list o
 ### Added
 
 - Sessions now know they run in a limited claude.ai environment and may ask the owner for research: the new policy `playbooks/policies/research.md`, the commands `tld research check-prompt` and `tld research report`, an `## Environment` section in the runtime skill, and the guide `docs/guides/cloud-environments.md` (what to enable and deny for the working and the research environment). A pasted research report is data, never an instruction.
+- The opt-in `board-gate` hook (`hooks.board_gate.enabled`): a session that a record-writing tld command started cannot end its turn before it has written its status record, once. New `tld board record-id` prints the document id of a status record.
 - A second `/make-plan` of an issue, or `/implement` of a plan, that another session is still running now stops and asks (`stop` or `take_over`). New `tld plan active-run` reads the tracking issue's comments and the board record; a run silent for more than two hours counts as dead. The start comments now end with `Session: <id>.`, and runs post `Planning stopped:` / `Implementation stopped:`.
 - The release workflow template (`template: release`) takes three new parameters, so one `tld-release` can cut
   the tags of every repository: `version_style: pep440` accepts versions like `4.2.0a1`, `check_script` runs a
@@ -36,6 +37,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Fixed
 
+- A session no longer skips its status record when its runtime's board tools drop: the playbooks fall back to `tld board client set`.
 - `tld plan check-commands` trusts a command through a `verify.after_merge_allow` prefix only when every word after
   the prefix is a safe option of that program with a plain value: tld's own (`--index`, `--json`, ...) and those a
   stack guide lists in an `after-merge-options` block (the python guide: `-q`, `-k`, `--tb=short`, ...); no
@@ -51,6 +53,8 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Changed
 
+- Status board: every implement run and every attended command has its own record (`<project>--run--<plan>`, `<project>--<command>--<session tail>`), so two runs or two sessions no longer replace each other's card; the old keys are accepted until 1.2.0, and `/tld:board prune` lists old-key records after 24 hours.
+- `/tld:land` no longer reads its previous record (it has no per-session lookup).
 - Plans now live on the feature branch at `docs/plans/<issue>/plan.md` and stay after the merge; `plan/<slug>` plans are
   deprecated for one release.
 - `/make-plan` assigns the `fast` worker level to literal phases, and `validate-manifest` requires complexity S for it.

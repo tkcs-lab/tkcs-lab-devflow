@@ -61,6 +61,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld board build --title T --out F ...` | `tld.board.build` | build the self-contained board page |
 | `tld board validate-record FILE [--doc-id ID]` | `tld.board.record` | validate a status record |
 | `tld board project-slug OWNER/NAME` | `tld.board.record` | the project slug of a repository, the only `project` a record may have |
+| `tld board record-id --repo OWNER/NAME (--run --plan-slug SLUG \| --command CMD (--session ID \| --unattended))` | `tld.board.record` | the document id of a status record: `<project>--run--<plan>`, `<project>--<command>--<session tail>`, or `<project>--<command>` when unattended |
 | `tld ops land-order [FILE] [--max N]` | `tld.ops.land_order` | order the open pull requests for `/land` |
 | `tld ops pick-release --pattern RE ...` | `tld.ops.pick_release` | pick the newest eligible release tag |
 | `tld ops upstream-sync plan\|prepare ...` | `tld.ops.upstream_sync` | sync a fork to an upstream release |

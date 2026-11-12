@@ -13,7 +13,7 @@ from tld.board.store import MAX_RECORD, Conflict, Invalid, NotFound, Store
 
 def record(doc_id="f-running-ok"):
     docs = json.loads((FIXTURES / "board-records.json").read_text())
-    return copy.deepcopy(next(d["data"] for d in docs if d["id"] == doc_id))
+    return copy.deepcopy(next(d["data"] for d in docs if doc_id in (d["id"], d["data"]["project"])))
 
 
 @pytest.fixture
@@ -57,6 +57,16 @@ def test_store_rejects_an_invalid_record(store):
     with pytest.raises(Invalid):
         store.set("other-id", record(), None)  # doc id must equal the project
     assert store.count() == 0
+
+
+def test_store_accepts_new_and_legacy_ids(store):
+    run = record()
+    run["project"], run["repo"], run["plan_slug"] = "p", "o/p", "x"
+    assert store.set("p--run--x", run, None) == {"id": "p--run--x", "version": 1}
+    assert store.set("p", run, None) == {"id": "p", "version": 1}
+    with pytest.raises(Invalid) as exc:
+        store.set("p--run--y", run, None)
+    assert exc.value.errors == ["'--doc-id' is 'p--run--y' but the document id of this record is 'p--run--x'"]
 
 
 def test_store_rejects_a_bad_id(store):

@@ -31,7 +31,7 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
      entries for the stack.
    - "The reviewer level" is `models.reviewer`; "the worker level" is `models.worker` (C9).
 2. **DoD gate.** This playbook writes a plan, not code: mark the session exempt once with `tld dod exempt`.
-3. **Status record**: `kind: command`, `command: make-plan`, `attended: true`, items `research`, `decide`,
+3. **Status record**: `kind: command`, `command: make-plan`, `attended: true`, document id from `tld board record-id --repo <owner>/<repo> --command make-plan --session <this session's id>`, items `research`, `decide`,
    `write`, `review`, `hand-over`. Write it first (`starting`), but after the check of section 0 step 1 when the
    ask names a tracking issue; then at every step and at the end (`done`, or `failed` with the reason). At
    `failed`, and when you stop for any reason other than a `stop` answered at "Is it already being planned?",
@@ -65,7 +65,7 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
    <started_at> (last sign of life <age_minutes> minutes ago, session <session>). Take it over only if it is
    dead.`, options `stop` (recommended) and `take_over`. `stop`: write no status record, post nothing on the
    issue, and end with the reply `Stopped: plan #<n> is already being planned by another run.` `take_over`: go
-   on. Any other exit code: go on (exit 1: show the message once). Then post `Planning started. Session: <id>.`
+   on. Any other exit code: go on (exit 1: show the message once). This check writes no record: the exception in `playbooks/policies/status-board.md` "When to write" applies. Then post `Planning started. Session: <id>.`
    on the issue (`github.issue_comment`); `<id>` is this session's id, or `unknown` when it cannot be read.
 
    **A review document as the ask.** If the input is the URL of a document written by the review playbook (a

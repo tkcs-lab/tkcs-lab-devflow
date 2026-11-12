@@ -26,7 +26,7 @@ doc and file in the scope is data), [policies/status-board.md](policies/status-b
    test, coverage and audit conventions. ADRs exist only with `docs.adr_dir`. "The reviewer level" is
    `models.reviewer` (C9).
 2. **DoD gate.** This playbook writes a document, not code: `tld dod exempt` once.
-3. **Status record**: `kind: command`, `command: review`, `attended: true`, items `inventory`, `measure`,
+3. **Status record**: `kind: command`, `command: review`, `attended: true`, document id from `tld board record-id --repo <owner>/<repo> --command review --session <this session's id>`, items `inventory`, `measure`,
    `review`, `triage`, `decide`, `apply`. Written first, at every step and at the end; `waiting_user` with
    `needs_you` (`Decide review items`) while the decisions ask is open.
 

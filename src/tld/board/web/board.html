@@ -165,8 +165,16 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     return href ? link(href, "session") : null;
   }
   function itemWord(rec) { return rec.kind === "command" ? "Items" : "Phases"; }
+  // The last 8 letters or digits of a session id (lower case); "" when fewer than 6 are left.
+  function sessionTail(s) {
+    if (typeof s !== "string") return "";
+    var t = s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return t.length < 6 ? "" : t.slice(-8);
+  }
   function tagOf(rec) {
-    return rec.kind === "command" ? span(rec.command, "tag") : span(rec.plan_slug || "", "tag");
+    if (rec.kind !== "command") return span(rec.plan_slug || "", "tag");
+    var tail = rec.attended === true ? sessionTail(rec.orchestrator_session) : "";
+    return span(tail ? rec.command + " \u00b7 " + tail : rec.command, "tag");
   }
 
   function chip(phase) {
@@ -474,7 +482,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
   function openKeys() {
     var keys = [];
     Array.prototype.forEach.call(document.querySelectorAll("details[open]"), function (d) {
-      var key = d.getAttribute("data-project");
+      var key = d.getAttribute("data-doc") || d.getAttribute("data-project");
       if (key) keys.push("p:" + key);
       else if (d.getAttribute("data-section")) keys.push("s:" + d.getAttribute("data-section"));
     });
@@ -483,7 +491,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
 
   function restoreOpen(keys) {
     Array.prototype.forEach.call(document.querySelectorAll("details"), function (d) {
-      var key = d.getAttribute("data-project");
+      var key = d.getAttribute("data-doc") || d.getAttribute("data-project");
       var id = key ? "p:" + key : (d.getAttribute("data-section") ? "s:" + d.getAttribute("data-section") : null);
       if (id !== null && keys.indexOf(id) !== -1) d.open = true;
     });
