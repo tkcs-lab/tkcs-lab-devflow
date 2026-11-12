@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-KINDS = ("shell", "write", "github_op", "stop", "prompt")
+KINDS = ("shell", "write", "github_op", "stop", "prompt", "session_start")
 VERDICTS = ("allow", "deny", "error")
 
 
@@ -31,6 +31,8 @@ class Action:
     continuing: bool = False                        # stop: the runtime is already continuing after a block
     prompt: str | None = None                       # prompt: the text the user submitted
     invoked: str | None = None                      # prompt: the tld command or skill the runtime found at the start of it
+    session_level: str | None = None                # session_start, prompt: strong | standard | fast of the session's model
+    command_level: str | None = None                # prompt: the level the invoked command is meant for
 
     def __post_init__(self):
         if self.kind not in KINDS:
