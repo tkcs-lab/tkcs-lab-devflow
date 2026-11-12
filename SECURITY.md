@@ -10,7 +10,7 @@ page or a tool result). Two layers, with different jobs:
   push, no deletion) and `tld-tags` (no tag except by the owner), an agent account with the `write` role (no
   admin, no bypass of the rulesets), and the environments `tld-agent` and `tld-release`, which keep `TLD_AGENT_TOKEN` and
   `TLD_RELEASE_TOKEN` on the default branch and behind the owner's approval. `tld ops repo-admin` audits and
-  applies them ([docs/guides/admin.md](docs/guides/admin.md)). A manipulated agent cannot talk its way past them.
+  applies them ([docs/guides/admin.md](docs/guides/admin.md)). A manipulated agent cannot talk its way past them. With `admin_bypass: true` the owner (admin role, never the agent) may merge a pull request through `tld-main` in `pull_request` mode, required checks included, so the owner waits for green CI.
   Precisely: the `write` role *can* press merge on a pull request into the main branch, but only once `tld-main` is
   satisfied — an approval by the owner (the agent cannot approve its own pull request), the required checks green,
   stale approvals dismissed by a new push and the last push approved by someone other than its author. So the agent
