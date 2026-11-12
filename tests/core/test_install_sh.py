@@ -190,6 +190,26 @@ def test_rerun_of_the_same_version_keeps_a_working_tld(tmp_path, release) -> Non
     assert venvs(tmp_path) == {"9.9.9"}
 
 
+def test_rerun_with_failing_pip_keeps_the_working_link_and_venv(tmp_path, release) -> None:
+    install(tmp_path, release, "9.9.9")
+    before = os.readlink(link(tmp_path))
+    r = run_installer(tmp_path, [], release, TLD_PIP_ARGS="--no-index --no-deps --no-such-option")
+    assert r.returncode == 0, r.stderr
+    assert "tld 9.9.9 is already installed" in r.stdout
+    assert os.readlink(link(tmp_path)) == before
+    assert tld_version(tmp_path) == "tld 9.9.9"
+
+
+def test_rerun_with_a_broken_venv_rebuilds_it(tmp_path, release) -> None:
+    install(tmp_path, release, "9.9.9")
+    entry = tmp_path / "data" / "tld" / "venvs" / "9.9.9" / "bin" / "tld"
+    entry.write_text("#!/bin/sh\necho broken\n")
+    r = run_installer(tmp_path, [], release)
+    assert r.returncode == 0, r.stderr
+    assert "already installed" not in r.stdout
+    assert tld_version(tmp_path) == "tld 9.9.9"
+
+
 def test_second_run_replaces_the_link_and_keeps_one_previous_venv(tmp_path, release) -> None:
     install(tmp_path, release, "9.9.8")
     install(tmp_path, release, "9.9.9")
@@ -378,6 +398,7 @@ def test_path_hint_only_when_bin_is_not_on_path(tmp_path, release) -> None:
 def test_temp_dir_is_removed(tmp_path, release) -> None:
     assert run_installer(tmp_path, [], release).returncode == 0
     assert list((tmp_path / "tmp").iterdir()) == []
+    link(tmp_path).unlink()  # a current install would end the run before any download
     rel = copy_release(release, tmp_path)
     (rel / "v9.9.9" / WHEEL.format(v="9.9.9")).write_bytes(b"x")
     assert run_installer(tmp_path, [], rel).returncode == 1
@@ -502,6 +523,26 @@ def test_board_without_compose_plugin_refuses(tmp_path, release) -> None:
     assert r.returncode == 1
     assert "Docker with the compose plugin is required" in r.stderr
     assert "pull" not in docker_log(tmp_path)
+
+
+@pytest.mark.parametrize("dangling", [False, True])
+def test_board_symlinked_env_is_refused_and_left_alone(tmp_path, release, dangling) -> None:
+    (tmp_path / "board").mkdir()
+    target = tmp_path / "elsewhere.env"
+    if not dangling:
+        target.write_text("TLD_BOARD_TOKEN=x\n")
+        target.chmod(0o644)
+    env_file(tmp_path).symlink_to(target)
+    r = run_installer(tmp_path, ["board"], release)
+    assert r.returncode == 1
+    assert f"{env_file(tmp_path)} is a symlink: replace it with a regular file" in r.stderr
+    assert "chmod" not in r.stderr
+    assert "pull" not in docker_log(tmp_path) and " up" not in docker_log(tmp_path)
+    if not dangling:
+        assert stat.S_IMODE(target.stat().st_mode) == 0o644
+        assert target.read_text() == "TLD_BOARD_TOKEN=x\n"
+    else:
+        assert not target.exists()
 
 
 def test_foreign_symlink_is_not_replaced(tmp_path, release) -> None:

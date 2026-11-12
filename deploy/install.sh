@@ -103,6 +103,13 @@ pick_python() {
 
 install_cli() {
     check_version
+    VENV="$DATA/venvs/$VERSION"
+    # Already current: leave the working link and venv alone. A broken venv falls through and is rebuilt.
+    if [ "$(readlink "$BIN/tld" 2>/dev/null || true)" = "$VENV/bin/tld" ] &&
+        [ "$("$VENV/bin/tld" --version 2>&1 || true)" = "tld $VERSION" ]; then
+        say "tld $VERSION is already installed: $BIN/tld"
+        return 0
+    fi
     pick_python
     make_tmp
     WHEEL="tld-$VERSION-py3-none-any.whl"
@@ -111,7 +118,6 @@ install_cli() {
     verify "$WHEEL"
 
     mkdir -p "$BIN" "$DATA/venvs"
-    VENV="$DATA/venvs/$VERSION"
     rm -rf "$VENV"
     # shellcheck disable=SC2086
     "$PY" -m venv ${TLD_VENV_ARGS:-} "$VENV" || {
@@ -227,6 +233,7 @@ install_board() {
         say "created $BOARD_DIR/.env with a new board token (it stays in that file)"
     fi
 
+    [ ! -L "$BOARD_DIR/.env" ] || die "$BOARD_DIR/.env is a symlink: replace it with a regular file"
     chmod 600 "$BOARD_DIR/.env"
     (cd "$BOARD_DIR" && docker compose pull) ||
         die "could not pull the board image; if the message says denied, the package ghcr.io/tkcs-lab/tld-board must be made public once by the repository owner (CONTRIBUTING.md, first release)"
