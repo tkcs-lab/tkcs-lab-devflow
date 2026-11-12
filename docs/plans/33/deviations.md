@@ -11,7 +11,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-policy-core
 
-- pending
+- worker: D1 step 5 revised after the orchestrator sent the phase back: rest file used only after exit 0, --ask added to board answers --from-reply, mktemp scratch files deleted afterwards; Design D1 should be updated to match
+- retry: Sent back once for the D1 step 5 security gaps found by the security-reviewer; second report approved
+- review: Open non-blocking: a bare skip or stop line in the rest file could answer a single-choice ask; policy does not say where the ask file comes from or that all scratch files are deleted on every exit path
 
 ## p3-playbook-links
 
