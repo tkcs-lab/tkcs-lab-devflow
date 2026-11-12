@@ -36,9 +36,11 @@ the security of the runtime itself.
 and checks it against `SHA256SUMS`. That file comes from the same release over the same TLS connection, so the check
 shows integrity (a corrupt or truncated download), not authenticity (a tampered release). `install.sh` itself is
 unverified, as with every `curl | sh`, and neither it nor `compose.yaml` is signed. PyYAML is installed from PyPI
-without a hash, and the isolated build installs `setuptools>=68` unpinned and without hashes. Releases are made
-immutable (a manual step), so assets cannot be replaced after publishing, and the compose file pins the board image
-by digest because a ghcr tag can be overwritten. The one exception to the read-only workflow token: the release job
+without a hash. The release workflow's isolated build installs `setuptools>=68` unpinned and without hashes, so a
+compromise there reaches users through a correctly checksummed wheel. Releases should be made immutable (the owner
+enables this once before the first release, see CONTRIBUTING.md), so assets cannot be replaced after publishing,
+and the compose file pins the board image by digest because a ghcr tag can be overwritten. The digest pin protects
+against a moved tag, not against a tampered release; the image is not signed. The one exception to the read-only workflow token: the release job
 holds `packages: write` (to push the image), only behind the `tld-release` environment, where the owner approves
 every run.
 

@@ -39,6 +39,7 @@ curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download
 tld --help
 ```
 
+What the checksum does and does not prove: [SECURITY.md](SECURITY.md). To read the script first, download it with `curl -fsSLO <url>`, then `sh install.sh`.
 Running the same line again upgrades to the latest release. To pin a version, run that release's own installer
 (`curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/download/vX.Y.Z/install.sh | sh`), which installs its own version.
 Uninstall with `... | sh -s -- uninstall`. Without the installer:
