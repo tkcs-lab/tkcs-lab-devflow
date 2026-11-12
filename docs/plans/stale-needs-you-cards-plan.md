@@ -190,7 +190,7 @@ A cancelled linked ask has no effect (the card is the ordinary `needs_you` card)
 ### 3.8 Existing tests this change touches
 
 `tests/core/test_board_store.py:122,123,139` (schema 3, whole-entry equality), `tests/core/test_board_deploy.py:101`
-(every route is in the guide), `tests/core/test_board_server.py:44` (the auth matrix lists every route),
+(every route is in the guide), `tests/core/test_board_server.py:44` (the auth matrix `MATRIX` is a hand list; p1 adds a test that it covers every `POLICY` entry),
 `tests/core/test_board_inbox.py:49` (`schema` properties equal `ask.FIELDS` in order), `tests/core/test_board.py:59`
 (page writes no record). The 13-record fixture `tests/fixtures/board-records.json` and its three checks
 (`tests/board_rules_check.js`, `tests/board_render_check.js`, `tests/core/test_board_rules.py`) are not edited.
@@ -335,6 +335,19 @@ phases:
          `version` is 409 `version_conflict`; a record with `needs_you` false is 409 `not_needs_you`; a body with an
          extra key is 400; a session write after the dismissal makes `dismissed_at` null; the owner cannot `PUT`
          (403, unchanged); without Origin or CSRF the dismiss is 403.
+         Also add: `test_dismiss_of_a_missing_record_raises_not_found` in the store tests; with
+         `Store(path, clock=lambda: "2026-11-09T12:00:00Z")` assert `dismiss(...)["dismissed_at"]` and
+         `store.list()[0]["dismissed_at"]` equal that time, and that after `dismiss` a `set(id, data, 7)` with a
+         stale version raises `Conflict` whose `.current["dismissed_at"]` equals it;
+         `test_dismiss_body_must_be_exactly_a_positive_int_version` (bodies `{"version": true}`, `{"version": 0}`,
+         `{"version": "1"}`, `{"version": 1.0}`, `[]`, `{}` and raw `{` are 400 `bad_request`; dismiss and restore of
+         `/api/records/no-such/...` are 404 `not_found`); parametrise the existing
+         `test_owner_post_needs_the_csrf_token_and_the_origin` over every owner POST route (`answer`, `cancel`,
+         `dismiss`, `restore`, `logout`), each with a valid body, with the same six outcomes it asserts today;
+         `test_a_session_cannot_dismiss_through_put` (session `PUT` of a valid needs_you record with an extra
+         top-level `dismissed_at` answers 200 or 400 and a following `GET` shows `dismissed_at` null);
+         `test_the_matrix_covers_every_policy_entry` (map each `MATRIX` method and path to its route name through
+         `ROUTES`; the set of `(name, method)` equals `set(POLICY)`).
       6. tests/core/test_board_mcp.py: assert the tool names are unchanged and `board_list` entries carry
          `dismissed_at`.
       7. docs/guides/board-server.md: add the two rows to the HTTP API table (`POST /api/records/<id>/dismiss`,
@@ -374,8 +387,11 @@ phases:
          `^[a-z0-9][a-z0-9-]{0,99}$`, description: the status record that posted the ask (the project slug for a
          run, `<project>--<command>` for a command); the board page shows one card per wait.
       4. tests/core/test_board_inbox.py: add cases to the existing bad-asks parametrisation (a record of another
-         project, a record with a capital letter, a record of 101 characters, a number) and good cases (`None`, the
-         project slug, `<project>--make-plan`); add a test that `store.ID_RE.pattern == record.DOC_ID_RE.pattern`
+         project, a record with a capital letter, a record of 101 characters, a number, `<project>--bogus`; use the
+         needle `must be null, the project slug, or`, not `record`, so the generic unknown-field text cannot match) and good cases (`None`, the
+         project slug, `<project>--make-plan`); add `test_an_ask_keeps_its_record_field` (post an ask with `record` the project slug through the `server`
+         fixture; `GET /api/asks/<id>` returns it; an ask posted without `record` has no `record` key or `null`) and a
+         test that `store.ID_RE.pattern == record.DOC_ID_RE.pattern`
          (import `tld.board.store`).
       Stop condition: if any test outside tests/core/test_board_inbox.py fails, stop with `status=blocked` and
       name it.
@@ -384,7 +400,7 @@ phases:
       - grep -n "DOC_ID_RE" src/tld/board/record.py src/tld/board/ask.py prints at least 3 lines
   - id: p3a-placement-rules
     title: The placement rules in rules.js and their fixture
-    depends_on: []
+    depends_on: [p2-ask-record]
     complexity: S
     touches:
       - src/tld/board/web/rules.js
@@ -401,7 +417,7 @@ phases:
       2. tests/fixtures/board-links.json: one JSON object `{"now", "entries", "asks", "expected",
          "expected_stale"}`. `now` is `2026-11-09T12:00:00Z`. Build the entries from records of
          tests/fixtures/board-records.json (copy the `f-waiting` data for needs_you cases, `f-running-ok` for a plain
-         running case) with these ids and expectations (`expected` maps id to `{section, badge}`). Every entry has `data.project` equal to its id, `data.repo` `example-org/<id>` and `data.orchestrator_session` `session_<id>`, so no two entries share a session; an ask's `project` and `created_by` are `<id>` and `session_<id>` of the entry it is meant to link to, except `linked-open-other-project`, whose ask has `created_by` `session_linked-open-other-project` and `project` `other-project`; `dismissed-but-clear` and `stale-quiet` have `needs_you_reason` `""` and `needs_you_since` null:
+         running case) with these ids and expectations (`expected` maps id to `{section, badge}`). Every entry has `data.project` equal to its id, `data.repo` `example-org/<id>` and `data.orchestrator_session` `session_<id>`, so no two entries share a session; an ask's `project` and `created_by` are `<id>` and `session_<id>` of the entry it is meant to link to, except `linked-open-other-project`, whose ask has `created_by` `session_linked-open-other-project` and `project` `other-project`; `dismissed-and-linked` (dismissed, with an open linked ask): `hidden`/`dismissed`; `null-session` (data copied from `f-maint-deps--deps` with `orchestrator_session` null, and an open ask with `created_by` `deps` and no `record`): `needs_you`/null; `dismissed-but-clear` and `stale-quiet` have `needs_you_reason` `""` and `needs_you_since` null:
          `plain-needs` needs_you, no ask: `needs_you`/null; `linked-open-record` (open ask with `record` equal to
          its id): `linked`/null; `linked-open-session` (open ask without `record`, `created_by` equal to the
          record's `orchestrator_session`, same project): `linked`/null; `linked-open-other-project` (same session
@@ -416,9 +432,10 @@ phases:
          `stale-quiet`. Entries carry `id`, `version` 1, `dismissed_at` and `data`.
       3. tests/board_links_check.js: loads the fixture, asserts `place(entry, asks, Date.parse(now))` equals each
          `expected` (section, badge) and, for `answer_received`, that `.ask` is the answered ask; asserts the ids
-         whose section is `hidden` equal `expected_stale`; prints `OK`.
+         whose section is `hidden` equal `expected_stale`, and that the sorted keys of `expected` equal the sorted entry ids; prints `OK`.
       4. tests/core/test_board_links.py: runs the node check the way `test_rules_in_node` does (skip without node)
-         and asserts stdout `OK`.
+         and asserts stdout `OK`; add `test_links_fixture_is_valid`: every `entries[].data` passes
+         `record.validate(data, id)` and every ask passes `ask.validate_stored`.
       Stop condition: if `tests/board_rules_check.js` fails, stop with `status=blocked`; `section` must not change.
     acceptance:
       - node tests/board_links_check.js prints OK
@@ -455,21 +472,21 @@ phases:
          `answer received`; write record R2 (document id `links-two`, repo `example-org/links-two`) with `needs_you` true, assert its card has a `[data-action="dismiss"]`
          button inside the details, tap Dismiss, assert R2 is in Hidden with `dismissed`; tap Restore and assert R2
          is in Needs you again; dismiss R2 again, rewrite R2 through the API with `if_version`, assert R2 is back
-         in Needs you; assert no console errors and no dialogs. Print `OK`.
+         in Needs you; assert no console errors and no dialogs. Load the page with `?poll=500`; wait for the ask card first, then assert the page has no element `[data-doc="links-one"]` and the count reads `needs you 0`; assert `[data-doc="links-two"] > summary [data-action="dismiss"]` has count 0; with `page.route` on `**/api/records/links-two/dismiss` answering 409 `{"error":"version_conflict"}`, tap Dismiss and assert the notice text is visible and R2 is still in Needs you. Print `OK`.
       6. tests/core/test_board_page.py: add `test_links_dismiss_and_restore_in_a_browser`, built like
          `test_login_poll_and_answer_an_ask_in_a_browser`, running the new script. tests/core/test_board.py: change
          the comment at line 58 to say the page writes nothing but answers, cancels, dismissals and the login;
-         keep both assertions.
+         keep both assertions. Add `test_fixture_page_has_no_dismiss_or_restore_buttons`: build with `--fixture tests/fixtures/board-records.json`, open it in Chromium, assert `[data-action]` count 0 and `[data-section="needs_you"] .row` count above 0.
       Stop condition: if `tests/board_render_check.js` or `tests/board_poll_check.js` fails after the change, stop
       with `status=blocked`; they pin the unchanged parts of the page.
     acceptance:
-      - .venv/bin/python -m pytest tests/core/test_board_page.py tests/core/test_board.py -q exits 0
+      - TLD_REQUIRE_BROWSER=1 .venv/bin/python -m pytest tests/core/test_board_page.py tests/core/test_board.py -q exits 0
       - node tests/board_render_check.js prints OK
       - grep -c 'api("PUT"' src/tld/board/web/board.html prints 0
       - grep -c 'data-action="dismiss"' src/tld/board/web/board.html and grep -c 'data-action="restore"' src/tld/board/web/board.html each print at least 1
   - id: p4-resolve-stale
     title: The resolve command and stale printing dismissed records
-    depends_on: [p3a-placement-rules]
+    depends_on: [p1-store-dismissals, p3a-placement-rules]
     complexity: M
     touches:
       - src/tld/board/stale.py
@@ -493,10 +510,21 @@ phases:
          `tld board resolve FILE|- --now T --reason TEXT` after the `stale` row and change the `stale` row to say
          it also prints dismissed records.
       4. tests/core/test_board_resolve.py: cases: a needs_you record (copy `f-waiting` from the 13-record fixture,
-         then set `next_check_at` to a time) is cleared and passes `record.validate`; the output has `status` done,
+         then set `status` `running` and `next_check_at` to a time, so the input is valid) is cleared and passes `record.validate`; the output has `status` done,
          `finished_at` and `updated_at` equal `--now`, `next_check_at` null, `needs_you_reason` `""`; an entry
-         `{id, version, data}` is accepted; a record with needs_you false exits 1 with `board_resolve: `; an empty
-         and a 201-character reason exit 1; stdin `-` works; the input is not changed. Parity: load
+         `{id, version, data}` is accepted, also with `dismissed_at` null and with `dismissed_at`
+         `2026-11-09T11:00:00Z` (an entry is recognised by its `data` key, never by its exact key set); a record with needs_you false exits 1 with `board_resolve: `; an empty
+         and a 201-character reason exit 1; stdin `-` works; the input is not changed;
+         `test_resolve_clears_a_command_record` (copy `f-maint-deps--deps`, `pr_open` with `needs_you`: exit 0,
+         `status` `done`, `finished_at` equal `--now`, `record.validate(out, "f-maint-deps--deps") == []`);
+         `test_resolve_refuses_an_output_that_does_not_validate` (an input with an unknown top-level key: exit 1, stderr
+         starts `board_resolve: `);
+         `test_prune_clears_a_record_through_client_get_resolve_and_set` (integration: `board_helpers.running(tmp_path)`,
+         store `f-waiting` data with fresh timestamps under its id, `srv.store.dismiss(id, 1)`, then run the real
+         `tld board client get <id>` with `TLD_BOARD_URL` and `TLD_BOARD_TOKEN` set to the test server, pipe it to
+         `tld board resolve - --now <T> --reason "PRs merged"`, pipe that to
+         `tld board client set <id> - --if-version 1`: all three exit 0, and `GET /api/records/<id>` shows `version`
+         2, `data.needs_you` false, `data.status` `done`, `dismissed_at` null). Parity: load
          tests/fixtures/board-links.json, run `tld board stale - --now <now>` on its `entries` and assert the printed
          ids equal `expected_stale`.
       5. tests/core/test_board_resolve.py: add a test that a dismissed needs_you entry is printed by `tld board stale`
@@ -536,13 +564,13 @@ phases:
          answer; the session still reads the answer on its wake.
       4. playbooks/policies/status-board.md: the four additions of Design 3.6.
       5. adapters/claude/skills/runtime/SKILL.md: name `tld board resolve` in the prune sentence.
-      6. tests/core/test_stale_cards_playbooks.py: assert land.md names `integration` and `workflow` items and
-         does not contain the string `Review PR`; board.md contains `tld board resolve` and
-         `--if-version`; runtime.md's ask example JSON line contains `"record"`; status-board.md contains
-         `current: null`; the ask example of runtime.md, with `record` set, passes `tld.board.ask.validate_new`
-         once its placeholders are replaced by these values: project `example-project`, repo
-         `example-org/example-project`, record `example-project`, created_by `session_x`, context_url
-         `https://example.com/x`, question ids `q1`, `q2`, `q3`, option values `a`, `b`.
+      6. tests/core/test_stale_cards_playbooks.py (behaviour only; CONTRIBUTING.md allows no sentence greps): the ask
+         example JSON of runtime.md, with `record` set and its placeholders replaced by these values: project
+         `example-project`, repo `example-org/example-project`, record `example-project`, created_by `session_x`,
+         context_url `https://example.com/x`, question ids `q1`, `q2`, `q3`, option values `a`, `b`, passes
+         `tld.board.ask.validate_new`; every JSON status-record example in land.md, if any, passes
+         `record.validate(rec, "example-project--land")` and none has `status` `pr_open` together with `needs_you`
+         true. The wording is checked by the acceptance greps below, not by a test.
       7. Run `.venv/bin/python evals/run.py check-baseline`. When it exits 1, run
          `.venv/bin/python evals/run.py baseline --refresh-hashes` and commit evals/baselines/default.json alone in its own
          commit whose message says the playbook wording changed and a real re-run of the attended tasks is left to
@@ -553,6 +581,9 @@ phases:
       - .venv/bin/python -m pytest tests/core/test_stale_cards_playbooks.py tests/core/test_contracts.py tests/core/test_no_project_words.py -q exits 0
       - .venv/bin/python evals/run.py check-baseline exits 0
       - grep -n "Review PR" playbooks/land.md prints nothing
+      - grep -c "tld board resolve" playbooks/board.md and grep -c -e "--if-version" playbooks/board.md each print at least 1
+      - grep -c "current: null" playbooks/policies/status-board.md prints at least 1
+      - grep -c '"record"' playbooks/runtime.md prints at least 1
   - id: p6-retire
     title: Docs, changelog and retire the plan
     depends_on: [p3b-page, p5-playbooks]
