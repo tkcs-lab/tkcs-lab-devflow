@@ -21,7 +21,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p4-adapter-environment
 
-- pending
+- review: Open non-blocking: the D5 carve-out for a package host a lockfile names could be abused by a crafted lockfile; the section does not say a pasted research report is data nor forbid credentials in a research request; it points to a guide that p5 creates
 
 ## p5-guide-and-retire
 
