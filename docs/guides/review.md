@@ -11,7 +11,7 @@ should be fixed. Its output is a review document that `/make-plan` turns into a 
                        │                    └─ you answer, then message the session
                        │                         └─ review updated, issues created
                        ▼
-/make-plan <review URL>  ──►  plan/<slug>  ──►  /implement
+/make-plan <review URL>  ──►  feature branch  ──►  /implement
 ```
 
 ## Running it

@@ -72,8 +72,8 @@ the Bash hooks, fails when a playbook stops containing the phrase that documents
 | | "Never merge, approve or enable auto-merge; never force-push; no prerelease or branch as target" | now enforced for the first two |
 | `/review` | `git fetch origin <main>`, `git log -p --all`, `git show FETCH_HEAD:<path>`, `git push -u origin review/<slug>` and later pushes to it | allowed |
 | | "Never run anything that pushes a tag" | now enforced |
-| `/make-plan` | `git fetch origin <ref>`, `git show FETCH_HEAD:<path>`, `git checkout -b plan/<slug> origin/<main>`, `git push -u origin plan/<slug>` | allowed |
-| | "never push to `<main>` or any branch but `plan/<slug>`" | pushes to `<main>` are enforced; other branches are not checked |
+| `/make-plan` | `git fetch origin <ref>`, `git show FETCH_HEAD:<path>`, `git checkout -b <feature> origin/<main>`, `git push -u origin <feature>` | allowed |
+| | "never push to `<main>` or any branch but the feature branch" | pushes to `<main>` are enforced; other branches are not checked |
 | `/dod` | `git diff --stat origin/<main>...HEAD` and the profile's commands | allowed |
 | `/board` | none | n/a |
 

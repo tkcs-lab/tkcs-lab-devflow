@@ -72,10 +72,19 @@ project-words test keeps the rest generic.
 A large change is a plan document with an implementation manifest: phases with `depends_on`, `touches`, `brief`,
 `acceptance`, `verify_after_merge` and an optional `worker_level`, plus manual steps before and after. `tld plan
 validate-manifest` checks it (cycles, unknown dependencies, overlapping `touches` within a wave, the reason for a
-`strong` worker). `/implement` runs only plans from `main` or a `plan/*` branch of the same repository (S14), starts
+`strong` worker). `/implement` runs only plans of the same repository that sit on `main` or on the plan's own feature branch
+(`<plan_dir>/<n>/plan.md`, S14); the owner's start confirmation is pinned by a `Plan-Started` commit trailer holding the
+plan's full blob id, so a plan that changed afterwards is not run without a new start ask. Old-layout plans on
+`plan/<slug>` are still accepted, with a deprecation warning. It starts
 one worker per ready phase, merges each into one feature branch after a scope-drift check
 ([scope-drift.md](scope-drift.md)), runs `verify.fast` after every merge, and ends with one final review and one
 pull request. Branch names come from `tld plan branch-name` (C12).
+
+The orchestrator alone writes `<plan_dir>/<n>/deviations.md` next to the plan, after each merge has passed its
+verification (`tld plan deviations`): one section per phase, worker text summarised and never pasted, and `check`
+fails while a section still says `- pending` or an out-of-scope path is unrecorded. A phase may set `worker_level:
+fast` (cheapest level) only with complexity `S`; its fix, revision and conflict workers run at `standard`. The plan
+and its deviations stay in the repository as a historical record after the merge.
 
 ### Guard
 
@@ -111,7 +120,8 @@ count. Sessions reach it through `tld board client` / `ask` / `answers` or the `
 
 - **A SessionStart hook that installs the toolkit into `~/.claude/`.** It worked in a probe, but it needs a pin in
   every repository and a fetch at every start; plugins in the Claude Project are the one delivery route
-  ([delivery.md](../guides/delivery.md)).
+  ([delivery.md](../guides/delivery.md)). (The `model-check` hook does use a SessionStart event, but only to record the
+  session's model; it installs or fetches nothing.)
 - **Separate plugins per stack, or for the agents.** One plugin and one version keep the playbooks, roles and
   guides in step.
 - **Hooks as the security boundary.** A manipulated agent can run code the hooks cannot read; GitHub rulesets
