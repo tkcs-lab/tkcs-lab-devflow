@@ -3,6 +3,7 @@
 
     tld board validate-record FILE|- [--doc-id ID]
     tld board project-slug OWNER/NAME
+    tld board record-id --repo OWNER/NAME (--run --plan-slug SLUG | --command CMD (--session ID | --unattended))
 
 Exit 0 and `status-record: OK`, or exit 1 and one line per error, each starting `status-record: `
 and naming the field in single quotes. The rules are plain Python (no schema interpreter); the schema
@@ -16,6 +17,7 @@ states are `done`, `failed` and `pr_open`. Python 3.11+, stdlib only.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -52,12 +54,82 @@ TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 SLUG = re.compile(r"^[a-z0-9-]+$")
 DOC_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")
 REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+LEGACY_UNTIL = "1.2.0"  # the old document ids (legacy_ids) are accepted until this tld version
+DOC_ID_MAX = 100
+TAIL_LEN, TAIL_MIN = 8, 6
 
 
 def project_slug(repo: str) -> str:
     """The project slug of `owner/name`: the name, lower case, every run of other characters one hyphen."""
     name = repo.rsplit("/", 1)[-1]
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def _plan_part(plan_slug, prefix: str) -> str:
+    """The `<plan>` part of a run's document id: `plan_slug` made safe, cut with a hash when too long."""
+    text = plan_slug if isinstance(plan_slug, str) else ""
+    plan = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "plan"
+    if len(prefix) + len(plan) <= DOC_ID_MAX:
+        return plan
+    keep = DOC_ID_MAX - len(prefix) - 9
+    if keep < 0:
+        raise ValueError("'project' is too long for a document id")
+    return plan[:keep].rstrip("-") + "-" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
+
+
+def _session_tail(session) -> str:
+    """The last 8 letters or digits of a session id (lower case); empty when fewer than 6 are left."""
+    text = re.sub(r"[^a-z0-9]", "", session.lower()) if isinstance(session, str) else ""
+    return text[-TAIL_LEN:] if len(text) >= TAIL_MIN else ""
+
+
+def doc_id(rec: dict) -> str:
+    """The document id of a status record (see playbooks/policies/status-board.md). Raises ValueError."""
+    project = rec["project"]
+    if rec["kind"] == "run":
+        prefix = f"{project}--run--"
+        if len(prefix) > DOC_ID_MAX - 1:
+            raise ValueError("'project' is too long for a document id")
+        return prefix + _plan_part(rec.get("plan_slug"), prefix)
+    command = rec["command"]
+    if rec.get("attended") is not True:
+        result = f"{project}--{command}"
+    else:
+        tail = _session_tail(rec.get("orchestrator_session"))
+        if not tail:
+            raise ValueError("'orchestrator_session' needs at least 6 letters or digits to key an attended command record")
+        result = f"{project}--{command}--{tail}"
+    if len(result) > DOC_ID_MAX:
+        raise ValueError("'project' is too long for a document id")
+    return result
+
+
+_make_doc_id = doc_id  # `validate` has a parameter of the same name
+
+
+def legacy_ids(rec: dict) -> tuple[str, ...]:
+    """The old document ids still accepted until LEGACY_UNTIL: a run's project slug, an attended command's `<project>--<command>`."""
+    if rec["kind"] == "run":
+        return (rec["project"],)
+    if rec.get("attended") is True:
+        return (f"{rec['project']}--{rec['command']}",)
+    return ()
+
+
+def owns_doc_id(project: str, doc_id: str) -> bool:
+    """Whether `doc_id` has the shape of a document id of `project` (the project itself, a run, or a command)."""
+    if not (isinstance(doc_id, str) and DOC_ID_RE.match(doc_id)):
+        return False
+    if doc_id == project:
+        return True
+    if not doc_id.startswith(project + "--"):
+        return False
+    parts = doc_id[len(project) + 2:].split("--")
+    if parts[0] == "run":
+        return len(parts) == 2 and bool(parts[1])
+    if parts[0] in COMMANDS:
+        return len(parts) == 1 or (len(parts) == 2 and bool(parts[1]))
+    return False
 
 
 def _is_timestamp(value) -> bool:
@@ -215,13 +287,16 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
     elif isinstance(project, str) and SLUG.match(project) and "--" not in project and "repo" in rec:
         if project != project_slug(rec["repo"]):
             errors.append(f"'project' must be '{project_slug(rec['repo'])}', the slug of the repository name")
-    if doc_id is not None and isinstance(project, str):
-        if kind == "command" and command in COMMANDS:
-            expected = f"{project}--{command}"
+    keyable = (isinstance(project, str) and SLUG.match(project) and "--" not in project and kind in KINDS
+               and (kind == "run" or command in COMMANDS))
+    if doc_id is not None and keyable and doc_id not in legacy_ids(rec):
+        try:
+            expected = _make_doc_id(rec)
+        except ValueError as exc:
+            errors.append(str(exc))
         else:
-            expected = project
-        if doc_id != expected:
-            errors.append(f"'--doc-id' is '{doc_id}' but the document id of this record is '{expected}'")
+            if doc_id != expected:
+                errors.append(f"'--doc-id' is '{doc_id}' but the document id of this record is '{expected}'")
     if kind == "command":
         for key in ("plan_slug", "plan_url", "feature_branch", "next_check_at"):
             if key in rec and rec[key] is not None:
@@ -314,8 +389,59 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
     return errors
 
 
+class _Parser(argparse.ArgumentParser):
+    def error(self, message):
+        print(f"status-record: {message}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _record_id(args: list[str]) -> int:
+    sp = _Parser(prog="tld board record-id", description="Print the document id of a status record.")
+    sp.add_argument("--repo", required=True, help="owner/name")
+    kind = sp.add_mutually_exclusive_group(required=True)
+    kind.add_argument("--run", action="store_true", help="an implement run (needs --plan-slug)")
+    kind.add_argument("--command", help="a command record: " + ", ".join(COMMANDS))
+    sp.add_argument("--plan-slug", help="the plan slug of the run")
+    who = sp.add_mutually_exclusive_group()
+    who.add_argument("--session", help="the session id of an attended command")
+    who.add_argument("--unattended", action="store_true", help="a scheduled command")
+    try:
+        a = sp.parse_args(args)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 1
+    if not REPO.match(a.repo):
+        sp.error(f"'{a.repo}' does not look like owner/name")
+    project = project_slug(a.repo)
+    if not project:
+        sp.error(f"'{a.repo}' has no letters or digits to make a project slug of")
+    if a.run:
+        if not a.plan_slug:
+            sp.error("--run needs --plan-slug")
+        if a.session or a.unattended:
+            sp.error("--session and --unattended go with --command")
+        rec = {"project": project, "kind": "run", "command": None, "plan_slug": a.plan_slug,
+               "attended": True, "orchestrator_session": a.session}
+    else:
+        if a.command not in COMMANDS:
+            sp.error(f"'{a.command}' is not a command; use one of {', '.join(COMMANDS)}")
+        if a.plan_slug:
+            sp.error("--plan-slug goes with --run")
+        if not a.session and not a.unattended:
+            sp.error("--command needs --session or --unattended")
+        rec = {"project": project, "kind": "command", "command": a.command, "plan_slug": None,
+               "attended": not a.unattended, "orchestrator_session": a.session}
+    try:
+        print(_make_doc_id(rec))
+    except ValueError as exc:
+        print(f"status-record: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
+    if args[:1] == ["record-id"]:
+        return _record_id(args[1:])
     if args[:1] == ["project-slug"]:
         sp = argparse.ArgumentParser(prog="tld board project-slug", description="Print the project slug of a repository.")
         sp.add_argument("repo", help="owner/name")
