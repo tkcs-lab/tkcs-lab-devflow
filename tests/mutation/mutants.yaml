@@ -53,7 +53,8 @@ tests:
   src/tld/guard/_trees.py:
   - tests/core/test_guard_corpus.py
   - tests/core/test_guard_trust.py
-
+  src/tld/plan/active.py:
+  - tests/core/test_plan_active.py
 mutants:
 - id: NM1
   file: src/tld/guard/no_merge.py
@@ -442,3 +443,18 @@ mutants:
   why: curl to the releases endpoint allowed
   old: "    msg = check_curl_tag_api(it)\n    if msg:"
   new: "    msg = None\n    if msg:"
+- id: AR1
+  file: src/tld/plan/active.py
+  why: a run silent for exactly the maximum age counts as stale (killed by test_exactly_max_age_is_still_active)
+  old: 'elif age <= max_age:'
+  new: 'elif age < max_age:'
+- id: AR2
+  file: src/tld/plan/active.py
+  why: comments by anyone count as the bot's (killed by test_start_by_someone_else_is_ignored)
+  old: 'if comment["author"].casefold() == bot.casefold():'
+  new: 'if True:'
+- id: AR3
+  file: src/tld/plan/active.py
+  why: a final marker no longer closes the run (killed by test_final_marker_closes_the_run)
+  old: 'if line.startswith(finals):'
+  new: 'if False:'

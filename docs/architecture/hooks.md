@@ -365,6 +365,7 @@ How a command is parsed, and the commands of the playbooks the guards must allow
 
 ## What the hooks do not protect
 
+- **A second run of the same command.** No hook can see another session, so make-plan and implement check the tracking issue's comments and the board record themselves (`tld plan active-run`); two runs that start before the first one's start comment is visible can both pass the check, and a run that sits more than two hours without a comment or a board update counts as dead.
 - **Sessions without the plugin.** Hooks exist only where `tld` is enabled. A session that does not load the plugin, a
   person at a terminal, another tool, and a CI job are not covered.
 - **Branch protection and CI remain the hard enforcement.** Require a pull request, required reviews, status checks, no

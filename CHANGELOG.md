@@ -7,6 +7,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Added
 
+- A second `/make-plan` of an issue, or `/implement` of a plan, that another session is still running now stops and asks (`stop` or `take_over`). New `tld plan active-run` reads the tracking issue's comments and the board record; a run silent for more than two hours counts as dead. The start comments now end with `Session: <id>.`, and runs post `Planning stopped:` / `Implementation stopped:`.
 - The release workflow template (`template: release`) takes three new parameters, so one `tld-release` can cut
   the tags of every repository: `version_style: pep440` accepts versions like `4.2.0a1`, `check_script` runs a
   repository's own pre-release check with the version before the tag, and `create_release: false` only tags and

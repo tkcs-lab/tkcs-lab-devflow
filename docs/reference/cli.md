@@ -34,6 +34,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld plan check-commands PLAN --profile P` | `tld.plan.phases` | which `verify_after_merge` commands the profile trusts (a verify entry, a `verify.after_merge_allow` prefix, a `ci.dispatchable` dispatch); prints `{"trusted", "unknown"}` (S14) |
 | `tld plan branch-name --plan-slug S \| --review-slug S \| --manifest PLAN [--phase ID [--rev N] \| --fix N]` | `tld.plan.phases` | the branch names of the playbooks (C12) |
 | `tld plan phase-status PLAN [--ref R] [--running ID]... [--approved ID]... [--repo DIR]` | `tld.plan.phases` | done (by `Plan-Phase` trailers on the branch's own, unreverted commits), approved (`Plan-Gate-Approved` trailers or `--approved`), gated, ready, waiting phases and the ones to start, as JSON |
+| `tld plan active-run --kind make-plan\|implement --comments F --bot L [--record F --plan-slug S] [--self ID] [--now ISO] [--max-age-minutes N]` | `tld.plan.active` | is another run of the same plan or issue alive: `none`, `own`, `stale` (exit 0) or `active` (exit 4), from the tracking issue's comments and the board record |
 | `tld roles required --profile P --at POINT [--changed F]` | `tld.roles.dispatch` | the roles required at a point, with their mode, as JSON |
 | `tld roles verify --required F --report F` | `tld.roles.dispatch` | check a report against `tld roles required` |
 | `tld dod exempt` | `tld.dod.gate` | mark this checkout's session exempt from the dod-gate hook |
