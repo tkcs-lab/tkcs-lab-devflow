@@ -31,7 +31,7 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
      entries for the stack.
    - "The reviewer level" is `models.reviewer`; "the worker level" is `models.worker` (C9).
 2. **DoD gate.** This playbook writes a plan, not code: mark the session exempt once with `tld dod exempt`.
-3. **Status record**: `kind: command`, `command: make-plan`, `attended: true`, items `research`, `decide`,
+3. **Status record**: `kind: command`, `command: make-plan`, `attended: true`, document id from `tld board record-id --repo <owner>/<repo> --command make-plan --session <this session's id>`, items `research`, `decide`,
    `write`, `review`, `hand-over`. Write it first (`starting`), but after the check of section 0 step 1 when the
    ask names a tracking issue; then at every step and at the end (`done`, or `failed` with the reason). At
    `failed`, and when you stop for any reason other than a `stop` answered at "Is it already being planned?",
