@@ -442,3 +442,53 @@ def test_repo_profile_trust_boundary(cmd, ok):
     prof = yaml.safe_load((ROOT / ".tld" / "toolkit.yaml").read_text())
     r = phases.check_commands(mf([cmd]), prof)
     assert (r["trusted"] == [cmd]) is ok
+
+
+# ---- check-commands: options after an allowed prefix ----------------------------------------
+TLD = ".venv/bin/python launcher/tld"
+
+
+@pytest.mark.parametrize("tail", ["-q", "-x", "-v", "-vv", "-k test_a", "-k=test_a", "-m slow", "--tb=short",
+                                  "--tb=line", "--tb=no", "--tb short", "-q -x tests/core",
+                                  "tests/core/test_x.py::test_a -k a"])
+def test_check_commands_pytest_safe_options_are_trusted(tail):
+    cmd = f"{PFX} {tail}"
+    assert cc([cmd], allow=[PFX])["trusted"] == [cmd]
+
+
+@pytest.mark.parametrize("tail", ["--basetemp=/home/user -q", "--basetemp build", "-p x", "-pno:cacheprovider",
+                                  "-c other.ini", "--rootdir=/", "--confcutdir=/", "-o addopts=x",
+                                  "--pyargs os", "--junitxml=/root/.bashrc", "/etc", "tests/../../x", "../x",
+                                  "~/x", "--unknown", "--tb=long", "--tb=", "-k", "-k -p", "-q=1", "-- tests"])
+def test_check_commands_pytest_other_options_are_unknown(tail):
+    cmd = f"{PFX} {tail}"
+    assert cc([cmd], allow=[PFX]) == {"trusted": [], "unknown": [cmd]}
+
+
+@pytest.mark.parametrize("cmd", [
+    f"{TLD} ops docs-index check --index docs/README.md",
+    f"{TLD} ops docs-index check --profile .tld/toolkit.yaml --json --strict",
+    f"{TLD} profile validate .tld/toolkit.yaml --no-file-checks",
+    f"{TLD} plan validate-manifest tests/fixtures/p.yaml --profile tests/fixtures/t.yaml --ref feature/x",
+])
+def test_check_commands_tld_safe_options_are_trusted(cmd):
+    prof = yaml.safe_load((ROOT / ".tld" / "toolkit.yaml").read_text())
+    assert phases.check_commands(mf([cmd]), prof)["trusted"] == [cmd]
+
+
+@pytest.mark.parametrize("cmd", [
+    f"{TLD} ops docs-index check --root /",
+    f"{TLD} ops docs-index check --index /etc/passwd",
+    f"{TLD} ops docs-index check --index ../README.md",
+    f"{TLD} ops docs-index check --write",
+    f"{TLD} profile validate /etc/x.yaml",
+    f"{TLD} plan validate-manifest p.yaml --ref -x",
+])
+def test_check_commands_tld_other_options_are_unknown(cmd):
+    prof = yaml.safe_load((ROOT / ".tld" / "toolkit.yaml").read_text())
+    assert phases.check_commands(mf([cmd]), prof)["unknown"] == [cmd]
+
+
+def test_check_commands_other_program_takes_no_options():
+    assert cc(["npm test web", "npm test --watch"], allow=["npm test"]) == {
+        "trusted": ["npm test web"], "unknown": ["npm test --watch"]}

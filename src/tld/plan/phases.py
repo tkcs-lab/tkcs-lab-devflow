@@ -59,6 +59,16 @@ REMOTE = re.compile(r"github\.com[:/](?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z
 DISPATCH = re.compile(r"dispatch ([^\s]+)")
 PLAIN = re.compile(r"[A-Za-z0-9_./=:@%+,*?\[\]\- '\"]*")
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+TOKEN = re.compile(r"[A-Za-z0-9_./:@%+,*?\[\]=-]+")
+# The options a command may carry after a `verify.after_merge_allow` prefix, keyed by the program the prefix
+# names: None takes no value, "token" a plain word, "path" a repo-relative path, a set one of its words.
+# Everything else (pytest's --basetemp, -p, -c, --rootdir, -o; tld's --root; any unknown option) is unknown.
+SAFE_OPTIONS: dict[str, dict[str, object]] = {
+    "pytest": {"-q": None, "-x": None, "-v": None, "-vv": None, "-k": "token", "-m": "token",
+               "--tb": {"short", "line", "no"}},
+    "tld": {"--json": None, "--strict": None, "--no-file-checks": None, "--index": "path", "--profile": "path",
+            "--ref": "token"},
+}
 
 
 class PlanError(Exception):
@@ -250,6 +260,55 @@ def _entries(items: object) -> list[str]:
     return out
 
 
+def _program(prefix: list[str]) -> str:
+    """The program a prefix runs, for SAFE_OPTIONS: `pytest`, `tld`, or "" for any other."""
+    names = [w.rsplit("/", 1)[-1] for w in prefix]
+    if "pytest" in names:
+        return "pytest"
+    return "tld" if "tld" in names else ""
+
+
+def _repo_path(word: str) -> bool:
+    """A repo-relative path: a plain word, no leading `/`, `~` or `-`, no `..` segment."""
+    return (bool(TOKEN.fullmatch(word)) and not word.startswith(("/", "~", "-"))
+            and ".." not in word.split("/"))
+
+
+def _safe_tail(tail: list[str], program: str) -> bool:
+    """Whether every word after an allowed prefix is a safe option of the program or a repo-relative path."""
+    options = SAFE_OPTIONS.get(program, {})
+    i = 0
+    while i < len(tail):
+        word = tail[i]
+        i += 1
+        if not word.startswith("-"):
+            if not _repo_path(word):
+                return False
+            continue
+        name, eq, value = word.partition("=")
+        if name not in options:
+            return False
+        kind = options[name]
+        if kind is None:
+            if eq:
+                return False
+            continue
+        if not eq:
+            if i >= len(tail):
+                return False
+            value = tail[i]
+            i += 1
+        if isinstance(kind, set):
+            ok = value in kind
+        elif kind == "path":
+            ok = _repo_path(value)
+        else:
+            ok = bool(TOKEN.fullmatch(value)) and not value.startswith("-")
+        if not ok:
+            return False
+    return True
+
+
 def check_commands(manifest: dict, profile: dict) -> dict:
     """Split `verify_after_merge` into the commands the profile trusts and the unknown ones (S14)."""
     verify = profile.get("verify")
@@ -283,7 +342,7 @@ def check_commands(manifest: dict, profile: dict) -> dict:
             words = shlex.split(cmd)
         except ValueError:
             return False
-        return any(words[:len(p)] == p for p in prefixes)
+        return any(words[:len(p)] == p and _safe_tail(words[len(p):], _program(p)) for p in prefixes)
 
     result: dict = {"trusted": [], "unknown": []}
     for cmd in manifest.get("verify_after_merge") or []:
