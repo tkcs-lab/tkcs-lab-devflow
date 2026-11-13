@@ -37,7 +37,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p5-release-skill
 
-- pending
+- worker: The skill description is wrapped in double quotes (the brief text contains a colon-space that breaks YAML). Playbook step 2 says "Create the branch chore/release-<X-Y-Z>" instead of a git checkout -b span, because tests/adapters/claude/test_hooks_compat.py rejects the placeholder inside a git span.
+- worker: The evals baseline hashes were refreshed as the brief allows (playbooks linked by recorded commands changed; no recorded task is affected).
+- review: Orchestrator checks: roles verify exit 0 (blocking=0, 7 non-blocking), scope check clean, full suite after the merge 4502 passed, evals check-baseline exit 0. Open non-blocking findings: main can move between the post-merge check and the dispatch; changelog text is pasted into the PR body and the ask; the newest-run lookup can match another actor run; log lines are shown verbatim; the version input has no format check in the playbook (release-prepare checks it); the merged head of the release PR
 
 ## p6-docs-reference
 
