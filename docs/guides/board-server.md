@@ -310,8 +310,8 @@ each text at most 2000 characters, the whole ask at most 64 KiB, and at most 200
 With `TLD_BOARD_PLAN` set, the board keeps the subscription use sessions report (the `usage_samples` table, schema
 version 5). A reading is one sample per window kind (`five_hour`, `seven_day`): the raw `utilization` (a fraction of
 the limit, 0.26 is 26%), the time the window ends (`resets_at`, to the minute), the server's own time of arrival,
-the plan and the factor in force then, and the source (`final`, `scheduled`). The plan and the factor are applied
-only when the page reads the samples, so a wrong setting can be corrected later. Limits: 50 samples per window, a
+the plan and the factor in force then, and the source (`final`, `scheduled`). The plan and the factor are stored with
+each reading and applied when the page reads it, so a wrong setting only affects readings taken while it was in force. Limits: 50 samples per window, a
 window is deleted 120 days after it ended, and at most 20,000 rows are kept (the oldest go first). Upgrading moves
 the database to schema 5: an older board image cannot open it again, so keep the backup from before the upgrade
 (Backup and restore) if you may roll back. The factor (`TLD_BOARD_MAX_FACTOR`, default 5) is an assumption about
@@ -333,9 +333,11 @@ Read the numbers with these limits in mind:
   count), and so is the blocked time.
 - Readings stop near 100% when a limit is hit. On Standard the use above the limit is therefore invisible and the
   page cannot show whether Max would pay off; the verdict only counts windows read on Max.
-- The weekly factor may not be exactly 5. It is an assumption, so change `TLD_BOARD_MAX_FACTOR` if you know better.
+- The Max factor (5 unless you set `TLD_BOARD_MAX_FACTOR`) is an assumption and may not be exactly 5, for the weekly
+  window in particular. One factor serves both kinds. A new value applies to readings taken after the restart and to
+  the Max figures; older readings keep the factor stored with them.
 - `resets_at` is floored to the minute when stored. Jitter that stays inside one minute merges into one window; a
-  larger drift, or jitter that crosses a minute boundary, makes a second row for the same window. This is a known and
+  larger drift, or jitter that crosses a minute boundary, shows up as a second window (a second column with its own readings). This is a known and
   accepted blemish.
 
 ## MCP tools
