@@ -5,6 +5,8 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-13
+
 ### Added
 
 - The board has a Usage page (`#usage`): for the 5-hour and the weekly window, two bars (Standard and Max, Max = 5x Standard), a 30-day history of finished windows, and a verdict whether Standard would have been enough. Set `TLD_BOARD_PLAN` (`standard` or `max`, no default) and optionally `TLD_BOARD_MAX_FACTOR` on the board host.
