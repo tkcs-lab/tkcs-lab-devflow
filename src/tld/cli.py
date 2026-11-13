@@ -43,6 +43,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
                              "end every allow-* marker (profile, workflow install, git-ops)"),
     ("board", "server"): ("tld.board.server", (), "serve the status board"),
     ("board", "client"): ("tld.board.client", (), "health | list | get | set | delete of status records"),
+    ("board", "usage"): ("tld.board.usage_client", (), "send the newest rate-limit reading to the board"),
     ("board", "mcp-stdio"): ("tld.board.mcp_stdio", (), "MCP stdio bridge to the board server"),
     ("board", "stale"): ("tld.board.stale", (), "print the ids of hidden status records"),
     ("board", "resolve"): ("tld.board.resolve", (), "clear needs_you of a record whose pull requests are all merged or closed"),
