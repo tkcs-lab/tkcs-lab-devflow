@@ -48,6 +48,8 @@ tests:
   - tests/core/test_guard_corpus.py
   src/tld/guard/_wrappers.py:
   - tests/core/test_guard_mutations.py
+  src/tld/ops/release_prepare.py:
+  - tests/core/test_release_prepare.py
   - tests/core/test_guard_corpus.py
   src/tld/guard/integrity.py:
   - tests/core/test_guard_corpus.py
@@ -604,4 +606,24 @@ mutants:
   file: src/tld/guard/no_git_tag.py
   why: a curl URL built from a variable is not checked
   old: '    if curl_dynamic_url(it.words):  # whatever the method parser thinks: `-d@f`, `-sd x`, `-sXPOST` hide a body'
+  new: '    if False:'
+- id: RP1
+  file: src/tld/ops/release_prepare.py
+  why: a --version that is not X.Y.Z (a quote, a missing part) is written into the version files
+  old: '    if not SEMVER.match(nxt):'
+  new: '    if False:'
+- id: RP2
+  file: src/tld/ops/release_prepare.py
+  why: a removed line of a version file is not looked at, so a deleted line passes the base check
+  old: '                if line[:1] in "+-" and not line.startswith(("+++", "---")):'
+  new: '                if line[:1] == "+" and not line.startswith(("+++", "---")):'
+- id: RP3
+  file: src/tld/ops/release_prepare.py
+  why: an untracked version file is accepted by the base check
+  old: '            if not _git(root, "ls-files", "--", rel).strip():'
+  new: '            if False:'
+- id: RP4
+  file: src/tld/ops/release_prepare.py
+  why: the files are not compared after writing, so a file that did not move goes unnoticed
+  old: '    if not _agree(prepared["profile"], root, prepared["next"]):'
   new: '    if False:'
