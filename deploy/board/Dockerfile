@@ -7,7 +7,7 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 RUN useradd --system --uid 10001 --no-create-home board && mkdir /data && chown board /data && chmod 700 /data
 WORKDIR /app
 COPY src/tld/__init__.py /app/src/tld/
-COPY src/tld/board/__init__.py src/tld/board/server.py src/tld/board/store.py src/tld/board/mcp.py src/tld/board/build.py src/tld/board/record.py src/tld/board/ask.py /app/src/tld/board/
+COPY src/tld/board/__init__.py src/tld/board/server.py src/tld/board/store.py src/tld/board/mcp.py src/tld/board/build.py src/tld/board/record.py src/tld/board/ask.py src/tld/board/usage.py /app/src/tld/board/
 COPY src/tld/board/web/board.html src/tld/board/web/rules.js /app/src/tld/board/web/
 ENV TLD_BOARD_DB=/data/board.sqlite3 PYTHONUNBUFFERED=1 PYTHONPATH=/app/src PYTHONDONTWRITEBYTECODE=1
 VOLUME ["/data"]
