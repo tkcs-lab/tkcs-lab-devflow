@@ -61,4 +61,5 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Finishing
 
-- pending
+- review: dod on the feature branch: suite 4626 passed, profile and policy validation, fixtures, evals baseline and docs index all green (2 length warnings: hooks.md, board-server.md). tech-writer (dod) 0 blocking, 6 non-blocking: cli.md row omits --profile, the guide points at plan step ma1, guide lacks pre-PR error table, delivery.md:58 omits the skill route, stale git-ops.md:10 and admin.md:236.
+- scope: scope: three out-of-scope paths accepted (tests/core/test_ci_workflows.py, src/tld/guard/_release_dispatch.py, tests/core/test_hook_protect_paths_setup.py), all owner-approved on the board; see the gate entries.
