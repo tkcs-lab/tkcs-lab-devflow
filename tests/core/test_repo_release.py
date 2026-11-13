@@ -22,16 +22,19 @@ def doc():
     return yaml.safe_load(WORKFLOW.read_text())
 
 
-BUILD_STEPS = ["Read the version", "Check that the tag is new and find the previous one", "Set up Python",
+BUILD_STEPS = ["Read the version", "Check that the tag is new and find the previous one",
+               "Check that the commit is green", "Set up Python",
                "Build the wheel and the sdist", "Set up QEMU", "Set up Buildx", "Log in to ghcr",
                "Build the board image", "Collect the release assets", "Upload the release assets"]
 PUBLISH_STEPS = ["Download the release assets", "Check the release assets against SHA256SUMS",
-                 "Check that the commit is green", "Write the release notes", "Publish the tag and the release"]
+                 "Check that the commit is green", "Write the release notes", "Tag the board image",
+                 "Publish the tag and the release"]
 
 
-def step(doc, name):
-    """The step called NAME, looked up in the job that owns it (the names are unique across both jobs)."""
-    job = "publish" if name in PUBLISH_STEPS else "build"
+def step(doc, name, job=None):
+    """The step called NAME. With JOB, only that job's steps are searched; without it, the job that owns the name
+    (a name in both jobs, "Check that the commit is green", is looked up in publish)."""
+    job = job or ("publish" if name in PUBLISH_STEPS else "build")
     return next(s for s in doc["jobs"][job]["steps"] if s.get("name") == name)
 
 
@@ -50,7 +53,7 @@ def test_triggers_environment_and_tokens(doc):
     assert doc["permissions"] == {"contents": "read"}
     assert list(doc["jobs"]) == ["build", "publish"]
     for job in doc["jobs"].values():
-        assert job["environment"] == "tld-release" and job["if"] == "github.ref == 'refs/heads/main'"
+        assert job["if"] == "github.ref == 'refs/heads/main'"
     assert doc["jobs"]["publish"]["needs"] == "build" and "needs" not in doc["jobs"]["build"]
     publish = step(doc, "Publish the tag and the release")
     assert publish["if"] == "inputs.dry_run == false"
@@ -108,24 +111,25 @@ NEW_STEPS = ["Set up Python", "Build the wheel and the sdist", "Set up QEMU", "S
 def test_each_job_has_its_steps_in_order(doc):
     assert names("build") == BUILD_STEPS
     assert names("publish") == PUBLISH_STEPS
-    assert BUILD_STEPS[2:] == NEW_STEPS
+    assert BUILD_STEPS[3:] == NEW_STEPS
 
 
 def test_image_is_built_before_the_tag_and_pushed_only_when_not_a_dry_run(doc):
     # the image is built in the build job, which publish needs: so it precedes the tag
     assert "Build the board image" in names("build") and "Publish the tag and the release" in names("publish")
     assert doc["jobs"]["publish"]["needs"] == "build"
-    assert step(doc, "Build the board image")["with"]["push"] == "${{ inputs.dry_run == false }}"
+    with_ = step(doc, "Build the board image")["with"]
+    assert "push" not in with_ and "tags" not in with_
+    assert with_["outputs"] == ("type=image,name=ghcr.io/${{ github.repository_owner }}/tld-board,"
+                                "push-by-digest=true,name-canonical=true,push=${{ inputs.dry_run == false }}")
     assert step(doc, "Log in to ghcr")["if"] == "inputs.dry_run == false"
 
 
-def test_build_step_has_platforms_tags_and_file(doc):
+def test_build_step_has_platforms_and_file(doc):
     build = step(doc, "Build the board image")
     assert build["id"] == "image"
     w = build["with"]
     assert w["platforms"] == "linux/amd64,linux/arm64" and w["file"] == "deploy/board/Dockerfile" and w["context"] == "."
-    image = "ghcr.io/${{ github.repository_owner }}/tld-board"
-    assert w["tags"].strip().splitlines() == [f"{image}:${{{{ steps.version.outputs.version }}}}", f"{image}:latest"]
 
 
 def test_new_actions_are_the_pinned_shas_of_d4(doc):
@@ -146,8 +150,13 @@ def test_new_actions_are_the_pinned_shas_of_d4(doc):
 
 
 def test_job_permissions(doc):
-    assert doc["jobs"]["build"]["permissions"] == {"contents": "read", "packages": "write"}
-    assert doc["jobs"]["publish"]["permissions"] == {"contents": "read"}
+    assert doc["jobs"]["build"]["permissions"] == {"contents": "read", "checks": "read", "packages": "write"}
+    assert doc["jobs"]["publish"]["permissions"] == {"contents": "read", "packages": "write"}
+
+
+def test_only_the_publish_job_has_the_environment(doc):
+    assert "environment" not in doc["jobs"]["build"]
+    assert doc["jobs"]["publish"]["environment"] == "tld-release"
 
 
 def test_the_build_job_never_references_the_release_token(doc):
@@ -169,8 +178,12 @@ def test_publish_job_runs_no_third_party_build_code(doc):
     uses = [s["uses"] for s in doc["jobs"]["publish"]["steps"] if "uses" in s]
     assert uses == ["actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333"]
     run = "\n".join(s.get("run", "") for s in doc["jobs"]["publish"]["steps"])
-    for word in ("pip install", "docker ", "python -m", "setup.py"):
+    for word in ("pip install", "python -m", "setup.py"):
         assert word not in run, word
+    docker = [s for s in doc["jobs"]["publish"]["steps"] if "docker " in s.get("run", "")]
+    assert [s["name"] for s in docker] == ["Tag the board image"]
+    assert docker[0]["env"]["GITHUB_TOKEN"] == "${{ github.token }}"
+    assert "secrets." not in yaml.safe_dump(docker[0])
 
 
 def test_build_exposes_what_publish_needs(doc):
@@ -193,8 +206,53 @@ def test_qemu_image_is_pinned_by_digest(doc):
     assert re.fullmatch(r"docker\.io/tonistiigi/binfmt@sha256:[0-9a-f]{64}", step(doc, "Set up QEMU")["with"]["image"])
 
 
-def test_green_check_skips_its_own_job(doc):
-    assert step(doc, "Check that the commit is green")["env"]["SELF"] == "publish"
+def test_publish_green_check_skips_its_own_job(doc):
+    assert step(doc, "Check that the commit is green", job="publish")["env"]["SELF"] == "publish"
+
+
+def test_build_green_check_leaves_out_this_run_by_its_id(doc):
+    s = step(doc, "Check that the commit is green", job="build")
+    assert s["if"] == "inputs.skip_checks == false"
+    assert s["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert s["env"]["RUN_ID"] == "${{ github.run_id }}"
+    assert 'contains("/actions/runs/" + env.RUN_ID + "/")' in s["run"]
+    assert "select(.name !=" not in s["run"]
+
+
+def test_the_image_is_tagged_after_the_notes_and_before_the_tag(doc):
+    publish = names("publish")
+    assert publish.index("Write the release notes") < publish.index("Tag the board image") \
+        < publish.index("Publish the tag and the release")
+    assert step(doc, "Tag the board image", job="publish")["if"] == "inputs.dry_run == false"
+
+
+def run_tag_step(doc, tmp_path, digest):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    calls = tmp_path / "calls"
+    stub = bin_dir / "docker"
+    stub.write_text(f'#!/bin/sh\necho "$*" >> {calls}\n')
+    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+    calls.write_text("")
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "GITHUB_TOKEN": "x", "ACTOR": "a", "IMAGE": "ghcr.io/o/tld-board",
+           "TAG": "v1.2.0", "DIGEST": digest, "GITHUB_STEP_SUMMARY": str(tmp_path / "summary")}
+    r = subprocess.run(["bash", "-c", step(doc, "Tag the board image", job="publish")["run"]], cwd=tmp_path,
+                       capture_output=True, text=True, env=env)
+    return r, calls.read_text().splitlines()
+
+
+def test_tag_step_refuses_a_bad_digest(doc, tmp_path):
+    r, calls = run_tag_step(doc, tmp_path, "sha256:xyz")
+    assert r.returncode != 0 and "::error::" in r.stdout + r.stderr
+    assert not any("imagetools" in line for line in calls)
+
+
+def test_tag_step_tags_the_digest_with_the_version_and_latest(doc, tmp_path):
+    digest = "sha256:" + "a" * 64
+    r, calls = run_tag_step(doc, tmp_path, digest)
+    assert r.returncode == 0, r.stderr
+    assert ("buildx imagetools create -t ghcr.io/o/tld-board:1.2.0 -t ghcr.io/o/tld-board:latest "
+            f"ghcr.io/o/tld-board@{digest}") in calls
 
 
 def test_publish_creates_a_draft_with_every_asset_then_publishes(doc):
