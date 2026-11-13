@@ -540,3 +540,23 @@ mutants:
   why: problems exit 0 (killed by every exit-1 test)
   old: "        print(f\"summary: {problem}\")\n    return 1"
   new: "        print(f\"summary: {problem}\")\n    return 0"
+- id: VP13
+  file: src/tld/profile/validate.py
+  why: release pattern regex error ok
+  old: 'errors.append(f"''release.version_files[{i}].pattern'': not a valid regular expression ({exc})")'
+  new: pass
+- id: VP14
+  file: src/tld/profile/validate.py
+  why: release pattern group count ok
+  old: 'if groups != 1:'
+  new: 'if groups == 1:'
+- id: VP15
+  file: src/tld/profile/validate.py
+  why: release without changelog ok
+  old: 'if "changelog" not in docs:'
+  new: 'if "changelog" in docs:'
+- id: VP16
+  file: src/tld/profile/validate.py
+  why: release match count ok
+  old: 'if count != 1:'
+  new: 'if count == 1:'

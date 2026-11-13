@@ -100,6 +100,12 @@ stacks: []               # REQUIRED (may be []). Stack guides to load (stacks/<n
 #   repo: owner/name       # the central repository that holds the tld-git-ops workflow
 #   workflow: tld-git-ops.yml   # optional, this is the default
 
+# release:               # optional: the release skill; needs docs.changelog
+#   workflow: release.yml          # file name in .github/workflows; takes the boolean input dry_run
+#   version_files:                 # every file that holds the version
+#     - path: pyproject.toml
+#       pattern: '^version = "(\d+\.\d+\.\d+)"$'   # regex, multiline, exactly one capture group: the version
+
 # land:                  # optional: /land works without it
 #   max_prs: 10            # 1..50
 

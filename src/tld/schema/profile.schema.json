@@ -501,6 +501,44 @@
         }
       }
     },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflow",
+        "version_files"
+      ],
+      "properties": {
+        "workflow": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+\\.ya?ml$",
+          "description": "File name of the release workflow in .github/workflows. It takes the boolean input dry_run; the release skill dispatches it with dry_run false after the owner's yes."
+        },
+        "version_files": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Files that hold the version; the release skill edits only the version captured by the pattern.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "pattern"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "pattern": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
     "hooks": {
       "type": "object",
       "additionalProperties": false,
