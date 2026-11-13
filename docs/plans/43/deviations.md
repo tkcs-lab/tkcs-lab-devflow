@@ -28,6 +28,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 ## Final review
 
 - final: p1-store-api: docs/guides/board-server.md "Usage readings" lacked the plan 3.9 caveats and a description of the #usage page; fix worker fix-1 adds them.
+- final: fix-1 merged: guide now describes the page and the 3.9 caveats. The worker also corrected one existing guide sentence that wrongly said plan and factor are applied only on read (they are stored per reading). Stale wording remains in the usage.py and store.py docstrings (non-blocking).
 
 ## Finishing
 
