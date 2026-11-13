@@ -1,0 +1,337 @@
+name: release
+
+# Releases tkcs-lab-devflow itself: the tag v<version> on the head of main and a GitHub release whose notes are
+# the CHANGELOG.md entry of that version plus the pull requests merged since the previous tag.
+# The version is the one in pyproject.toml, .claude-plugin/plugin.json and src/tld/__init__.py, which a test keeps
+# equal; bump all three (and add the CHANGELOG entry) in a pull request first. Run it by hand: Actions, release,
+# Run workflow, on main. It starts as a dry run.
+# The release carries everything an install needs: the wheel and the sdist, install.sh and compose.yaml stamped with
+# the version and the image digest, SHA256SUMS over those four, and the multi-arch board image on ghcr.io. The order
+# is: build the image (a dry run builds it and pushes nothing), then the tag, then a draft release holding every
+# asset, then publish the draft. So releases/latest never lacks install.sh, and a failure before the last step
+# leaves no public half-release (at worst an untagged image digest, which nothing refers to).
+# Two jobs, so the owner token never sits on a runner that runs third-party build code. `build` (pip, setuptools, the
+# docker/* actions, QEMU) never references TLD_RELEASE_TOKEN and has no environment, so it runs without an approval: it
+# checks that the commit is green, builds, pushes the board image by digest only (no tag) and uploads dist/ and
+# release-notes.md as an artifact. `publish` (needs: build) is the one approval of a run: it has the token and runs only
+# gh, docker and the shell: it downloads the artifact, checks it against SHA256SUMS, checks that the commit is green,
+# puts the tags :<version> and :latest on the image digest, then makes the tag, the draft release and the release.
+# Modelled on src/tld/templates/tld-release.yml: the tag is made with TLD_RELEASE_TOKEN, an owner token that is a
+# secret of the environment tld-release (main only, the owner approves the publish job of every run); the workflow's
+# GITHUB_TOKEN reads, only the build job (an untagged image) and the publish job (the image tags) write packages, and
+# the tag ruleset tld-tags lets no workflow token create a tag.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only show the tag and the release notes; untick to publish"
+        required: false
+        default: true
+        type: boolean
+      skip_checks:
+        description: "Release even though a check on the commit is not green"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      checks: read
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      previous: ${{ steps.previous.outputs.previous }}
+      digest: ${{ steps.image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the version
+        id: version
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, re, sys, tomllib
+          from pathlib import Path
+          package = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          plugin = json.loads(Path(".claude-plugin/plugin.json").read_text())["version"]
+          init = re.search(r'^__version__ = "([^"]+)"', Path("src/tld/__init__.py").read_text(), re.M).group(1)
+          if not package == plugin == init:
+              sys.exit(f"::error::versions differ: pyproject.toml {package}, plugin.json {plugin}, tld.__version__ {init}")
+          if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", package):
+              sys.exit(f"::error::{package} is not a release version (x.y.z): bump it in a pull request first")
+          entry = re.search(rf"^## \[{re.escape(package)}\][^\n]*\n(.*?)(?=^## \[|\Z)", Path("CHANGELOG.md").read_text(), re.M | re.S)
+          if not entry or not entry.group(1).strip():
+              sys.exit(f"::error::CHANGELOG.md has no '## [{package}]' entry")
+          Path("release-notes.md").write_text(entry.group(1).strip() + "\n")
+          print(f"version={package}")
+          print(f"tag=v{package}")
+          PY
+          echo "Release tag: $(grep '^tag=' "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check that the tag is new and find the previous one
+        id: previous
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/$REPO/git/ref/tags/$TAG" > /dev/null 2>&1; then
+            echo "::error::tag $TAG already exists"
+            exit 1
+          fi
+          previous=$(gh api --paginate "repos/$REPO/git/matching-refs/tags/v" --jq '.[].ref' \
+            | sed 's#^refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          echo "Previous tag: ${previous:-none}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check that the commit is green
+        if: inputs.skip_checks == false
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # build pushes the image, so a red commit stops here, before anything is pushed. Its own check and the
+          # not yet started publish check are left out.
+          bad=$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[]
+            | select(.name != "build" and .name != "publish")
+            | select(.status != "completed" or (.conclusion | IN("success", "skipped", "neutral") | not))
+            | "\(.name): \(.status) \(.conclusion // "")"')
+          if [ -n "$bad" ]; then
+            echo "::error::checks on $SHA are not all green:"
+            printf '  %s\n' "$bad"
+            exit 1
+          fi
+          echo "checks on $SHA are green"
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.13"
+
+      - name: Build the wheel and the sdist
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          python -m pip install build==1.2.2
+          python -m build --outdir dist .
+          for f in "dist/tld-$VERSION-py3-none-any.whl" "dist/tld-$VERSION.tar.gz"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::the build did not produce $f"
+              exit 1
+            fi
+          done
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        with:
+          # The action's default for this version is docker.io/tonistiigi/binfmt:latest, run privileged. Pinned by
+          # digest (the tag :latest on 2026-11-12) so a moved tag cannot change what runs; refresh it by hand.
+          image: docker.io/tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to ghcr
+        if: inputs.dry_run == false
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build the board image
+        id: image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: deploy/board/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          # Pushed by digest, without a tag: the tags :<version> and :latest are added by the publish job after the
+          # owner approved it. A dry run (push=false) builds and pushes nothing.
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/tld-board,push-by-digest=true,name-canonical=true,push=${{ inputs.dry_run == false }}
+
+      - name: Collect the release assets
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/tld-board
+          DIGEST: ${{ steps.image.outputs.digest }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "$DRY_RUN" = "true" ]; then
+            DIGEST=sha256:dry-run
+          elif [ -z "$DIGEST" ]; then
+            echo "::error::the image build gave no digest"
+            exit 1
+          fi
+          sed "s/@TLD_VERSION@/$VERSION/" deploy/install.sh > dist/install.sh
+          sed "s#@TLD_IMAGE@#$IMAGE@$DIGEST#" deploy/board/compose.yaml > dist/compose.yaml
+          if grep -l '@TLD_' dist/install.sh dist/compose.yaml; then
+            echo "::error::a release asset still holds an unstamped @TLD_ token"
+            exit 1
+          fi
+          (cd dist && sha256sum "tld-$VERSION-py3-none-any.whl" "tld-$VERSION.tar.gz" install.sh compose.yaml > SHA256SUMS)
+          {
+            echo "## Release assets"
+            ls -1 dist | sed 's/^/- /'
+            echo
+            echo "Image: $IMAGE@$DIGEST"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the release assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-dist
+          path: |
+            dist/
+            release-notes.md
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: publish
+    needs: build
+    runs-on: ubuntu-latest
+    environment: tld-release
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download the release assets
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: release-dist
+          path: .
+
+      - name: Check the release assets against SHA256SUMS
+        env:
+          TAG: ${{ needs.build.outputs.tag }}
+          PREVIOUS: ${{ needs.build.outputs.previous }}
+        run: |
+          set -euo pipefail
+          # TAG and PREVIOUS come from the build job, which runs third-party code: trust nothing it wrote.
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if [[ ! "$TAG" =~ $semver ]] || { [ -n "$PREVIOUS" ] && [[ ! "$PREVIOUS" =~ $semver ]]; }; then
+            echo "::error::the build job gave a tag or a previous tag that is not vX.Y.Z"
+            exit 1
+          fi
+          version=${TAG#v}
+          expected=$(printf '%s\n' SHA256SUMS compose.yaml install.sh "tld-$version-py3-none-any.whl" "tld-$version.tar.gz" | sort)
+          if [ -n "$(find dist ! -type f ! -path dist)" ] || [ "$(ls -1A dist | sort)" != "$expected" ]; then
+            echo "::error::dist/ does not hold exactly the five release assets for $TAG"
+            exit 1
+          fi
+          cd dist
+          if ! sha256sum -c SHA256SUMS; then
+            echo "::error::dist/ does not match SHA256SUMS; the artifact release-dist is not what the build job collected"
+            exit 1
+          fi
+
+      - name: Check that the commit is green
+        if: inputs.skip_checks == false
+        env:
+          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          SELF: publish
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::secret TLD_RELEASE_TOKEN is not set in the environment tld-release"
+            exit 1
+          fi
+          bad=$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[]
+            | select(.name != env.SELF)
+            | select(.status != "completed" or (.conclusion | IN("success", "skipped", "neutral") | not))
+            | "\(.name): \(.status) \(.conclusion // "")"')
+          if [ -n "$bad" ]; then
+            echo "::error::checks on $SHA are not all green:"
+            printf '  %s\n' "$bad"
+            exit 1
+          fi
+          echo "checks on $SHA are green"
+
+      - name: Write the release notes
+        env:
+          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          TAG: ${{ needs.build.outputs.tag }}
+          PREVIOUS: ${{ needs.build.outputs.previous }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::secret TLD_RELEASE_TOKEN is not set in the environment tld-release"
+            exit 1
+          fi
+          args=(-X POST "repos/$REPO/releases/generate-notes" -f tag_name="$TAG" -f target_commitish="$SHA")
+          if [ -n "$PREVIOUS" ]; then
+            args+=(-f previous_tag_name="$PREVIOUS")
+          fi
+          { echo; gh api "${args[@]}" --jq .body; } >> release-notes.md
+          { echo "## Notes for $TAG"; cat release-notes.md; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tag the board image
+        if: inputs.dry_run == false
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/tld-board
+          TAG: ${{ needs.build.outputs.tag }}
+          DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          # DIGEST and TAG come from the build job, which runs third-party code: check their shape.
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::the build job gave no image digest of the form sha256:<64 hex>"
+            exit 1
+          fi
+          version=${TAG#v}
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker buildx imagetools create -t "$IMAGE:$version" -t "$IMAGE:latest" "$IMAGE@$DIGEST"
+          echo "Image $IMAGE@$DIGEST tagged $version and latest" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the tag and the release
+        if: inputs.dry_run == false
+        env:
+          GH_TOKEN: ${{ secrets.TLD_RELEASE_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          TAG: ${{ needs.build.outputs.tag }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          object=$(gh api -X POST "repos/$REPO/git/tags" -f tag="$TAG" -f message="Release $TAG" -f object="$SHA" -f type=commit --jq .sha)
+          gh api -X POST "repos/$REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$object" > /dev/null
+          if ! gh release create --verify-tag --draft --repo "$REPO" --title "$TAG" --notes-file release-notes.md -- "$TAG" ./dist/*; then
+            echo "::error::tag $TAG was created but the release was not; dist/ is in the artifact release-dist of run $RUN_ID (kept 14 days). Run: gh run download $RUN_ID --repo $REPO --name release-dist  then: gh release create $TAG --verify-tag --draft --repo $REPO --title $TAG --notes-file release-notes.md dist/*  then: gh release edit $TAG --draft=false --repo $REPO"
+            exit 1
+          fi
+          if ! gh release edit "$TAG" --draft=false --repo "$REPO"; then
+            echo "::error::the draft release of $TAG exists but is not published; run: gh release edit $TAG --draft=false --repo $REPO"
+            exit 1
+          fi
+          url=$(gh release view "$TAG" --repo "$REPO" --json url -q .url)
+          echo "Released $TAG: $url" >> "$GITHUB_STEP_SUMMARY"
+          echo "$url"
