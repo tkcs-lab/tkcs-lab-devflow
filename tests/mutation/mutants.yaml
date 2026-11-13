@@ -615,8 +615,8 @@ mutants:
 - id: RP2
   file: src/tld/ops/release_prepare.py
   why: a removed line of a version file is not looked at, so a deleted line passes the base check
-  old: '                if line[:1] in "+-" and not line.startswith(("+++", "---")):'
-  new: '                if line[:1] == "+" and not line.startswith(("+++", "---")):'
+  old: '    return [line for line in lines[first:] if line[:1] in ("+", "-")]'
+  new: '    return [line for line in lines[first:] if line[:1] == "+"]'
 - id: RP3
   file: src/tld/ops/release_prepare.py
   why: an untracked version file is accepted by the base check

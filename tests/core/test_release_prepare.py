@@ -314,3 +314,30 @@ def test_the_patterns_of_the_release_profile_match_this_repository_exactly_once(
                 "src/tld/__init__.py": r'^__version__ = "(\d+\.\d+\.\d+)"'}
     for rel, pattern in patterns.items():
         assert len(re.findall(pattern, (ROOT / rel).read_text(), re.M)) == 1, rel
+
+
+@pytest.mark.parametrize("extra", ['++__import__("os")\n', '--x\n', '; import os\n'])
+@pytest.mark.parametrize("commit", [False, True])
+def test_check_base_fails_on_content_that_looks_like_a_diff_header_or_trails_the_version(repo, capsys, extra, commit):
+    prepared(repo, capsys)
+    p = repo / "pkg/__init__.py"
+    text = p.read_text()
+    p.write_text(text.replace("# kept equal", extra.strip() + " # kept equal") if extra.startswith(";")
+                 else text + extra)
+    if commit:
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "x")
+    code, _, err = run(capsys, "--check", "--version", "1.2.0", "--base", "origin/main")
+    assert code == 1 and "pkg/__init__.py" in err
+
+
+def test_check_base_refuses_a_ref_that_looks_like_an_option(repo, capsys):
+    prepared(repo, capsys)
+    code, _, err = run(capsys, "--check", "--version", "1.2.0", "--base=--independent")
+    assert code == 1 and "--independent is not a git ref" in err
+
+
+def test_the_base_content_must_still_match_the_pattern(repo, capsys):
+    prepared(repo, capsys)
+    assert rp._rebuild_problems(repo, "HEAD", "pkg/__init__.py", r'^nothing = "(\d+)"', "1") == [
+        "no match for the pattern in pkg/__init__.py at the base"]

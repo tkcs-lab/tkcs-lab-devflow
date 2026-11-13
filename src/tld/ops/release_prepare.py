@@ -190,9 +190,8 @@ def _git(root: Path, *args: str) -> str:
     return r.stdout
 
 
-def _changed_since(root: Path, base: str) -> set[str]:
-    merge_base = _git(root, "merge-base", base, "HEAD").strip()
-    names = set(_git(root, "diff", "--name-only", merge_base).splitlines())
+def _changed_since(root: Path, merge_base: str) -> set[str]:
+    names = set(_git(root, "diff", "--name-only", "--no-renames", merge_base).splitlines())
     for line in _git(root, "status", "--porcelain").splitlines():
         names.update(p.strip() for p in line[3:].split(" -> "))
     return names
@@ -221,16 +220,25 @@ def check(profile: dict, root: Path, version: str, base: str | None) -> list[str
     if _heading(cl["section"], text) is None:
         problems.append(f"{cl['file']} has no section '{cl['section']}'")
     if base is not None and not problems:
-        problems += _base_problems(profile, root, base)
+        problems += _base_problems(profile, root, base, version)
     return problems
 
 
-def _base_problems(profile: dict, root: Path, base: str) -> list[str]:
+def _diff_lines(diff: str) -> list[str]:
+    """The added and removed lines of a one-file diff: everything after the first hunk header."""
+    lines = diff.splitlines()
+    first = next((i for i, line in enumerate(lines) if line.startswith("@@")), len(lines))
+    return [line for line in lines[first:] if line[:1] in ("+", "-")]
+
+
+def _base_problems(profile: dict, root: Path, base: str, version: str) -> list[str]:
+    if base.startswith("-"):
+        return [f"{base} is not a git ref"]
     cl_file = profile["docs"]["changelog"]["file"]
     files = {vf["path"]: vf["pattern"] for vf in profile["release"]["version_files"]}
     try:
-        changed = _changed_since(root, base)
         merge_base = _git(root, "merge-base", base, "HEAD").strip()
+        changed = _changed_since(root, merge_base)
         problems = [f"{name} changed since {base}, but is neither the changelog nor a version file"
                     for name in sorted(changed - set(files) - {cl_file})]
         for rel, pattern in files.items():
@@ -239,13 +247,26 @@ def _base_problems(profile: dict, root: Path, base: str) -> list[str]:
             if not _git(root, "ls-files", "--", rel).strip():
                 problems.append(f"{rel} is not tracked by git")
                 continue
-            for line in _git(root, "diff", "-U0", merge_base, "--", rel).splitlines():
-                if line[:1] in "+-" and not line.startswith(("+++", "---")):
-                    if not re.search(pattern, line[1:].rstrip("\r"), re.M):
-                        problems.append(f"{rel}: the changed line {line!r} is not a version line")
+            for line in _diff_lines(_git(root, "diff", "-U0", "--no-renames", merge_base, "--", rel)):
+                if not re.search(pattern, line[1:].rstrip("\r"), re.M):
+                    problems.append(f"{rel}: the changed line {line!r} is not a version line")
+            problems += _rebuild_problems(root, merge_base, rel, pattern, version)
         return problems
     except ReleaseError as exc:
         return [str(exc)]
+
+
+def _rebuild_problems(root: Path, merge_base: str, rel: str, pattern: str, version: str) -> list[str]:
+    """The file must equal its base content with only the version replaced (nothing else on any line)."""
+    old = _git(root, "show", f"{merge_base}:{rel}")
+    try:
+        m = _span(rel, pattern, old)
+    except ReleaseError as exc:
+        return [f"{exc} at the base"]
+    expected = old[:m.start(1)] + version + old[m.end(1):]
+    if _read(_inside(root, rel)).replace("\r\n", "\n") != expected.replace("\r\n", "\n"):
+        return [f"{rel} differs from its base content in more than the version"]
+    return []
 
 
 def _load(path: str) -> dict:
