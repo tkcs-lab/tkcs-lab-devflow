@@ -1,7 +1,7 @@
 # Maintenance commands and the status board
 
-Five commands keep a repository up to date and tidy without you doing the work: `/deps`, `/ci`, `/upstream`,
-`/land` and `/docs tidy`. `/deps`, `/ci`, `/upstream` and `/docs tidy` run unattended from a scheduled task; `/land` is run by you. None
+Six commands keep a repository up to date and tidy without you doing the work: `/deps`, `/ci`, `/upstream`,
+`/land`, `/docs tidy` and `/usage`. `/deps`, `/ci`, `/upstream`, `/docs tidy` and `/usage` run unattended from a scheduled task; `/land` is run by you. None
 of them ever merges, approves or enables auto-merge. Each writes a status record to the board (see
 below) when one exists. What the spike found about what a cloud session can and cannot do is in
 [maintenance-spike.md](../architecture/maintenance-spike.md).
@@ -72,6 +72,26 @@ missing ADR-index row. The result is one pull request, or, when only judgement i
 docs over 400 lines, an index over 150 lines), an issue titled `Docs tidy: <n> items to decide` with a
 checklist. It never merges, deletes, moves or edits a doc body. It writes a record with `command: docs`
 and the document id `<project>--docs` (unattended, unchanged); with nothing to fix the record says `docs clean`.
+
+### `/usage`
+
+Every 2 hours it reads the account-wide rate-limit reading its own session has seen (the 5-hour and the weekly
+window) and sends it with `tld board usage --source scheduled` to the board's Usage page
+([board-server.md](board-server.md)). It writes no status record, asks nothing and posts nothing on GitHub. It
+runs on the fast model level and each run spends a little of the same subscription quota; when you are idle it can
+itself start a 5-hour window, which the page keeps out of the verdict (a window that stays below 5% of Standard
+counts as idle). Without a reading (a scheduled session may not be allowed to read its own stream) it replies
+`usage: no reading` and changes nothing. Schedule it with the cron line `7 */2 * * *`.
+
+After a release that adds it:
+
+1. Upgrade the board host with the installer line ([delivery.md](delivery.md)). The database moves to schema 5; keep
+   a backup first (see "Backup and restore" in the board guide).
+2. Add `TLD_BOARD_PLAN=max` (and, to make it explicit, `TLD_BOARD_MAX_FACTOR=5`) to `~/tld-board/.env`, then run
+   `docker compose up -d` in `~/tld-board`.
+3. Optional: in claude.ai add a scheduled task that runs `/tld:usage` every 2 hours. The first run shows whether a
+   scheduled session may read its own stream (`usage: no reading` if not).
+4. After a day compare the Max bars with https://claude.ai/settings/usage; they should agree within 5 points.
 
 ## Profile sections
 

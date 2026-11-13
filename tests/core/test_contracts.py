@@ -22,7 +22,7 @@ RUNTIME = PLAYBOOKS / "runtime.md"
 CORE_DIRS = [ROOT / d for d in ("playbooks", "roles", "checklists", "stacks")]
 CORE_FILES = sorted(p for d in CORE_DIRS for p in d.rglob("*.md"))
 ADAPTER_FILES = sorted(CLAUDE.rglob("*.md"))
-COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "ci", "upstream", "docs", "board", "migrate")
+COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "ci", "upstream", "docs", "board", "migrate", "usage")
 
 cli = _load("tld.cli")
 dispatch = _load("tld.roles.dispatch")
@@ -260,7 +260,7 @@ def test_every_playbook_links_the_untrusted_text_policy(path):
 @pytest.mark.parametrize("name", COMMANDS)
 def test_every_command_playbook_writes_a_status_record_or_says_why_not(name):
     text = (PLAYBOOKS / f"{name}.md").read_text()
-    if name in ("dod", "board"):  # a report and a check; they change nothing
+    if name in ("dod", "board", "usage"):  # a report and a check change nothing; usage sends a reading, no record
         return
     assert "policies/status-board.md" in text, name
     assert re.search(r"`attended: (true|false)`", text), f"{name}: no attended value (C7)"
