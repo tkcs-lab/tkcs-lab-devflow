@@ -103,8 +103,8 @@ that runner; the one approval of a run is the environment `tld-release` on `publ
 green (`publish` checks again), builds the wheel and the sdist, builds the board image for linux/amd64 and linux/arm64 and pushes it to
 `ghcr.io/tkcs-lab/tld-board` by digest, without a tag, collects five assets (`tld-X.Y.Z-py3-none-any.whl`,
 `tld-X.Y.Z.tar.gz`, `install.sh` and `compose.yaml` stamped with the version and the image digest, and `SHA256SUMS`)
-and uploads them as the artifact `release-dist` (kept 14 days). `publish` (`needs: build`, read only, holds the
-token, and `packages: write` for the image tags) downloads it, runs `sha256sum -c SHA256SUMS`, adds the image tags
+and uploads them as the artifact `release-dist` (kept 14 days). `publish` (`needs: build`, `contents: read` plus
+`packages: write` for the image tags, holds the token) downloads it, runs `sha256sum -c SHA256SUMS`, adds the image tags
 (the version and `latest`), and only then creates the tag and a draft release with the assets, which it publishes
 last, so the release is public complete or not at all. The QEMU binfmt image is pinned by digest in `release.yml`; to refresh it, resolve `docker.io/tonistiigi/binfmt:latest` (the current digest was read through `mirror.gcr.io` and not checked against docker.io) and update the digest by hand. A dry run builds everything, pushes nothing and tags nothing.
 

@@ -49,7 +49,7 @@ by digest without a tag, holds `packages: write` and `checks: read`, and never r
 `publish` is behind the environment `tld-release`, the one approval of a run, and holds `TLD_RELEASE_TOKEN`, which can
 create tags; it runs `gh`, docker and the shell, with no third-party build code on that runner. It checks the
 downloaded `dist/` against `SHA256SUMS`, which catches a corrupt transfer but not a compromised `build` job, since that
-job wrote the sums (the image digest it hands on is as untrusted, so the approval is the control: compare it with the digest in the step summary of `build`), adds the image tags with the workflow token (`packages: write`) and only then makes the tag and the
+job wrote the sums (the image digest it hands on is as untrusted, so the approval is the control: compare it with the digest in the registry, not with the summary `build` wrote), adds the image tags with the workflow token (`packages: write`) and only then makes the tag and the
 release. An unapproved run moves no tag, but `build` runs without approval.
 
 ## What a report can be about
