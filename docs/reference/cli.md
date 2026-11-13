@@ -47,6 +47,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld guard end-allow` | `tld.guard.protect_paths` | end the profile, workflow-install and git-ops markers; it does not end the plan marker |
 | `tld board server [--host H] [--port N] [--db F] [--insecure-cookie] ...` | `tld.board.server` | serve the board: status records, asks, the owner's page ([board-server.md](../guides/board-server.md)) |
 | `tld board client health\|list\|get\|set\|delete ...` | `tld.board.client` | status records on the board server |
+| `tld board usage FILE\|- [--source final\|scheduled]` | `tld.board.usage_client` | send the newest rate-limit reading to the board's Usage page; exit 3 no board, 1 refused or not understood |
 | `tld board ask FILE\|- [--fallback-issue O/R[#N]] [--mention LOGIN] [--profile P]` | `tld.board.inbox` | post an ask and print its id; exit 3 no board, 5 the fallback comment body is on stdout |
 | `tld board answers ID [--wait S] [--interval S]` | `tld.board.inbox` | print the answers JSON; exit 3 still open, 4 cancelled |
 | `tld board answers --from-issue COMMENTS.json --ask FILE --self LOGIN [--owner LOGIN]... [--repo O/R] [--profile P]` | `tld.board.inbox` | the answers in the owner's (`--owner`, else `git.owner_login`, else the repository owner) or an admin's replies to a fallback comment, never `--self`'s (required); exit 3 incomplete, 2 no `--self` or no owner |
