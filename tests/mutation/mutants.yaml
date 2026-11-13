@@ -26,6 +26,8 @@ tests:
   - tests/core/test_profile_version.py
   src/tld/plan/manifest.py:
   - tests/core/test_validate_manifest.py
+  src/tld/plan/summary.py:
+  - tests/core/test_plan_summary.py
   src/tld/guard/markers.py:
   - tests/core/test_guard_markers.py
   - tests/core/test_guard_mutations.py
@@ -458,3 +460,83 @@ mutants:
   why: a final marker no longer closes the run (killed by test_final_marker_closes_the_run)
   old: 'if line.startswith(finals):'
   new: 'if False:'
+- id: SM1
+  file: src/tld/plan/summary.py
+  why: 'the limit is exclusive: exactly the maximum fails (killed by test_exactly_the_limit_is_ok_and_one_more_fails)'
+  old: "if words > MAX_WORDS[kind]:"
+  new: "if words >= MAX_WORDS[kind]:"
+- id: SM2
+  file: src/tld/plan/summary.py
+  why: the plan limit is 351 (killed by test_exactly_the_limit_is_ok_and_one_more_fails and test_constants_match_the_design)
+  old: "\"plan\": 350"
+  new: "\"plan\": 351"
+- id: SM3
+  file: src/tld/plan/summary.py
+  why: the heading is left out of the word count (killed by test_the_heading_is_counted)
+  old: "sect = lines[start:end]"
+  new: "sect = lines[start + 1:end]"
+- id: SM4
+  file: src/tld/plan/summary.py
+  why: the count runs to the end of the file instead of the next heading (killed by test_the_count_stops_at_the_next_section)
+  old: "end = after[0][0] if after else len(lines)"
+  new: "end = len(lines)"
+- id: SM5
+  file: src/tld/plan/summary.py
+  why: the section ends at any line starting with # (killed by test_a_sub_heading_stays_inside_the_summary_and_its_words_count)
+  old: "elif line.startswith(\"## \"):"
+  new: "elif line.startswith(\"#\"):"
+- id: SM6
+  file: src/tld/plan/summary.py
+  why: the fence is never entered, so fenced headings and labels count (killed by the fence tests)
+  old: "fence = opened"
+  new: "pass"
+- id: SM7
+  file: src/tld/plan/summary.py
+  why: CRLF is not normalised, so the echoed line carries a carriage return (killed by test_crlf_gives_the_same_result_as_lf)
+  old: "return text.replace(\"\\r\\n\", \"\\n\")"
+  new: "return text"
+- id: SM8
+  file: src/tld/plan/summary.py
+  why: two Summary headings need three to fail (killed by test_two_summary_headings_fail)
+  old: "if len(exact) > 1:"
+  new: "if len(exact) > 2:"
+- id: SM9
+  file: src/tld/plan/summary.py
+  why: the placement check is skipped (killed by the placement tests)
+  old: "problems += placement(lines, kinds, heads, start, kind)"
+  new: "pass"
+- id: SM10
+  file: src/tld/plan/summary.py
+  why: an issue no longer starts with the Request heading (killed by test_an_issue_has_request_then_summary)
+  old: "ok = pos == 1 and heads[0][1] == \"Request\""
+  new: "ok = pos == 0"
+- id: SM11
+  file: src/tld/plan/summary.py
+  why: label names match in any case (killed by test_a_wrong_case_label_is_unknown_and_the_right_one_is_missing)
+  old: "if name not in order:"
+  new: "if name.lower() not in [o.lower() for o in order]:"
+- id: SM12
+  file: src/tld/plan/summary.py
+  why: the dash prefix of a label line is not accepted (killed by test_dash_labels_are_accepted)
+  old: "rest = line[2:] if line.startswith(\"- \") else line"
+  new: "rest = line"
+- id: SM13
+  file: src/tld/plan/summary.py
+  why: the required labels of plan and pr are swapped (killed by the missing-label tests)
+  old: "    \"plan\": (\"Use it\", \"Scope\", \"Review focus\"),\n    \"issue\": (\"Use it\", \"Scope\", \"Review focus\"),\n    \"pr\": (\"Deviations\", \"Review focus\"),"
+  new: "    \"plan\": (\"Deviations\", \"Review focus\"),\n    \"issue\": (\"Use it\", \"Scope\", \"Review focus\"),\n    \"pr\": (\"Use it\", \"Scope\", \"Review focus\"),"
+- id: SM14
+  file: src/tld/plan/summary.py
+  why: a label given twice is not reported (killed by test_a_duplicate_label_is_reported_once)
+  old: "if known.count(name) > 1:"
+  new: "if False:"
+- id: SM15
+  file: src/tld/plan/summary.py
+  why: an echoed fragment is not cut to TEXT_MAX (killed by test_a_long_unknown_label_is_echoed_at_text_max)
+  old: "return scrub(text[:TEXT_MAX])"
+  new: "return scrub(text)"
+- id: SM16
+  file: src/tld/plan/summary.py
+  why: problems exit 0 (killed by every exit-1 test)
+  old: "        print(f\"summary: {problem}\")\n    return 1"
+  new: "        print(f\"summary: {problem}\")\n    return 0"
