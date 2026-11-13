@@ -34,3 +34,4 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - scope: evals/fixtures/commands.py (p4-collect) is still in the final diff: accepted. No other scope drift.
 - final: dod gate: tech-writer (dod) found one blocking doc error, docs/guides/maintenance.md said all six commands write a status record but /usage writes none; fix worker fix-2 corrects it.
+- final: fix-2 merged: maintenance.md now says /usage writes no status record; the worker also corrected two other sentences in the same guide that made the same claim.
