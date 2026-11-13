@@ -43,7 +43,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p6-docs-reference
 
-- pending
+- worker: The docs describe the merged guard (exact dry_run true, skip_checks must be exactly false, no curl or gh api --input dispatch, no dynamic or glob words), not the plan section 3.4 design; they do not list the open findings and say the owner merge and publish approval are the controls. A workflow under another name is guarded only once the profile names it (the hook guards the names the profile lists).
+- review: Orchestrator checks: roles verify exit 0 (round 2 blocking=0; round 1 had one blocking, fixed), scope check clean, full suite after the merge 4502 passed, evals baseline current, docs index 0 errors. The first acceptance grep only hits the plan own brief. Out of scope for this phase: README.md:81, docs/guides/git-ops.md:10 and docs/guides/admin.md:236 still say the owner runs the release by hand.
 
 ## p7-retire
 
