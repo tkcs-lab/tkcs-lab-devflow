@@ -48,7 +48,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p7-retire
 
-- pending
+- review: Orchestrator checks: roles verify exit 0 (blocking=0), scope check clean, full suite after the merge 4503 passed, evals baseline current, docs index 0 errors; the three acceptance greps run by the orchestrator (one index row, tld:release in README, one Added heading). The guide and changelog follow the merged guard, not the plan wording. Stale wording left: docs/guides/git-ops.md:10 and docs/guides/admin.md:236 (outside every phase touches).
 
 ## Final review
 
