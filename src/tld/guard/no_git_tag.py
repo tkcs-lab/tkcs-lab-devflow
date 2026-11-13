@@ -106,6 +106,7 @@ PUSH_KEY = re.compile(r"^remote\.[^=]*\.(push|mirror)$", re.I)
 RUN_VALUE_OPTS = ("--ref", "-r", "-R", "--repo")
 API_VALUE_OPTS = ("-q", "--jq", "-t", "--template", "-H", "--header", "-p", "--preview", "--hostname", "--cache",
                   "-X", "--method", "--input")
+UNREADABLE_WORD = re.compile(r"[{}*]")   # brace expansion and globbing: the shell decides the real word
 UNREADABLE_RELEASE = ("this release dispatch has inputs that cannot be read, so dry_run and skip_checks cannot be "
                       "checked; dispatch with plain -f fields or the MCP inputs")
 
@@ -266,7 +267,9 @@ def _release_fields(words: list[str], start: int, skip_opts: tuple[str, ...], ke
 def _release_gh_run(ctx: Ctx, it: Item, ident: str) -> str | None:
     """`gh workflow run <release workflow>`: every -f/-F value of dry_run and skip_checks is read."""
     values, unreadable = _release_fields(it.words, 0, RUN_VALUE_OPTS, {"dry_run": "dry_run", "skip_checks": "skip_checks"})
-    return deny(UNREADABLE_RELEASE) if unreadable else release_inputs_problem(ctx, ident, values)
+    if unreadable or any(is_dynamic(w) or UNREADABLE_WORD.search(w) for w in it.words):
+        return deny(UNREADABLE_RELEASE)
+    return release_inputs_problem(ctx, ident, values)
 
 
 def _release_api(ctx: Ctx, it: Item, api, ident: str) -> str | None:
@@ -274,7 +277,8 @@ def _release_api(ctx: Ctx, it: Item, api, ident: str) -> str | None:
     never read (it can change between the check and the run)."""
     keymap = {"inputs[dry_run]": "dry_run", "inputs[skip_checks]": "skip_checks"}
     values, unreadable = _release_fields(it.words, 2, API_VALUE_OPTS, keymap)
-    if unreadable or api.field_files or api.input_file:
+    if unreadable or api.field_files or api.input_file or any(is_dynamic(w) for w in it.words) \
+            or UNREADABLE_WORD.search(api.endpoint or ""):
         return deny(UNREADABLE_RELEASE)
     return release_inputs_problem(ctx, ident, values)
 
@@ -378,6 +382,9 @@ def check_gh(ctx: Ctx, it: Item) -> str | None:
         api = parse_gh_api(it.words)
         ep = api.endpoint
         clean = posixpath.normpath(re.sub(r"%([0-9a-fA-F]{2})", lambda h: chr(int(h[1], 16)), re.split(r"[?#]", ep)[0])) if ep else ep
+        if api.method != "GET" and (is_dynamic(ep) or UNREADABLE_WORD.search(ep)):
+            return deny("this `gh api` call builds its endpoint at run time, so it cannot be checked against the "
+                        "release workflow; call it with a plain endpoint")
         ep = re.sub(r"^api/v3/", "", clean.lstrip("/")) if ep else ep
         m = DISPATCH.match(ep)
         if api.method != "GET" and m and is_release_workflow(ctx, m.group(1)):
@@ -459,7 +466,10 @@ def check_curl(ctx: Ctx, it: Item) -> str | None:
     if msg:
         return msg
     for w in it.words[1:]:
-        m = CURL_DISPATCH.search(w) if not is_dynamic(w) else None
+        if "dispatches" in w and re.search(r"[{}\[\]]", w):
+            return deny(UNREADABLE_RELEASE)
+        norm = posixpath.normpath(re.sub(r"%([0-9a-fA-F]{2})", lambda h: chr(int(h[1], 16)), re.split(r"[?#]", w)[0]))
+        m = CURL_DISPATCH.search(norm) if not is_dynamic(w) else None
         if not m:
             continue
         if is_release_workflow(ctx, m.group(1)):

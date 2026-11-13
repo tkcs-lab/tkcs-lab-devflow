@@ -265,6 +265,10 @@ def test_the_marker_for_the_stem_covers_the_file(fresh_repo):
     "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches --input missing.json",
     "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches --input -",
     "curl -X POST https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches",
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/./dispatches",
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld-release.yml//dispatches",
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld%2Drelease.yml/dispatches",
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/{dispatches}",
     "curl -X POST -d '{\"ref\":\"main\",\"inputs\":{\"dry_run\":\"true\"}}' "
     "https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches",
 ])
@@ -320,6 +324,10 @@ def test_a_body_file_is_never_read_for_a_release_dispatch(fresh_repo):
     RUN + " -f dry_run=true -f skip_checks=t", RUN + " -f 'dry_run= true'", RUN + " -f dry_run=TRUE",
     "gh workflow run -f version=9.yml tld-release.yml -f dry_run=false",
     "gh workflow run --ref tld-git-ops.yml tld-release.yml -f dry_run=false",
+    RUN + " -f dry_run=true -f $X", RUN + ' -f dry_run=true -f "$X"', RUN + " -f dry_run=true -f $(echo dry_run=false)",
+    RUN + " -f dry_run=true -f {dry_run=false,x}",
+    API + "-f 'inputs[dry_run]=true' -f \"$X\"",
+    "gh api -X POST \"$EP\" -f 'inputs[dry_run]=false'",
     "gh api -X POST https://api.github.com//repos/o/r/actions/workflows/tld-release.yml/dispatches -f 'inputs[dry_run]=false'",
     "gh api -X POST https://api.github.com///repos/o/r/actions/workflows/tld-release.yml/dispatches?x=1 -f 'inputs[dry_run]=false'",
     "gh api 'repos/o/r/actions/workflows/tld-release.yml/dispatches#x' -f 'inputs[dry_run]=false'",
@@ -337,7 +345,7 @@ def test_a_body_file_is_never_read_for_a_release_dispatch(fresh_repo):
 def test_option_values_and_odd_spellings_do_not_hide_inputs(fresh_repo, command):
     assert _code(fresh_repo, command) == 2, command
     _tld(fresh_repo, "allow-release", "tld-release.yml")   # a real run is then allowed, skip_checks never
-    assert (_code(fresh_repo, command) == 2) is ("skip_checks" in command.lower()), command
+    assert (_code(fresh_repo, command) == 2) is ("skip_checks" in command.lower() or "$" in command or "{dry" in command), command
 
 
 @pytest.mark.parametrize("command", [
