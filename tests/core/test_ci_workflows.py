@@ -17,15 +17,17 @@ def steps(doc, job):
     return [s.get("run", "") for s in doc["jobs"][job]["steps"]]
 
 
-BUILD_PERMISSIONS = {"contents": "read", "packages": "write"}
-PUBLISH_PERMISSIONS = {"contents": "read"}
-ALLOWED_JOB_PERMISSIONS = [BUILD_PERMISSIONS, PUBLISH_PERMISSIONS]
+BUILD_PERMISSIONS = {"contents": "read", "checks": "read", "packages": "write"}
+PUBLISH_PERMISSIONS = {"contents": "read", "packages": "write"}
+RELEASE_WORKFLOW = "release.yml"
 
 
-def permission_problems(doc) -> list[str]:
+def permission_problems(doc, workflow: str) -> list[str]:
     """Why a workflow breaks the permission rule: top-level `{contents: read}` everywhere; a job may add its own
-    `permissions` only under `environment: tld-release`, and only one of the two shapes of ALLOWED_JOB_PERMISSIONS (the
-    release workflow's build job and publish job)."""
+    `permissions` only in one of two cases. (1) The job named `build` of release.yml, which has no `environment` (it
+    runs without an approval and never sees the owner token) and exactly BUILD_PERMISSIONS. (2) Any job with
+    `environment: tld-release` and exactly PUBLISH_PERMISSIONS (the release workflow's publish job). Everything else is
+    rejected: other jobs, other workflows, other permission sets, any other environment. `workflow` is the file name."""
     problems = []
     if not isinstance(doc, dict):
         return ["the workflow is not a mapping"]
@@ -36,58 +38,85 @@ def permission_problems(doc) -> list[str]:
         if not isinstance(job, dict) or "permissions" not in job:
             continue
         perms = job["permissions"]
-        if job.get("environment") != "tld-release":
-            problems.append(f"job {name} has permissions but not environment: tld-release")
         if not isinstance(perms, dict):
             problems.append(f"job {name} permissions are {perms!r}, not a mapping")
             continue
-        if perms not in ALLOWED_JOB_PERMISSIONS:
-            problems.append(f"job {name} permissions {perms!r} are neither {BUILD_PERMISSIONS} nor {PUBLISH_PERMISSIONS}")
+        environment = job.get("environment")
+        if environment is None and workflow == RELEASE_WORKFLOW and name == "build":
+            if perms != BUILD_PERMISSIONS:
+                problems.append(f"job build permissions {perms!r} are not {BUILD_PERMISSIONS}")
+            continue
+        if environment != "tld-release":
+            problems.append(f"job {name} has permissions but not environment: tld-release "
+                            f"(only the build job of {RELEASE_WORKFLOW} may have none)")
+        elif perms != PUBLISH_PERMISSIONS:
+            problems.append(f"job {name} permissions {perms!r} are not {PUBLISH_PERMISSIONS}")
     return problems
 
 
 @pytest.mark.parametrize("name", sorted(p.name for p in WORKFLOWS.glob("*.yml")))
 def test_actions_are_pinned_and_permissions_read_only(name):
     doc = load(name)
-    assert permission_problems(doc) == []
+    assert permission_problems(doc, name) == []
     for job in doc["jobs"].values():
         for step in job["steps"]:
             if "uses" in step:
                 assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", step["uses"]), step["uses"]
 
 
-def job_doc(permissions, environment="tld-release", top=None):
+def job_doc(permissions, environment="tld-release", top=None, job_name="release"):
     job = {"runs-on": "ubuntu-latest", "permissions": permissions, "steps": []}
     if environment is not None:
         job["environment"] = environment
-    return {"permissions": {"contents": "read"} if top is None else top, "jobs": {"release": job}}
+    return {"permissions": {"contents": "read"} if top is None else top, "jobs": {job_name: job}}
 
 
-RELEASE_PERMISSIONS = BUILD_PERMISSIONS
+# (doc, workflow) pairs the rule rejects
+BAD_CASES = [
+    (job_doc(BUILD_PERMISSIONS, environment=None), "release.yml"),
+    (job_doc(BUILD_PERMISSIONS, environment="other"), "release.yml"),
+    (job_doc({"contents": "write"}), "release.yml"),
+    (job_doc({"packages": "write", "issues": "write"}), "release.yml"),
+    (job_doc(PUBLISH_PERMISSIONS, top="write-all"), "release.yml"),
+    (job_doc("write-all"), "release.yml"),
+    (job_doc(PUBLISH_PERMISSIONS, top={"contents": "read", "packages": "write"}), "release.yml"),
+    ({"jobs": {"release": {"runs-on": "ubuntu-latest", "steps": []}}}, "release.yml"),
+    (job_doc(PUBLISH_PERMISSIONS, environment=None), "release.yml"),
+    (job_doc({"packages": "write"}), "release.yml"),
+    (job_doc({"contents": "read", "packages": "write", "id-token": "write"}), "release.yml"),
+    # the build job of release.yml
+    (job_doc(BUILD_PERMISSIONS, environment=None, job_name="build"), "test.yml"),
+    (job_doc(BUILD_PERMISSIONS, environment=None, job_name="build"), "mutation.yml"),
+    (job_doc({"packages": "write"}, environment=None, job_name="build"), "release.yml"),
+    (job_doc({"contents": "read", "packages": "write"}, environment=None, job_name="build"), "release.yml"),
+    (job_doc({**BUILD_PERMISSIONS, "id-token": "write"}, environment=None, job_name="build"), "release.yml"),
+    (job_doc({**BUILD_PERMISSIONS, "checks": "write"}, environment=None, job_name="build"), "release.yml"),
+    (job_doc(BUILD_PERMISSIONS, environment="other", job_name="build"), "release.yml"),
+    (job_doc(BUILD_PERMISSIONS, environment="tld-release", job_name="build"), "release.yml"),
+    (job_doc(BUILD_PERMISSIONS, environment=None, job_name="publish"), "release.yml"),
+    (job_doc(BUILD_PERMISSIONS, environment="", job_name="build"), "release.yml"),
+    (job_doc(BUILD_PERMISSIONS, environment=False, job_name="build"), "release.yml"),
+    (job_doc(BUILD_PERMISSIONS, environment=None, job_name="Build"), "release.yml"),
+    (job_doc(BUILD_PERMISSIONS, environment=None, job_name="other"), "release.yml"),
+    (job_doc(BUILD_PERMISSIONS, environment=None, top="write-all", job_name="build"), "release.yml"),
+]
+BAD_IDS = ["no-environment", "other-environment", "contents-write", "extra-write", "top-write-all", "job-write-all",
+           "top-packages-write", "no-top-level", "publish-shape-without-environment", "packages-without-contents",
+           "third-permission", "build-in-test-yml", "build-in-other-workflow", "build-packages-only",
+           "build-without-checks", "build-extra-permission", "build-checks-write", "build-other-environment",
+           "build-with-approval-and-build-permissions", "publish-job-with-build-permissions-no-environment",
+           "build-empty-environment", "build-false-environment",
+           "build-name-case", "other-job-with-build-permissions-no-environment", "build-top-write-all"]
 
 
-@pytest.mark.parametrize("doc", [
-    job_doc(RELEASE_PERMISSIONS, environment=None),
-    job_doc(RELEASE_PERMISSIONS, environment="other"),
-    job_doc({"contents": "write"}),
-    job_doc({"packages": "write", "issues": "write"}),
-    job_doc(RELEASE_PERMISSIONS, top="write-all"),
-    job_doc("write-all"),
-    job_doc(RELEASE_PERMISSIONS, top={"contents": "read", "packages": "write"}),
-    {"jobs": {"release": {"runs-on": "ubuntu-latest", "steps": []}}},
-    job_doc(PUBLISH_PERMISSIONS, environment=None),
-    job_doc({"packages": "write"}),
-    job_doc({"contents": "read", "packages": "write", "id-token": "write"}),
-], ids=["no-environment", "other-environment", "contents-write", "extra-write", "top-write-all",
-        "job-write-all", "top-packages-write", "no-top-level", "publish-shape-without-environment",
-        "packages-without-contents", "third-permission"])
-def test_permission_rule_rejects(doc):
-    assert permission_problems(doc)
+@pytest.mark.parametrize("doc, workflow", BAD_CASES, ids=BAD_IDS)
+def test_permission_rule_rejects(doc, workflow):
+    assert permission_problems(doc, workflow)
 
 
-@pytest.mark.parametrize("permissions", [BUILD_PERMISSIONS, PUBLISH_PERMISSIONS], ids=["build", "publish"])
-def test_permission_rule_accepts_the_two_release_jobs(permissions):
-    assert permission_problems(job_doc(permissions)) == []
+def test_permission_rule_accepts_the_two_release_jobs():
+    assert permission_problems(job_doc(BUILD_PERMISSIONS, environment=None, job_name="build"), "release.yml") == []
+    assert permission_problems(job_doc(PUBLISH_PERMISSIONS, job_name="publish"), "release.yml") == []
 
 
 def test_the_test_workflow_runs_every_check():
