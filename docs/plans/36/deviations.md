@@ -5,7 +5,10 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p1-summary-check
 
-- pending
+- worker: none reported; worker read four D1 gaps one way each (text-before only when placement is right; None. on Scope gives two lines; one line per near-miss heading; echoed offending line is raw)
+- review: acceptance 1 (coverage with fail-under 100) cannot pass as written because the project coverage config measures all of tld; summary.py alone is at 100 percent
+- retry: first merge failed the full suite (module-run test needed the package on the path); sent back and fixed in the test
+- review: security review left four non-blocking findings (hidden-markup forms not covered, unbounded output, symlink and FIFO read, long-token word cap); listed in the pull request body
 
 ## p2-playbooks
 
