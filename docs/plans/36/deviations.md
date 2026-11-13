@@ -14,7 +14,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - worker: none reported; step 6.3 of implement was reworded so the body and its check come before the pull request is created
 - review: security review left six non-blocking findings (ask text not scanned for hidden markup, untrusted inputs not named as data, security rule judgement only, single-session check without deviations file, scratch file creation, ordering tests anchored on first mention); listed in the pull request body
-- retry: final review sent step 6.3 back twice over: phase list needed its own Phases heading and the pasted deviations headings had to be demoted (fix-1)
+- retry: final review sent step 6.3 back once with two blocking findings: the phase list needed its own Phases heading and the pasted deviations headings had to be demoted (fix-1)
+- worker: fix-1 added a rule the plan did not make: when a pull request template has its own Summary heading it is merged into the checked Summary or left out (two Summary headings fail the check)
 
 ## p3-docs-retire
 
@@ -24,6 +25,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - final: blocking: implement step 6.3 pastes the deviations file with phase headings that the pull request check reads as near-miss Summary headings (p2-playbooks)
 - final: blocking: implement step 6.3 puts phase list, checklist and review verdict right after the Summary with no heading, so the check counts them as Summary text (p2-playbooks)
+- final: blocking (second review): the template Summary rule added by fix-1 was missing from the deviations file; recorded under p2-playbooks (p2-playbooks)
 
 ## Finishing
 
