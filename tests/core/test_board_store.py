@@ -69,6 +69,12 @@ def test_store_accepts_new_and_legacy_ids(store):
     assert exc.value.errors == ["'--doc-id' is 'p--run--y' but the document id of this record is 'p--run--x'"]
 
 
+def test_store_accepts_a_prompt_run_record(store):
+    rec = json.loads((FIXTURES / "status-records" / "good-run-prompt.json").read_text())
+    assert store.set("tkcs-lab-devflow--run--issue-42", rec, None) == {"id": "tkcs-lab-devflow--run--issue-42", "version": 1}
+    assert store.get("tkcs-lab-devflow--run--issue-42")["data"]["plan_url"] is None
+
+
 def test_store_rejects_a_bad_id(store):
     for bad in ("", "UPPER", "-lead", "a/b", "x" * 101):
         with pytest.raises(Invalid) as exc:
