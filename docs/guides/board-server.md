@@ -322,7 +322,7 @@ The page is `#usage` (the `Usage` link in the header). For the 5-hour and the we
 and Max, for the newest window that has not ended; the Standard bar is marked "limit passed" above 100%. Below the
 bars is the history of finished windows, one column each: up to 30 days for the 5-hour kind, 56 days for the weekly kind.
 The board returns only the newest 60 windows per kind before that range is applied, so the 5-hour history and its
-verdict reach back about 12 days at most. Each kind gets a verdict from the finished windows of
+verdict reach back about 12 days when every window has a reading, and further when some have none. Each kind gets a verdict from the finished windows of
 that range that were read on Max. It needs 6 finished 5-hour windows or 2 weekly windows, else it says "not enough
 finished windows". With `over` the windows where Standard would have run out (above 100%) and `n` all counted
 windows: "Max makes sense" when `over / n` is 25% or more; "Standard would have been enough" when none passed 100%
