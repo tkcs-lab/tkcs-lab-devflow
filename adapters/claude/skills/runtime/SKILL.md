@@ -90,6 +90,7 @@ is handled at once. A child that finishes cleanly may never report back: the tim
 | `notify_human(text)` | `PushNotification` once, `text` cut to 190 characters. In an attended session also rename it with `set_session_title` to `[NEEDS YOU] <project> · <reason>` (the middle dot U+00B7 with a space on each side), after reading the current title with `get_session` once and keeping it; when `needs_you` goes back to false, rename back to that title. While `needs_you` stays true: no new push, a new rename only when the reason changed. An unattended session pushes only: it has no `get_session` and never renames. |
 | `show_human(files, caption)` | `SendUserFile` |
 | `secrets_help()` | `read_documentation` with topic `environment.secrets` |
+| `read_usage()` | `list_events` with the own session id, `kinds: ["rate_limit_event"]`, `limit: 100` (the kind filter is applied after the page is read, so a smaller page can come back empty); the newest event's `rate_limit_info` is the reading; an empty result or a refusal is "nothing". The own session id is the `session_...` id (`get_session`); in an unattended session, `session_` followed by the part of `$CLAUDE_CODE_REMOTE_SESSION_ID` after `cse_`. Write the reading to a scratch file and hand it to `tld board usage`. |
 | `schedule_wakeup(delay)` | `send_later`; cancel with `delete_trigger` |
 
 An unattended (scheduled) session has no `get_session` or `list_sessions`: never call them there, and write
