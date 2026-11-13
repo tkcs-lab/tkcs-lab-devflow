@@ -5,6 +5,8 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-13
+
 ### Added
 
 - Every plan, its tracking issue and the feature pull request now start with a short, checked `## Summary` (350 words for a plan and an issue, 175 for a pull request, which is about the deviations). New `tld plan summary-check FILE --kind plan|issue|pr [--deviations FILE]` checks placement, labels, word limit and hidden markup. Small-scope runs follow the same rules.
