@@ -14,6 +14,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - worker: none reported; step 6.3 of implement was reworded so the body and its check come before the pull request is created
 - review: security review left six non-blocking findings (ask text not scanned for hidden markup, untrusted inputs not named as data, security rule judgement only, single-session check without deviations file, scratch file creation, ordering tests anchored on first mention); listed in the pull request body
+- retry: final review sent step 6.3 back twice over: phase list needed its own Phases heading and the pasted deviations headings had to be demoted (fix-1)
 
 ## p3-docs-retire
 
