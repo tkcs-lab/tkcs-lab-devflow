@@ -73,6 +73,10 @@ DEVIATIONS_BODY
 ## Manual verification
 
 - [ ] Nothing to do.
+
+## Branches left on origin
+
+The owner deletes them in the GitHub UI.
 """
 DEVIATIONS = "# Deviations\n\n- None.\n"
 FIXTURES = {"plan": PLAN_DOC, "issue": ISSUE_DOC, "pr": PR_DOC.replace("DEVIATIONS_BODY", "- None.")}
@@ -184,7 +188,7 @@ def demote(text):
 
 def test_implement_says_to_demote_the_pasted_deviations_headings():
     text = section(IMPLEMENT.read_text(), "## 6. Finishing")
-    assert "###" in text and "####" in text
+    assert re.search(r"demote[^.]*`###`[^.]*`####`|demote[^.]*###[^.]*####", text.split("3. Write the pull request body", 1)[1].split("**The Summary.**", 1)[0])
 
 
 def test_implement_gives_the_phase_list_its_own_heading():
@@ -207,3 +211,4 @@ def test_the_same_file_pasted_without_demoting_fails(tmp_path):
     r = subprocess.run(tld_cmd("plan", "summary-check", str(body), "--kind", "pr", "--deviations", str(dev)),
                        capture_output=True, text=True, timeout=60)
     assert r.returncode == 1
+    assert "found 'p1-summary-check'" in r.stdout, r.stdout

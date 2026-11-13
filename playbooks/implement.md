@@ -395,8 +395,8 @@ text>`; exit 1 counts as `changes`. Then:
    `## Deviations` section with the content of the deviations file, a **Manual verification** section (each
    `manual_after` item as an unchecked box, with a link to the plan's Manual steps section), and
    `## Branches left on origin` with that ledger list and the sentence "The owner deletes them in the GitHub UI."
-   When pasting the deviations file, demote its `#` and `##` headings to `###` and `####`: the check reads any
-   other `## ` heading in the body as a near miss of the Summary heading. When the repository has a pull request
+   When pasting the deviations file, demote its `#` and `##` headings to `###` and `####`: the check reads a
+   `## ` heading that contains the word summary (such as `## p1-summary-check`) as a near miss of the Summary heading. When the repository has a pull request
    template, its sections come after the Summary; if the template has its own `## Summary` heading, merge it
    into the checked Summary or leave it out (two Summary headings fail the check).
 
