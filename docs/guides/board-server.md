@@ -317,6 +317,27 @@ the database to schema 5: an older board image cannot open it again, so keep the
 (Backup and restore) if you may roll back. The factor (`TLD_BOARD_MAX_FACTOR`, default 5) is an assumption about
 how much more Max allows than Standard; the Max figures are Standard figures divided by it. Whoever holds the session token can post readings and so push older history out of the 20,000-row limit; the readings can be collected again.
 
+The page is `#usage` (the `Usage` link in the header). For the 5-hour and the weekly window it shows two bars, Standard
+and Max, for the newest window that has not ended; the Standard bar is marked "limit passed" above 100%. Below the
+bars is the history of finished windows, one column each: 30 days for the 5-hour kind, 56 days for the weekly kind
+(the board returns at most the newest 60 windows per kind). Each kind gets a verdict from the finished windows of
+that range that were read on Max. It needs 6 finished 5-hour windows or 2 weekly windows, else it says "not enough
+finished windows". With `over` the windows where Standard would have run out (above 100%) and `n` all counted
+windows: "Max makes sense" when `over / n` is 25% or more; "Standard would have been enough" when none passed 100%
+and the 90th percentile of the peaks is below 80% of Standard; otherwise "borderline". A window whose peak is below
+5% of Standard is idle (typically only the scheduled reading started it) and is kept out of the verdict.
+
+Read the numbers with these limits in mind:
+
+- The peak is the largest reading, so with few readings in a window it is a lower bound (the column titles show the
+  count), and so is the blocked time.
+- Readings stop near 100% when a limit is hit. On Standard the use above the limit is therefore invisible and the
+  page cannot show whether Max would pay off; the verdict only counts windows read on Max.
+- The weekly factor may not be exactly 5. It is an assumption, so change `TLD_BOARD_MAX_FACTOR` if you know better.
+- `resets_at` is floored to the minute when stored. Jitter that stays inside one minute merges into one window; a
+  larger drift, or jitter that crosses a minute boundary, makes a second row for the same window. This is a known and
+  accepted blemish.
+
 ## MCP tools
 
 `POST /mcp` is a stateless streamable-HTTP MCP endpoint: one JSON-RPC object per request, answered as
