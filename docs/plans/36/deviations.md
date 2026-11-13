@@ -21,7 +21,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: blocking: implement step 6.3 pastes the deviations file with phase headings that the pull request check reads as near-miss Summary headings (p2-playbooks)
+- final: blocking: implement step 6.3 puts phase list, checklist and review verdict right after the Summary with no heading, so the check counts them as Summary text (p2-playbooks)
 
 ## Finishing
 
