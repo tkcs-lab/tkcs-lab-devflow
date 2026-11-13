@@ -9,15 +9,18 @@ name: release
 # the version and the image digest, SHA256SUMS over those four, and the multi-arch board image on ghcr.io. The order
 # is: build the image (a dry run builds it and pushes nothing), then the tag, then a draft release holding every
 # asset, then publish the draft. So releases/latest never lacks install.sh, and a failure before the last step
-# leaves no public half-release (at worst an orphan image tag, which a re-run overwrites).
+# leaves no public half-release (at worst an untagged image digest, or, once 'Tag the board image' has run, :latest ahead of
+# the last release, which a re-run overwrites).
 # Two jobs, so the owner token never sits on a runner that runs third-party build code. `build` (pip, setuptools, the
-# docker/* actions, QEMU) never references TLD_RELEASE_TOKEN; it uploads dist/ and release-notes.md as an artifact.
-# `publish` (needs: build) has the token and runs only gh and the shell: it downloads the artifact, checks it against
-# SHA256SUMS, checks that the commit is green, then makes the tag, the draft release and the release.
+# docker/* actions, QEMU) never references TLD_RELEASE_TOKEN and has no environment, so it runs without an approval: it
+# checks that the commit is green, builds, pushes the board image by digest only (no tag) and uploads dist/ and
+# release-notes.md as an artifact. `publish` (needs: build) is the one approval of a run: it has the token and runs only
+# gh, docker and the shell: it downloads the artifact, checks it against SHA256SUMS, checks that the commit is green,
+# puts the tags :<version> and :latest on the image digest, then makes the tag, the draft release and the release.
 # Modelled on src/tld/templates/tld-release.yml: the tag is made with TLD_RELEASE_TOKEN, an owner token that is a
-# secret of the environment tld-release (main only, the owner approves every run of each job); the workflow's
-# GITHUB_TOKEN reads, and only the build job writes packages (the board image), and the tag ruleset tld-tags lets no
-# workflow token create a tag.
+# secret of the environment tld-release (main only, the owner approves the publish job of every run); the workflow's
+# GITHUB_TOKEN reads, only the build job (an untagged image) and the publish job (the image tags) write packages, and
+# the tag ruleset tld-tags lets no workflow token create a tag.
 
 on:
   workflow_dispatch:
@@ -44,10 +47,10 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    environment: tld-release
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
+      checks: read
       packages: write
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -99,6 +102,28 @@ jobs:
           echo "previous=$previous" >> "$GITHUB_OUTPUT"
           echo "Previous tag: ${previous:-none}" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Check that the commit is green
+        if: inputs.skip_checks == false
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # build pushes the image, so a red commit stops here, before anything is pushed. The jobs of this run
+          # (build, and publish which has not started) are left out by their run id, other workflows are not.
+          bad=$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[]
+            | select((.details_url // "") | contains("/actions/runs/" + env.RUN_ID + "/") | not)
+            | select(.status != "completed" or (.conclusion | IN("success", "skipped", "neutral") | not))
+            | "\(.name): \(.status) \(.conclusion // "")"')
+          if [ -n "$bad" ]; then
+            echo "::error::checks on $SHA are not all green:"
+            printf '  %s\n' "$bad"
+            exit 1
+          fi
+          echo "checks on $SHA are green"
+
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -143,10 +168,9 @@ jobs:
           context: .
           file: deploy/board/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ inputs.dry_run == false }}
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/tld-board:${{ steps.version.outputs.version }}
-            ghcr.io/${{ github.repository_owner }}/tld-board:latest
+          # Pushed by digest, without a tag: the tags :<version> and :latest are added by the publish job after the
+          # owner approved it. A dry run (push=false) builds and pushes nothing.
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/tld-board,push-by-digest=true,name-canonical=true,push=${{ inputs.dry_run == false }}
 
       - name: Collect the release assets
         env:
@@ -194,6 +218,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
+      packages: write
     steps:
       - name: Download the release assets
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
@@ -268,6 +293,26 @@ jobs:
           fi
           { echo; gh api "${args[@]}" --jq .body; } >> release-notes.md
           { echo "## Notes for $TAG"; cat release-notes.md; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tag the board image
+        if: inputs.dry_run == false
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/tld-board
+          TAG: ${{ needs.build.outputs.tag }}
+          DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          # DIGEST and TAG come from the build job, which runs third-party code: check their shape.
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::the build job gave no image digest of the form sha256:<64 hex>"
+            exit 1
+          fi
+          version=${TAG#v}
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker buildx imagetools create -t "$IMAGE:$version" -t "$IMAGE:latest" "$IMAGE@$DIGEST"
+          echo "Image $IMAGE@$DIGEST tagged $version and latest" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish the tag and the release
         if: inputs.dry_run == false
