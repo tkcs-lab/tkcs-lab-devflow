@@ -20,9 +20,10 @@ from tld.guard._common import Ctx
 from tld.guard._gitcfg import _truthy, git_config_value, git_config_values
 from tld.guard._gitgh import (Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs, read_input_text,
                               ref_exists, short_ref)
-from tld.guard._shell import ParseError, is_dynamic
 from tld.guard._release_dispatch import (UNREADABLE_RELEASE, _glob, _release_api, _release_gh_run, _release_mcp,
-                                         curl_dispatch_glob, deny, is_release_workflow, normalise_path)
+                                         curl_dispatch_glob, curl_dynamic_url, deny, is_release_workflow,
+                                         normalise_path, run_workflow_arg)
+from tld.guard._shell import ParseError, is_dynamic
 from tld.guard.integrity import dynamic_command, integrity
 
 NAME = "no-git-tag"
@@ -234,20 +235,15 @@ def _uncheckable_workflow_id(ident: str) -> bool:
 def check_gh(ctx: Ctx, it: Item) -> str | None:
     path = gh_path(it.words)
     if path[:2] == ["workflow", "run"] and len(path) > 2:
-        if is_dynamic(path[2]) or _glob(path[2]):
+        wf = run_workflow_arg(it.words) or path[2]
+        if is_dynamic(wf) or _glob(wf):
             return deny("`gh workflow run` names its workflow with a word the shell expands, which cannot be checked "
                         "against the release workflow; dispatch a workflow by its literal file name")
-        # the workflow may follow an option whose value ends in .yml: look at every word, release first
-        for w in it.words:
-            if is_release_workflow(ctx, w):
-                return _release_gh_run(ctx, it, w)
-        if any(is_git_ops_workflow(ctx, w) for w in it.words):
+        if is_release_workflow(ctx, wf):
+            return _release_gh_run(ctx, it, wf)
+        if is_git_ops_workflow(ctx, wf):
             return check_git_ops_gh_run(ctx, it)
-        if is_release_workflow(ctx, path[2]):
-            return _release_gh_run(ctx, it, path[2])
-        if is_git_ops_workflow(ctx, path[2]):
-            return check_git_ops_gh_run(ctx, it)
-        if _uncheckable_workflow_id(path[2]):  # S10: a numeric id could be the release workflow
+        if _uncheckable_workflow_id(wf):  # S10: a numeric id could be the release workflow
             return deny("`gh workflow run` with a numeric workflow id cannot be checked against the release "
                         "workflow; dispatch a workflow by its file name")
     if path[:2] == ["release", "edit"] and any(w == "--tag" or w.startswith("--tag=") for w in it.words):
@@ -341,6 +337,8 @@ def check_curl(ctx: Ctx, it: Item) -> str | None:
     msg = check_curl_tag_api(it)
     if msg:
         return msg
+    if _curl_method_and_data(it.words)[0] not in ("GET", "HEAD", "OPTIONS") and curl_dynamic_url(it.words):
+        return deny(UNREADABLE_RELEASE)
     for w in it.words[1:]:
         if curl_dispatch_glob(w):
             return deny(UNREADABLE_RELEASE)

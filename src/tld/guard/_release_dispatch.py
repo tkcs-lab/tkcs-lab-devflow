@@ -177,3 +177,43 @@ def _release_mcp(ctx: Ctx, wid: str, inputs) -> str | None:
         if isinstance(k, str) and k.lower() in values:
             values[k.lower()].append("true" if v is True else "false" if v is False else v if isinstance(v, str) else "?")
     return release_inputs_problem(ctx, wid, values)
+
+
+RUN_FIELD_OPTS = ("-f", "-F", "--field", "--raw-field")
+
+
+def run_workflow_arg(words: list[str]) -> str | None:
+    """The workflow argument of `gh workflow run`: the first positional word after `run`, not any word that merely
+    looks like a workflow name (a field value, a branch). Options that take a value consume the next word."""
+    try:
+        i = words.index("workflow")
+        i = words.index("run", i) + 1
+    except ValueError:
+        return None
+    while i < len(words):
+        w = words[i]
+        i += 1
+        if w.startswith("-"):
+            if "=" not in w and w in RUN_VALUE_OPTS + RUN_FIELD_OPTS:
+                i += 1
+        else:
+            return w
+    return None
+
+
+CURL_VALUE_OPTS = ("-H", "--header", "-X", "--request", "--method", "-u", "--user", "-o", "--output", "-A",
+                   "--user-agent", "-e", "--referer", "-b", "--cookie", "-d", "--data", "--data-raw", "--data-binary",
+                   "--data-ascii", "--data-urlencode", "--json", "-F", "--form", "--form-string", "-T",
+                   "--upload-file", "--post-data", "--post-file", "--body-data", "--body-file")
+CURL_API_TEXT = re.compile(r"workflows|dispatch|releases|git/(refs|tags)|actions/runs")
+
+
+def curl_dynamic_url(words: list[str]) -> bool:
+    """A non-option curl word the shell expands (`https://api.github.com/repos/$REPO/...`, `"$URL"`) that may be
+    the URL of a release, tag or dispatch call: its real value cannot be checked."""
+    for k, w in enumerate(words[1:], 1):
+        if not is_dynamic(w) or w.startswith("-") or (k > 1 and words[k - 1] in CURL_VALUE_OPTS):
+            continue
+        if CURL_API_TEXT.search(w) or w.startswith(("$", "`")) or "://" in w or "/" in w:
+            return True
+    return False

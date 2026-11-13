@@ -312,6 +312,38 @@ def test_a_curl_query_string_question_mark_is_not_a_glob(fresh_repo):
     assert _code(fresh_repo, "curl https://api.github.com/repos/o/r/actions/runs?per_page=1") == 0
 
 
+@pytest.mark.parametrize("command", [
+    "gh workflow run tld-git-ops.yml -f repo=acme/web -f name=chore/release -f dry_run=false",
+    "gh workflow run tld-git-ops.yml -f repo=acme/release -f dry_run=false",
+    "gh workflow run tld-git-ops.yml --ref chore/release -f dry_run=false",
+    "gh workflow run tld-git-ops.yml -f note=x/tld-release -f dry_run=false",
+])
+def test_the_release_marker_does_not_open_a_git_ops_run_named_by_a_field_value(fresh_repo, command):
+    """The workflow is the positional argument, not any word whose last path segment looks like the release one."""
+    assert _code(fresh_repo, command) == 2
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert _code(fresh_repo, command) == 2, command
+
+
+@pytest.mark.parametrize("command", [
+    'curl -X POST -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/$REPO/actions/workflows/'
+    'tld-release.yml/dispatches -d \'{"inputs":{"dry_run":"false"}}\'',
+    'curl -X POST "$U" -d x',
+    'curl -X POST https://$HOST/repos/o/r/actions/workflows/tld-release.yml/dispatches -d x',
+    'curl -X POST https://api.github.com/repos/o/r/actions/workflows/$WF/dispatches -d x',
+    'curl -X POST "$API/repos/o/r/git/refs" -d \'{"ref":"refs/tags/v9","sha":"abc"}\'',
+])
+def test_a_curl_url_built_from_a_variable_is_denied(fresh_repo, command):
+    assert _code(fresh_repo, command) == 2, command
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert _code(fresh_repo, command) == 2, command
+
+
+def test_a_curl_get_or_a_dynamic_header_alone_is_fine(fresh_repo):
+    assert _code(fresh_repo, 'curl -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/o/r') == 0
+    assert _code(fresh_repo, 'curl -X POST -H "Authorization: Bearer $T" -d "$BODY" https://example.org/x') == 0
+
+
 API = "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches -f ref=main "
 
 

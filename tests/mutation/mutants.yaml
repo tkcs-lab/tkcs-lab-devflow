@@ -595,3 +595,13 @@ mutants:
   why: only braces and brackets count in a curl dispatch word, so a globbed `*` / `?` URL goes through
   old: '    return "dispatch" in bare or "workflows" in bare'
   new: '    return bool(re.search(r"[{}\[\]]", word)) and "dispatch" in bare'
+- id: GT16
+  file: src/tld/guard/no_git_tag.py
+  why: the workflow of a gh workflow run is any word that looks like the release one, so a field value hijacks the check
+  old: '        wf = run_workflow_arg(it.words) or path[2]'
+  new: '        wf = next((w for w in it.words if is_release_workflow(ctx, w)), None) or run_workflow_arg(it.words) or path[2]'
+- id: GT17
+  file: src/tld/guard/no_git_tag.py
+  why: a curl URL built from a variable is not checked
+  old: '    if _curl_method_and_data(it.words)[0] not in ("GET", "HEAD", "OPTIONS") and curl_dynamic_url(it.words):'
+  new: '    if False:'
