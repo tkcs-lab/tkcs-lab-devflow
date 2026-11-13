@@ -12,6 +12,9 @@ docs:
     - README.md
   index: docs/README.md
   plan_dir: docs/plans/
+  changelog:
+    file: CHANGELOG.md
+    section: "## [Unreleased]"
 
 git:
   main_branch: main
@@ -76,3 +79,13 @@ roles:
     - {role: test-architect, at: [make_plan]}
     - {role: tech-writer, at: [dod, review]}
     - {role: dependency-auditor, at: [dod], when: ["pyproject.toml", "tests/requirements.txt"]}
+
+release:
+  workflow: release.yml
+  version_files:
+    - path: pyproject.toml
+      pattern: '^version = "([^"]+)"'
+    - path: .claude-plugin/plugin.json
+      pattern: '^\s*"version": "([^"]+)"'
+    - path: src/tld/__init__.py
+      pattern: '^__version__ = "([^"]+)"'
