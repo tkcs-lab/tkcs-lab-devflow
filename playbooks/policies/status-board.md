@@ -3,7 +3,7 @@
 The board is the owner's inbox (D7, D8): it holds a status record of every run and every ask a playbook puts
 to the owner. These playbooks write a status record, so the owner sees each run in one place: setup, review,
 make-plan, implement, land, deps, upstream, docs and migrate, and the worker of a single-session prompt (make-plan's small scope). dod and board write none
-(a report and the board itself), nor do git-ops and repo-admin. The record
+(a report and the board itself), nor do git-ops, repo-admin and release. The record
 format is `src/tld/schema/status-record.schema.json`; `tld board validate-record FILE --doc-id ID` checks one.
 Asks are [runtime.md](../runtime.md)'s `ask_human`. This file says where, how and when to write records.
 
