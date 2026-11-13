@@ -16,6 +16,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - review: security review left six non-blocking findings (ask text not scanned for hidden markup, untrusted inputs not named as data, security rule judgement only, single-session check without deviations file, scratch file creation, ordering tests anchored on first mention); listed in the pull request body
 - retry: final review sent step 6.3 back once with two blocking findings: the phase list needed its own Phases heading and the pasted deviations headings had to be demoted (fix-1)
 - worker: fix-1 added a rule the plan did not make: when a pull request template has its own Summary heading it is merged into the checked Summary or left out (two Summary headings fail the check)
+- review: owner chose polish after the second final review: fix-2 reworded the reason in step 6.3 and tightened three test items; no third full review ran after it
 
 ## p3-docs-retire
 
