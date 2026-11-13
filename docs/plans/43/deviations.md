@@ -9,7 +9,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-cli
 
-- pending
+- review: Worker hardened the parser (finite numbers, Path.read_text, RecursionError) in a commit after the security review; the role was not rerun, the changes only address its non-blocking findings and the full suite passed.
 
 ## p3-page
 
