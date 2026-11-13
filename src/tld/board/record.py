@@ -54,7 +54,6 @@ TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 SLUG = re.compile(r"^[a-z0-9-]+$")
 DOC_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")
 REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-LEGACY_UNTIL = "1.2.0"  # the old document ids (legacy_ids) are accepted until this tld version
 DOC_ID_MAX = 100
 TAIL_LEN, TAIL_MIN = 8, 6
 
@@ -105,15 +104,6 @@ def doc_id(rec: dict) -> str:
 
 
 _make_doc_id = doc_id  # `validate` has a parameter of the same name
-
-
-def legacy_ids(rec: dict) -> tuple[str, ...]:
-    """The old document ids still accepted until LEGACY_UNTIL: a run's project slug, an attended command's `<project>--<command>`."""
-    if rec["kind"] == "run":
-        return (rec["project"],)
-    if rec.get("attended") is True:
-        return (f"{rec['project']}--{rec['command']}",)
-    return ()
 
 
 def owns_doc_id(project: str, doc_id: str) -> bool:
@@ -289,7 +279,7 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
             errors.append(f"'project' must be '{project_slug(rec['repo'])}', the slug of the repository name")
     keyable = (isinstance(project, str) and SLUG.match(project) and "--" not in project and kind in KINDS
                and (kind == "run" or command in COMMANDS))
-    if doc_id is not None and keyable and doc_id not in legacy_ids(rec):
+    if doc_id is not None and keyable:
         try:
             expected = _make_doc_id(rec)
         except ValueError as exc:

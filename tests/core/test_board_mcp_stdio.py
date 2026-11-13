@@ -124,7 +124,7 @@ def test_end_to_end_with_the_real_server(server):
         req(1, "initialize", {"protocolVersion": "2025-06-18"}),
         json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
         req(2, "tools/list"),
-        req(3, "tools/call", {"name": "board_set", "arguments": {"id": "f-running-ok", "data": rec}}),
+        req(3, "tools/call", {"name": "board_set", "arguments": {"id": "f-running-ok--run--plan-f-running-ok", "data": rec}}),
     ]
     proc = subprocess.run([*SCRIPT_CMD], env=env, capture_output=True, text=True, timeout=30,
                           input="\n".join(lines) + "\n")
@@ -133,8 +133,8 @@ def test_end_to_end_with_the_real_server(server):
     assert replies[0]["result"]["serverInfo"]["name"] == "tld-board"
     assert {t["name"] for t in replies[1]["result"]["tools"]} == {"board_get", "board_list", "board_set", "board_ask", "board_answers", "board_cancel"}
     assert replies[2]["result"]["isError"] is False
-    assert json.loads(replies[2]["result"]["content"][0]["text"]) == {"id": "f-running-ok", "version": 1}
-    assert server.store.get("f-running-ok")["version"] == 1
+    assert json.loads(replies[2]["result"]["content"][0]["text"]) == {"id": "f-running-ok--run--plan-f-running-ok", "version": 1}
+    assert server.store.get("f-running-ok--run--plan-f-running-ok")["version"] == 1
 
 
 def test_config_error_is_treated_as_no_config():

@@ -285,8 +285,6 @@ def test_the_old_kind_maintenance_is_refused():
 
 # --- document ids per run and per session (tld board record-id) ----------------------------------
 
-import tld  # noqa: E402
-
 REC = _load("tld.board.record")
 LONG_MESSAGE = "'project' is too long for a document id"
 SHORT_MESSAGE = "'orchestrator_session' needs at least 6 letters or digits to key an attended command record"
@@ -376,19 +374,14 @@ def test_two_runs_get_two_ids():
     assert run_id("first-plan") != run_id("second-plan")
 
 
-def test_legacy_ids_are_still_accepted():
-    assert setup_record("--doc-id", "tkcs-lab-devflow--setup").returncode == 0
-    assert run(RECORDS / "good-run.json", "--doc-id", "tkcs-lab-devflow").returncode == 0
-    third = setup_record("--doc-id", "tkcs-lab-devflow")
-    assert third.returncode == 1 and "'--doc-id'" in third.stdout
-    third = run(RECORDS / "good-run.json", "--doc-id", "tkcs-lab-devflow--run")
-    assert third.returncode == 1 and "'--doc-id'" in third.stdout
+def test_old_ids_are_rejected():
+    for bad in (setup_record("--doc-id", "tkcs-lab-devflow--setup"),
+                setup_record("--doc-id", "tkcs-lab-devflow"),
+                run(RECORDS / "good-run.json", "--doc-id", "tkcs-lab-devflow")):
+        assert bad.returncode == 1 and "'--doc-id'" in bad.stdout
 
 
-def test_unattended_command_has_no_legacy_id():
-    assert REC.legacy_ids(rec_of(command="deps", attended=False, session=None)) == ()
-    assert REC.legacy_ids(rec_of()) == ("tkcs-lab-devflow--make-plan",)
-    assert REC.legacy_ids(rec_of("run", plan_slug="x")) == ("tkcs-lab-devflow",)
+def test_unattended_command_id_is_project_and_command():
     assert command_record("--doc-id", "tkcs-lab-devflow--deps").returncode == 0
 
 
@@ -456,17 +449,3 @@ def test_record_id_cli():
     ):
         bad = record_id(*args)
         assert bad.returncode == 1 and bad.stdout == "" and bad.stderr.startswith("status-record: "), (args, bad.stderr)
-
-
-def window_over(version):
-    return tuple(int(x) for x in version.split(".")[:3]) >= (1, 2, 0)
-
-
-def test_version_compare_reads_two_digit_parts():
-    assert window_over("1.10.0") and window_over("1.2.0") and window_over("2.0.0")
-    assert not window_over("1.1.9") and not window_over("1.0.0")
-
-
-def test_legacy_window_ends():
-    assert REC.LEGACY_UNTIL == "1.2.0"
-    assert not window_over(tld.__version__), "remove LEGACY_UNTIL and legacy_ids from tld.board.record"

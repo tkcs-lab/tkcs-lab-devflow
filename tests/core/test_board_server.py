@@ -18,7 +18,7 @@ from tld.board import server as board_server
 SCRIPT_CMD = tld_cmd("board", "server")
 
 
-def record(doc_id="f-running-ok"):
+def record(doc_id="f-running-ok--run--plan-f-running-ok"):
     docs = json.loads((FIXTURES / "board-records.json").read_text())
     return copy.deepcopy(next(d["data"] for d in docs if doc_id in (d["id"], d["data"]["project"])))
 
@@ -64,15 +64,19 @@ MATRIX = [
 ]
 
 
-def _matrix_record(rec):
+def _matrix_id(slug):
+    return f"{slug}--run--x"
+
+
+def _matrix_record(slug):
     data = record()
-    data.update(project=rec, repo=f"example-org/{rec}", needs_you=True, needs_you_reason="Answer the ask",
+    data.update(project=slug, repo=f"example-org/{slug}", plan_slug="x", needs_you=True, needs_you_reason="Answer the ask",
                 needs_you_since="2026-11-09T11:00:00Z", status="waiting_user", next_check_at=None)
     return data
 
 
-def _body(kind, server, rec="f-running-ok"):
-    return {"record": {"data": _matrix_record(rec), "if_version": 1}, "ask": ask_doc(),
+def _body(kind, server, slug="f-running-ok"):
+    return {"record": {"data": _matrix_record(slug), "if_version": 1}, "ask": ask_doc(),
             "dismiss": {"version": 1}, "answers": {"answers": {"SEC-1": "plan", "go": True}},
             "rpc": {"jsonrpc": "2.0", "id": 1, "method": "ping"},
             "usage": {"five_hour": {"utilization": 0.3, "resets_at": int(time.time()) + 3600}, "source": "final"},
@@ -94,12 +98,13 @@ def matrix_server(tmp_path_factory):
 @pytest.mark.parametrize("method,path,body,expected", MATRIX, ids=[f"{m} {p}" for m, p, _, _ in MATRIX])
 def test_auth_matrix(matrix_server, who, method, path, body, expected):
     srv = matrix_server
-    rec = f"matrix-{next(_MATRIX_IDS)}"
-    srv.store.set(rec, _matrix_record(rec), None)
+    slug = f"matrix-{next(_MATRIX_IDS)}"
+    rec = _matrix_id(slug)
+    srv.store.set(rec, _matrix_record(slug), None)
     ask = srv.store.create_ask(ask_doc())
     cookie, csrf = login(srv)
     url = path.format(rec=rec, ask=ask["id"])
-    kwargs = {"body": _body(body, srv, rec)}
+    kwargs = {"body": _body(body, srv, slug)}
     if who == "session":
         kwargs["token"] = WRITE
     elif who == "owner":
@@ -224,11 +229,11 @@ def test_passphrase_compare_is_constant_time_on_digests():
 
 def _owner_post_cases(server):
     ask = new_ask(server)
-    call(server, "PUT", "/api/records/csrf-rec", token=WRITE, body={"data": _matrix_record("csrf-rec")})
+    call(server, "PUT", f"/api/records/{_matrix_id('csrf-rec')}", token=WRITE, body={"data": _matrix_record("csrf-rec")})
     return [("answer", f"/api/asks/{ask['id']}/answer", {"answers": {"SEC-1": "plan", "go": True}}),
             ("cancel", f"/api/asks/{ask['id']}/cancel", None),
-            ("dismiss", "/api/records/csrf-rec/dismiss", {"version": 1}),
-            ("restore", "/api/records/csrf-rec/restore", None),
+            ("dismiss", f"/api/records/{_matrix_id('csrf-rec')}/dismiss", {"version": 1}),
+            ("restore", f"/api/records/{_matrix_id('csrf-rec')}/restore", None),
             ("logout", "/logout", None)]
 
 
@@ -361,44 +366,44 @@ def test_without_a_passphrase_the_owner_ui_is_off(tmp_path):
 
 def test_put_get_list_delete_roundtrip(server, owner):
     cookie, _ = owner
-    status, _, body = call(server, "PUT", "/api/records/f-running-ok", token=WRITE, body={"data": record()})
-    assert (status, body) == (200, {"id": "f-running-ok", "version": 1})
-    _, _, body = call(server, "PUT", "/api/records/f-running-ok", token=WRITE,
+    status, _, body = call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE, body={"data": record()})
+    assert (status, body) == (200, {"id": "f-running-ok--run--plan-f-running-ok", "version": 1})
+    _, _, body = call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE,
                       body={"data": record(), "if_version": 1})
-    assert body == {"id": "f-running-ok", "version": 2}
-    status, _, body = call(server, "GET", "/api/records/f-running-ok", cookie=cookie)
+    assert body == {"id": "f-running-ok--run--plan-f-running-ok", "version": 2}
+    status, _, body = call(server, "GET", "/api/records/f-running-ok--run--plan-f-running-ok", cookie=cookie)
     assert status == 200 and body["version"] == 2 and body["data"] == record()
     _, _, body = call(server, "GET", "/api/records", cookie=cookie)
-    assert [r["id"] for r in body["records"]] == ["f-running-ok"]
-    assert call(server, "DELETE", "/api/records/f-running-ok", token=WRITE)[2] == {"deleted": True}
-    assert call(server, "DELETE", "/api/records/f-running-ok", token=WRITE)[:3:2] == (404, {"error": "not_found"})
+    assert [r["id"] for r in body["records"]] == ["f-running-ok--run--plan-f-running-ok"]
+    assert call(server, "DELETE", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE)[2] == {"deleted": True}
+    assert call(server, "DELETE", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE)[:3:2] == (404, {"error": "not_found"})
 
 
 def test_put_conflict_returns_409_with_the_current_record(server):
-    call(server, "PUT", "/api/records/f-running-ok", token=WRITE, body={"data": record()})
-    status, _, body = call(server, "PUT", "/api/records/f-running-ok", token=WRITE, body={"data": record()})
+    call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE, body={"data": record()})
+    status, _, body = call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE, body={"data": record()})
     assert status == 409 and body["error"] == "version_conflict" and body["current"]["version"] == 1
-    status, _, body = call(server, "PUT", "/api/records/f-starting", token=WRITE,
-                           body={"data": record("f-starting"), "if_version": 4})
+    status, _, body = call(server, "PUT", "/api/records/f-starting--run--plan-f-starting", token=WRITE,
+                           body={"data": record("f-starting--run--plan-f-starting"), "if_version": 4})
     assert status == 409 and body["current"] is None
 
 
 def test_put_invalid_returns_422_with_errors(server):
     bad = record()
     bad["surprise"] = 1
-    status, _, body = call(server, "PUT", "/api/records/f-running-ok", token=WRITE, body={"data": bad})
+    status, _, body = call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE, body={"data": bad})
     assert status == 422 and body["error"] == "invalid" and body["errors"]
-    assert call(server, "PUT", "/api/records/f-running-ok", token=WRITE, raw=b"nope")[0] == 400
-    assert call(server, "PUT", "/api/records/f-running-ok", token=WRITE, body=[1])[0] == 400
-    assert call(server, "PUT", "/api/records/f-running-ok", token=WRITE, body={"if_version": 1})[0] == 400
+    assert call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE, raw=b"nope")[0] == 400
+    assert call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE, body=[1])[0] == 400
+    assert call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE, body={"if_version": 1})[0] == 400
 
 
 def test_if_version_true_is_400(server):
     for bad in (True, "1", 0, 1.5):
-        status, _, body = call(server, "PUT", "/api/records/f-running-ok", token=WRITE,
+        status, _, body = call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE,
                                body={"data": record(), "if_version": bad})
         assert (status, body) == (400, {"error": "bad_request"})
-    assert call(server, "PUT", "/api/records/f-running-ok", token=WRITE,
+    assert call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE,
                 body={"data": record(), "if_version": None})[0] == 200
 
 
@@ -488,7 +493,7 @@ def test_wrong_method_is_405(server):
     assert call(server, "POST", "/", token=WRITE, body={})[0] == 405
     assert call(server, "DELETE", "/", token=WRITE)[0] == 405
     assert call(server, "GET", "/login")[0] == 405
-    status, headers, _ = call(server, "POST", "/api/records/f-running-ok", token=WRITE, body={})
+    status, headers, _ = call(server, "POST", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE, body={})
     assert status == 405 and headers["Allow"] == "GET, PUT, DELETE"
 
 
@@ -503,7 +508,7 @@ def test_responses_have_content_length(server):
         assert int(resp.getheader("Content-Length")) == len(data)
     conn.close()
     conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=10)
-    conn.request("PUT", "/api/records/f-running-ok", headers=auth)  # no Content-Length at all
+    conn.request("PUT", "/api/records/f-running-ok--run--plan-f-running-ok", headers=auth)  # no Content-Length at all
     resp = conn.getresponse()
     resp.read()
     assert resp.status == 400
@@ -512,7 +517,7 @@ def test_responses_have_content_length(server):
 
 def test_oversized_body_is_413(server):
     conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=10)
-    conn.putrequest("PUT", "/api/records/f-running-ok")
+    conn.putrequest("PUT", "/api/records/f-running-ok--run--plan-f-running-ok")
     conn.putheader("Authorization", f"Bearer {WRITE}")
     conn.putheader("Content-Length", str(1048576 + 1))
     conn.endheaders()
@@ -592,40 +597,40 @@ def _listed(server, doc_id):
 
 
 def test_dismiss_shows_dismissed_at_and_a_session_write_clears_it(server, owner):
-    assert _put(server, "dis-one", _matrix_record("dis-one"))[0] == 200
-    status, _, body = _owner_post(server, owner, "/api/records/dis-one/dismiss", {"version": 1})
-    assert status == 200 and body["id"] == "dis-one" and body["version"] == 1 and body["dismissed_at"]
-    assert _listed(server, "dis-one")["dismissed_at"] == body["dismissed_at"]
-    assert call(server, "GET", "/api/records/dis-one", token=WRITE)[2]["dismissed_at"] == body["dismissed_at"]
-    assert _put(server, "dis-one", _matrix_record("dis-one"), 1)[0] == 200
-    assert _listed(server, "dis-one")["dismissed_at"] is None
+    assert _put(server, "dis-one--run--x", _matrix_record("dis-one"))[0] == 200
+    status, _, body = _owner_post(server, owner, "/api/records/dis-one--run--x/dismiss", {"version": 1})
+    assert status == 200 and body["id"] == "dis-one--run--x" and body["version"] == 1 and body["dismissed_at"]
+    assert _listed(server, "dis-one--run--x")["dismissed_at"] == body["dismissed_at"]
+    assert call(server, "GET", "/api/records/dis-one--run--x", token=WRITE)[2]["dismissed_at"] == body["dismissed_at"]
+    assert _put(server, "dis-one--run--x", _matrix_record("dis-one"), 1)[0] == 200
+    assert _listed(server, "dis-one--run--x")["dismissed_at"] is None
 
 
 def test_dismiss_with_a_wrong_version_is_409_version_conflict(server, owner):
-    _put(server, "dis-two", _matrix_record("dis-two"))
-    status, _, body = _owner_post(server, owner, "/api/records/dis-two/dismiss", {"version": 5})
+    _put(server, "dis-two--run--x", _matrix_record("dis-two"))
+    status, _, body = _owner_post(server, owner, "/api/records/dis-two--run--x/dismiss", {"version": 5})
     assert status == 409 and body["error"] == "version_conflict" and body["current"]["version"] == 1
 
 
 def test_dismiss_of_a_pr_open_record_is_200(server, owner):
     quiet = record()
-    quiet.update(project="dis-three", repo="example-org/dis-three", status="pr_open",
+    quiet.update(project="dis-three", repo="example-org/dis-three", plan_slug="x", status="pr_open",
                  finished_at=quiet["updated_at"], next_check_at=None)
-    assert _put(server, "dis-three", quiet)[0] == 200
-    status, _, body = _owner_post(server, owner, "/api/records/dis-three/dismiss", {"version": 1})
+    assert _put(server, "dis-three--run--x", quiet)[0] == 200
+    status, _, body = _owner_post(server, owner, "/api/records/dis-three--run--x/dismiss", {"version": 1})
     assert status == 200 and body["dismissed_at"]
-    assert _listed(server, "dis-three")["dismissed_at"] == body["dismissed_at"]
+    assert _listed(server, "dis-three--run--x")["dismissed_at"] == body["dismissed_at"]
 
 
 def test_dismiss_with_an_extra_key_is_400(server, owner):
-    _put(server, "dis-four", _matrix_record("dis-four"))
-    status, _, body = _owner_post(server, owner, "/api/records/dis-four/dismiss", {"version": 1, "x": 1})
+    _put(server, "dis-four--run--x", _matrix_record("dis-four"))
+    status, _, body = _owner_post(server, owner, "/api/records/dis-four--run--x/dismiss", {"version": 1, "x": 1})
     assert (status, body) == (400, {"error": "bad_request"})
 
 
 def test_dismiss_body_must_be_exactly_a_positive_int_version(server, owner):
-    _put(server, "dis-five", _matrix_record("dis-five"))
-    path = "/api/records/dis-five/dismiss"
+    _put(server, "dis-five--run--x", _matrix_record("dis-five"))
+    path = "/api/records/dis-five--run--x/dismiss"
     for body in ({"version": True}, {"version": 0}, {"version": "1"}, {"version": 1.0}, [], {}):
         status, _, payload = _owner_post(server, owner, path, body)
         assert (status, payload) == (400, {"error": "bad_request"}), body
@@ -638,16 +643,16 @@ def test_dismiss_body_must_be_exactly_a_positive_int_version(server, owner):
 
 
 def test_restore_clears_the_dismissal(server, owner):
-    _put(server, "dis-six", _matrix_record("dis-six"))
-    _owner_post(server, owner, "/api/records/dis-six/dismiss", {"version": 1})
-    status, _, body = _owner_post(server, owner, "/api/records/dis-six/restore")
-    assert (status, body) == (200, {"id": "dis-six", "dismissed_at": None})
-    assert _listed(server, "dis-six")["dismissed_at"] is None
+    _put(server, "dis-six--run--x", _matrix_record("dis-six"))
+    _owner_post(server, owner, "/api/records/dis-six--run--x/dismiss", {"version": 1})
+    status, _, body = _owner_post(server, owner, "/api/records/dis-six--run--x/restore")
+    assert (status, body) == (200, {"id": "dis-six--run--x", "dismissed_at": None})
+    assert _listed(server, "dis-six--run--x")["dismissed_at"] is None
 
 
 def test_the_owner_still_cannot_write_a_record(server, owner):
     cookie, csrf = owner
-    status, _, _ = call(server, "PUT", "/api/records/dis-seven", cookie=cookie, csrf=csrf, origin=True,
+    status, _, _ = call(server, "PUT", "/api/records/dis-seven--run--x", cookie=cookie, csrf=csrf, origin=True,
                         body={"data": _matrix_record("dis-seven")})
     assert status == 403
 
@@ -655,9 +660,9 @@ def test_the_owner_still_cannot_write_a_record(server, owner):
 def test_a_session_cannot_dismiss_through_put(server):
     data = _matrix_record("dis-eight")
     data["dismissed_at"] = "2026-11-09T12:00:00Z"
-    assert _put(server, "dis-eight", data)[0] in (200, 400, 422)
-    _put(server, "dis-eight", _matrix_record("dis-eight"))
-    entry = call(server, "GET", "/api/records/dis-eight", token=WRITE)[2]
+    assert _put(server, "dis-eight--run--x", data)[0] in (200, 400, 422)
+    _put(server, "dis-eight--run--x", _matrix_record("dis-eight"))
+    entry = call(server, "GET", "/api/records/dis-eight--run--x", token=WRITE)[2]
     assert entry["dismissed_at"] is None
 
 
