@@ -66,6 +66,7 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | `/tld:upstream` | weekly, unattended: syncs a patch-carrying fork to the newest upstream release tag, one pull request |
 | `/tld:docs [check \| init \| tidy]` | a thin CLAUDE.md, one docs index, docs read only when a row matches ([guide](docs/guides/docs-index.md)) |
 | `/tld:board [prune]` | checks the connection to your board, or prunes its stale records and clears cards whose pull requests are done, after you confirm |
+| `/tld:usage` | unattended, every few hours: sends the account's 5-hour and weekly subscription use to the board's Usage page |
 | `/tld:migrate` | moves a repository from claude-toolkit to tld: shows the plan, writes it on a branch after you confirm, one pull request |
 
 No command merges, approves, tags or force-pushes. Three skills run on request:
