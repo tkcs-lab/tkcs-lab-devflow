@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "tld status record",
-  "description": "One database document per run or session (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an implement orchestration keyed '<project>--run--<plan>'; an attended command record (kind 'command') is keyed '<project>--<command>--<session tail>' and an unattended one '<project>--<command>'. tld board record-id builds the id; the old keys (the project slug for a run, '<project>--<command>' for an attended command) are still accepted until tld 1.2.0. The project slug is derived from the repository name (tld board project-slug). 'attended' says whether a person started the command and can answer; the final states are done, failed and pr_open. Schema version 1 gained the optional phase field 'scope' without a bump. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, the project slug) are checked by src/tld/board/record.py. No secrets, file contents or commit messages belong in a record.",
+  "description": "One database document per run or session (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an implement orchestration or a single-session prompt run (make-plan's small scope), keyed '<project>--run--<plan>'; an attended command record (kind 'command') is keyed '<project>--<command>--<session tail>' and an unattended one '<project>--<command>'. tld board record-id builds the id; the old keys (the project slug for a run, '<project>--<command>' for an attended command) are still accepted until tld 1.2.0. The project slug is derived from the repository name (tld board project-slug). 'attended' says whether a person started the command and can answer; the final states are done, failed and pr_open. Schema version 1 gained the optional phase field 'scope' without a bump. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, the project slug) are checked by src/tld/board/record.py. No secrets, file contents or commit messages belong in a record.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -195,7 +195,7 @@
         "run",
         "command"
       ],
-      "description": "'run' is an implement orchestration; 'command' is the record of any other command (setup, review, make-plan, deps, upstream, ci, land, docs, migrate)."
+      "description": "'run' is an implement orchestration or a single-session prompt run; 'command' is the record of any other command (setup, review, make-plan, deps, upstream, ci, land, docs, migrate)."
     },
     "command": {
       "enum": [
@@ -234,7 +234,7 @@
         "string",
         "null"
       ],
-      "description": "null for a command record."
+      "description": "null for a command record and for a single-session prompt run (it has no plan document)."
     },
     "feature_branch": {
       "type": [

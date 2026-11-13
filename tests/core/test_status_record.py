@@ -17,7 +17,7 @@ def run(*args, stdin=None):
     return subprocess.run([*SCRIPT_CMD, *map(str, args)], input=stdin, capture_output=True, text=True)
 
 
-@pytest.mark.parametrize("name", ["good-run", "good-run-scope", "good-command", "good-command-docs"])
+@pytest.mark.parametrize("name", ["good-run", "good-run-prompt", "good-run-scope", "good-command", "good-command-docs"])
 def test_good_fixture_passes(name):
     result = run(RECORDS / f"{name}.json")
     assert result.returncode == 0, result.stdout
@@ -119,6 +119,38 @@ def test_doc_id_for_setup():
 def test_doc_id_for_run():
     assert run(RECORDS / "good-run.json", "--doc-id", "tkcs-lab-devflow--run--example-plan").returncode == 0
     assert run(RECORDS / "good-run.json", "--doc-id", "tkcs-lab-devflow--deps").returncode == 1
+
+
+def _prompt_run(**changes):
+    rec = json.loads((RECORDS / "good-run-prompt.json").read_text())
+    rec.update(changes)
+    return rec
+
+
+def test_prompt_run_id_and_null_plan_url():
+    ok = run(RECORDS / "good-run-prompt.json", "--doc-id", "tkcs-lab-devflow--run--issue-42")
+    assert ok.returncode == 0, ok.stdout
+    out = subprocess.run(
+        tld_cmd("board", "record-id", "--repo", "tkcs-lab/tkcs-lab-devflow", "--run", "--plan-slug", "issue-42"),
+        capture_output=True, text=True)
+    assert out.returncode == 0 and out.stdout.strip() == "tkcs-lab-devflow--run--issue-42"
+    bad = run("-", stdin=json.dumps(_prompt_run(plan_url="")))
+    assert bad.returncode == 1 and "'plan_url'" in bad.stdout
+
+
+@pytest.mark.parametrize("value", ["", 5, False])
+def test_run_rejects_a_plan_url_that_is_not_null_or_a_string(value):
+    result = run("-", stdin=json.dumps(_prompt_run(plan_url=value)))
+    assert result.returncode == 1
+    assert "status-record: 'plan_url' must be null or a non-empty string for a run" in result.stdout.splitlines()
+
+
+@pytest.mark.parametrize("key,value", [("plan_slug", None), ("plan_slug", ""),
+                                       ("feature_branch", None), ("feature_branch", "")])
+def test_prompt_run_still_needs_plan_slug_and_feature_branch(key, value):
+    result = run("-", stdin=json.dumps(_prompt_run(**{key: value})))
+    assert result.returncode == 1
+    assert f"'{key}' must be a non-empty string for a run" in result.stdout
 
 
 def test_stdin_and_bad_json():

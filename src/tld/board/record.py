@@ -302,9 +302,11 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
             if key in rec and rec[key] is not None:
                 errors.append(f"'{key}' must be null for a command record")
     elif kind == "run":
-        for key in ("plan_slug", "plan_url", "feature_branch"):
+        for key in ("plan_slug", "feature_branch"):
             if key in rec and not _nonempty_str(rec[key]):
                 errors.append(f"'{key}' must be a non-empty string for a run")
+        if "plan_url" in rec and rec["plan_url"] is not None and not _nonempty_str(rec["plan_url"]):
+            errors.append("'plan_url' must be null or a non-empty string for a run")
     session = rec.get("orchestrator_session")
     if "orchestrator_session" in rec:
         if session == "scheduled":
@@ -399,7 +401,7 @@ def _record_id(args: list[str]) -> int:
     sp = _Parser(prog="tld board record-id", description="Print the document id of a status record.")
     sp.add_argument("--repo", required=True, help="owner/name")
     kind = sp.add_mutually_exclusive_group(required=True)
-    kind.add_argument("--run", action="store_true", help="an implement run (needs --plan-slug)")
+    kind.add_argument("--run", action="store_true", help="a run: implement or a single-session prompt (needs --plan-slug)")
     kind.add_argument("--command", help="a command record: " + ", ".join(COMMANDS))
     sp.add_argument("--plan-slug", help="the plan slug of the run")
     who = sp.add_mutually_exclusive_group()

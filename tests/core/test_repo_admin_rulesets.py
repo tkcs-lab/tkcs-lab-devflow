@@ -26,7 +26,7 @@ def bodies(ra, cfg=RULESETS):
 
 
 def as_served(body, rid):
-    """What GET /rulesets/{id} answers for a ruleset made from `body` (GitHub adds ids and defaults)."""
+    """What GET /rulesets/{id} answers for a ruleset made from `body` (GitHub adds ids and defaults, and leaves out the update rule's false parameter)."""
     have = copy.deepcopy(body)
     have.update({"id": rid, "source_type": "Repository", "source": "acme/app"})
     for rule in have["rules"]:
@@ -35,6 +35,8 @@ def as_served(body, rid):
         if rule["type"] == "required_status_checks":
             for c in rule["parameters"]["required_status_checks"]:
                 c["integration_id"] = 15368
+        if rule["type"] == "update" and rule.get("parameters") == {"update_allows_fetch_and_merge": False}:
+            del rule["parameters"]
     return have
 
 
@@ -140,13 +142,96 @@ def test_weaker_review_parameters_are_drift(ra, change):
         if name == "tld-main":
             next(r for r in have["rules"] if r["type"] == "pull_request")["parameters"].update(change)
     ctx, _ = world(ra, {"rulesets": RULESETS}, routes=served(ra, edit=edit))
-    assert [f.message for f in ra.check_rulesets(ctx)] == ["ruleset tld-main: rule pull_request has other parameters"]
+    assert [f.message for f in ra.check_rulesets(ctx)] == [
+        "ruleset tld-main: rule pull_request has other parameters: " + next(iter(change))]
 
 
 def test_other_required_checks_are_drift(ra):
     routes = served(ra, {"default_branch": {"required_status_checks": ["lint"]}})
     ctx, _ = world(ra, {"rulesets": {"default_branch": {"required_status_checks": ["lint", "test"]}}}, routes=routes)
-    assert [f.message for f in ra.check_rulesets(ctx)] == ["ruleset tld-main: rule required_status_checks has other parameters"]
+    assert [f.message for f in ra.check_rulesets(ctx)] == [
+        "ruleset tld-main: rule required_status_checks has other parameters: required_status_checks"]
+
+
+def _edit_rule(name, kind, fn):
+    def edit(rname, have):
+        if rname == name:
+            fn(next(r for r in have["rules"] if r["type"] == kind))
+    return edit
+
+
+def test_a_tag_update_rule_served_with_empty_parameters_is_no_drift(ra):
+    edit = _edit_rule("tld-tags", "update", lambda r: r.update(parameters={}))
+    ctx, _ = world(ra, {"rulesets": RULESETS}, routes=served(ra, edit=edit))
+    assert ra.check_rulesets(ctx) == []
+
+
+def test_a_tag_update_rule_that_allows_fetch_and_merge_is_drift(ra):
+    edit = _edit_rule("tld-tags", "update", lambda r: r.update(parameters={"update_allows_fetch_and_merge": True}))
+    ctx, _ = world(ra, {"rulesets": RULESETS}, routes=served(ra, edit=edit))
+    found = ra.check_rulesets(ctx)
+    assert [f.message for f in found] == ["ruleset tld-tags: rule update has other parameters: update_allows_fetch_and_merge"]
+    assert found[0].action.method == "PUT" and found[0].action.path == f"{RS}/2"
+    assert found[0].action.body == bodies(ra)["tld-tags"]
+
+
+MISSING_CASES = [
+    ("tld-main", "pull_request", "required_approving_review_count", 1),
+    ("tld-main", "pull_request", "dismiss_stale_reviews_on_push", True),
+    ("tld-main", "pull_request", "require_last_push_approval", True),
+    ("tld-main", "pull_request", "require_code_owner_review", False),
+    ("tld-main", "pull_request", "required_review_thread_resolution", False),
+    ("tld-tags", "update", "update_allows_fetch_and_merge", False),
+]
+
+
+def test_missing_cases_cover_every_wanted_parameter(ra):
+    wanted = [(name, r["type"], k, v) for name, b in bodies(ra).items() for r in b["rules"]
+              if r["type"] != "required_status_checks" for k, v in (r.get("parameters") or {}).items()]
+    assert sorted(MISSING_CASES) == sorted(wanted)
+
+
+@pytest.mark.parametrize("name,kind,key,value", MISSING_CASES, ids=[f"{n}-{t}-{k}" for n, t, k, _ in MISSING_CASES])
+def test_a_missing_parameter_is_drift_unless_its_wanted_value_is_false(ra, name, kind, key, value):
+    edit = _edit_rule(name, kind, lambda r: r.setdefault("parameters", {}).pop(key, None))
+    ctx, _ = world(ra, {"rulesets": RULESETS}, routes=served(ra, edit=edit))
+    found = ra.check_rulesets(ctx)
+    if value is False:
+        assert found == []
+        return
+    assert [f.message for f in found] == [f"ruleset {name}: rule {kind} has other parameters: {key}"]
+    assert found[0].action.method == "PUT" and found[0].action.path == f"{RS}/1"
+    assert found[0].action.body == bodies(ra)[name]
+
+
+@pytest.mark.parametrize("edit,messages", [
+    (lambda p: p.pop("required_status_checks"),
+     ["ruleset tld-main: rule required_status_checks has other parameters: required_status_checks"]),
+    (lambda p: p.update(strict_required_status_checks_policy=True),
+     ["ruleset tld-main: rule required_status_checks has other parameters: strict_required_status_checks_policy"]),
+    (lambda p: p.pop("strict_required_status_checks_policy"), []),
+], ids=["contexts-missing", "strict-true", "strict-missing"])
+def test_required_status_checks_parameters_are_compared(ra, edit, messages):
+    fn = _edit_rule("tld-main", "required_status_checks", lambda r: edit(r["parameters"]))
+    ctx, _ = world(ra, {"rulesets": RULESETS}, routes=served(ra, edit=fn))
+    assert [f.message for f in ra.check_rulesets(ctx)] == messages
+
+
+def test_several_differing_review_parameters_are_named_in_policy_order(ra):
+    fn = _edit_rule("tld-main", "pull_request", lambda r: r["parameters"].update(
+        {"require_last_push_approval": False, "required_approving_review_count": 0}))
+    ctx, _ = world(ra, {"rulesets": RULESETS}, routes=served(ra, edit=fn))
+    assert [f.message for f in ra.check_rulesets(ctx)] == [
+        "ruleset tld-main: rule pull_request has other parameters: required_approving_review_count, require_last_push_approval"]
+
+
+def test_served_rulesets_converge_on_apply(ra):
+    ctx, fake = world(ra, {"rulesets": RULESETS}, routes=served(ra))
+    found = ra.run_checks(ctx, ["rulesets"])
+    lines = []
+    assert ra.apply_findings(ctx, found, True, False, lines.append) == 0
+    assert lines == ["Nothing to change."]
+    assert fake.writes == []
 
 
 def test_a_tag_ruleset_that_lets_workflows_tag_is_drift(ra):
