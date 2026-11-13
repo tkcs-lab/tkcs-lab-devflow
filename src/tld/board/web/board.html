@@ -84,6 +84,19 @@ button:disabled { opacity: .6; cursor: default; }
 .hidden-view { display: none; }
 h2.ask-title { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 0 0 4px; }
 .back { display: inline-block; margin: 0 0 8px; }
+.usage-card h3 { font-size: 15px; margin: 0 0 8px; }
+.usage-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.usage-row .lbl { width: 64px; flex: none; }
+.usage-row .pct { width: 150px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+.track { flex: 1 1 auto; height: 14px; background: var(--run-bg); border-radius: 7px; overflow: hidden; }
+.fill { height: 100%; background: var(--run); }
+.fill.over { background: var(--need); }
+.chart { position: relative; height: 120px; display: flex; align-items: flex-end; gap: 2px; border-bottom: 1px solid var(--line); margin-top: 8px; }
+.col { flex: 1 1 0; min-width: 2px; background: var(--run); }
+.col.over { background: var(--need); }
+.col.idle { background: var(--line); }
+.limit-line { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--muted); height: 0; pointer-events: none; }
+.limit-line span { position: absolute; right: 0; bottom: 1px; font-size: 11px; color: var(--muted); background: var(--card); padding: 0 3px; }
 label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 13px; }
 </style>
 </head>
@@ -91,6 +104,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
 <header>
   <div class="top">
     <h1 id="title"></h1>
+    <a href="#usage" class="hidden-view" id="usage-link">Usage</a>
     <button type="button" class="quiet hidden-view" id="logout">Log out</button>
   </div>
   <div class="sub" id="updated"></div>
@@ -105,6 +119,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
   </form>
 </section>
 <section id="askview" class="hidden-view" aria-label="Ask"></section>
+<section id="usageview" class="hidden-view" aria-label="Subscription usage"></section>
 <div class="notice hidden-view" id="flash" role="status"></div>
 <main id="main"><div class="notice" id="status">Loading…</div></main>
 <script>
@@ -536,8 +551,11 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     if (timer !== null) { clearInterval(timer); timer = null; }
     show("login", true);
     show("logout", false);
+    show("usage-link", false);
+    stopUsage();
     flash("");
     show("askview", false);
+    show("usageview", false);
     show("main", false);
     document.getElementById("counts").textContent = "";
     document.getElementById("updated").textContent = "";
@@ -695,7 +713,139 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     view.appendChild(card);
   }
 
+  var usageTimer = null;
+  var usageSeq = 0;
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var USAGE_KINDS = [["five_hour", "5-hour window"], ["seven_day", "Weekly window"]];
+  var USAGE_DAYS = { five_hour: 30, seven_day: 56 };
+
+  function stopUsage() {
+    usageSeq++;
+    if (usageTimer !== null) { clearInterval(usageTimer); usageTimer = null; }
+  }
+
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  function whole(n) { return String(Math.round(n)); }
+
+  function usageBarRow(label, pct, isStandard) {
+    var bar = usageBar(pct);
+    var row = el("div", "usage-row");
+    var track = el("div", "track");
+    track.setAttribute("role", "img");
+    track.setAttribute("aria-label", label + ": " + whole(pct) + " percent of the limit");
+    var fill = el("div", isStandard && bar.over ? "fill over" : "fill");
+    fill.style.width = bar.fill + "%";
+    add(track, fill);
+    add(row, el("span", "lbl", label), track,
+      el("span", "pct", whole(pct) + "%" + (isStandard && bar.over ? " (limit passed)" : "")));
+    return row;
+  }
+
+  function usageCard(title, win, factor, now) {
+    var card = el("div", "card usage-card");
+    add(card, el("h3", null, title));
+    if (!win) { add(card, el("div", "notice", "No window is running.")); return card; }
+    add(card, usageBarRow("Standard", win.last_standard, true), usageBarRow("Max", win.last_standard / factor, false));
+    var left = win.resets_at - now;
+    var since = now - win.last_seen;
+    add(card, el("div", "notice", (left < 60 ? "resets in under a minute" : "resets in " + usageAgo(left)) +
+      " · last reading " + usageAgo(since) + (since < 60 ? "" : " ago")));
+    return card;
+  }
+
+  function usageChart(kind, windows, factor, now) {
+    var from = now - USAGE_DAYS[kind] * 86400;
+    var done = windows.filter(function (w) { return w.complete === true && w.resets_at >= from; });
+    var wrap = el("div", "usage-history");
+    if (done.length === 0) { add(wrap, el("div", "notice", "No finished windows yet.")); return wrap; }
+    var top = 120;
+    done.forEach(function (w) { top = Math.max(top, 1.1 * w.peak_standard); });
+    var chart = el("div", "chart");
+    done.forEach(function (w) {
+      var cls = "col" + (w.over ? " over" : "") + (w.idle ? " idle" : "");
+      var col = el("div", cls);
+      col.style.height = (Math.min(w.peak_standard, top) / top * 100) + "%";
+      var d = new Date(w.start * 1000);
+      col.title = d.getDate() + " " + MONTHS[d.getMonth()] + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes()) +
+        " - peak " + whole(w.peak_standard) + "% of Standard (" + whole(w.peak_standard / factor) + "% of Max), " +
+        w.samples + " readings";
+      chart.appendChild(col);
+    });
+    var lines = [[100, "Standard limit"]];
+    if (factor * 100 < top) lines.push([factor * 100, "Max limit"]);
+    lines.forEach(function (l) {
+      var line = el("div", "limit-line");
+      line.style.bottom = (l[0] / top * 100) + "%";
+      add(line, el("span", null, l[1]));
+      chart.appendChild(line);
+    });
+    add(wrap, chart);
+    return wrap;
+  }
+
+  function renderUsage(data) {
+    var view = document.getElementById("usageview");
+    view.textContent = "";
+    var back = el("a", "back", "← Back to the board");
+    back.href = "#";
+    add(view, back, el("h2", "ask-title", "Subscription usage"));
+    if (!data || typeof data.now !== "number" || !data.windows) {
+      add(view, el("div", "notice bad", "The usage data could not be read."));
+      return;
+    }
+    if (data.plan === null || data.plan === undefined) {
+      add(view, el("div", "notice", "Usage is off. Set TLD_BOARD_PLAN=max (or standard) on the board host and restart it."));
+      return;
+    }
+    var factor = data.factor > 0 ? data.factor : 5;
+    var now = data.now;
+    add(view, el("div", "notice", data.plan === "max" ?
+      "You are on Max (" + factor + "x). Max = " + factor + "x Standard (assumed)." :
+      "You are on Standard. Use above 100% is invisible here, so this page cannot show whether Max is worth it."));
+    var any = USAGE_KINDS.some(function (k) { return (data.windows[k[0]] || []).length > 0; });
+    if (!any) { add(view, el("div", "notice", "No readings yet. They arrive when a tld command ends or the /tld:usage task runs.")); return; }
+    USAGE_KINDS.forEach(function (k) {
+      var list = data.windows[k[0]] || [];
+      add(view, usageCard(k[1], usageNow(list, now), factor, now));
+      var section = el("div", "card usage-card");
+      add(section, el("h3", null, k[1] + ": history"), usageChart(k[0], list, factor, now));
+      var verdict = usageVerdict(list, k[0], now);
+      var vnode = el("div", "verdict " + verdict.kind, verdict.text);
+      add(section, vnode);
+      add(view, section);
+    });
+  }
+
+  function loadUsage() {
+    var seq = ++usageSeq;
+    api("GET", "api/usage").then(function (r) {
+      if (seq !== usageSeq) return;
+      if (r.status === 200 && r.data) renderUsage(r.data);
+      else {
+        var view = document.getElementById("usageview");
+        view.textContent = "";
+        add(view, el("div", "notice bad", "Usage could not be loaded: HTTP " + r.status));
+      }
+    }).catch(function (err) {
+      if (err instanceof Unauthorized) showLogin("Your session ended. Log in again.");
+    });
+  }
+
   function route() {
+    stopUsage();
+    if (location.hash === "#usage") {
+      flash("");
+      show("main", false);
+      show("askview", false);
+      show("usageview", true);
+      var uv = document.getElementById("usageview");
+      uv.textContent = "";
+      uv.appendChild(el("div", "notice", "Loading…"));
+      loadUsage();
+      usageTimer = setInterval(loadUsage, 60000);
+      return;
+    }
+    show("usageview", false);
     var m = /^#ask=([A-Za-z0-9-]+)$/.exec(location.hash);
     if (!m) {
       document.getElementById("askview").textContent = "";
@@ -720,6 +870,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
   function startInbox() {
     show("login", false);
     show("logout", true);
+    show("usage-link", true);
     route();
     load();
     if (timer === null) timer = setInterval(load, pollMs());
