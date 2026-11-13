@@ -111,7 +111,8 @@ the real control lives: the rulesets `tld-main` and `tld-tags`, an agent account
 a pull request only after `tld-main` is satisfied: the owner's approval, green required checks, stale approvals
 dismissed and the last push approved by someone else; so it cannot land its own unreviewed change), and the
 environments `tld-agent` and `tld-release` that hold the tokens ([admin.md](../guides/admin.md)). Tags have one
-route, the release workflow `tld-release`, run by the owner with `TLD_RELEASE_TOKEN` (D13); the central git-ops
+route, the release workflow `tld-release`, approved by the owner in GitHub (`TLD_RELEASE_TOKEN`); a session starts it only
+through the release skill after the owner's yes (D13); the central git-ops
 workflow only deletes branches ([git-ops.md](../guides/git-ops.md)).
 
 ### Board
@@ -133,7 +134,8 @@ count. Sessions reach it through `tld board client` / `ask` / `answers` or the `
   guides in step.
 - **Hooks as the security boundary.** A manipulated agent can run code the hooks cannot read; GitHub rulesets
   cannot be talked out of a rule (D1).
-- **A second tag route through git-ops.** One route, one environment, one reviewer (D13).
+- **A second tag route through git-ops.** One route (the release workflow, approved by the owner in GitHub), one
+  environment, one reviewer (D13).
 - **Artifact pages for the board and for decisions.** The board must not depend on claude.ai, and an agent must not
   be able to answer for the owner. Also rejected for the board: a remote `type: http` MCP entry (its credential
   variables are read as empty), an SDK or web framework (the repository is stdlib plus PyYAML), push channels

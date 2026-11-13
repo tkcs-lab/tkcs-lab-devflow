@@ -43,13 +43,14 @@ enables this once before the first release, see CONTRIBUTING.md), so assets cann
 and the compose file pins the board image by digest because a ghcr tag can be overwritten. The digest pin protects
 against a moved tag, not against a tampered release; the image is not signed.
 
-The release workflow has two jobs, both behind the `tld-release` environment, where the owner approves every run.
-The `build` job runs the third-party build code (pip, setuptools, the docker actions, QEMU, whose binfmt image is
-pinned by digest); it holds `packages: write` (to push the image), the one exception to the read-only workflow
-token, and never references `TLD_RELEASE_TOKEN`. The `publish` job holds that owner token, which can create tags,
-and the read-only token only; it runs `gh` and the shell, with no third-party build code on that runner. It checks
-the downloaded `dist/` against `SHA256SUMS`, which catches a corrupt transfer but not a compromised `build` job,
-since that job wrote the sums.
+The release workflow has two jobs. `build` has no environment: it checks the commit is green, runs the third-party
+build code (pip, setuptools, the docker actions, QEMU, whose binfmt image is pinned by digest), pushes the board image
+by digest without a tag, holds `packages: write` and `checks: read`, and never references `TLD_RELEASE_TOKEN`.
+`publish` is behind the environment `tld-release`, the one approval of a run, and holds `TLD_RELEASE_TOKEN`, which can
+create tags; it runs `gh`, docker and the shell, with no third-party build code on that runner. It checks the
+downloaded `dist/` against `SHA256SUMS`, which catches a corrupt transfer but not a compromised `build` job, since that
+job wrote the sums, adds the image tags with the workflow token (`packages: write`) and only then makes the tag and the
+release. An unapproved run moves no tag, but `build` runs without approval.
 
 ## What a report can be about
 
