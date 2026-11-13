@@ -1,6 +1,13 @@
 """no-git-tag: no creating, moving, deleting or pushing tags; reading stays allowed."""
+import json
+import re
+import subprocess
+import sys
+import time
+
 import pytest
 
+from conftest import BIN
 from hooks_helpers import bash, event, git, make_repo, make_repo_with_origin, run, run_script
 
 HOOK = "no-git-tag"
@@ -141,6 +148,7 @@ RELEASE_DENIED = [
     "gh workflow run tld-release.yml -f dry_run=false -f version=9.9.9", "gh workflow run tld-release",
     "gh workflow run .github/workflows/tld-release.yml",
     "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches -f ref=main",
+    "curl -X POST https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches",
     "gh release edit v1 --tag v3", "gh release edit v1 --tag=v3",
     "gh api -X PATCH repos/o/r/releases/1 -f tag_name=v2", "gh api -X DELETE repos/o/r/releases/1",
 ]
@@ -176,3 +184,299 @@ def test_release_dispatch_denied(feature_repo):
     assert _mcp(feature_repo, method="run_workflow", workflow_id="test.yml", ref="main") == 0
     assert _mcp(feature_repo, method="run_workflow", workflow_id="tld-git-ops.yml", ref="main") == 0
     assert _mcp(feature_repo, method="cancel_workflow_run", run_id=5) == 0
+
+
+# --------------------------------------------------------------------------- the guarded release dispatch
+
+
+def _tld(repo, *args):
+    return subprocess.run([sys.executable, str(BIN), "guard", *args], cwd=repo, capture_output=True, text=True, timeout=60)
+
+
+def _age(repo, seconds):
+    marker = repo / ".git" / "tld" / "release-confirm.json"
+    data = json.loads(marker.read_text())
+    data["written_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - seconds))
+    marker.write_text(json.dumps(data))
+
+
+def _code(repo, command):
+    return run(HOOK, bash(command, repo)).code
+
+
+RUN = "gh workflow run tld-release.yml"
+# (command, denied without the marker, denied with the marker for tld-release.yml)
+MATRIX = [
+    (RUN, True, False),
+    (RUN + " -f dry_run=true", False, False),
+    (RUN + " -f dry_run=false", True, False),
+    (RUN + " -f dry_run=true -f dry_run=false", True, False),
+    (RUN + " -f dry_run=false -f dry_run=true", True, False),
+    (RUN + " -f dry_run=true -f skip_checks=false", False, False),
+    (RUN + " -f dry_run=false -f skip_checks=true", True, True),
+    (RUN + " -f dry_run=false -f skip_checks=True", True, True),
+    (RUN + " -f dry_run=false -f skip_checks=YES", True, True),
+    (RUN + " -f dry_run=false -f skip_checks=1", True, True),
+    (RUN + " -f dry_run=true -f skip_checks=true", True, True),
+    (RUN + " -f dry_run=false -f skip_checks=false -f skip_checks=true", True, True),
+    (RUN + " -f dry_run=False", True, False),
+    (RUN + " -f dry_run=0", True, False),
+    (RUN + " -f dry_run=1", True, False),
+    (RUN + " -f dry_run=''", True, False),
+    ("gh workflow run tld-release -f dry_run=false", True, False),
+    ("gh workflow run .github/workflows/tld-release.yml -f dry_run=false", True, False),
+    (RUN + " --json", True, True),
+    (RUN + " -f dry_run=false -F x=@f", True, True),
+    (RUN + " -f dry_run=false --field=x=@f", True, True),
+]
+
+
+@pytest.mark.parametrize("command,denied,denied_with_marker", MATRIX)
+def test_release_dispatch_matrix(fresh_repo, command, denied, denied_with_marker):
+    assert (_code(fresh_repo, command) == 2) is denied, command
+    assert _tld(fresh_repo, "allow-release", "tld-release.yml").returncode == 0
+    assert (_code(fresh_repo, command) == 2) is denied_with_marker, command
+
+
+@pytest.mark.parametrize("marker_for", ["release.yml", "other.yml"])
+def test_a_marker_for_another_workflow_does_not_open_this_one(fresh_repo, marker_for):
+    _tld(fresh_repo, "allow-release", marker_for)
+    assert _code(fresh_repo, RUN + " -f dry_run=false") == 2
+
+
+def test_an_expired_marker_denies(fresh_repo):
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    _age(fresh_repo, 601)
+    assert _code(fresh_repo, RUN + " -f dry_run=false") == 2
+
+
+def test_the_stem_is_covered_by_a_marker_for_the_file(fresh_repo):
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert _code(fresh_repo, "gh workflow run tld-release -f dry_run=false") == 0
+
+
+def test_the_marker_for_the_stem_covers_the_file(fresh_repo):
+    _tld(fresh_repo, "allow-release", "tld-release")
+    assert _code(fresh_repo, RUN + " -f dry_run=false") == 0
+
+
+@pytest.mark.parametrize("command", [
+    RUN + " --json", RUN + " -f dry_run=true -F body=@f", RUN + " -f dry_run=true --field body=@f",
+    "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches -f inputs[dry_run]=true -F inputs[skip_checks]=@f",
+    "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches --input missing.json",
+    "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches --input -",
+    "curl -X POST https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches",
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/./dispatches",
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld-release.yml//dispatches",
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld%2Drelease.yml/dispatches",
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/{dispatches}",
+    "curl -X POST -d '{\"ref\":\"main\",\"inputs\":{\"dry_run\":\"true\"}}' "
+    "https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches",
+])
+def test_unreadable_release_inputs_deny_even_with_the_marker(fresh_repo, command):
+    assert _code(fresh_repo, command) == 2
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    r = run(HOOK, bash(command, fresh_repo))
+    assert r.code == 2 and "cannot be read" in r.stderr, (command, r.stderr)
+
+
+@pytest.mark.parametrize("command", [
+    # a bracket key other than inputs[dry_run] / inputs[skip_checks] is a word the shell decides: under nullglob
+    # `inputs[a]=b` vanishes (and with a matching file it becomes another word), so the inputs cannot be read
+    "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches "
+    "-f inputs[dry_run]=true -f inputs[a]=b",
+    "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches -f inputs[DRY_RUN]=true",
+    RUN + " -f dry_run=true -f inputs[a]=b",
+])
+def test_a_bracket_key_other_than_the_two_release_inputs_denies(fresh_repo, command):
+    assert _code(fresh_repo, command) == 2, command
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    r = run(HOOK, bash(command, fresh_repo))
+    assert r.code == 2 and "cannot be read" in r.stderr, (command, r.stderr)
+
+
+@pytest.mark.parametrize("command", [
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld-rele*.yml/dispatches",
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld-releas?.yml/dispatches",
+    "curl -X POST -d x api.github.com/repos/o/r/actions/workflows/tld-rele*.yml/dispatches",
+    "curl -X POST -d x api.github.com/repos/o/r/actions/workflows/[t]ld-release.yml/dispatches",
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispat*",
+])
+def test_a_globbed_curl_dispatch_word_denies(fresh_repo, command):
+    """A glob the shell expands into the real release dispatch URL: the word cannot be checked, so it is denied."""
+    r = run(HOOK, bash(command, fresh_repo))
+    assert r.code == 2 and "cannot be read" in r.stderr, (command, r.stderr)
+
+
+def test_a_curl_query_string_question_mark_is_not_a_glob(fresh_repo):
+    assert _code(fresh_repo, "curl https://api.github.com/repos/o/r/actions/runs?per_page=1") == 0
+
+
+@pytest.mark.parametrize("command", [
+    "gh workflow run tld-git-ops.yml -f repo=acme/web -f name=chore/release -f dry_run=false",
+    "gh workflow run tld-git-ops.yml -f repo=acme/release -f dry_run=false",
+    "gh workflow run tld-git-ops.yml --ref chore/release -f dry_run=false",
+    "gh workflow run tld-git-ops.yml -f note=x/tld-release -f dry_run=false",
+])
+def test_the_release_marker_does_not_open_a_git_ops_run_named_by_a_field_value(fresh_repo, command):
+    """The workflow is the positional argument, not any word whose last path segment looks like the release one."""
+    assert _code(fresh_repo, command) == 2
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert _code(fresh_repo, command) == 2, command
+
+
+@pytest.mark.parametrize("command", [
+    'curl -X POST -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/$REPO/actions/workflows/'
+    'tld-release.yml/dispatches -d \'{"inputs":{"dry_run":"false"}}\'',
+    'curl -X POST "$U" -d x',
+    'U=https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches; '
+    'curl -H "Authorization: token $T" -d\'{"inputs":{"dry_run":"false","skip_checks":"true"}}\' "$U"',
+    'U=https://x.invalid/a; curl -d@body.json "$U"',
+    'U=https://x.invalid/a; curl -sd @body.json "$U"',
+    'U=https://x.invalid/a; curl -sXPOST -d@b "$U"',
+    "curl -d'{\"tag_name\":\"v9\"}' https://api.github.com/repos/o/r/releases",
+    "curl -d@b https://api.github.com/repos/o/r/releases",
+    'curl -X POST https://$HOST/repos/o/r/actions/workflows/tld-release.yml/dispatches -d x',
+    'curl -X POST https://api.github.com/repos/o/r/actions/workflows/$WF/dispatches -d x',
+    'curl -X POST "$API/repos/o/r/git/refs" -d \'{"ref":"refs/tags/v9","sha":"abc"}\'',
+])
+def test_a_curl_url_built_from_a_variable_is_denied(fresh_repo, command):
+    assert _code(fresh_repo, command) == 2, command
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert _code(fresh_repo, command) == 2, command
+
+
+def test_a_curl_get_or_a_dynamic_header_alone_is_fine(fresh_repo):
+    assert _code(fresh_repo, 'curl -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/o/r') == 0
+    assert _code(fresh_repo, 'curl -X POST -H "Authorization: Bearer $T" -d "$BODY" https://example.org/x') == 0
+
+
+API = "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches -f ref=main "
+
+
+@pytest.mark.parametrize("fields,denied,denied_with_marker", [
+    ("", True, False),
+    ("-f 'inputs[dry_run]=true'", False, False),
+    ("-f 'inputs[dry_run]=false'", True, False),
+    ("-f 'inputs[dry_run]=true' -f 'inputs[dry_run]=false'", True, False),
+    ("-f 'inputs[dry_run]=false' -f 'inputs[skip_checks]=true'", True, True),
+    ("-f 'inputs[dry_run]=true' -f 'inputs[skip_checks]=yes'", True, True),
+])
+def test_release_dispatch_through_gh_api(fresh_repo, fields, denied, denied_with_marker):
+    assert (_code(fresh_repo, API + fields) == 2) is denied, fields
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert (_code(fresh_repo, API + fields) == 2) is denied_with_marker, fields
+
+
+@pytest.mark.parametrize("endpoint", ["https://api.github.com//repos/o/c/actions/workflows/tld-git-ops.yml/dispatches",
+                                      "repos/o/c/actions/workflows/./tld-git-ops.yml/dispatches#x"])
+def test_git_ops_dispatch_endpoint_forms_are_normalised_too(fresh_repo, endpoint):
+    assert _code(fresh_repo, f"gh api -X POST {endpoint} -f 'inputs[dry_run]=false'") == 2
+
+
+def test_a_body_file_is_never_read_for_a_release_dispatch(fresh_repo):
+    base = "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches --input "
+    (fresh_repo / "dry.json").write_text(json.dumps({"inputs": {"dry_run": "true"}}))
+    for name in ("dry.json", "missing.json", "-"):
+        assert _code(fresh_repo, base + name) == 2, name
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    for name in ("dry.json", "missing.json", "-"):
+        assert _code(fresh_repo, base + name) == 2, name
+
+
+@pytest.mark.parametrize("command", [
+    RUN + " -f dry_run=true --ref -f -f dry_run=false",
+    RUN + " -f dry_run=true -r -f -f dry_run=false",
+    RUN + " -f dry_run=true -f skip_checks=false --ref -f -f skip_checks=true",
+    API + "-f 'inputs[dry_run]=true' -q -f -f 'inputs[dry_run]=false'",
+    API + "-f 'inputs[dry_run]=true' --jq -f -f 'inputs[skip_checks]=true'",
+    API + "-f 'inputs[dry_run]=true' --hostname -f -f 'inputs[dry_run]=false'",
+    API + "-f 'inputs[dry_run]=true' -H -f -f 'inputs[dry_run]=false'",
+    RUN + " -f DRY_RUN=false", RUN + " -f dry_run=true -f Skip_Checks=true",
+    RUN + " -f dry_run=true -f skip_checks=t", RUN + " -f 'dry_run= true'", RUN + " -f dry_run=TRUE",
+    "gh workflow run -f version=9.yml tld-release.yml -f dry_run=false",
+    "gh workflow run --ref tld-git-ops.yml tld-release.yml -f dry_run=false",
+    "gh workflow run tld-releas{e..e}.yml -f dry_run=false", "gh workflow run $WF.yml -f dry_run=false",
+    "gh workflow run tld-releas?.yml -f dry_run=false", "gh workflow run tld-git-op{s..s}.yml -f dry_run=false",
+    RUN + " -f dry_run=true ?? ?????????????", RUN + " -f dry_run=true [-]f [d]ry_run=false",
+    API + "-f 'inputs[dry_run]=true' ??",
+    RUN + " -f dry_run=true -f $X", RUN + ' -f dry_run=true -f "$X"', RUN + " -f dry_run=true -f $(echo dry_run=false)",
+    RUN + " -f dry_run=true -f {dry_run=false,x}",
+    API + "-f 'inputs[dry_run]=true' -f \"$X\"",
+    "gh api -X POST \"$EP\" -f 'inputs[dry_run]=false'",
+    "gh api -X POST https://api.github.com//repos/o/r/actions/workflows/tld-release.yml/dispatches -f 'inputs[dry_run]=false'",
+    "gh api -X POST https://api.github.com///repos/o/r/actions/workflows/tld-release.yml/dispatches?x=1 -f 'inputs[dry_run]=false'",
+    "gh api 'repos/o/r/actions/workflows/tld-release.yml/dispatches#x' -f 'inputs[dry_run]=false'",
+    "gh api 'repos/o/r/actions/workflows/tld-release.yml/dispatches?a=1#x' -f 'inputs[dry_run]=false'",
+    "gh api -X POST repos/o/r/actions/workflows/tld%2Drelease.yml/dispatches -f 'inputs[dry_run]=false'",
+    "gh workflow run --ref a.yml tld-release.yml -f dry_run=false -f skip_checks=true",
+    "gh workflow run -r a.yml tld-release.yml -f dry_run=false",
+    "gh api -X POST repos/o/r/actions/workflows/./tld-release.yml/dispatches -f 'inputs[dry_run]=false'",
+    "gh api -X POST repos/o/r/actions/workflows/x/../tld-release.yml/dispatches -f 'inputs[dry_run]=false'",
+    "gh api -X POST repos/o/r/actions/workflows//tld-release.yml/dispatches -f 'inputs[dry_run]=false'",
+    "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches/ -f 'inputs[dry_run]=false'",
+    "gh api -X POST https://ghe.example/api/v3/repos/o/r/actions/workflows/tld-release.yml/dispatches -f 'inputs[dry_run]=false'", RUN + " -f dry_run=1", RUN + " -f dry_run=yes",
+    API + "-f 'inputs[dry_run]=true' -f 'inputs[SKIP_CHECKS]=true'",
+])
+def test_option_values_and_odd_spellings_do_not_hide_inputs(fresh_repo, command):
+    assert _code(fresh_repo, command) == 2, command
+    _tld(fresh_repo, "allow-release", "tld-release.yml")   # a real run is then allowed, skip_checks never
+    assert (_code(fresh_repo, command) == 2) is bool(
+        "skip_checks" in command.lower() or re.search(r"[${}?*\[\]]", re.sub(r"inputs\[\w+\]", "", command))), command
+
+
+@pytest.mark.parametrize("command", [
+    RUN + " -f dry_run=true --ref main", RUN + " -f dry_run=true -r main -R o/r",
+    API + "-f 'inputs[dry_run]=true' -q .x -H 'Accept: x'",
+])
+def test_option_values_are_skipped_when_reading_inputs(fresh_repo, command):
+    assert _code(fresh_repo, command) == 0, command
+
+
+def _mcp_release(repo, **extra):
+    return _mcp(repo, method="run_workflow", workflow_id="tld-release.yml", ref="main", **extra)
+
+
+def test_release_dispatch_through_mcp(fresh_repo):
+    assert _mcp_release(fresh_repo, inputs={"DRY_RUN": 1}) == 2
+    assert _mcp_release(fresh_repo, inputs={"dry_run": True}) == 0
+    assert _mcp_release(fresh_repo, inputs={"dry_run": "true"}) == 0
+    assert _mcp_release(fresh_repo, inputs='{"dry_run": "true"}') == 0
+    assert _mcp_release(fresh_repo, inputs={"dry_run": False}) == 2
+    assert _mcp_release(fresh_repo) == 2
+    assert _mcp_release(fresh_repo, inputs={}) == 2
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert _mcp_release(fresh_repo, inputs={"dry_run": False}) == 0
+    assert _mcp_release(fresh_repo, inputs={"dry_run": "false"}) == 0
+    assert _mcp_release(fresh_repo, inputs={"dry_run": False, "skip_checks": True}) == 2
+    assert _mcp_release(fresh_repo, inputs={"dry_run": True, "skip_checks": "yes"}) == 2
+    assert _mcp_release(fresh_repo, inputs=["dry_run"]) == 2
+    assert _mcp_release(fresh_repo, inputs={"dry_run": False, "skip_checks": ["true"]}) == 2
+    assert _mcp_release(fresh_repo, inputs={"dry_run": False, "SKIP_CHECKS": True}) == 2
+
+    assert _mcp_release(fresh_repo, inputs="[1]") == 2
+    assert _mcp_release(fresh_repo, inputs="not json") == 2
+
+
+def test_numeric_ids_and_reruns_stay_denied_with_the_marker(fresh_repo):
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert _mcp(fresh_repo, method="run_workflow", workflow_id=123456, ref="main", inputs={"dry_run": True}) == 2
+    assert _mcp(fresh_repo, method="run_workflow", workflow_id="123456", ref="main") == 2
+    assert _mcp(fresh_repo, method="rerun_workflow_run", run_id=5) == 2
+    assert _mcp(fresh_repo, method="rerun_failed_jobs", run_id=5) == 2
+    assert _code(fresh_repo, "gh workflow run 123456 -f dry_run=true") == 2
+    assert _code(fresh_repo, "git tag v9") == 2
+
+
+def test_the_profiles_release_workflow_is_guarded_by_name(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/x")
+    profile = repo / ".tld" / "toolkit.yaml"
+    profile.write_text(profile.read_text() + "release:\n  workflow: release.yml\n  version_files:\n"
+                       "    - {path: pyproject.toml, pattern: '^version = \"(.+)\"$'}\n")
+    assert _code(repo, "gh workflow run release.yml -f dry_run=false") == 2
+    assert _code(repo, "gh workflow run release -f dry_run=false") == 2
+    assert _code(repo, "gh workflow run release.yml -f dry_run=true") == 0
+    _tld(repo, "allow-release", "release.yml")
+    assert _code(repo, "gh workflow run release.yml -f dry_run=false") == 0
+    assert _code(repo, "gh workflow run release.yml -f dry_run=false -f skip_checks=true") == 2
+    assert _code(repo, "gh workflow run test.yml") == 0

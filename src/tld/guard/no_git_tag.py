@@ -2,7 +2,10 @@
 """PreToolUse hook `no-git-tag`: no creating, moving, deleting or pushing tags.
 
 Reading stays allowed (`git tag -l`, `git describe`, `git fetch --tags`, `git ls-remote --tags`).
-Tags have one route (D13): the release workflow, which the owner runs by hand; a session may not dispatch it.
+Tags have one route (D13): the release workflow, which the owner approves in GitHub. A session starts it only
+through the release skill, after the owner's yes: `dry_run=true`, or `dry_run=false` while the release marker of
+`tld guard allow-release <workflow-file>` is set (10 minutes). `skip_checks` and inputs the hook cannot read
+(`--json`, a field file, every curl dispatch) are denied even with the marker.
 The hook also guards the one other ref-changing workflow, git-ops (it deletes branches): a dispatch with
 `dry_run` false needs the confirm marker of `tld guard allow-git-ops` (S12).
 """
@@ -17,14 +20,13 @@ from tld.guard._common import Ctx
 from tld.guard._gitcfg import _truthy, git_config_value, git_config_values
 from tld.guard._gitgh import (Item, gh_path, iter_items, parse_gh_api, parse_push, parse_refspecs, read_input_text,
                               ref_exists, short_ref)
+from tld.guard._release_dispatch import (UNREADABLE_RELEASE, _glob, _release_api, _release_gh_run, _release_mcp,
+                                         curl_dispatch_glob, curl_dynamic_url, deny, is_release_workflow,
+                                         normalise_path, run_workflow_arg)
 from tld.guard._shell import ParseError, is_dynamic
 from tld.guard.integrity import dynamic_command, integrity
 
 NAME = "no-git-tag"
-INSTEAD = ("Tags are cut only by the release workflow (tld-release), which the owner runs by hand on the main "
-           "branch; there is no other route (git-ops deletes branches only). Do not create, move, delete or push "
-           "a tag from a session, and do not dispatch the release workflow; say in your report that a release is "
-           "due instead. Reading is fine: `git tag -l`, `git describe`, `git fetch --tags`, `git ls-remote --tags`.")
 TAG_REF = re.compile(r"^repos/[^/]+/[^/]+/git/refs/tags(/.*)?$")
 
 LIST_LONG = ("list", "verify", "contains", "no-contains", "points-at", "merged", "no-merged")
@@ -32,10 +34,6 @@ LIST_LONG_VALUE = ("contains", "no-contains", "points-at", "merged", "no-merged"
 CREATE_LONG = ("annotate", "sign", "force", "delete", "edit", "local-user", "message", "file")
 CREATE_LONG_VALUE = ("local-user", "message", "file")
 OTHER_LONG_VALUE = ("sort", "format", "cleanup")
-
-
-def deny(what: str) -> str:
-    return f"blocked: {what}. {INSTEAD}"
 
 
 def _resolve(name: str, *tables: tuple[str, ...]) -> str | None:
@@ -92,16 +90,9 @@ def check_tag(args: list[str]) -> str | None:
     return None
 
 
-RELEASE_WORKFLOW = "tld-release.yml"
 REL_EDIT = re.compile(r"^repos/[^/]+/[^/]+/releases/[^/]+$")
 DISPATCH = re.compile(r"^repos/[^/]+/[^/]+/actions/workflows/([^/]+)/dispatches$")
 PUSH_KEY = re.compile(r"^remote\.[^=]*\.(push|mirror)$", re.I)
-
-
-def is_release_workflow(name: str) -> bool:
-    base = os.path.basename(name.strip())
-    return base in (RELEASE_WORKFLOW, "tld-release")
-
 
 # ---- S12: git-ops runs for real only after the user's yes -----------------------------------------------
 GIT_OPS_WORKFLOW = "tld-git-ops.yml"
@@ -244,11 +235,15 @@ def _uncheckable_workflow_id(ident: str) -> bool:
 def check_gh(ctx: Ctx, it: Item) -> str | None:
     path = gh_path(it.words)
     if path[:2] == ["workflow", "run"] and len(path) > 2:
-        if is_release_workflow(path[2]):
-            return deny("this dispatches the release workflow")
-        if is_git_ops_workflow(ctx, path[2]):
+        wf = run_workflow_arg(it.words) or path[2]
+        if is_dynamic(wf) or _glob(wf):
+            return deny("`gh workflow run` names its workflow with a word the shell expands, which cannot be checked "
+                        "against the release workflow; dispatch a workflow by its literal file name")
+        if is_release_workflow(ctx, wf):
+            return _release_gh_run(ctx, it, wf)
+        if is_git_ops_workflow(ctx, wf):
             return check_git_ops_gh_run(ctx, it)
-        if _uncheckable_workflow_id(path[2]):  # S10: a numeric id could be the release workflow
+        if _uncheckable_workflow_id(wf):  # S10: a numeric id could be the release workflow
             return deny("`gh workflow run` with a numeric workflow id cannot be checked against the release "
                         "workflow; dispatch a workflow by its file name")
     if path[:2] == ["release", "edit"] and any(w == "--tag" or w.startswith("--tag=") for w in it.words):
@@ -258,9 +253,14 @@ def check_gh(ctx: Ctx, it: Item) -> str | None:
     if path[:1] == ["api"]:
         api = parse_gh_api(it.words)
         ep = api.endpoint
+        clean = normalise_path(ep) if ep else ep
+        if api.method != "GET" and (is_dynamic(ep) or _glob(ep)):
+            return deny("this `gh api` call builds its endpoint at run time, so it cannot be checked against the "
+                        "release workflow; call it with a plain endpoint")
+        ep = re.sub(r"^api/v3/", "", clean.lstrip("/")) if ep else ep
         m = DISPATCH.match(ep)
-        if api.method != "GET" and m and is_release_workflow(m.group(1)):
-            return deny("this dispatches the release workflow")
+        if api.method != "GET" and m and is_release_workflow(ctx, m.group(1)):
+            return _release_api(ctx, it, api, m.group(1))
         if api.method != "GET" and m and is_git_ops_workflow(ctx, m.group(1)):
             return check_git_ops_api(ctx, it, api)
         if api.method != "GET" and m and _uncheckable_workflow_id(m.group(1)):  # S10: numeric workflow id
@@ -297,6 +297,10 @@ def _curl_method_and_data(words: list[str]) -> tuple[str, list[str]]:
             elif not eq:
                 val, i = (words[i] if i < len(words) else ""), i + 1
             method = val.upper()
+        elif re.match(r"^-[A-Za-z]*[dFTX]", w) and not w.startswith("--") and w not in ("-X",) and name not in CURL_DATA:
+            # attached values and clusters (`-d@f`, `-sd x`, `-sXPOST`): a body or a method the parser cannot split
+            # safely, so count it as data and the call as non-GET
+            data.append(w)
         elif name in CURL_DATA:
             if not eq:
                 val, i = (words[i] if i < len(words) else ""), i + 1
@@ -332,17 +336,22 @@ def check_curl_tag_api(it: Item) -> str | None:
 
 
 def check_curl(ctx: Ctx, it: Item) -> str | None:
-    """A raw API call to a workflow dispatch: the release one is denied, a git-ops one needs the confirm marker
+    """A raw API call to a workflow dispatch: the release one is denied (its body is never read), a git-ops one needs the confirm marker
     (its body is not parsed). A call that creates or edits a release or tag is denied like its `gh api` form."""
     msg = check_curl_tag_api(it)
     if msg:
         return msg
+    if curl_dynamic_url(it.words):  # whatever the method parser thinks: `-d@f`, `-sd x`, `-sXPOST` hide a body
+        return deny(UNREADABLE_RELEASE)
     for w in it.words[1:]:
-        m = CURL_DISPATCH.search(w) if not is_dynamic(w) else None
+        if curl_dispatch_glob(w):
+            return deny(UNREADABLE_RELEASE)
+        norm = normalise_path(w)
+        m = CURL_DISPATCH.search(norm) if not is_dynamic(w) else None
         if not m:
             continue
-        if is_release_workflow(m.group(1)):
-            return deny("this request dispatches the release workflow")
+        if is_release_workflow(ctx, m.group(1)):
+            return deny(UNREADABLE_RELEASE)
         if is_git_ops_workflow(ctx, m.group(1)):
             return git_ops_real_run(ctx, "this request dispatches git-ops with a body this hook does not read")
         if _uncheckable_workflow_id(m.group(1)):
@@ -363,8 +372,8 @@ def check_mcp(ctx: Ctx) -> str | None:
         return None
     wid = args.get("workflow_id")
     if isinstance(wid, str) and wid.lower().endswith((".yml", ".yaml")):
-        if is_release_workflow(wid):
-            return deny("this dispatches the release workflow")
+        if is_release_workflow(ctx, wid):
+            return _release_mcp(ctx, wid, args.get("inputs"))
         if is_git_ops_workflow(ctx, wid):
             inputs = args.get("inputs")
             if isinstance(inputs, str):

@@ -86,6 +86,12 @@ def test_prompt_with_opening_command_opens_the_session(repo):
     assert write(repo, repo / "a.txt", sid="other").verdict == "deny"
 
 
+def test_release_prompt_opens_the_session(repo):
+    assert prompt(repo, "/tld:release minor", "release").context is None
+    assert write(repo, repo / "a.txt").verdict == "allow"
+    assert write(repo, repo / "a.txt", sid="other").verdict == "deny"
+
+
 def test_prompt_with_other_known_command_adds_no_context_and_does_not_open(repo):
     assert prompt(repo, "/tld:dod", "dod").context is None
     assert write(repo, repo / "a.txt").verdict == "deny"

@@ -40,6 +40,11 @@ tests:
   - tests/core/test_hook_no_merge.py
   src/tld/guard/no_git_tag.py:
   - tests/core/test_hook_no_git_tag.py
+  - tests/core/test_guard_markers.py
+  - tests/core/test_guard_corpus.py
+  src/tld/guard/_release_dispatch.py:
+  - tests/core/test_hook_no_git_tag.py
+  - tests/core/test_guard_markers.py
   - tests/core/test_guard_corpus.py
   src/tld/guard/_wrappers.py:
   - tests/core/test_guard_mutations.py
@@ -560,3 +565,43 @@ mutants:
   why: release match count ok
   old: 'if count != 1:'
   new: 'if count == 1:'
+- id: GT10
+  file: src/tld/guard/_release_dispatch.py
+  why: a release dispatch with skip_checks true allowed
+  old: '    if any(not _is_exactly_false(v) for v in values.get("skip_checks", [])):'
+  new: '    if False:'
+- id: GT11
+  file: src/tld/guard/_release_dispatch.py
+  why: the release marker opens any workflow, not only the one it names
+  old: '        if isinstance(have, str) and re.sub(r"\.ya?ml$", "", os.path.basename(have)) == want:'
+  new: '        if isinstance(have, str):'
+- id: GT12
+  file: src/tld/guard/_release_dispatch.py
+  why: one true dry_run among several values lets a real run through
+  old: '    if not dry or any(not _is_true(v) for v in dry):'
+  new: '    if not dry or all(not _is_true(v) for v in dry):'
+- id: GT13
+  file: src/tld/guard/_release_dispatch.py
+  why: unreadable release inputs allowed while the marker is set
+  old: "    if unreadable or any(is_dynamic(w) or _glob(w) for w in it.words):\n        return deny(UNREADABLE_RELEASE)\n    return release_inputs_problem(ctx, ident, values)"
+  new: "    if (unreadable or any(is_dynamic(w) or _glob(w) for w in it.words)) and markers.read(ctx.project_dir, \"release\") is None:\n        return deny(UNREADABLE_RELEASE)\n    return release_inputs_problem(ctx, ident, values)"
+- id: GT14
+  file: src/tld/guard/_release_dispatch.py
+  why: any inputs[...] bracket key counts as literal, so a stray `inputs[a]=b` word the shell expands is read
+  old: '    return bool(UNREADABLE_WORD.search(RELEASE_KEY.sub("", word)))'
+  new: '    return bool(UNREADABLE_WORD.search(re.sub(r"inputs\[\w+\]", "", word)))'
+- id: GT15
+  file: src/tld/guard/_release_dispatch.py
+  why: only braces and brackets count in a curl dispatch word, so a globbed `*` / `?` URL goes through
+  old: '    return "dispatch" in bare or "workflows" in bare'
+  new: '    return bool(re.search(r"[{}\[\]]", word)) and "dispatch" in bare'
+- id: GT16
+  file: src/tld/guard/no_git_tag.py
+  why: the workflow of a gh workflow run is any word that looks like the release one, so a field value hijacks the check
+  old: '        wf = run_workflow_arg(it.words) or path[2]'
+  new: '        wf = next((w for w in it.words if is_release_workflow(ctx, w)), None) or run_workflow_arg(it.words) or path[2]'
+- id: GT17
+  file: src/tld/guard/no_git_tag.py
+  why: a curl URL built from a variable is not checked
+  old: '    if curl_dynamic_url(it.words):  # whatever the method parser thinks: `-d@f`, `-sd x`, `-sXPOST` hide a body'
+  new: '    if False:'
