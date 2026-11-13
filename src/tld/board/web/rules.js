@@ -46,9 +46,9 @@ function drift(phase) {
   return { text: "drift " + n, title: title, level: c ? "collision" : "drift" };
 }
 
-// Owner dismissal: the entry carries a dismissed_at made on its current version and still needs the owner.
+// Owner dismissal: the entry carries a dismissed_at made on its current version (any state).
 function isDismissed(entry) {
-  return typeof entry.dismissed_at === "string" && entry.data.needs_you === true;
+  return typeof entry.dismissed_at === "string";
 }
 
 // An ask belongs to an entry by its record field, else by session and project.
@@ -77,8 +77,8 @@ function answerReceived(entry, asks) {
 // Where an entry is drawn: {section, badge, ask}. section adds "linked" (no record card: the open ask is the card).
 function place(entry, asks, nowMs) {
   var rec = entry.data;
+  if (isDismissed(entry)) return { section: "hidden", badge: "dismissed", ask: null };
   if (rec.needs_you === true) {
-    if (isDismissed(entry)) return { section: "hidden", badge: "dismissed", ask: null };
     var linked = linkedAsks(entry, asks);
     if (linked.some(function (ask) { return ask.state === "open"; })) return { section: "linked", badge: null, ask: null };
     var answered = answerReceived(entry, asks);

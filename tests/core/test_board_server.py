@@ -602,12 +602,14 @@ def test_dismiss_with_a_wrong_version_is_409_version_conflict(server, owner):
     assert status == 409 and body["error"] == "version_conflict" and body["current"]["version"] == 1
 
 
-def test_dismiss_of_a_record_that_does_not_need_you_is_409_not_needs_you(server, owner):
+def test_dismiss_of_a_pr_open_record_is_200(server, owner):
     quiet = record()
-    quiet.update(project="dis-three", repo="example-org/dis-three")
+    quiet.update(project="dis-three", repo="example-org/dis-three", status="pr_open",
+                 finished_at=quiet["updated_at"], next_check_at=None)
     assert _put(server, "dis-three", quiet)[0] == 200
     status, _, body = _owner_post(server, owner, "/api/records/dis-three/dismiss", {"version": 1})
-    assert (status, body) == (409, {"error": "not_needs_you"})
+    assert status == 200 and body["dismissed_at"]
+    assert _listed(server, "dis-three")["dismissed_at"] == body["dismissed_at"]
 
 
 def test_dismiss_with_an_extra_key_is_400(server, owner):

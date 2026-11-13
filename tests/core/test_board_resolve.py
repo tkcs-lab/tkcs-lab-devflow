@@ -127,11 +127,15 @@ def stale_ids(entries):
     return res.stdout.split()
 
 
-def test_stale_prints_dismissed_needs_you_only():
+def test_stale_prints_every_dismissed_record():
     entry = {"id": "f-waiting", "version": 1, "data": fixture_record("f-waiting")}
     assert stale_ids([entry]) == []
     assert stale_ids([{**entry, "dismissed_at": None}]) == []
     assert stale_ids([{**entry, "dismissed_at": "2026-11-09T11:00:00Z"}]) == ["f-waiting"]
+    quiet = {"id": "f-running-ok", "version": 1, "data": fixture_record("f-running-ok")}
+    assert stale_ids([quiet]) == []
+    assert stale_ids([{**quiet, "dismissed_at": None}]) == []
+    assert stale_ids([{**quiet, "dismissed_at": "2026-11-09T11:00:00Z"}]) == ["f-running-ok"]
 
 
 def test_stale_matches_the_links_fixture():

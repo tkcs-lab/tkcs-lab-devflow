@@ -5,6 +5,10 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+### Changed
+
+- The board page's Dismiss button is on every card outside "Hidden" (PR open, Running, Done, answer received), not only on "Needs you" cards; a dismissed card of any state is in the first list of `/tld:board prune`. The dismiss endpoint no longer answers `409 not_needs_you`.
+
 ## [1.1.0] - 2026-11-13
 
 ### Added
