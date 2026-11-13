@@ -89,29 +89,31 @@ There is one version, in `pyproject.toml`, `.claude-plugin/plugin.json` and `src
 string (`tests/core/test_repo_release.py`, `tests/adapters/claude/test_structure.py::test_plugin_versions_agree`). A
 Claude Project caches the plugin per version, so a change users should get ships as a new version.
 
-To release: in a pull request, bump the three to `X.Y.Z` and add a `## [X.Y.Z]` entry to `CHANGELOG.md` (the test
-requires one for a release version). After the merge the owner runs the workflow `release`
-(`.github/workflows/release.yml`) on `main`: a dry run first shows the tag `vX.Y.Z` and the notes (the changelog
-entry plus the pull requests merged since the previous tag); unticking `dry_run` publishes, after the owner approves
-the run in the environment `tld-release`, which holds `TLD_RELEASE_TOKEN`. A breaking change to the profile raises
-the major version, and the release notes say how to update `tld.version`.
+To release: run the release skill. It opens the pull request (the changelog heading and the version lines of
+`release.version_files`); you merge it, answer one board question and approve the `publish` job once in GitHub. The
+manual way still works: in a pull request bump the three to `X.Y.Z` and add a `## [X.Y.Z]` entry to `CHANGELOG.md` (the
+test requires one for a release version), merge, then run the workflow `release` (`.github/workflows/release.yml`) on
+`main`: a dry run first shows the tag `vX.Y.Z` and the notes (the changelog entry plus the pull requests merged since
+the previous tag); unticking `dry_run` publishes. A breaking change to the profile raises the major version, and the
+release notes say how to update `tld.version`.
 
 The workflow has two jobs, so the owner token is only in the `publish` job and no third-party build code runs on
-that runner. `build` (read, plus `packages: write` for the board image, no access to `TLD_RELEASE_TOKEN`) builds the
-wheel and the sdist, builds the board image for linux/amd64 and linux/arm64 and pushes it to
-`ghcr.io/tkcs-lab/tld-board` (the version and `latest`), collects five assets (`tld-X.Y.Z-py3-none-any.whl`,
+that runner; the one approval of a run is the environment `tld-release` on `publish`. `build` (no environment; read,
+`checks: read`, plus `packages: write` for the board image; no access to `TLD_RELEASE_TOKEN`) checks that the commit is
+green (`publish` checks again), builds the wheel and the sdist, builds the board image for linux/amd64 and linux/arm64 and pushes it to
+`ghcr.io/tkcs-lab/tld-board` by digest, without a tag, collects five assets (`tld-X.Y.Z-py3-none-any.whl`,
 `tld-X.Y.Z.tar.gz`, `install.sh` and `compose.yaml` stamped with the version and the image digest, and `SHA256SUMS`)
-and uploads them as the artifact `release-dist` (kept 14 days). `publish` (`needs: build`, read only, holds the
-token) downloads it, runs `sha256sum -c SHA256SUMS`, checks that the commit is green, and only then creates the tag
-and a draft release with the assets, which it publishes last, so the release is public complete or not at all. The
-owner approves each of the two jobs. The green-commit check runs in `publish`, after `build` has pushed the image, so a red commit can leave a moved `:latest`. The QEMU binfmt image is pinned by digest in `release.yml`; to refresh it, resolve `docker.io/tonistiigi/binfmt:latest` (the current digest was read through `mirror.gcr.io` and not checked against docker.io) and update the digest by hand. A dry run builds everything, pushes nothing and tags nothing.
+and uploads them as the artifact `release-dist` (kept 14 days). `publish` (`needs: build`, `contents: read` plus
+`packages: write` for the image tags, holds the token) downloads it, runs `sha256sum -c SHA256SUMS`, adds the image tags
+(the version and `latest`), and only then creates the tag and a draft release with the assets, which it publishes
+last, so the release is public complete or not at all. The QEMU binfmt image is pinned by digest in `release.yml`; to refresh it, resolve `docker.io/tonistiigi/binfmt:latest` (the current digest was read through `mirror.gcr.io` and not checked against docker.io) and update the digest by hand. A dry run builds everything, pushes nothing and tags nothing.
 
 One-time steps for the first release: enable release immutability (repository settings, General, Releases) before it,
 so assets cannot be replaced after publishing, and make the ghcr package `tld-board` public after the first push
 (package settings, Change visibility), or the board installer cannot pull it.
 
-If a real run fails, the image is pushed before the tag, so the ghcr tag `:latest` can be ahead of the last
-published release, not only an orphan `:<version>` tag; a re-run overwrites both. If the draft release was
+If `publish` fails at `Tag the board image`, at most one of the two image tags exists and no git tag: fix it and run again. If it fails after that step,
+`:latest` may be ahead of the last release, and a re-run overwrites it. If the draft release was
 created but publishing it failed, re-running the workflow stops at "tag already exists": run only
 `gh release edit <tag> --draft=false`. If the release was not created, the error message names the run; fetch
 `dist/` with `gh run download <run-id> --name release-dist` and run the printed `gh release create` and

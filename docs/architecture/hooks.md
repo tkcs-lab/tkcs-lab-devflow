@@ -36,7 +36,7 @@ shims; `CLAUDE_PROJECT_DIR` and `stop_hook_active` are read only here.
 |---|---|---|---|---|
 | `no-merge` | PreToolUse: `Bash`, and the GitHub MCP tools that merge, approve or write to a branch | pull request merges, approvals, auto-merge, any push to the main branch | A human merges; a session opens the pull request and stops | `gh pr merge 12`, `git push origin HEAD:main`; `git push -u origin feature/x`, `git merge origin/main` |
 | `no-force-push` | PreToolUse: `Bash` | `git push` with `--force`, `-f`, `--force-with-lease`, `--force-if-includes`, a `+` refspec; deleting a branch by push | History on origin is append-only; branches are deleted by the owner | `git push -f origin x`, `git push origin :old`; `git push -u origin x`, `git branch -d old` |
-| `no-git-tag` | PreToolUse: `Bash`, GitHub MCP `actions_run_trigger` | creating, moving, deleting or pushing tags; dispatching the release workflow; a real git-ops run without the confirm marker | Tags are cut only by the release workflow, which the owner runs | `git tag v2`, `git push --tags`; `git tag -l`, `git describe`, `git ls-remote --tags` |
+| `no-git-tag` | PreToolUse: `Bash`, GitHub MCP `actions_run_trigger` | creating, moving, deleting or pushing tags; dispatching the release workflow without `dry_run=true` and without the release marker (never with `skip_checks` other than `false`, never with inputs it cannot read); a real git-ops run without the confirm marker | Tags are cut only by the release workflow, which the owner approves in GitHub | `git tag v2`, `git push --tags`; `git tag -l`, `git describe`, `git ls-remote --tags` |
 | `secret-scan` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | content that looks like a credential | A secret in a file ends up in history | a GitHub token or a private key block; `API_KEY = os.environ["API_KEY"]` |
 | `protect-paths` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` | edits to paths the profile lists | Some files are changed by people or by tools, not by hand | `echo x > .env`; `echo x > .env.example` |
 | `plan-gate` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, the GitHub MCP content-write tools (`push_files`, `create_or_update_file`, `delete_file`); UserPromptSubmit (opt-in) | writes into the repository from a session no tld command started | A chat message must not start an implementation | `echo x > README.md`; `ls` |
@@ -104,15 +104,16 @@ and (S22) through `curl`, `wget`, `http` / `xh` too (`POST .../releases`, `PATCH
 `.../git/tags`, `.../git/refs/tags/...`, and `.../git/refs` with a `refs/tags/` body or one read from a file); a `GET`
 stays allowed.
 
-Tags have one route (D13): `tld-release`, which the owner runs by hand; git-ops makes no tags. So a session may not start
-it: `gh workflow run tld-release.yml`, its `dispatches` API (also by `curl`) and MCP `run_workflow` for it are denied.
-A workflow named by a numeric id instead of a file name — `gh workflow run 123456`, `.../workflows/123456/dispatches`,
-or `run_workflow` with a numeric `workflow_id` — is denied too, since it cannot be checked against the release workflow
-(S10), and so is `actions_run_trigger` with `rerun_workflow_run` / `rerun_failed_jobs`, which could re-run a past release
-run. `git push origin tags/v1`, a `refs/tags/` source and a bare name that is a local tag are tag pushes and denied (S9).
+Tags have one route (D13): the release workflow, approved by the owner in GitHub; git-ops makes no tags. A session may
+dispatch it (`tld-release.yml`, the profile's `release.workflow`; a workflow under another name is guarded only once the profile names it) only with `dry_run=true` (exactly), or with `dry_run=false`
+while `tld guard allow-release <workflow-file>` ran in the last 10 minutes (like S12; the release skill runs it after the
+owner's yes). A `skip_checks` other than exactly `false`, `gh api --input`, every `curl` dispatch and any dynamic or glob
+word are denied even with the marker. The marker is a step, not a control: a lexical hook cannot read every shell form;
+the controls are the owner's merge and publish approval. A numeric workflow id (`gh workflow run 123456`, `.../workflows/123456/dispatches`, `run_workflow` with a numeric `workflow_id`)
+is denied (S10), and so is `actions_run_trigger` with `rerun_workflow_run` / `rerun_failed_jobs`. `git push origin tags/v1`, a `refs/tags/` source and a bare name that is a local tag are tag pushes and denied (S9).
 Other workflows, such as those in `ci.dispatchable`, stay allowed. Reading stays allowed: `git tag -l`, `--list`, `-n`,
 `--contains`, `--points-at`, `--merged`, `-v`, `git describe`, `git fetch --tags`, `git ls-remote --tags`, `gh release list`.
-The release workflow runs in CI in the `tld-release` environment and is not affected. **Real git-ops runs (S12).** A git-ops dispatch (`tld-git-ops.yml` or `git_ops.workflow`; `gh workflow run`, `gh api`
+**Real git-ops runs (S12).** A git-ops dispatch (`tld-git-ops.yml` or `git_ops.workflow`; `gh workflow run`, `gh api`
 dispatches, MCP `run_workflow`) with `dry_run` false, or with inputs it cannot read, is denied unless
 `tld guard allow-git-ops` was run in the last 10 minutes; the git-ops playbook runs it after the user's yes.
 
@@ -245,7 +246,7 @@ while a session has no plan, a write into the repository is denied and the agent
 to propose `/tld:make-plan` (the `ask` skill, `/tld:ask`, says how).
 
 - **Opens per session, from the prompt hook.** A prompt that starts with `make-plan`, `implement`, `review`, `setup`,
-  `migrate`, `land`, `deps`, `upstream`, `docs` or `repo-admin` (`/tld:<name>` or `/<name>`) opens that session id. Other
+  `migrate`, `release`, `land`, `deps`, `upstream`, `docs` or `repo-admin` (`/tld:<name>` or `/<name>`) opens that session id. Other
   known commands (`/tld:dod`, `/tld:ask`) neither open it nor add context. A skill the model starts itself does not pass
   through `UserPromptSubmit`, so it cannot open the gate. The prompt may also arrive expanded
   (`<command-name>/tld:<name></command-name>` after any leading `<system-reminder>` blocks), which opens it too; a
