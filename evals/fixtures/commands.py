@@ -73,6 +73,9 @@ def build(dest: Path, command: str = "land") -> dict:
     elif command == "board":
         files[".tld/toolkit.yaml"] = _profile()
         expected["stop_message"] = ["TLD_BOARD_URL", "TLD_BOARD_TOKEN"]
+    elif command == "usage":
+        files[".tld/toolkit.yaml"] = _profile()
+        expected["stop_message"] = "usage: no reading"
     elif command == "implement":
         files[".tld/toolkit.yaml"] = _profile()
     elif command == "migrate":

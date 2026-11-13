@@ -1,0 +1,37 @@
+# Deviations: usage-monitor
+
+Written by the implement orchestrator after each phase merge; workers never edit this file.
+Every deviation from the plan is listed under its phase. "None." means the phase followed the plan.
+
+## p1-store-api
+
+- None.
+
+## p2-cli
+
+- review: Worker hardened the parser (finite numbers, Path.read_text, RecursionError) in a commit after the security review; the role was not rerun, the changes only address its non-blocking findings and the full suite passed.
+
+## p3-page
+
+- review: Worker pinned choices the plan leaves open: a window counts for the verdict when resets_at is not older than the range, usageAgo returns no "ago" (the page adds it), the Max bar is last_standard divided by factor, column titles use browser local time.
+
+## p4-collect
+
+- scope: evals/fixtures/commands.py
+- review: Brief gap: the eval step needs a usage branch in evals/fixtures/commands.py, which was not in touches; the worker stopped, the orchestrator approved adding only that branch. The evals baseline refresh also updated the hashes of the 12 existing commands (new policy text).
+- retry: Worker was sent back once (blocked on the brief gap above) and then completed the phase.
+
+## p5-retire
+
+- None.
+
+## Final review
+
+- final: p1-store-api: docs/guides/board-server.md "Usage readings" lacked the plan 3.9 caveats and a description of the #usage page; fix worker fix-1 adds them.
+- final: fix-1 merged: guide now describes the page and the 3.9 caveats. The worker also corrected one existing guide sentence that wrongly said plan and factor are applied only on read (they are stored per reading). Stale wording remains in the usage.py and store.py docstrings (non-blocking).
+
+## Finishing
+
+- scope: evals/fixtures/commands.py (p4-collect) is still in the final diff: accepted. No other scope drift.
+- final: dod gate: tech-writer (dod) found one blocking doc error, docs/guides/maintenance.md said all six commands write a status record but /usage writes none; fix worker fix-2 corrects it.
+- final: fix-2 merged: maintenance.md now says /usage writes no status record; the worker also corrected two other sentences in the same guide that made the same claim.

@@ -135,6 +135,8 @@ Environment variables:
 | `TLD_BOARD_SESSION_URL` | server | Optional https base, ending in `/`, that a session id is appended to for the page's session links. Without it the page shows no session links. For Claude Code on the web: `https://claude.ai/code/`. |
 | `TLD_BOARD_DB` | server | Default for `--db`. |
 | `TLD_BOARD_URL` | client, bridge | Base URL of the server, for example `https://board.example.org`. Not a secret. |
+| `TLD_BOARD_PLAN` | server | `standard` or `max`: the plan the account is on. Unset: the usage readings are off (`POST /api/usage` answers 409 `usage_off`). Anything else: the server does not start. |
+| `TLD_BOARD_MAX_FACTOR` | server | How many times the Standard limit Max gives: a number above 1 and at most 20, default 5. Anything else: the server does not start. It is an assumption, not a measured value. |
 | `TLD_BOARD_ALLOW_HTTP` | client, bridge | `1` allows a plain `http://` URL for a non-loopback host. |
 
 If `TLD_BOARD_URL` or `TLD_BOARD_TOKEN` is unset, sessions skip every record step and put their asks on GitHub
@@ -292,6 +294,8 @@ board's own `Origin` and the `X-CSRF-Token` header the login returned; the login
 | `GET /api/asks/<id>` | yes | yes | 200, the ask | 404 `not_found` |
 | `POST /api/asks/<id>/answer` | 403 | yes | 200, the answered ask; body `{"answers": {"<question id>": value}}` | 409 `not_open`, 422 `invalid`, 403 `csrf` |
 | `POST /api/asks/<id>/cancel` | yes | yes | 200, the ask (cancelling a cancelled ask is a no-op) | 409 `not_open` (answered), 404 |
+| `GET /api/usage` | 403 | yes | 200 `{"now", "plan", "factor", "windows": {"five_hour": [...], "seven_day": [...]}}`; `plan` is null when `TLD_BOARD_PLAN` is unset | |
+| `POST /api/usage` | yes | 403 | 200 `{"stored": n}`; body `{"five_hour": {"utilization", "resets_at"}, "seven_day": {...}, "source": "final"}` (at least one window; `source` is `final` or `scheduled`) | 409 `usage_off` (no plan set), 422 `invalid` (`errors`), 413 `payload_too_large` (over 4096 bytes) |
 | `POST /mcp` | yes | 403 | JSON-RPC answer, see the next section | |
 
 A write without `if_version` creates the record and conflicts when it exists; with `if_version` it succeeds
@@ -300,6 +304,46 @@ only when the stored version equals it. Other errors are `{"error": "<code>"}`: 
 `payload_too_large` (over 1048576 bytes; 4096 for the login). The ask format is
 `src/tld/schema/ask.schema.json`: at most 30 questions of kind `choice` (2 to 10 options), `confirm` or `text`,
 each text at most 2000 characters, the whole ask at most 64 KiB, and at most 200 open asks.
+
+## Usage readings
+
+With `TLD_BOARD_PLAN` set, the board keeps the subscription use sessions report (the `usage_samples` table, schema
+version 5). A reading is one sample per window kind (`five_hour`, `seven_day`): the raw `utilization` (a fraction of
+the limit, 0.26 is 26%), the time the window ends (`resets_at`, to the minute), the server's own time of arrival,
+the plan and the factor in force then, and the source (`final`, `scheduled`). The plan and the factor are stored with
+each reading and applied when the page reads it, so a wrong setting only affects readings taken while it was in force. Limits: 50 samples per window, a
+window is deleted 120 days after it ended, and at most 20,000 rows are kept (the oldest go first). Upgrading moves
+the database to schema 5: an older board image cannot open it again, so keep the backup from before the upgrade
+(Backup and restore) if you may roll back. The factor (`TLD_BOARD_MAX_FACTOR`, default 5) is an assumption about
+how much more Max allows than Standard; the Max figures are Standard figures divided by it. Whoever holds the session token can post readings and so push older history out of the 20,000-row
+limit; the readings can be collected again.
+
+The page is `#usage` (the `Usage` link in the header). For the 5-hour and the weekly window it shows two bars, Standard
+and Max, for the newest window that has not ended; the Standard bar is marked "limit passed" above 100%. Below the
+bars is the history of finished windows, one column each: up to 30 days for the 5-hour kind, 56 days for the weekly kind.
+The board returns only the newest 60 windows per kind before that range is applied, so the 5-hour history and its
+verdict reach back about 12 days when every window has a reading, and further when some have none. Each kind gets a verdict from the finished windows of
+that range that were read on Max. It needs 6 finished 5-hour windows or 2 weekly windows, else it says "not enough
+finished windows". With `over` the windows where Standard would have run out (above 100%) and `n` all counted
+windows: "Max makes sense" when `over / n` is 25% or more; "Standard would have been enough" when none passed 100%
+and the 90th percentile of the peaks is below 80% of Standard; otherwise "borderline". A window whose peak is below
+5% of Standard is idle (typically only the scheduled reading started it) and is kept out of the verdict. When any
+counted window passed 100%, the verdict adds the hours Standard would have blocked you: from the first reading above
+100% to the window end, summed over those windows.
+
+Read the numbers with these limits in mind:
+
+- The peak is the largest reading, so with few readings in a window it is a lower bound (the column titles show the
+  count), and so is the blocked time.
+- Readings stop near 100% when a limit is hit. On Standard the use above the limit is therefore invisible and the
+  page cannot show whether Max would pay off; the verdict only counts windows read on Max.
+- The Max factor (5 unless you set `TLD_BOARD_MAX_FACTOR`) is an assumption and may not be exactly 5, for the weekly
+  window in particular. One factor serves both kinds. A new value applies to readings taken after the restart and to
+  the Max figures; older readings keep the factor stored with them.
+- `resets_at` is floored to the minute when stored. Jitter that stays inside one minute merges into one window; a
+  larger drift, or jitter that crosses a minute boundary, shows up as a second window (a second column with its
+  own readings). This is a known and
+  accepted blemish.
 
 ## MCP tools
 
@@ -392,7 +436,7 @@ docker exec tld-board python -c "import sqlite3; sqlite3.connect('/data/board.sq
 docker cp tld-board:/data/copy.sqlite3 ./board-backup.sqlite3
 ```
 
-A database at schema 4 is refused by an older image, so keep the backup from before the upgrade to roll back.
+A database at schema 5 is refused by an older image, so keep the backup from before the upgrade to roll back.
 
 To restore, stop the server, put the copy at the path given by `--db` (in the container `/data/board.sqlite3`),
 and start it again. Records are short-lived and rewritten by the next run; open asks are the part worth

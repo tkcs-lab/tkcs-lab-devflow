@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import subprocess
+import time
 
 import pytest
 
@@ -57,6 +58,8 @@ MATRIX = [
     ("POST", "/api/records/{rec}/dismiss", "dismiss", (401, 403, 200)),
     ("POST", "/api/records/{rec}/restore", None, (401, 403, 200)),
     ("POST", "/mcp", "rpc", (401, 200, 403)),
+    ("GET", "/api/usage", None, (401, 403, 200)),
+    ("POST", "/api/usage", "usage", (401, 200, 403)),
     ("POST", "/logout", None, (401, 403, 200)),
 ]
 
@@ -71,7 +74,9 @@ def _matrix_record(rec):
 def _body(kind, server, rec="f-running-ok"):
     return {"record": {"data": _matrix_record(rec), "if_version": 1}, "ask": ask_doc(),
             "dismiss": {"version": 1}, "answers": {"answers": {"SEC-1": "plan", "go": True}},
-            "rpc": {"jsonrpc": "2.0", "id": 1, "method": "ping"}, None: None}[kind]
+            "rpc": {"jsonrpc": "2.0", "id": 1, "method": "ping"},
+            "usage": {"five_hour": {"utilization": 0.3, "resets_at": int(time.time()) + 3600}, "source": "final"},
+            None: None}[kind]
 
 
 _MATRIX_IDS = itertools.count(1)
@@ -81,7 +86,7 @@ _MATRIX_IDS = itertools.count(1)
 def matrix_server(tmp_path_factory):
     """One server for the whole matrix: each case brings its own record id, ask and owner session, so a case
     that deletes, cancels or logs out changes nothing another case reads."""
-    with running(tmp_path_factory.mktemp("matrix")) as srv:
+    with running(tmp_path_factory.mktemp("matrix"), usage_plan=("max", 5.0)) as srv:
         yield srv
 
 

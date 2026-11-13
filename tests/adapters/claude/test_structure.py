@@ -62,7 +62,7 @@ def test_session_start_is_only_used_by_model_check():
 # ---- commands -------------------------------------------------------------------------------
 def test_every_playbook_command_has_a_wrapper():
     assert COMMANDS == tuple(sorted(("setup", "review", "make-plan", "implement", "dod", "land", "deps",
-                                     "upstream", "docs", "board", "migrate", "ci")))
+                                     "upstream", "docs", "board", "migrate", "ci", "usage")))
 
 
 @pytest.mark.parametrize("name", COMMANDS)
@@ -84,6 +84,7 @@ def test_commands_that_must_run_on_a_level():
     assert frontmatter(CLAUDE / "commands" / "make-plan.md")["model"] == aliases["strong"]
     assert frontmatter(CLAUDE / "commands" / "review.md")["model"] == aliases["strong"]
     assert frontmatter(CLAUDE / "commands" / "implement.md")["model"] == aliases["standard"]
+    assert frontmatter(CLAUDE / "commands" / "usage.md")["model"] == aliases["fast"]
 
 
 # ---- skills ---------------------------------------------------------------------------------

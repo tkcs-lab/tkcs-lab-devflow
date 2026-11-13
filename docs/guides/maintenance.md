@@ -1,9 +1,9 @@
 # Maintenance commands and the status board
 
-Five commands keep a repository up to date and tidy without you doing the work: `/deps`, `/ci`, `/upstream`,
-`/land` and `/docs tidy`. `/deps`, `/ci`, `/upstream` and `/docs tidy` run unattended from a scheduled task; `/land` is run by you. None
-of them ever merges, approves or enables auto-merge. Each writes a status record to the board (see
-below) when one exists. What the spike found about what a cloud session can and cannot do is in
+Six commands keep a repository up to date and tidy without you doing the work: `/deps`, `/ci`, `/upstream`,
+`/land`, `/docs tidy` and `/usage`. `/deps`, `/ci`, `/upstream`, `/docs tidy` and `/usage` run unattended from a scheduled task; `/land` is run by you. None
+of them ever merges, approves or enables auto-merge. Each, except `/usage`, writes a status record to the board (see
+below) when one exists; `/usage` writes none (see its section). What the spike found about what a cloud session can and cannot do is in
 [maintenance-spike.md](../architecture/maintenance-spike.md).
 
 ## What each command does
@@ -73,6 +73,26 @@ docs over 400 lines, an index over 150 lines), an issue titled `Docs tidy: <n> i
 checklist. It never merges, deletes, moves or edits a doc body. It writes a record with `command: docs`
 and the document id `<project>--docs` (unattended, unchanged); with nothing to fix the record says `docs clean`.
 
+### `/usage`
+
+Every 2 hours it reads the account-wide rate-limit reading its own session has seen (the 5-hour and the weekly
+window) and sends it with `tld board usage --source scheduled` to the board's Usage page
+([board-server.md](board-server.md)). It writes no status record, asks nothing and posts nothing on GitHub. It
+runs on the fast model level and each run spends a little of the same subscription quota; when you are idle it can
+itself start a 5-hour window, which the page keeps out of the verdict (a window that stays below 5% of Standard
+counts as idle). Without a reading (a scheduled session may not be allowed to read its own stream) it replies
+`usage: no reading` and changes nothing. Schedule it with the cron line `7 */2 * * *`.
+
+After a release that adds it:
+
+1. Upgrade the board host with the installer line ([delivery.md](delivery.md)). The database moves to schema 5; keep
+   a backup first (see "Backup and restore" in the board guide).
+2. Add `TLD_BOARD_PLAN=max` (and, to make it explicit, `TLD_BOARD_MAX_FACTOR=5`) to `~/tld-board/.env`, then run
+   `docker compose up -d` in `~/tld-board`.
+3. Optional: in claude.ai add a scheduled task that runs `/tld:usage` every 2 hours. The first run shows whether a
+   scheduled session may read its own stream (`usage: no reading` if not).
+4. After a day compare the Max bars with https://claude.ai/settings/usage; they should agree within 5 points.
+
 ## Profile sections
 
 All sections are optional (`/ci` runs without its `ci` keys, on their defaults). A command whose section is missing stops with
@@ -130,7 +150,7 @@ The environment these tasks run in (what to enable and deny) is in [cloud-enviro
 ## The board
 
 The board is the self-hosted server described in [board-server.md](board-server.md): it stores the
-status record of every command run (C7) and every ask a command puts to you, and serves the page you
+status record of every command run that writes one (C7) and every ask a command puts to you, and serves the page you
 log in to. Set two variables in every environment that should write to it: `TLD_BOARD_URL`
 (not a secret) and `TLD_BOARD_TOKEN` (board-server.md says how to keep the token in a network secret). Without
 them the commands skip every board step. `/board` checks the connection and reports how many records
@@ -140,7 +160,7 @@ A phase chip shows `drift <n>` when the phase changed `n` files outside its `tou
 when the check was unavailable): a count only, the paths are in the pull request's Scope section. What
 is recorded, what is not and why it never blocks: [scope-drift.md](../architecture/scope-drift.md).
 
-Every command writes a record (D8), and every run and every attended session has its own, so two runs or two
+Every command except `/usage` writes a record (D8), and every run and every attended session has its own, so two runs or two
 sessions never replace each other's card. `/implement` writes a `run` record under `<project>--run--<plan>`; the worker of a single-session prompt writes one under `<project>--run--issue-<n>` (no plan link, no phases); an
 attended `setup`, `review`, `make-plan`, `land`, `docs init` or `migrate` writes `<project>--<command>--<session tail>`
 (the last 8 letters and digits of its session id); the unattended `deps`, `ci`, `upstream` and `docs tidy` keep

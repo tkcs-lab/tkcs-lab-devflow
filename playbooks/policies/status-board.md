@@ -76,6 +76,9 @@ very first write means a record of an earlier run exists: read it and write over
   than a minute; before `ask_human` the record is written with `needs_you`.
 - Every state change, and every check-in even when nothing changed (set `updated_at`).
 - The final state.
+- After the final write of a run (`done`, `failed` or `pr_open`), call `read_usage()` ([runtime.md](../runtime.md))
+  and, when it returns a reading, save it to a scratch file and run `tld board usage <file>`. Best effort: an
+  error is never reported and never stops the run. The usage playbook is excluded: it writes no record.
 
 ## Best effort
 
