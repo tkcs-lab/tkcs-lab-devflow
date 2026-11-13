@@ -24,9 +24,9 @@ says when, and `notes` carries inputs and cautions. Show the relevant rows when 
 - **A recorded file is still a diff to read.** Fixtures, snapshots and generated files that arrived by
   dispatch get the same review as anything else: no account identifier, tenant URL, token or private
   content may enter the repository.
-- **Never push a release tag.** There is one route to a tag: the release workflow `tld-release`, which the
-  owner runs by hand on the main branch. Never dispatch it (the `no-git-tag` guard denies it); say in your
-  report that a release is due. The git-ops playbook deletes branches only.
+- **Never push a release tag.** There is one route to a tag: the release workflow, which the owner approves
+  in GitHub. A session starts it only through the release playbook, after the owner's yes on the board (the
+  `no-git-tag` guard denies any other dispatch). The git-ops playbook deletes branches only.
 - **A missing credential or capability is not a test failure.** It is a dispatch.
 
 ## Which pull requests to follow

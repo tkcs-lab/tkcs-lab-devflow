@@ -88,13 +88,13 @@ def test_commands_that_must_run_on_a_level():
 
 # ---- skills ---------------------------------------------------------------------------------
 def test_skills_are_the_runtime_map_and_two_pointers():
-    assert SKILLS == ("ask", "git-ops", "repo-admin", "runtime")
+    assert SKILLS == ("ask", "git-ops", "release", "repo-admin", "runtime")
     for name in SKILLS:
         fm = frontmatter(CLAUDE / "skills" / name / "SKILL.md")
         assert fm["name"] == name and len(fm["description"]) > 40
 
 
-@pytest.mark.parametrize("name", ["ask", "git-ops", "repo-admin"])
+@pytest.mark.parametrize("name", ["ask", "git-ops", "release", "repo-admin"])
 def test_pointer_skill_names_an_existing_playbook(name):
     text = (CLAUDE / "skills" / name / "SKILL.md").read_text()
     assert f"${{CLAUDE_PLUGIN_ROOT}}/playbooks/{name}.md" in text and (PLAYBOOKS / f"{name}.md").is_file()
