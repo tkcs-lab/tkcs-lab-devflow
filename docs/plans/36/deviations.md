@@ -17,7 +17,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-docs-retire
 
-- pending
+- None.
 
 ## Final review
 
