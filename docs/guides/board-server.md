@@ -55,7 +55,7 @@ this one is valid (save it as `record.json`):
   "command": null,
   "project": "example-project",
   "repo": "example/example-project",
-  "plan_slug": "plan-example-project",
+  "plan_slug": "demo",
   "plan_url": "https://example.com/example/example-project/blob/plan/docs/plan.md",
   "feature_branch": "feature/plan-example-project",
   "orchestrator_session": "session_example-project",
@@ -117,10 +117,10 @@ this one is valid (save it as `record.json`):
 ```
 
 ```bash
-cli/tld board client set example-project record.json
+cli/tld board client set example-project--run--demo record.json
 ```
 
-The answer is `{"id":"example-project","version":1}`, and the run shows on the page.
+The answer is `{"id":"example-project--run--demo","version":1}`, and the run shows on the page.
 
 ## Configuration
 

@@ -45,7 +45,6 @@ async function api(method, route, body) {
     assert.strictEqual((await tag(docs[0].id)).trim(), "make-plan \u00b7 efghijkl");
     assert.strictEqual((await tag(docs[1].id)).trim(), "make-plan \u00b7 xxwwvvuu");
     assert.strictEqual((await tag(docs[2].id)).trim(), "deps");
-    assert.strictEqual((await tag(docs[3].id)).trim(), "make-plan");
 
     await page.click('[data-doc="' + docs[0].id + '"] > summary');
     assert.ok(await page.evaluate((id) => document.querySelector('[data-doc="' + id + '"]').open, docs[0].id));

@@ -22,6 +22,10 @@ entry of the released version at the top of the GitHub release, above the list o
 - The `no-git-tag` guard lets a session dispatch the release workflow with `dry_run=true` (exactly), or with `dry_run=false` while the release marker is set. A `skip_checks` that is not exactly `false`, `gh api --input`, every curl dispatch and any dynamic or glob word are always denied, and a workflow under another name is guarded only once the profile names it (`release.workflow`). The marker is a deliberate step, not a control: the controls are the owner's merge and publish approval.
 - This repository's release workflow needs one approval (the publish job); the build job checks the commit is green and pushes the board image by digest, and publish adds the tags.
 
+### Removed
+
+- The old board document ids (a run under its project slug, an attended command under `<project>--<command>`) are no longer accepted by `tld board record` or the board store, and `tld board stale` no longer lists a record for its old id. Write a record under its current id (`tld board record-id`).
+
 ### Fixed
 
 - `tld ops repo-admin apply` no longer puts back the `tld-tags` ruleset on every run: GitHub returns its `update` rule without the false `update_allows_fetch_and_merge`, which the audit read as drift. A ruleset finding now names the parameters that differ.

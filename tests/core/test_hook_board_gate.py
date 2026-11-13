@@ -276,11 +276,11 @@ def test_real_mcp_board_set_result_is_a_record_write(board, tmp_path):
     from test_board_mcp import record
     store = Store(str(tmp_path / "b.db"))
     prompt(board, "docs")
-    first = board_mcp._call_tool(store, "board_set", {"id": "f-running-ok", "data": record()})
+    first = board_mcp._call_tool(store, "board_set", {"id": "f-running-ok--run--plan-f-running-ok", "data": record()})
     assert result(board, first["content"][0]["text"], op="board_set").verdict == "allow"
     assert state(board)["written"] is True
     prompt(board, "review")
-    stale = board_mcp._call_tool(store, "board_set", {"id": "f-running-ok", "data": record(), "if_version": 9})
+    stale = board_mcp._call_tool(store, "board_set", {"id": "f-running-ok--run--plan-f-running-ok", "data": record(), "if_version": 9})
     assert stale["isError"]
     result(board, stale["content"][0]["text"], op="board_set")
     assert state(board)["written"] is False

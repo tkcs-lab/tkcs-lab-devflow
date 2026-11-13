@@ -34,18 +34,17 @@ def test_fixture_has_14_valid_records():
         assert result.returncode == 0, f"{entry['id']}: {result.stdout}"
 
 
-def test_board_stale_prints_the_hidden_ids_and_the_stale_legacy_one():
+def test_board_stale_prints_the_hidden_ids():
     result = subprocess.run([*STALE_CMD, str(FIXTURE), "--now", NOW], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     ids = result.stdout.split()
-    assert sorted(ids) == ["f-done-old--run--plan-f-done-old", "f-legacy-needs", "f-stale-quiet--run--plan-f-stale-quiet"]
+    assert sorted(ids) == ["f-done-old--run--plan-f-done-old", "f-stale-quiet--run--plan-f-stale-quiet"]
     needs = {e["id"] for e in docs() if e["data"]["needs_you"]}
-    # f-legacy-needs is the one needs_you record listed: its id is the legacy one and it is 3 days old
-    assert not (needs - {"f-legacy-needs"}) & set(ids)
+    assert not needs & set(ids)  # a record that needs the owner is never listed by age alone
 
 
 def test_board_stale_reads_stdin():
     result = subprocess.run([*STALE_CMD, "-", "--now", NOW], input=FIXTURE.read_text(),
                             capture_output=True, text=True)
-    assert sorted(result.stdout.split()) == ["f-done-old--run--plan-f-done-old", "f-legacy-needs",
+    assert sorted(result.stdout.split()) == ["f-done-old--run--plan-f-done-old",
                                              "f-stale-quiet--run--plan-f-stale-quiet"]

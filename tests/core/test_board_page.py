@@ -44,7 +44,7 @@ def test_login_poll_and_answer_an_ask_in_a_browser(tmp_path):
         rec = copy.deepcopy(next(d["data"] for d in docs if d["data"]["project"] == "f-running-ok"))
         rec["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         rec["next_check_at"] = None
-        srv.store.set("f-running-ok", rec, None)
+        srv.store.set("f-running-ok--run--plan-f-running-ok", rec, None)
         result = subprocess.run(["node", str(ROOT / "tests" / "board_poll_check.js"), base(srv), WRITE, PASSPHRASE],
                                 capture_output=True, text=True, timeout=120)
         assert result.returncode == 0, result.stdout + result.stderr

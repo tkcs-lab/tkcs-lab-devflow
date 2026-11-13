@@ -21,7 +21,7 @@ def fixture_record(doc_id):
 
 
 def waiting():
-    rec = fixture_record("f-waiting")
+    rec = fixture_record("f-waiting--run--plan-f-waiting")
     rec["status"] = "running"
     rec["next_check_at"] = "2026-11-09T09:10:00Z"
     return rec
@@ -34,12 +34,12 @@ def run(rec, *extra, now=NOW, reason="PRs merged"):
 
 def test_resolve_clears_a_needs_you_record():
     rec = waiting()
-    assert board_record.validate(rec, "f-waiting") == []
+    assert board_record.validate(rec, "f-waiting--run--plan-f-waiting") == []
     before = copy.deepcopy(rec)
     res = run(rec)
     assert res.returncode == 0, res.stderr
     out = json.loads(res.stdout)
-    assert board_record.validate(out, "f-waiting") == []
+    assert board_record.validate(out, "f-waiting--run--plan-f-waiting") == []
     assert out["needs_you"] is False and out["status"] == "done"
     assert out["finished_at"] == NOW and out["updated_at"] == NOW
     assert out["next_check_at"] is None and out["needs_you_reason"] == "" and out["needs_you_since"] is None
@@ -56,7 +56,7 @@ def test_resolve_clears_a_prompt_run_record():
 
 def test_resolve_accepts_an_entry_with_or_without_dismissed_at():
     for extra in ({}, {"dismissed_at": None}, {"dismissed_at": "2026-11-09T11:00:00Z"}):
-        res = run({"id": "f-waiting", "version": 1, **extra, "data": waiting()})
+        res = run({"id": "f-waiting--run--plan-f-waiting", "version": 1, **extra, "data": waiting()})
         assert res.returncode == 0, res.stderr
         assert json.loads(res.stdout)["status"] == "done"
 
@@ -104,7 +104,7 @@ def test_resolve_refuses_an_output_that_does_not_validate():
 
 def test_prune_clears_a_record_through_client_get_resolve_and_set(tmp_path):
     with running(tmp_path) as srv:
-        doc_id = "f-waiting"
+        doc_id = "f-waiting--run--plan-f-waiting"
         rec = waiting()
         for key in ("updated_at", "needs_you_since", "next_check_at"):
             rec[key] = "2026-11-12T09:00:00Z"
@@ -136,14 +136,14 @@ def stale_ids(entries):
 
 
 def test_stale_prints_every_dismissed_record():
-    entry = {"id": "f-waiting", "version": 1, "data": fixture_record("f-waiting")}
+    entry = {"id": "f-waiting--run--plan-f-waiting", "version": 1, "data": fixture_record("f-waiting--run--plan-f-waiting")}
     assert stale_ids([entry]) == []
     assert stale_ids([{**entry, "dismissed_at": None}]) == []
-    assert stale_ids([{**entry, "dismissed_at": "2026-11-09T11:00:00Z"}]) == ["f-waiting"]
-    quiet = {"id": "f-running-ok", "version": 1, "data": fixture_record("f-running-ok")}
+    assert stale_ids([{**entry, "dismissed_at": "2026-11-09T11:00:00Z"}]) == ["f-waiting--run--plan-f-waiting"]
+    quiet = {"id": "f-running-ok--run--plan-f-running-ok", "version": 1, "data": fixture_record("f-running-ok--run--plan-f-running-ok")}
     assert stale_ids([quiet]) == []
     assert stale_ids([{**quiet, "dismissed_at": None}]) == []
-    assert stale_ids([{**quiet, "dismissed_at": "2026-11-09T11:00:00Z"}]) == ["f-running-ok"]
+    assert stale_ids([{**quiet, "dismissed_at": "2026-11-09T11:00:00Z"}]) == ["f-running-ok--run--plan-f-running-ok"]
 
 
 def test_stale_matches_the_links_fixture():

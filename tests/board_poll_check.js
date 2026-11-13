@@ -58,12 +58,12 @@ async function api(method, route, body) {
     assert.strictEqual(await page.locator('[data-project="f-waiting"]').count(), 0);
     waiting.updated_at = now();
     waiting.needs_you_since = now();
-    await api("PUT", "/api/records/f-waiting", { data: waiting });
+    await api("PUT", "/api/records/f-waiting--run--plan-f-waiting", { data: waiting });
     await page.waitForSelector('[data-project="f-waiting"]', { timeout: 5000 });
     await page.click('[data-project="f-running-ok"] > summary');
     assert.ok(await page.isVisible('[data-project="f-running-ok"] .detail'), "row opens");
     waiting.last_event = "changed";
-    await api("PUT", "/api/records/f-waiting", { data: waiting, if_version: 1 });
+    await api("PUT", "/api/records/f-waiting--run--plan-f-waiting", { data: waiting, if_version: 1 });
     await page.waitForFunction(() => document.body.textContent.includes("changed"), null, { timeout: 5000 });
     assert.ok(await page.isVisible('[data-project="f-running-ok"] .detail'), "row is still open after a render");
 
@@ -112,7 +112,7 @@ async function api(method, route, body) {
     assert.deepStrictEqual(stored.answers, { "SEC-1": "issue", go: true, notes: "Owner note: link the old issue." });
     // The confirmation survives a poll.
     waiting.last_event = "after-flash";
-    await api("PUT", "/api/records/f-waiting", { data: waiting, if_version: 2 });
+    await api("PUT", "/api/records/f-waiting--run--plan-f-waiting", { data: waiting, if_version: 2 });
     await page.waitForFunction(() => document.body.textContent.includes("after-flash"), null, { timeout: 5000 });
     assert.strictEqual(await page.textContent("#flash"), "Answers sent: Decide <b>two</b> items");
 

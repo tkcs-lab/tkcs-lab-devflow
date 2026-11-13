@@ -6,8 +6,7 @@
 Reads a JSON list of {"id", "data"} documents (FILE, or stdin for - or no argument) and prints one
 id per line for every record whose board section is `hidden`. The rule is the one in
 src/tld/board/web/rules.js, re-implemented here; a record the owner dismissed
-(the entry's `dismissed_at` is a string) is printed whatever its state. A record still under a legacy id
-(`legacy_ids`) is also printed once it is more than 24 hours old, even with needs_you true.
+(the entry's `dismissed_at` is a string) is printed whatever its state.
 Python 3.11+, stdlib only.
 """
 from __future__ import annotations
@@ -17,10 +16,7 @@ import json
 import sys
 from datetime import datetime, timedelta, timezone
 
-from tld.board.record import legacy_ids
-
 WEEK = timedelta(days=7)
-LEGACY_HIDE = timedelta(hours=24)
 
 
 def parse(iso: str) -> datetime:
@@ -43,14 +39,6 @@ def section(rec: dict, now: datetime, dismissed: bool = False) -> str:
     return "running"
 
 
-def legacy_stale(doc: dict, now: datetime) -> bool:
-    """A record under a legacy document id that has not been updated for more than 24 hours."""
-    try:
-        return doc["id"] in legacy_ids(doc["data"]) and now - parse(doc["data"]["updated_at"]) > LEGACY_HIDE
-    except (ValueError, KeyError, TypeError):
-        return False
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Print the ids of hidden status records.")
     parser.add_argument("file", nargs="?", default="-", help="JSON list of {id, data}, or - for stdin")
@@ -61,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         docs = json.loads(text)
         now = parse(args.now) if args.now else datetime.now(timezone.utc)
         hidden = [doc["id"] for doc in docs
-                  if section(doc["data"], now, isinstance(doc.get("dismissed_at"), str)) == "hidden" or legacy_stale(doc, now)]
+                  if section(doc["data"], now, isinstance(doc.get("dismissed_at"), str)) == "hidden"]
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(f"board_stale: cannot read the records ({exc})", file=sys.stderr)
         return 1

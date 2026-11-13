@@ -18,7 +18,7 @@ SCRIPT = TLD / "board" / "client.py"
 SCRIPT_CMD = tld_cmd("board", "client")
 
 
-def record(doc_id="f-running-ok"):
+def record(doc_id="f-running-ok--run--plan-f-running-ok"):
     docs = json.loads((FIXTURES / "board-records.json").read_text())
     return copy.deepcopy(next(d["data"] for d in docs if doc_id in (d["id"], d["data"]["project"])))
 
@@ -108,24 +108,24 @@ def test_cli_set_get_list_delete(server, tmp_path):
     env = env_for(server)
     doc = tmp_path / "r.json"
     doc.write_text(json.dumps(record()))
-    res = cli("set", "f-running-ok", str(doc), env=env)
-    assert (res.returncode, json.loads(res.stdout)) == (0, {"id": "f-running-ok", "version": 1})
-    res = cli("set", "f-running-ok", "-", "--if-version", "1", env=env, stdin=json.dumps(record()))
-    assert json.loads(res.stdout) == {"id": "f-running-ok", "version": 2}
-    res = cli("get", "f-running-ok", env=env)
+    res = cli("set", "f-running-ok--run--plan-f-running-ok", str(doc), env=env)
+    assert (res.returncode, json.loads(res.stdout)) == (0, {"id": "f-running-ok--run--plan-f-running-ok", "version": 1})
+    res = cli("set", "f-running-ok--run--plan-f-running-ok", "-", "--if-version", "1", env=env, stdin=json.dumps(record()))
+    assert json.loads(res.stdout) == {"id": "f-running-ok--run--plan-f-running-ok", "version": 2}
+    res = cli("get", "f-running-ok--run--plan-f-running-ok", env=env)
     got = json.loads(res.stdout)
     assert res.returncode == 0 and got["version"] == 2 and got["data"] == record()
     assert res.stdout.count("\n") == 1
     res = cli("list", env=env)
-    assert [r["id"] for r in json.loads(res.stdout)["records"]] == ["f-running-ok"]
-    res = cli("delete", "f-running-ok", env=env)
-    assert (res.returncode, json.loads(res.stdout)) == (0, {"deleted": ["f-running-ok"], "missing": []})
+    assert [r["id"] for r in json.loads(res.stdout)["records"]] == ["f-running-ok--run--plan-f-running-ok"]
+    res = cli("delete", "f-running-ok--run--plan-f-running-ok", env=env)
+    assert (res.returncode, json.loads(res.stdout)) == (0, {"deleted": ["f-running-ok--run--plan-f-running-ok"], "missing": []})
 
 
 def test_cli_set_conflict_exits_1_and_prints_the_body(server):
     env = env_for(server)
-    assert cli("set", "f-running-ok", "-", env=env, stdin=json.dumps(record())).returncode == 0
-    res = cli("set", "f-running-ok", "-", env=env, stdin=json.dumps(record()))
+    assert cli("set", "f-running-ok--run--plan-f-running-ok", "-", env=env, stdin=json.dumps(record())).returncode == 0
+    res = cli("set", "f-running-ok--run--plan-f-running-ok", "-", env=env, stdin=json.dumps(record()))
     body = json.loads(res.stdout)
     assert res.returncode == 1 and body["error"] == "version_conflict" and body["current"]["version"] == 1
     assert "409" in res.stderr
@@ -134,9 +134,9 @@ def test_cli_set_conflict_exits_1_and_prints_the_body(server):
 def test_cli_set_invalid_exits_1(server):
     bad = record()
     bad["surprise"] = 1
-    res = cli("set", "f-running-ok", "-", env=env_for(server), stdin=json.dumps(bad))
+    res = cli("set", "f-running-ok--run--plan-f-running-ok", "-", env=env_for(server), stdin=json.dumps(bad))
     assert res.returncode == 1 and json.loads(res.stdout)["error"] == "invalid"
-    res = cli("set", "f-running-ok", "-", env=env_for(server), stdin="not json")
+    res = cli("set", "f-running-ok--run--plan-f-running-ok", "-", env=env_for(server), stdin="not json")
     assert res.returncode == 1 and res.stdout == ""
 
 
@@ -147,7 +147,7 @@ def test_cli_wrong_token_exits_1(server):
 
 def test_cli_delete_reports_missing(server):
     env = env_for(server)
-    cli("set", "f-running-ok", "-", env=env, stdin=json.dumps(record()))
-    res = cli("delete", "f-running-ok", "nope", env=env)
+    cli("set", "f-running-ok--run--plan-f-running-ok", "-", env=env, stdin=json.dumps(record()))
+    res = cli("delete", "f-running-ok--run--plan-f-running-ok", "nope", env=env)
     assert res.returncode == 0
-    assert json.loads(res.stdout) == {"deleted": ["f-running-ok"], "missing": ["nope"]}
+    assert json.loads(res.stdout) == {"deleted": ["f-running-ok--run--plan-f-running-ok"], "missing": ["nope"]}

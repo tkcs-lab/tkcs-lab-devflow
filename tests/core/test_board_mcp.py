@@ -21,7 +21,7 @@ SCRIPT = TLD / "board" / "server.py"
 SCRIPT_CMD = tld_cmd("board", "server")
 
 
-def record(doc_id="f-running-ok"):
+def record(doc_id="f-running-ok--run--plan-f-running-ok"):
     docs = json.loads((FIXTURES / "board-records.json").read_text())
     return copy.deepcopy(next(d["data"] for d in docs if doc_id in (d["id"], d["data"]["project"])))
 
@@ -98,19 +98,19 @@ def test_tools_list_has_the_record_and_ask_tools_and_no_delete(store):
 
 
 def test_board_set_then_get_then_list(store):
-    payload, is_error = tool(store, "board_set", {"id": "f-running-ok", "data": record()})
-    assert (payload, is_error) == ({"id": "f-running-ok", "version": 1}, False)
-    got, is_error = tool(store, "board_get", {"id": "f-running-ok"})
+    payload, is_error = tool(store, "board_set", {"id": "f-running-ok--run--plan-f-running-ok", "data": record()})
+    assert (payload, is_error) == ({"id": "f-running-ok--run--plan-f-running-ok", "version": 1}, False)
+    got, is_error = tool(store, "board_get", {"id": "f-running-ok--run--plan-f-running-ok"})
     assert not is_error and got["version"] == 1 and got["data"] == record()
     listed, is_error = tool(store, "board_list")
-    assert not is_error and [r["id"] for r in listed["records"]] == ["f-running-ok"]
+    assert not is_error and [r["id"] for r in listed["records"]] == ["f-running-ok--run--plan-f-running-ok"]
     assert listed["records"][0]["dismissed_at"] is None and got["dismissed_at"] is None
     missing, is_error = tool(store, "board_get", {"id": "nope"})
     assert (missing, is_error) == ({"error": "not_found"}, True)
 
 
 def test_board_set_with_a_per_session_id(store):
-    rec = record("f-running-ok")
+    rec = record("f-running-ok--run--plan-f-running-ok")
     rec.update(project="p", repo="o/p", kind="command", command="make-plan", plan_slug=None, plan_url=None,
                feature_branch=None, next_check_at=None, attended=True, orchestrator_session="session_01ABcdEFghIJkl",
                pr={"number": None, "url": None, "state": None, "ci": None, "awaiting": None})
@@ -122,35 +122,35 @@ def test_board_set_with_a_per_session_id(store):
 
 
 def test_board_set_conflict_is_an_error_result(store):
-    tool(store, "board_set", {"id": "f-running-ok", "data": record()})
-    payload, is_error = tool(store, "board_set", {"id": "f-running-ok", "data": record(), "if_version": 5})
+    tool(store, "board_set", {"id": "f-running-ok--run--plan-f-running-ok", "data": record()})
+    payload, is_error = tool(store, "board_set", {"id": "f-running-ok--run--plan-f-running-ok", "data": record(), "if_version": 5})
     assert is_error and payload["error"] == "version_conflict"
     assert payload["current"]["version"] == 1
-    payload, is_error = tool(store, "board_set", {"id": "f-running-ok", "data": record(), "if_version": 1})
+    payload, is_error = tool(store, "board_set", {"id": "f-running-ok--run--plan-f-running-ok", "data": record(), "if_version": 1})
     assert not is_error and payload["version"] == 2
 
 
 def test_board_set_invalid_is_an_error_result(store):
-    payload, is_error = tool(store, "board_set", {"id": "f-running-ok", "data": {"project": "x"}})
+    payload, is_error = tool(store, "board_set", {"id": "f-running-ok--run--plan-f-running-ok", "data": {"project": "x"}})
     assert is_error and payload["error"] == "invalid" and payload["errors"]
-    payload, is_error = tool(store, "board_set", {"id": "f-running-ok", "data": record(), "if_version": 0})
+    payload, is_error = tool(store, "board_set", {"id": "f-running-ok--run--plan-f-running-ok", "data": record(), "if_version": 0})
     assert is_error and payload["error"] == "bad_arguments"
-    payload, is_error = tool(store, "board_set", {"id": "f-running-ok"})
+    payload, is_error = tool(store, "board_set", {"id": "f-running-ok--run--plan-f-running-ok"})
     assert is_error and payload["error"] == "bad_arguments" and payload["detail"]
 
 
 def test_board_set_first_write_conflicts_when_the_record_exists(store):
-    tool(store, "board_set", {"id": "f-running-ok", "data": record()})
-    payload, is_error = tool(store, "board_set", {"id": "f-running-ok", "data": record()})
+    tool(store, "board_set", {"id": "f-running-ok--run--plan-f-running-ok", "data": record()})
+    payload, is_error = tool(store, "board_set", {"id": "f-running-ok--run--plan-f-running-ok", "data": record()})
     assert is_error and payload["error"] == "version_conflict" and payload["current"]["version"] == 1
 
 
 def test_board_delete_is_not_a_tool(store):
     """S19: deleting records is the board playbook's CLI step after the owner confirms, never an MCP tool."""
-    tool(store, "board_set", {"id": "f-running-ok", "data": record()})
-    reply = board_mcp.handle(store, rpc("tools/call", {"name": "board_delete", "arguments": {"ids": ["f-running-ok"]}}))
+    tool(store, "board_set", {"id": "f-running-ok--run--plan-f-running-ok", "data": record()})
+    reply = board_mcp.handle(store, rpc("tools/call", {"name": "board_delete", "arguments": {"ids": ["f-running-ok--run--plan-f-running-ok"]}}))
     assert reply["error"]["code"] == -32602
-    assert store.get("f-running-ok") is not None
+    assert store.get("f-running-ok--run--plan-f-running-ok") is not None
 
 
 def test_board_ask_answers_cancel(store):
@@ -251,7 +251,7 @@ def test_script_run_reports_a_conflict(tmp_path):
         replies = []
         for n in (1, 2):
             msg = rpc("tools/call", {"name": "board_set",
-                                     "arguments": {"id": "f-running-ok", "data": record()}}, msg_id=n)
+                                     "arguments": {"id": "f-running-ok--run--plan-f-running-ok", "data": record()}}, msg_id=n)
             req = urllib.request.Request(f"http://127.0.0.1:{port}/mcp", data=json.dumps(msg).encode(),
                                          method="POST", headers={"Authorization": f"Bearer {WRITE}",
                                                                  "Content-Type": "application/json"})

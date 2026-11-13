@@ -108,7 +108,7 @@ def test_doc_sample_record_is_valid() -> None:
     assert m, "no json block"
     rec = json.loads(m.group(1))
     assert rec["project"] == "example-project"
-    assert validate_status_record.validate(rec, "example-project") == []
+    assert validate_status_record.validate(rec, "example-project--run--demo") == []
 
 
 def test_doc_has_no_token_looking_value() -> None:
