@@ -57,6 +57,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 ## Final review
 
 - final: Round 1 (changes, 1 blocking): tld ops release-prepare --version minor|patch|major was treated as --bump; the plan says exit 1 with minor is not X.Y.Z. Sent to fix-1.
+- final: Round 2: approve. fix-1 confirmed fixed; roles ok (security-reviewer pass, code-reviewer 0 blocking). Open non-blocking: --version "" exits 1 with an empty message instead of a usage error; plan() signature now takes version and bump separately (plan text names version_or_bump).
 
 ## Finishing
 
