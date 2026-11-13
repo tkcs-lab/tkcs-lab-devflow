@@ -5,6 +5,14 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+### Added
+
+- A single-session prompt from /make-plan now shows on the status board: its worker writes a `run` record (`<project>--run--issue-<n>`, no plan link, no phases) from `starting` to `pr_open` with "Review PR #<n>", or a stop that needs you. The record validator accepts a run with `plan_url: null`.
+
+### Changed
+
+- The board page's Dismiss button is on every card outside "Hidden" (PR open, Running, Done, answer received), not only on "Needs you" cards; a dismissed card of any state is in the first list of `/tld:board prune`. The dismiss endpoint no longer answers `409 not_needs_you`.
+
 ### Fixed
 
 - `tld ops repo-admin apply` no longer puts back the `tld-tags` ruleset on every run: GitHub returns its `update` rule without the false `update_allows_fetch_and_merge`, which the audit read as drift. A ruleset finding now names the parameters that differ.

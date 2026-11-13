@@ -2,8 +2,8 @@
 
 The board is the owner's inbox (D7, D8): it holds a status record of every run and every ask a playbook puts
 to the owner. These playbooks write a status record, so the owner sees each run in one place: setup, review,
-make-plan, implement, land, deps, upstream, docs and migrate. dod and board write none (a report and the board
-itself), nor do git-ops and repo-admin. The record
+make-plan, implement, land, deps, upstream, docs and migrate, and the worker of a single-session prompt (make-plan's small scope). dod and board write none
+(a report and the board itself), nor do git-ops and repo-admin. The record
 format is `src/tld/schema/status-record.schema.json`; `tld board validate-record FILE --doc-id ID` checks one.
 Asks are [runtime.md](../runtime.md)'s `ask_human`. This file says where, how and when to write records.
 
@@ -26,8 +26,9 @@ never a reason to skip the record.
 
 | Field | Value |
 |---|---|
-| `kind` | `run` for implement; `command` for every other playbook (deps, upstream, land, setup, docs, review, make-plan, migrate) |
+| `kind` | `run` for implement and for a single-session prompt's worker; `command` for every other playbook (deps, upstream, land, setup, docs, review, make-plan, migrate) |
 | `command` | `null` for a run; else the playbook: `setup`, `review`, `make-plan`, `deps`, `upstream`, `land`, `docs`, `migrate` |
+| `plan_slug`, `plan_url`, `feature_branch` | a run's plan and branch; a single-session prompt's run has `plan_slug` `issue-<n>`, `plan_url` `null`, its branch and `phases: []`; all `null` for a command |
 | `project` | `tld board project-slug <owner>/<repo>`: the repository name, lower case, other characters as `-` |
 | document id | from `tld board record-id` (see "Keys and a record that already exists"): `<project>--run--<plan>` for a run, `<project>--<command>--<tail>` for an attended command, `<project>--<command>` for a scheduled one |
 | `attended` | `true` when a person started the command and can answer; `false` for a scheduled run |
@@ -58,9 +59,9 @@ very first write means a record of an earlier run exists: read it and write over
   `ask_human`), so the page shows one card per wait.
 - The final record never keeps `needs_you: true` unless the run stopped on something only the owner can fix.
   Pull requests waiting for review are items of the record, not an alert.
-- The owner can Dismiss a stuck card on the page and Restore it; the board keeps that next to the record and
-  never rewrites it. Your next write brings the card back if `needs_you` is still true. The board playbook's prune also
-  clears the `needs_you` of a record whose pull requests are all merged or closed, after the owner confirms.
+- The owner can Dismiss any card on the page (a stuck "needs you" card, a "PR open" card whose pull requests are
+  merged) and Restore it; the board keeps that next to the record and never rewrites it. Your next write of the record
+  brings the card back. The board playbook's prune also clears the `needs_you` of a record whose pull requests are all merged or closed, after the owner confirms.
 - A `version_conflict` with `current: null` means the record was deleted (pruned): write it again without
   `--if-version`.
 

@@ -79,7 +79,7 @@ class Store:
         # 3: the owner sessions a logout revoked (until their cookie would have expired anyway).
         self._db.execute(
             "CREATE TABLE IF NOT EXISTS revoked_sessions(nonce TEXT PRIMARY KEY, expires INTEGER NOT NULL)")
-        # 4: the owner's dismissals of "needs you" records; a record's data and version are never touched.
+        # 4: the owner's dismissals of records; a record's data and version are never touched.
         self._db.execute(
             "CREATE TABLE IF NOT EXISTS dismissals("
             "doc_id TEXT PRIMARY KEY, version INTEGER NOT NULL, dismissed_at TEXT NOT NULL)")
@@ -144,16 +144,14 @@ class Store:
             return cur.rowcount > 0
 
     def dismiss(self, doc_id: str, version: int) -> dict:
-        """The owner dismisses a record that needs them, on `version`. Raises NotFound, Conflict (the stored
-        version differs) or Invalid (the record does not need the owner). The record itself is not changed."""
+        """The owner dismisses a record (any state) on `version`. Raises NotFound or Conflict (the stored
+        version differs). The record itself is not changed."""
         with self._lock:
             current = self._get(doc_id)
             if current is None:
                 raise NotFound(doc_id)
             if current["version"] != version:
                 raise Conflict(current)
-            if current["data"].get("needs_you") is not True:
-                raise Invalid(["the record does not need you"])
             stamp = self._clock()
             self._db.execute("INSERT OR REPLACE INTO dismissals(doc_id, version, dismissed_at) VALUES (?, ?, ?)",
                              (doc_id, version, stamp))

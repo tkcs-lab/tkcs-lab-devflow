@@ -8,6 +8,7 @@ from board_helpers import WRITE, base, running
 from conftest import FIXTURES, tld_cmd
 
 from tld.board import record as board_record
+from tld.board.resolve import resolve
 
 NOW = "2026-11-12T10:00:00Z"
 RESOLVE = tld_cmd("board", "resolve")
@@ -44,6 +45,13 @@ def test_resolve_clears_a_needs_you_record():
     assert out["next_check_at"] is None and out["needs_you_reason"] == "" and out["needs_you_since"] is None
     assert out["last_event"] == "PRs merged"
     assert rec == before
+
+
+def test_resolve_clears_a_prompt_run_record():
+    rec = json.loads((FIXTURES / "status-records" / "good-run-prompt.json").read_text())
+    out = resolve(rec, "2026-11-09T12:00:00Z", "merged")
+    assert out["status"] == "done" and out["plan_url"] is None
+    assert out["phases"] == [] and out["needs_you"] is False
 
 
 def test_resolve_accepts_an_entry_with_or_without_dismissed_at():
@@ -127,11 +135,15 @@ def stale_ids(entries):
     return res.stdout.split()
 
 
-def test_stale_prints_dismissed_needs_you_only():
+def test_stale_prints_every_dismissed_record():
     entry = {"id": "f-waiting", "version": 1, "data": fixture_record("f-waiting")}
     assert stale_ids([entry]) == []
     assert stale_ids([{**entry, "dismissed_at": None}]) == []
     assert stale_ids([{**entry, "dismissed_at": "2026-11-09T11:00:00Z"}]) == ["f-waiting"]
+    quiet = {"id": "f-running-ok", "version": 1, "data": fixture_record("f-running-ok")}
+    assert stale_ids([quiet]) == []
+    assert stale_ids([{**quiet, "dismissed_at": None}]) == []
+    assert stale_ids([{**quiet, "dismissed_at": "2026-11-09T11:00:00Z"}]) == ["f-running-ok"]
 
 
 def test_stale_matches_the_links_fixture():

@@ -285,7 +285,7 @@ board's own `Origin` and the `X-CSRF-Token` header the login returned; the login
 | `GET /api/records/<id>` | yes | yes | 200 `{"id", "version", "dismissed_at", "data"}` | 404 `not_found` |
 | `PUT /api/records/<id>` | yes | 403 | 200 `{"id", "version"}`; body `{"data": {...}, "if_version": 3}` | 400 `bad_request`, 409 `version_conflict` (`current`), 422 `invalid` (`errors`) |
 | `DELETE /api/records/<id>` | yes | 403 | 200 `{"deleted": true}` | 404 `not_found` |
-| `POST /api/records/<id>/dismiss` | 403 | yes | 200 `{"id", "version", "dismissed_at"}`; body `{"version": n}` | 400 `bad_request`, 404 `not_found`, 409 `version_conflict` (`current`), 409 `not_needs_you`, 403 `csrf` |
+| `POST /api/records/<id>/dismiss` | 403 | yes | 200 `{"id", "version", "dismissed_at"}`; body `{"version": n}` | 400 `bad_request`, 404 `not_found`, 409 `version_conflict` (`current`), 403 `csrf` |
 | `POST /api/records/<id>/restore` | 403 | yes | 200 `{"id", "dismissed_at": null}`; empty body | 404 `not_found` |
 | `GET /api/asks[?state=open]` | yes | yes | 200 `{"asks": [...]}`, open ones first | 400 for an unknown state |
 | `POST /api/asks` | yes | 403 | 201, the stored ask with its `id`; body the ask | 422 `invalid` (`errors`) |
