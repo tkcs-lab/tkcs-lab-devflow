@@ -110,8 +110,8 @@ def _suggested(body: str) -> str:
     return "patch"
 
 
-def plan(profile: dict, root: Path, version_or_bump: str | None, date: str) -> dict:
-    """What a release would change. `version_or_bump` is X.Y.Z, patch|minor|major or None (only report).
+def plan(profile: dict, root: Path, version: str | None, bump: str | None, date: str) -> dict:
+    """What a release would change. `version` must be X.Y.Z, `bump` is patch|minor|major; both None only reports.
     Raises ReleaseError before anything is touched; the result holds `edits` (path -> new text) for `apply`."""
     root = Path(root)
     versions = _versions(profile, root)
@@ -128,9 +128,9 @@ def plan(profile: dict, root: Path, version_or_bump: str | None, date: str) -> d
         raise ReleaseError(f"the unreleased section of {cl['file']} is empty")
     result = {"current": current, "candidates": candidates, "suggested_bump": _suggested(body),
               "preview": body.strip()}
-    if version_or_bump is None:
+    if version is None and bump is None:
         return result
-    nxt = candidates.get(version_or_bump) or version_or_bump
+    nxt = version if version is not None else candidates[bump]
     if not SEMVER.match(nxt):
         raise ReleaseError(f"{nxt} is not X.Y.Z")
     if _tuple(nxt) <= _tuple(current):
@@ -334,7 +334,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             print(f"release-prepare: ok {args.version}")
             return 0
-        prepared = plan(profile, root, args.version or args.bump, date)
+        prepared = plan(profile, root, args.version, args.bump, date)
         if args.write and "next" in prepared:
             apply(prepared)
         elif args.write:
