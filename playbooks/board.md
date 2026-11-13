@@ -29,8 +29,8 @@ Needs a working board (steps 1 and 2 above succeed); without one, stop and say s
 1. `tld board client list`; save the value of `records` (the array of `{"id", "version", "dismissed_at",
    "data"}`) as a JSON file in the scratch directory.
 2. `tld board stale <file>` prints one id per line for every record the board hides: no update for more than 7
-   days, finished earlier, or dismissed by the owner. A record with `needs_you: true` is printed only when the
-   owner dismissed it, except a record under an old key (the project slug for a run, or the project slug and the command name
+   days, finished earlier, or dismissed by the owner (whatever its state). A record with `needs_you: true` that the
+   owner did not dismiss is printed only when it is under an old key (the project slug for a run, or the project slug and the command name
    joined by two hyphens for an attended command) not updated for 24 hours. This is the first list. Records under an old key are listed once
    they were not updated for 24 hours, even when they need the owner.
 3. The second list: every record with `data.needs_you` true that is not in the first list and that names at

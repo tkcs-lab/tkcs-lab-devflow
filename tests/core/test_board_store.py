@@ -255,10 +255,14 @@ def test_dismiss_with_a_wrong_version_raises_conflict(store):
     assert exc.value.current["version"] == 1
 
 
-def test_dismiss_of_a_record_that_does_not_need_you_raises_invalid(store):
+def test_dismiss_of_a_record_that_does_not_need_you_is_kept(store):
     store.set("f-running-ok", record(), None)
-    with pytest.raises(Invalid, match="does not need you"):
-        store.dismiss("f-running-ok", 1)
+    before = store.get("f-running-ok")
+    stamp = store.dismiss("f-running-ok", 1)["dismissed_at"]
+    assert isinstance(stamp, str)
+    after = store.get("f-running-ok")
+    assert after["dismissed_at"] == stamp
+    assert after["data"] == before["data"] and after["version"] == before["version"] == 1
 
 
 def test_dismiss_of_a_missing_record_raises_not_found(store):

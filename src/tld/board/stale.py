@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Print the ids of the status records the board hides, and of dismissed needs_you ones (the ones /board prune may delete).
+"""Print the ids of the status records the board hides, and of the ones the owner dismissed (the ones /board prune may delete).
 
     board_stale.py [FILE|-] [--now ISO]
 
 Reads a JSON list of {"id", "data"} documents (FILE, or stdin for - or no argument) and prints one
 id per line for every record whose board section is `hidden`. The rule is the one in
-src/tld/board/web/rules.js, re-implemented here; a record with needs_you true is printed only when the
-owner dismissed it (the entry's `dismissed_at` is a string). A record still under a legacy id
+src/tld/board/web/rules.js, re-implemented here; a record the owner dismissed
+(the entry's `dismissed_at` is a string) is printed whatever its state. A record still under a legacy id
 (`legacy_ids`) is also printed once it is more than 24 hours old, even with needs_you true.
 Python 3.11+, stdlib only.
 """
@@ -28,8 +28,10 @@ def parse(iso: str) -> datetime:
 
 
 def section(rec: dict, now: datetime, dismissed: bool = False) -> str:
+    if dismissed:
+        return "hidden"
     if rec.get("needs_you") is True:
-        return "hidden" if dismissed else "needs_you"
+        return "needs_you"
     if now - parse(rec["updated_at"]) > WEEK:
         return "hidden"
     if rec.get("status") == "pr_open":

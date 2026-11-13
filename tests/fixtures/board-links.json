@@ -567,6 +567,147 @@
       }
     },
     {
+      "id": "dismissed-pr-open",
+      "version": 1,
+      "dismissed_at": "2026-11-09T10:00:00Z",
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "dismissed-pr-open",
+        "repo": "example-org/dismissed-pr-open",
+        "plan_slug": "plan-dismissed-pr-open",
+        "plan_url": "https://example.com/example-org/dismissed-pr-open/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-dismissed-pr-open",
+        "orchestrator_session": "session_dismissed-pr-open",
+        "attended": true,
+        "status": "pr_open",
+        "needs_you": false,
+        "needs_you_reason": "",
+        "needs_you_since": null,
+        "phases": [
+          {
+            "id": "p0",
+            "title": "Phase zero",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "merged",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null,
+            "scope": {
+              "check": "ok",
+              "in_scope": 4,
+              "out_of_scope_count": 3,
+              "collision_count": 1,
+              "paths": [
+                "src/shared.py",
+                "docs/a.md",
+                "docs/b.md"
+              ],
+              "disposition": "accepted"
+            },
+            "pr": 16
+          },
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [
+              "p0"
+            ],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "running",
+        "next_check_at": null,
+        "finished_at": "2026-11-09T11:58:00Z",
+        "updated_at": "2026-11-09T11:58:00Z"
+      }
+    },
+    {
+      "id": "dismissed-done",
+      "version": 1,
+      "dismissed_at": "2026-11-09T10:00:00Z",
+      "data": {
+        "schema": 1,
+        "kind": "run",
+        "command": null,
+        "project": "dismissed-done",
+        "repo": "example-org/dismissed-done",
+        "plan_slug": "plan-dismissed-done",
+        "plan_url": "https://example.com/example-org/dismissed-done/blob/plan/docs/plan.md",
+        "feature_branch": "feature/plan-dismissed-done",
+        "orchestrator_session": "session_dismissed-done",
+        "attended": true,
+        "status": "done",
+        "needs_you": false,
+        "needs_you_reason": "",
+        "needs_you_since": null,
+        "phases": [
+          {
+            "id": "p0",
+            "title": "Phase zero",
+            "depends_on": [],
+            "complexity": "S",
+            "state": "merged",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null,
+            "scope": {
+              "check": "ok",
+              "in_scope": 4,
+              "out_of_scope_count": 3,
+              "collision_count": 1,
+              "paths": [
+                "src/shared.py",
+                "docs/a.md",
+                "docs/b.md"
+              ],
+              "disposition": "accepted"
+            }
+          },
+          {
+            "id": "p1",
+            "title": "Phase one",
+            "depends_on": [
+              "p0"
+            ],
+            "complexity": "S",
+            "state": "running",
+            "session": null,
+            "branch": null,
+            "started_at": null,
+            "finished_at": null
+          }
+        ],
+        "pr": {
+          "number": null,
+          "url": null,
+          "state": null,
+          "ci": null,
+          "awaiting": null
+        },
+        "last_event": "running",
+        "next_check_at": null,
+        "finished_at": "2026-11-09T11:58:00Z",
+        "updated_at": "2026-11-09T11:58:00Z"
+      }
+    },
+    {
       "id": "stale-quiet",
       "version": 1,
       "dismissed_at": null,
@@ -967,8 +1108,8 @@
       "badge": "dismissed"
     },
     "dismissed-but-clear": {
-      "section": "running",
-      "badge": null
+      "section": "hidden",
+      "badge": "dismissed"
     },
     "stale-quiet": {
       "section": "hidden",
@@ -977,11 +1118,22 @@
     "null-session--deps": {
       "section": "needs_you",
       "badge": null
+    },
+    "dismissed-pr-open": {
+      "section": "hidden",
+      "badge": "dismissed"
+    },
+    "dismissed-done": {
+      "section": "hidden",
+      "badge": "dismissed"
     }
   },
   "expected_stale": [
     "dismissed-and-linked",
+    "dismissed-but-clear",
+    "dismissed-done",
     "dismissed-needs",
+    "dismissed-pr-open",
     "stale-quiet"
   ]
 }

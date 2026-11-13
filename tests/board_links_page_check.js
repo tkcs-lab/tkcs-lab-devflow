@@ -1,6 +1,7 @@
 // Drives the served board page in Chromium for the cards that wait: an open ask hides its record's card, the answer
-// moves the record to Running with "answer received", Dismiss moves a "needs you" card to Hidden, Restore brings it
-// back, a session rewrite after a dismissal brings it back too, and a 409 shows the notice and keeps the card.
+// moves the record to Running with "answer received", Dismiss moves a "needs you" card (and a "PR open", Running or
+// Done card) to Hidden, Restore brings it back, a session rewrite after a dismissal brings it back too, and a 409
+// shows the notice and keeps the card.
 // Usage: node board_links_page_check.js BASE TOKEN PASSPHRASE
 const assert = require("assert");
 const fs = require("fs");
@@ -112,6 +113,58 @@ function needsRecord(base_, id) {
     const rewrite = needsRecord(template, "links-two");
     await api("PUT", "/api/records/links-two", { data: rewrite, if_version: 1 });
     await page.waitForSelector(two, { timeout: 5000 });
+
+    // R3: Dismiss on a "PR open" card.
+    const quiet = (id) => {
+      const rec = needsRecord(template, id);
+      rec.needs_you = false;
+      rec.needs_you_reason = "";
+      rec.needs_you_since = null;
+      return rec;
+    };
+    const prRec = quiet("links-pr");
+    prRec.status = "pr_open";
+    prRec.finished_at = prRec.updated_at;
+    prRec.pr = { number: 16, url: "https://github.com/example-org/links-pr/pull/16", state: "open", ci: "success", awaiting: "none" };
+    await api("PUT", "/api/records/links-pr", { data: prRec });
+    const prCard = '[data-section="pr_open"] [data-doc="links-pr"]';
+    await page.waitForSelector(prCard, { timeout: 5000 });
+    // Open it by its name: the summary centre holds a github.com link.
+    await page.click(prCard + " > summary .name");
+    await page.click(prCard + ' [data-action="dismiss"]');
+    const prHidden = '[data-section="hidden"] [data-doc="links-pr"]';
+    await page.waitForSelector(prHidden, { state: "attached", timeout: 5000 });
+    assert.ok((await page.textContent(prHidden)).includes("dismissed"), "PR open card: dismissed badge");
+    assert.strictEqual(await page.locator(prCard).count(), 0, "gone from PR open");
+    for (const sel of ['[data-section="hidden"]', prHidden]) {
+      if (!(await page.evaluate((s) => document.querySelector(s).open, sel))) await page.click(sel + " > summary");
+    }
+    await page.click(prHidden + ' [data-action="restore"]');
+    await page.waitForSelector(prCard, { timeout: 5000 });
+
+    // R4: every card outside Hidden has Dismiss.
+    const runRec = quiet("links-run");
+    runRec.status = "running";
+    runRec.finished_at = null;
+    runRec.pr = { number: null, url: null, state: null, ci: null, awaiting: null };
+    runRec.next_check_at = new Date(Date.now() + 10 * 60 * 1000).toISOString().replace(/\.\d+Z$/, "Z");
+    await api("PUT", "/api/records/links-run", { data: runRec });
+    const doneRec = quiet("links-done");
+    doneRec.status = "done";
+    doneRec.finished_at = doneRec.updated_at;
+    doneRec.next_check_at = null;
+    await api("PUT", "/api/records/links-done", { data: doneRec });
+    const doneCard = '[data-section="done"] [data-doc="links-done"]';
+    for (const card of ['[data-section="running"] [data-doc="links-one"]', '[data-section="running"] [data-doc="links-run"]', doneCard]) {
+      await page.waitForSelector(card, { timeout: 5000 });
+      if (!(await page.evaluate((s) => document.querySelector(s).open, card))) await page.click(card + " > summary .name");
+      assert.strictEqual(await page.locator(card + ' .detail [data-action="dismiss"]').count(), 1, "Dismiss on " + card);
+    }
+    await page.click(doneCard + ' [data-action="dismiss"]');
+    const doneHidden = '[data-section="hidden"] [data-doc="links-done"]';
+    await page.waitForSelector(doneHidden, { state: "attached", timeout: 5000 });
+    assert.ok((await page.textContent(doneHidden)).includes("dismissed"), "Done card: dismissed badge");
+    assert.strictEqual(await page.locator('[data-section="done"] > [data-doc="links-done"]').count(), 0, "gone from Done");
 
     assert.deepStrictEqual(errors, [], "console errors");
     await context.close();

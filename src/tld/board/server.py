@@ -528,8 +528,6 @@ class Handler(BaseHTTPRequestHandler):
             self._error(404, "not_found")
         except Conflict as exc:
             self._error(409, "version_conflict", current=exc.current)
-        except Invalid:
-            self._error(409, "not_needs_you")
         else:
             self._json(200, result)
 

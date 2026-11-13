@@ -287,7 +287,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     wrap.appendChild(b);
     return wrap;
   }
-  // The button carries data-action="dismiss" (in the details of a needs-you card, shown after the login).
+  // The button carries data-action="dismiss" (in the details of every card outside Hidden, shown after the login).
   function dismissButton(body, entry) {
     body.appendChild(ownerButton("Dismiss", "dismiss", entry, function () {
       return api("POST", "api/records/" + encodeURIComponent(entry.id) + "/dismiss", { version: entry.version });
@@ -328,7 +328,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
           " · awaiting " + (pr.awaiting === "codeowner" ? "codeowner" : pr.awaiting === "ci" ? "CI" : "nobody")));
         sum.appendChild(line);
       });
-    });
+    }, dismissButton);
   }
   function runRow(entry, now) {
     return row(entry, "run", now, function (sum, rec) {
@@ -336,19 +336,19 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
       add(sum, headLine(rec, silent), span(rec.status.replace("_", " ") + " · updated " + ago(rec.updated_at, now)),
         rec.phases.length ? chips(rec) : null);
       if (silent) sum.appendChild(span("No check-in since " + ago(rec.updated_at, now) + "."));
-    });
+    }, dismissButton);
   }
   function doneRow(entry, now) {
     return row(entry, "done", now, function (sum, rec) {
       var mark = rec.status === "failed" ? span("✕ failed", "badge failed") : span("✓ done", "badge");
       add(sum, headLine(rec, mark), span("finished " + ago(rec.finished_at, now)));
-    });
+    }, dismissButton);
   }
   function answeredRow(entry, placed, now) {
     return row(entry, "run", now, function (sum, rec) {
       add(sum, headLine(rec, span("✓ answer received", "badge")),
         span("Waiting for the session to continue · answered " + ago(placed.ask.answered_at, now)));
-    });
+    }, dismissButton);
   }
   function hiddenRow(entry, placed, now) {
     return row(entry, "hid", now, function (sum, rec) {

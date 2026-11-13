@@ -153,8 +153,8 @@ command (`/setup`, `/review`, `/make-plan`, `/implement`, `/land`, `/docs init`,
 final states are `done`, `failed` and `pr_open`. The rules are [playbooks/policies/status-board.md](../../playbooks/policies/status-board.md).
 
 `/board prune` makes two lists and asks one question for each that is not empty before it changes anything. The
-first holds the records the board hides: no update for more than 7 days, finished earlier, or a record that needs
-you and that you dismissed. The second holds records that still need you but name pull requests that are all
+first holds the records the board hides: no update for more than 7 days, finished earlier, or a record you
+dismissed. The second holds records that still need you but name pull requests that are all
 merged or closed. Prune deletes the first list and clears the second (`needs_you` off, status `done`); a record with
 no pull request, or with one still open, is never offered. More in [Cards that wait](#cards-that-wait).
 
@@ -166,9 +166,10 @@ A "Needs you" card always means something you can still act on.
   Once you answer, the run leaves "Needs you" and shows `answer received` under "Running" until the session wakes
   (up to 10 minutes, or when you write in its chat) and reads the answer. If you cancel the ask instead, the
   record's card comes back until the session wakes.
-- **Dismiss and Restore.** A card that is stuck has a `Dismiss` button. The card moves to "Hidden" with the badge
+- **Dismiss and Restore.** Every card outside "Hidden" has a `Dismiss` button in its details: a stuck "Needs you"
+  card, or a "PR open" card whose pull requests are already merged. The card moves to "Hidden" with the badge
   `dismissed`, and `Restore` brings it back. The board keeps the dismissal next to the record. When the session
-  writes the record again and it still needs you, the card returns by itself.
+  writes the record again, the card returns by itself.
 - **Prune** also clears the `needs_you` of a record whose pull requests are all merged or closed, after you
   confirm (see above).
 - **You still write no record.** Dismiss, Restore and the answer never change a record; only the session writes
