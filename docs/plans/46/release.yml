@@ -9,7 +9,8 @@ name: release
 # the version and the image digest, SHA256SUMS over those four, and the multi-arch board image on ghcr.io. The order
 # is: build the image (a dry run builds it and pushes nothing), then the tag, then a draft release holding every
 # asset, then publish the draft. So releases/latest never lacks install.sh, and a failure before the last step
-# leaves no public half-release (at worst an untagged image digest, which nothing refers to).
+# leaves no public half-release (at worst an untagged image digest, or, once 'Tag the board image' has run, :latest ahead of
+# the last release, which a re-run overwrites).
 # Two jobs, so the owner token never sits on a runner that runs third-party build code. `build` (pip, setuptools, the
 # docker/* actions, QEMU) never references TLD_RELEASE_TOKEN and has no environment, so it runs without an approval: it
 # checks that the commit is green, builds, pushes the board image by digest only (no tag) and uploads dist/ and
@@ -107,12 +108,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          # build pushes the image, so a red commit stops here, before anything is pushed. Its own check and the
-          # not yet started publish check are left out.
+          # build pushes the image, so a red commit stops here, before anything is pushed. The jobs of this run
+          # (build, and publish which has not started) are left out by their run id, other workflows are not.
           bad=$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[]
-            | select(.name != "build" and .name != "publish")
+            | select((.details_url // "") | contains("/actions/runs/" + env.RUN_ID + "/") | not)
             | select(.status != "completed" or (.conclusion | IN("success", "skipped", "neutral") | not))
             | "\(.name): \(.status) \(.conclusion // "")"')
           if [ -n "$bad" ]; then
