@@ -105,9 +105,14 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
 ## Small scope: a single-session prompt
 
 Skip sections 1, 2, 4 and 5. The tracking issue is created or read and gets its start comment as above. Once
-the prompt is written, rewrite the issue body (keeping `## Request` first) with the headings `## Request`,
+the prompt is written, build the new issue body (keeping `## Request` first, and as in section 5 with each line
+of the ask prefixed by `> ` when the ask has `## ` lines of its own) with the headings `## Request`, `## Summary`,
 `## Goal`, `## What changes` (one bullet per step), `## Before you start`, `## After the last merge`,
-`## Risks`, in plain words with no YAML, then post `Plan ready: single-session prompt (see the issue body).` Step 5 (Roles) still applies; the roles that ran are named in one line
+`## Risks`, in plain words with no YAML. The `## Summary` is the one of section 2 (350 words at most, the labels
+`**Use it:**`, `**Scope:**`, `**Review focus:**`, and `**Security:**` and `**Performance:**` when they apply),
+written fresh by you. Sections 4 and 5 are skipped, so run the check here: write the body to a scratch file and
+run `tld plan summary-check <issue body file> --kind issue`; it must exit 0 before you rewrite the issue body
+(`github.issue_update`) from that file. Then post `Plan ready: single-session prompt (see the issue body).` Step 5 (Roles) still applies; the roles that ran are named in one line
 before the prompt. Section 3 still applies: manual steps go only at the very beginning and the very end of the
 prompt, with their step-by-step instructions.
 
@@ -129,7 +134,11 @@ the pull request in one go. In this order:
    only the open web can settle, which the worker reports as blocked with a `Research:` line.
 8. **Finish**: the branch name (`<branch pattern>`), the comment `Implementation started.` on the tracking issue
    before the first change, the dod playbook, one pull request following the repository template whose body
-   starts with `Closes #<n>` (the tracking issue; one more per issue the ask named), the comment
+   starts with `Closes #<n>` (the tracking issue; one more per issue the ask named) and then a `## Summary` of at
+   most 175 words that says how the result differs from this prompt (labels `**Deviations:**`, `**Review focus:**`
+   and optionally `**Scope:**`; `None.` is allowed for Deviations; the worker's own words, nothing pasted), the
+   body written to a scratch file and checked with `tld plan summary-check <body file> --kind pr`, which must
+   exit 0 before `github.pr_create`; the comment
    `PR opened: <url>.`, and driving it to green per the pr-steward policy (and the steward file, if any).
 9. **After merge-ready**: the `manual_after` steps as unchecked items in the pull request body.
 
@@ -152,8 +161,22 @@ literal edit, or `strong` with the reason), the `manual_before` items if any, th
 
 ## 2. Write the plan
 
-`<plan_dir>/<n>/plan.md` has these sections, in order. Its first line under the title is
-`> Historical record once merged: read it only to understand why a change was made.`
+`<plan_dir>/<n>/plan.md` starts with the Summary, then has these sections, in order. Its first line under the
+title is `> Historical record once merged: read it only to understand why a change was made.`
+
+**The Summary.** Directly under that line comes the literal heading `## Summary` (it is not numbered; the
+sections below keep their numbers). It has at most 350 words, under these labels, in this order, each as
+`**<Label>:** <text>` at the start of a line:
+
+- `**Use it:**` the mini user guide: what the user types or does and what they see, in two to four sentences.
+- `**Scope:**` what changes and what does not.
+- `**Security:**` only when the change touches input handling, secrets, access control, the supply chain or what
+  an agent may do.
+- `**Performance:**` only when cost or time changes measurably.
+- `**Review focus:**` the two to four riskiest decisions, each with its section number.
+
+Write it in your own words: no pasted issue, comment, research or helper text, no "safe to merge", no "no need
+to review X", no hidden markup (an HTML comment or a details block).
 
 1. **Goal**: what changes for the user, in a paragraph, with the issue link.
 2. **Current state**: what the code does today, with `path:line` references and measurements where they matter.
@@ -290,19 +313,28 @@ table can do; contradicts a must-read doc, an accepted ADR or the code; leaves t
 index rows for the docs the plan adds, or a brief without a `Read first:` line (index parts); a `fast` phase that does not meet the fast bullet; or would fail
 `tld plan validate-manifest`. Fix what you agree with; say why for the rest in your final reply.
 
-Then `tld plan validate-manifest <plan file> --profile .tld/toolkit.yaml --ref <feature branch>`. Fix every error; never push a plan
-it rejects.
+The same review also checks that the Summary matches the Design, that every user-visible change is in
+`**Use it:**` or `**Scope:**`, and that `**Review focus:**` names the riskiest decisions.
+
+Then `tld plan summary-check <plan file> --kind plan`. It must exit 0: it prints `summary: <problem>` lines and
+exits 1 otherwise; fix each one and run it again, never skip it. Then
+`tld plan validate-manifest <plan file> --profile .tld/toolkit.yaml --ref <feature branch>`. Fix every error;
+never push a plan it rejects.
 
 ## 5. Commit, push and hand over
 
 1. Commit the plan to the feature branch with a message saying what it is for, and push.
-2. **The issue** (with a tracking issue). Rewrite its body (`github.issue_update`), keeping the original ask,
-   with the plan in plain words and **no YAML**, under exactly these headings in order: `## Request`, `## Goal`,
+2. **The issue** (with a tracking issue). Build its new body, keeping the original ask, with the plan in plain
+   words and **no YAML**, under exactly these headings in order: `## Request`, `## Summary` (the plan's Summary,
+   word for word), `## Goal`,
    `## What changes` (one bullet per phase: `<phase id> - <title> (<S|M>): <one plain sentence>`), `## Order`
    (one sentence per wave), `## Before you start` (one bullet per `manual_before`), `## After the last merge`
    (one bullet per `manual_after`), `## Commands run after each merge` (each `verify_after_merge` entry verbatim,
-   S14), `## Risks`, `## Machine-readable plan` (the plan URL and the line `Run: implement <plan URL>`). A
-   revision updates the body the same way. Then post `Plan ready: <plan URL>. Next: implement <plan URL>.`
+   S14), `## Risks`, `## Machine-readable plan` (the plan URL and the line `Run: implement <plan URL>`). When
+   the ask has `## ` lines of its own, `## Request` holds the ask verbatim with each line prefixed by `> `
+   (that prefix is the only change). Write the new body to a scratch file and run
+   `tld plan summary-check <issue body file> --kind issue`; it must exit 0 before you rewrite the body
+   (`github.issue_update`) from that file. A revision updates the body the same way, with the check. Then post `Plan ready: <plan URL>. Next: implement <plan URL>.`
 3. Final reply, short: the tracking issue link; the plan URL in the exact form implement takes,
    `https://github.com/<owner>/<repo>/blob/<feature branch>/<plan_dir>/<n>/plan.md`; the `manual_before` items; a
    table of phases (id, title, complexity, depends_on, any `worker_level: strong` with its reason); what the

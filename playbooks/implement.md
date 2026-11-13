@@ -382,15 +382,34 @@ text>`; exit 1 counts as `changes`. Then:
    ADRs when the profile has `docs.adr_dir`). The plan and the deviations file stay in the branch (for an
    old-layout plan whose retirement phase deleted the plan, only the deviations file stays; its own `final_checks`
    still apply).
-3. `github.pr_create` **one** pull request from the feature branch to `<main>`, following the repository's
-   template if it has one. With `tracking_issue`, the body begins with `Closes #<tracking_issue>` and one
-   `Closes #<n>` per entry of `closes`. It lists each phase with its merge commit, the combined acceptance
-   checklist, the final review's verdict and its non-blocking findings, every out-of-scope finding the workers
-   reported, a **Scope** section (the output of `tld plan scope-check section --results <results>`, pasted as is),
-   a `## Deviations` section with the content of the deviations file,
-   a **Manual verification** section (each `manual_after` item as an unchecked box, with a link to the plan's
-   Manual steps section), and `## Branches left on origin` with that ledger list and the sentence "The owner
-   deletes them in the GitHub UI." Then post `PR opened: <url>.` (with `tracking_issue`).
+3. Write the pull request body to a scratch file and check its Summary as below, before the pull request exists.
+   The pull request is **one**, from the feature branch to `<main>`, following the repository's template if it
+   has one.
+
+   **The body.** With `tracking_issue`, it begins with `Closes #<tracking_issue>` and one `Closes #<n>` per entry
+   of `closes`; the `Closes` lines stay first. Directly after them comes `## Summary` (below). Then it lists each
+   phase with its merge commit, the combined acceptance checklist, the final review's verdict and its
+   non-blocking findings, every out-of-scope finding the workers reported, a **Scope** section (the output of
+   `tld plan scope-check section --results <results>`, pasted as is), a `## Deviations` section with the content
+   of the deviations file, a **Manual verification** section (each `manual_after` item as an unchecked box, with
+   a link to the plan's Manual steps section), and `## Branches left on origin` with that ledger list and the
+   sentence "The owner deletes them in the GitHub UI." When the repository has a pull request template, its
+   sections come after the Summary.
+
+   **The Summary.** At most 175 words, under the labels `**Deviations:**`, `**Scope:**` (optional),
+   `**Security:**` and `**Performance:**` (only when relevant) and `**Review focus:**`, in this order. Write it
+   yourself, in your own words, from the deviations file, the final review and the plan's Summary: no pasted
+   worker, reviewer or issue text, no "safe to merge", no hidden markup. `**Deviations:**` is the focus; spend
+   the 175 words in this priority order: design changes, accepted scope drift, owner decisions taken during the
+   run, open non-blocking findings. `**Review focus:**` or `**Security:**` must name every deviation that
+   touches a protected path or came from the security-reviewer. The full `## Deviations` section stays as it
+   is.
+
+   **The check.** Run `tld plan summary-check <body file> --kind pr --deviations <deviations path>` on the
+   scratch file; it must exit 0 before you call `github.pr_create` with that body. Exit 1 prints `summary: <problem>` lines: fix them,
+   never skip the check. A later rewrite of the body (`github.pr_update`) keeps the Summary and runs the check
+   again. Do not check the plan's own Summary here: older plans have none. Then post `PR opened: <url>.` (with
+   `tracking_issue`).
 4. With `git.codeowners`, request their review (`github.pr_update` with the reviewers) and set `needs_you` with
    the reason `Review PR #<n>`. Never request again for the same pushed head, and never approve, merge or enable
    auto-merge. If the request is refused, still set `needs_you` and ask the human to request it.
