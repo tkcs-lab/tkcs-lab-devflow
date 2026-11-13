@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
+from pathlib import Path
 import time
 from collections.abc import Callable
 
@@ -50,7 +52,8 @@ def build_body(doc: object, source: str, now: float) -> dict:
         if not isinstance(win, dict):
             raise ValueError(f"{kind} is not an object")
         resets = win.get("resetsAt", win.get("resets_at"))
-        if "utilization" not in win or not _number(resets):
+        if not _number(win.get("utilization")) or not _number(resets) \
+                or not math.isfinite(win["utilization"]) or not math.isfinite(resets):
             raise ValueError(f"{kind} needs utilization and resetsAt")
         if resets <= now:
             continue
@@ -81,9 +84,9 @@ def main(argv: list[str] | None = None, clock: Callable[[], float] = time.time) 
         print("board_usage: no board configured", file=sys.stderr)
         return 3
     try:
-        text = sys.stdin.read() if args.file == "-" else open(args.file, encoding="utf-8").read()
+        text = sys.stdin.read() if args.file == "-" else Path(args.file).read_text(encoding="utf-8")
         body = build_body(json.loads(text), args.source, clock())
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         print(f"board_usage: cannot read the reading ({exc})", file=sys.stderr)
         return 1
     if len(body) == 1:
