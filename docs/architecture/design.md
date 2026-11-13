@@ -111,8 +111,8 @@ the real control lives: the rulesets `tld-main` and `tld-tags`, an agent account
 a pull request only after `tld-main` is satisfied: the owner's approval, green required checks, stale approvals
 dismissed and the last push approved by someone else; so it cannot land its own unreviewed change), and the
 environments `tld-agent` and `tld-release` that hold the tokens ([admin.md](../guides/admin.md)). Tags have one
-route, the release workflow `tld-release`, approved by the owner in GitHub (`TLD_RELEASE_TOKEN`); a session starts it only
-through the release skill after the owner's yes (D13); the central git-ops
+route, the release workflow `tld-release`, approved by the owner in GitHub (`TLD_RELEASE_TOKEN`); the release skill starts it after the
+owner's yes, and the hook only makes that a deliberate step (D13); the central git-ops
 workflow only deletes branches ([git-ops.md](../guides/git-ops.md)).
 
 ### Board

@@ -100,7 +100,7 @@ release notes say how to update `tld.version`.
 The workflow has two jobs, so the owner token is only in the `publish` job and no third-party build code runs on
 that runner; the one approval of a run is the environment `tld-release` on `publish`. `build` (no environment; read,
 `checks: read`, plus `packages: write` for the board image; no access to `TLD_RELEASE_TOKEN`) checks that the commit is
-green, builds the wheel and the sdist, builds the board image for linux/amd64 and linux/arm64 and pushes it to
+green (`publish` checks again), builds the wheel and the sdist, builds the board image for linux/amd64 and linux/arm64 and pushes it to
 `ghcr.io/tkcs-lab/tld-board` by digest, without a tag, collects five assets (`tld-X.Y.Z-py3-none-any.whl`,
 `tld-X.Y.Z.tar.gz`, `install.sh` and `compose.yaml` stamped with the version and the image digest, and `SHA256SUMS`)
 and uploads them as the artifact `release-dist` (kept 14 days). `publish` (`needs: build`, read only, holds the
@@ -112,7 +112,7 @@ One-time steps for the first release: enable release immutability (repository se
 so assets cannot be replaced after publishing, and make the ghcr package `tld-board` public after the first push
 (package settings, Change visibility), or the board installer cannot pull it.
 
-If `publish` fails at `Tag the board image`, nothing is tagged yet: fix it and run again. If it fails after that step,
+If `publish` fails at `Tag the board image`, at most one of the two image tags exists and no git tag: fix it and run again. If it fails after that step,
 `:latest` may be ahead of the last release, and a re-run overwrites it. If the draft release was
 created but publishing it failed, re-running the workflow stops at "tag already exists": run only
 `gh release edit <tag> --draft=false`. If the release was not created, the error message names the run; fetch

@@ -36,7 +36,7 @@ shims; `CLAUDE_PROJECT_DIR` and `stop_hook_active` are read only here.
 |---|---|---|---|---|
 | `no-merge` | PreToolUse: `Bash`, and the GitHub MCP tools that merge, approve or write to a branch | pull request merges, approvals, auto-merge, any push to the main branch | A human merges; a session opens the pull request and stops | `gh pr merge 12`, `git push origin HEAD:main`; `git push -u origin feature/x`, `git merge origin/main` |
 | `no-force-push` | PreToolUse: `Bash` | `git push` with `--force`, `-f`, `--force-with-lease`, `--force-if-includes`, a `+` refspec; deleting a branch by push | History on origin is append-only; branches are deleted by the owner | `git push -f origin x`, `git push origin :old`; `git push -u origin x`, `git branch -d old` |
-| `no-git-tag` | PreToolUse: `Bash`, GitHub MCP `actions_run_trigger` | creating, moving, deleting or pushing tags; dispatching the release workflow without `dry_run=true` and without the release marker (never with `skip_checks`, never with inputs it cannot read); a real git-ops run without the confirm marker | Tags are cut only by the release workflow, which the owner approves in GitHub | `git tag v2`, `git push --tags`; `git tag -l`, `git describe`, `git ls-remote --tags` |
+| `no-git-tag` | PreToolUse: `Bash`, GitHub MCP `actions_run_trigger` | creating, moving, deleting or pushing tags; dispatching the release workflow without `dry_run=true` and without the release marker (never with `skip_checks` other than `false`, never with inputs it cannot read); a real git-ops run without the confirm marker | Tags are cut only by the release workflow, which the owner approves in GitHub | `git tag v2`, `git push --tags`; `git tag -l`, `git describe`, `git ls-remote --tags` |
 | `secret-scan` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | content that looks like a credential | A secret in a file ends up in history | a GitHub token or a private key block; `API_KEY = os.environ["API_KEY"]` |
 | `protect-paths` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` | edits to paths the profile lists | Some files are changed by people or by tools, not by hand | `echo x > .env`; `echo x > .env.example` |
 | `plan-gate` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, the GitHub MCP content-write tools (`push_files`, `create_or_update_file`, `delete_file`); UserPromptSubmit (opt-in) | writes into the repository from a session no tld command started | A chat message must not start an implementation | `echo x > README.md`; `ls` |
@@ -105,7 +105,7 @@ and (S22) through `curl`, `wget`, `http` / `xh` too (`POST .../releases`, `PATCH
 stays allowed.
 
 Tags have one route (D13): the release workflow, approved by the owner in GitHub; git-ops makes no tags. A session may
-dispatch it (`tld-release.yml`, the profile's `release.workflow`) only with `dry_run=true` (exactly), or with `dry_run=false`
+dispatch it (`tld-release.yml`, the profile's `release.workflow`; a workflow under another name is guarded only once the profile names it) only with `dry_run=true` (exactly), or with `dry_run=false`
 while `tld guard allow-release <workflow-file>` ran in the last 10 minutes (like S12; the release skill runs it after the
 owner's yes). A `skip_checks` other than exactly `false`, `gh api --input`, every `curl` dispatch and any dynamic or glob
 word are denied even with the marker. The marker is a step, not a control: a lexical hook cannot read every shell form;
