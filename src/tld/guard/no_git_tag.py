@@ -106,7 +106,7 @@ PUSH_KEY = re.compile(r"^remote\.[^=]*\.(push|mirror)$", re.I)
 RUN_VALUE_OPTS = ("--ref", "-r", "-R", "--repo")
 API_VALUE_OPTS = ("-q", "--jq", "-t", "--template", "-H", "--header", "-p", "--preview", "--hostname", "--cache",
                   "-X", "--method", "--input")
-UNREADABLE_WORD = re.compile(r"[{}*]")   # brace expansion and globbing: the shell decides the real word
+UNREADABLE_WORD = re.compile(r"[{}*?\[\]]")   # brace expansion and globbing: the shell decides the real word
 UNREADABLE_RELEASE = ("this release dispatch has inputs that cannot be read, so dry_run and skip_checks cannot be "
                       "checked; dispatch with plain -f fields or the MCP inputs")
 
@@ -234,6 +234,11 @@ def _workflow_run_fields(words: list[str]) -> tuple[dict[str, str], bool]:
     return fields, unreadable
 
 
+def _glob(word: str) -> bool:
+    """A word the shell may expand into other words (the `inputs[name]` field keys of `gh api` are literal)."""
+    return bool(UNREADABLE_WORD.search(re.sub(r"inputs\[\w+\]", "", word)))
+
+
 def _release_fields(words: list[str], start: int, skip_opts: tuple[str, ...], keymap: dict[str, str]):
     """(values, unreadable): every -f/-F value whose key is in `keymap` (key -> name, matched case-insensitively).
     An option that takes a value consumes the next word verbatim, even one that looks like a flag."""
@@ -267,7 +272,7 @@ def _release_fields(words: list[str], start: int, skip_opts: tuple[str, ...], ke
 def _release_gh_run(ctx: Ctx, it: Item, ident: str) -> str | None:
     """`gh workflow run <release workflow>`: every -f/-F value of dry_run and skip_checks is read."""
     values, unreadable = _release_fields(it.words, 0, RUN_VALUE_OPTS, {"dry_run": "dry_run", "skip_checks": "skip_checks"})
-    if unreadable or any(is_dynamic(w) or UNREADABLE_WORD.search(w) for w in it.words):
+    if unreadable or any(is_dynamic(w) or _glob(w) for w in it.words):
         return deny(UNREADABLE_RELEASE)
     return release_inputs_problem(ctx, ident, values)
 
@@ -278,7 +283,7 @@ def _release_api(ctx: Ctx, it: Item, api, ident: str) -> str | None:
     keymap = {"inputs[dry_run]": "dry_run", "inputs[skip_checks]": "skip_checks"}
     values, unreadable = _release_fields(it.words, 2, API_VALUE_OPTS, keymap)
     if unreadable or api.field_files or api.input_file or any(is_dynamic(w) for w in it.words) \
-            or UNREADABLE_WORD.search(api.endpoint or ""):
+            or any(_glob(w) for w in it.words):
         return deny(UNREADABLE_RELEASE)
     return release_inputs_problem(ctx, ident, values)
 
@@ -361,6 +366,9 @@ def _uncheckable_workflow_id(ident: str) -> bool:
 def check_gh(ctx: Ctx, it: Item) -> str | None:
     path = gh_path(it.words)
     if path[:2] == ["workflow", "run"] and len(path) > 2:
+        if is_dynamic(path[2]) or _glob(path[2]):
+            return deny("`gh workflow run` names its workflow with a word the shell expands, which cannot be checked "
+                        "against the release workflow; dispatch a workflow by its literal file name")
         # the workflow may follow an option whose value ends in .yml: look at every word, release first
         for w in it.words:
             if is_release_workflow(ctx, w):
@@ -382,7 +390,7 @@ def check_gh(ctx: Ctx, it: Item) -> str | None:
         api = parse_gh_api(it.words)
         ep = api.endpoint
         clean = posixpath.normpath(re.sub(r"%([0-9a-fA-F]{2})", lambda h: chr(int(h[1], 16)), re.split(r"[?#]", ep)[0])) if ep else ep
-        if api.method != "GET" and (is_dynamic(ep) or UNREADABLE_WORD.search(ep)):
+        if api.method != "GET" and (is_dynamic(ep) or _glob(ep)):
             return deny("this `gh api` call builds its endpoint at run time, so it cannot be checked against the "
                         "release workflow; call it with a plain endpoint")
         ep = re.sub(r"^api/v3/", "", clean.lstrip("/")) if ep else ep

@@ -579,5 +579,5 @@ mutants:
 - id: GT13
   file: src/tld/guard/no_git_tag.py
   why: unreadable release inputs allowed while the marker is set
-  old: "    if unreadable or any(is_dynamic(w) or UNREADABLE_WORD.search(w) for w in it.words):\n        return deny(UNREADABLE_RELEASE)\n    return release_inputs_problem(ctx, ident, values)"
-  new: "    if (unreadable or any(is_dynamic(w) or UNREADABLE_WORD.search(w) for w in it.words)) and markers.read(ctx.project_dir, \"release\") is None:\n        return deny(UNREADABLE_RELEASE)\n    return release_inputs_problem(ctx, ident, values)"
+  old: "    if unreadable or any(is_dynamic(w) or _glob(w) for w in it.words):\n        return deny(UNREADABLE_RELEASE)\n    return release_inputs_problem(ctx, ident, values)"
+  new: "    if (unreadable or any(is_dynamic(w) or _glob(w) for w in it.words)) and markers.read(ctx.project_dir, \"release\") is None:\n        return deny(UNREADABLE_RELEASE)\n    return release_inputs_problem(ctx, ident, values)"

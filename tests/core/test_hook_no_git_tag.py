@@ -1,5 +1,6 @@
 """no-git-tag: no creating, moving, deleting or pushing tags; reading stays allowed."""
 import json
+import re
 import subprocess
 import sys
 import time
@@ -324,6 +325,10 @@ def test_a_body_file_is_never_read_for_a_release_dispatch(fresh_repo):
     RUN + " -f dry_run=true -f skip_checks=t", RUN + " -f 'dry_run= true'", RUN + " -f dry_run=TRUE",
     "gh workflow run -f version=9.yml tld-release.yml -f dry_run=false",
     "gh workflow run --ref tld-git-ops.yml tld-release.yml -f dry_run=false",
+    "gh workflow run tld-releas{e..e}.yml -f dry_run=false", "gh workflow run $WF.yml -f dry_run=false",
+    "gh workflow run tld-releas?.yml -f dry_run=false", "gh workflow run tld-git-op{s..s}.yml -f dry_run=false",
+    RUN + " -f dry_run=true ?? ?????????????", RUN + " -f dry_run=true [-]f [d]ry_run=false",
+    API + "-f 'inputs[dry_run]=true' ??",
     RUN + " -f dry_run=true -f $X", RUN + ' -f dry_run=true -f "$X"', RUN + " -f dry_run=true -f $(echo dry_run=false)",
     RUN + " -f dry_run=true -f {dry_run=false,x}",
     API + "-f 'inputs[dry_run]=true' -f \"$X\"",
@@ -345,7 +350,8 @@ def test_a_body_file_is_never_read_for_a_release_dispatch(fresh_repo):
 def test_option_values_and_odd_spellings_do_not_hide_inputs(fresh_repo, command):
     assert _code(fresh_repo, command) == 2, command
     _tld(fresh_repo, "allow-release", "tld-release.yml")   # a real run is then allowed, skip_checks never
-    assert (_code(fresh_repo, command) == 2) is ("skip_checks" in command.lower() or "$" in command or "{dry" in command), command
+    assert (_code(fresh_repo, command) == 2) is bool(
+        "skip_checks" in command.lower() or re.search(r"[${}?*\[\]]", re.sub(r"inputs\[\w+\]", "", command))), command
 
 
 @pytest.mark.parametrize("command", [
