@@ -17,7 +17,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p4-collect
 
-- scope: scope: evals/fixtures/commands.py
+- scope: evals/fixtures/commands.py
 - review: Brief gap: the eval step needs a usage branch in evals/fixtures/commands.py, which was not in touches; the worker stopped, the orchestrator approved adding only that branch. The evals baseline refresh also updated the hashes of the 12 existing commands (new policy text).
 - retry: Worker was sent back once (blocked on the brief gap above) and then completed the phase.
 
@@ -27,7 +27,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: p1-store-api: docs/guides/board-server.md "Usage readings" lacked the plan 3.9 caveats and a description of the #usage page; fix worker fix-1 adds them.
 
 ## Finishing
 
