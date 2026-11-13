@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import re
 
 from tld.guard import markers
@@ -138,11 +139,11 @@ def is_release_workflow(ctx: Ctx, ident) -> bool:
 
 
 def _is_true(value) -> bool:
-    return value is True or (isinstance(value, str) and value.strip().lower() == "true")
+    return value is True or value == "true"
 
 
 def _is_exactly_false(value) -> bool:
-    return value is False or (isinstance(value, str) and value.strip().lower() == "false")
+    return value is False or value == "false"
 
 
 def release_real_run(ctx: Ctx, ident, why: str) -> str | None:
@@ -356,6 +357,11 @@ def _uncheckable_workflow_id(ident: str) -> bool:
 def check_gh(ctx: Ctx, it: Item) -> str | None:
     path = gh_path(it.words)
     if path[:2] == ["workflow", "run"] and len(path) > 2:
+        for w in it.words:   # the workflow may follow an option whose value ends in .yml: look at every word
+            if is_release_workflow(ctx, w):
+                return _release_gh_run(ctx, it, w)
+            if is_git_ops_workflow(ctx, w):
+                return check_git_ops_gh_run(ctx, it)
         if is_release_workflow(ctx, path[2]):
             return _release_gh_run(ctx, it, path[2])
         if is_git_ops_workflow(ctx, path[2]):
@@ -370,7 +376,7 @@ def check_gh(ctx: Ctx, it: Item) -> str | None:
     if path[:1] == ["api"]:
         api = parse_gh_api(it.words)
         ep = api.endpoint
-        m = DISPATCH.match(ep)
+        m = DISPATCH.match(re.sub(r"^api/v3/", "", posixpath.normpath(ep)) if ep else ep)
         if api.method != "GET" and m and is_release_workflow(ctx, m.group(1)):
             return _release_api(ctx, it, api, m.group(1))
         if api.method != "GET" and m and is_git_ops_workflow(ctx, m.group(1)):

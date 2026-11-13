@@ -311,7 +311,15 @@ def test_a_body_file_is_never_read_for_a_release_dispatch(fresh_repo):
     API + "-f 'inputs[dry_run]=true' --hostname -f -f 'inputs[dry_run]=false'",
     API + "-f 'inputs[dry_run]=true' -H -f -f 'inputs[dry_run]=false'",
     RUN + " -f DRY_RUN=false", RUN + " -f dry_run=true -f Skip_Checks=true",
-    RUN + " -f dry_run=true -f skip_checks=t", RUN + " -f dry_run=1", RUN + " -f dry_run=yes",
+    RUN + " -f dry_run=true -f skip_checks=t", RUN + " -f 'dry_run= true'", RUN + " -f dry_run=TRUE",
+    "gh workflow run -f version=9.yml tld-release.yml -f dry_run=false",
+    "gh workflow run --ref a.yml tld-release.yml -f dry_run=false -f skip_checks=true",
+    "gh workflow run -r a.yml tld-release.yml -f dry_run=false",
+    "gh api -X POST repos/o/r/actions/workflows/./tld-release.yml/dispatches -f 'inputs[dry_run]=false'",
+    "gh api -X POST repos/o/r/actions/workflows/x/../tld-release.yml/dispatches -f 'inputs[dry_run]=false'",
+    "gh api -X POST repos/o/r/actions/workflows//tld-release.yml/dispatches -f 'inputs[dry_run]=false'",
+    "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches/ -f 'inputs[dry_run]=false'",
+    "gh api -X POST https://ghe.example/api/v3/repos/o/r/actions/workflows/tld-release.yml/dispatches -f 'inputs[dry_run]=false'", RUN + " -f dry_run=1", RUN + " -f dry_run=yes",
     API + "-f 'inputs[dry_run]=true' -f 'inputs[SKIP_CHECKS]=true'",
 ])
 def test_option_values_and_odd_spellings_do_not_hide_inputs(fresh_repo, command):
@@ -321,7 +329,7 @@ def test_option_values_and_odd_spellings_do_not_hide_inputs(fresh_repo, command)
 
 
 @pytest.mark.parametrize("command", [
-    RUN + " -f dry_run=true --ref main", RUN + " -f dry_run=TRUE -r main -R o/r",
+    RUN + " -f dry_run=true --ref main", RUN + " -f dry_run=true -r main -R o/r",
     API + "-f 'inputs[dry_run]=true' -q .x -H 'Accept: x'",
 ])
 def test_option_values_are_skipped_when_reading_inputs(fresh_repo, command):
