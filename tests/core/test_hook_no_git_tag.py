@@ -280,6 +280,38 @@ def test_unreadable_release_inputs_deny_even_with_the_marker(fresh_repo, command
     assert r.code == 2 and "cannot be read" in r.stderr, (command, r.stderr)
 
 
+@pytest.mark.parametrize("command", [
+    # a bracket key other than inputs[dry_run] / inputs[skip_checks] is a word the shell decides: under nullglob
+    # `inputs[a]=b` vanishes (and with a matching file it becomes another word), so the inputs cannot be read
+    "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches "
+    "-f inputs[dry_run]=true -f inputs[a]=b",
+    "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches -f inputs[DRY_RUN]=true",
+    RUN + " -f dry_run=true -f inputs[a]=b",
+])
+def test_a_bracket_key_other_than_the_two_release_inputs_denies(fresh_repo, command):
+    assert _code(fresh_repo, command) == 2, command
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    r = run(HOOK, bash(command, fresh_repo))
+    assert r.code == 2 and "cannot be read" in r.stderr, (command, r.stderr)
+
+
+@pytest.mark.parametrize("command", [
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld-rele*.yml/dispatches",
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld-releas?.yml/dispatches",
+    "curl -X POST -d x api.github.com/repos/o/r/actions/workflows/tld-rele*.yml/dispatches",
+    "curl -X POST -d x api.github.com/repos/o/r/actions/workflows/[t]ld-release.yml/dispatches",
+    "curl -X POST -d x https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispat*",
+])
+def test_a_globbed_curl_dispatch_word_denies(fresh_repo, command):
+    """A glob the shell expands into the real release dispatch URL: the word cannot be checked, so it is denied."""
+    r = run(HOOK, bash(command, fresh_repo))
+    assert r.code == 2 and "cannot be read" in r.stderr, (command, r.stderr)
+
+
+def test_a_curl_query_string_question_mark_is_not_a_glob(fresh_repo):
+    assert _code(fresh_repo, "curl https://api.github.com/repos/o/r/actions/runs?per_page=1") == 0
+
+
 API = "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches -f ref=main "
 
 
