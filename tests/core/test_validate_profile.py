@@ -411,3 +411,11 @@ def test_release_version_files_not_empty(vp):
     p = _release()
     p["release"]["version_files"] = []
     assert errs(vp, p)
+
+
+@pytest.mark.parametrize("path", ["../outside.txt", "/etc/hostname"])
+def test_release_version_file_outside_the_root_is_not_found(vp, tmp_path, path):
+    root = _release_tree(tmp_path / "repo") if (tmp_path / "repo").mkdir() is None else None
+    (tmp_path / "outside.txt").write_text('version = "1.0.0"\n')
+    e = errs(vp, _release([{"path": path, "pattern": r'version = "(\d+\.\d+\.\d+)"'}]), root)
+    assert e == [f"file not found: '{path}' (listed in the profile; checked from {root})"]

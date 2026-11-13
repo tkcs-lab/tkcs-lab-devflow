@@ -218,8 +218,9 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
             if wf is not None and not (root_dir / ".github" / "workflows" / wf).is_file():
                 errors.append(f"file not found: '.github/workflows/{wf}' (listed in the profile; checked from {root_dir})")
             for i, vf in enumerate(release.get("version_files", [])):
-                target = root_dir / vf["path"]
-                if not target.is_file():
+                target = (root_dir / vf["path"]).resolve()
+                inside = target.is_relative_to(root_dir.resolve())
+                if not inside or not target.is_file():
                     errors.append(f"file not found: '{vf['path']}' (listed in the profile; checked from {root_dir})")
                     continue
                 try:
@@ -228,7 +229,8 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
                     continue
                 if rx.groups != 1:
                     continue
-                count = len(rx.findall(target.read_text(errors="replace")))
+                with target.open(errors="replace") as fh:
+                    count = len(rx.findall(fh.read(1_000_000)))
                 if count != 1:
                     errors.append(f"'release.version_files[{i}]': the pattern matches {count} times in "
                                   f"{vf['path']} (needs exactly 1)")
