@@ -114,6 +114,9 @@ def edit(repo, rel, old, new):
 
 REFUSALS = [
     (("--version", "1.2"), None, "1.2 is not X.Y.Z"),
+    (("--version", "patch"), None, "patch is not X.Y.Z"),
+    (("--version", "minor"), None, "minor is not X.Y.Z"),
+    (("--version", "major"), None, "major is not X.Y.Z"),
     (("--version", '1.2.0"x'), None, '1.2.0"x is not X.Y.Z'),
     (("--version", "1.1.0"), None, "1.1.0 is not higher than 1.1.0"),
     (("--version", "1.0.9"), None, "1.0.9 is not higher than 1.1.0"),
@@ -217,6 +220,12 @@ def test_check_fails_before_write_and_passes_after(repo, capsys):
 def test_check_refuses_a_bad_version_shape(repo, capsys):
     code, _, err = run(capsys, "--check", "--version", "v1.2")
     assert code == 1 and "v1.2 is not X.Y.Z" in err
+
+
+@pytest.mark.parametrize("word", ["patch", "minor", "major"])
+def test_check_refuses_a_bump_word_as_the_version(repo, capsys, word):
+    code, _, err = run(capsys, "--check", "--version", word)
+    assert code == 1 and f"release-prepare: {word} is not X.Y.Z" in err
 
 
 def test_check_needs_the_section_heading_and_an_entry(repo, capsys):
