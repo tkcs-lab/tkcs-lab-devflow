@@ -32,4 +32,4 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Finishing
 
-- pending
+- scope: evals/fixtures/commands.py (p4-collect) is still in the final diff: accepted. No other scope drift.
