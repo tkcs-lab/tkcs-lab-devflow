@@ -26,6 +26,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - scope: scope: src/tld/guard/_release_dispatch.py and tests/core/test_hook_protect_paths_setup.py (outside touches; owner-approved, see gate entry)
 - review: ROLES GATE NOT PASSED, OWNER-ACCEPTED: a read-only security review of 23f11f8 reported blocking=6 non_blocking=12, so tld roles verify exits 1 for this phase. The owner chose accept on the board and the merge went ahead. Blocking: (1) curl -d@f and -sd@f bodies pass the git/refs exemption; (2) curl unique long-option prefixes (--data-r, --data-b, --upload-f) read as GET; (3) curl -K config file hides URL and body; (4) curl glob ranges hide keywords; (5) the dynamic-URL check skips words by curl 
 - review: Non-blocking findings of that review, owner-accepted residual risk: raw-word tag endpoint match (dot segments, percent escapes); JSON-escaped ref in a git/refs body; gh api --input body not read; GraphQL createRef on a tag; repositories/<id> API alias; case-sensitive workflow names; encoded path as workflow id; older MCP tool name run_workflow; curlrc and wget -i planted config; dispatch ref not constrained to main; release.workflow not yet in the profile (manual step ma1); gh run rerun in Bash.
+- review: Continuation of the residual-risk entry above (item 5 and 6): the dynamic-URL check skips words by curl option table, also for wget, http and xh; gh api grouped short options (-if) are read as a field-less GET and can dispatch with dry_run false or skip_checks true. All owner-accepted on the board.
 
 ## p4-release-prepare
 
@@ -34,12 +35,14 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - worker: After the security review (3 blocking, fixed): each changed version file must equal its base blob with only the version replaced; diff lines are taken after the first @@ only; a REF starting with a dash is rejected; renames are shown as an added and a deleted path (--no-renames).
 - worker: With no version argument the command also refuses an empty unreleased section, so a release of nothing is caught early.
 - review: Orchestrator checks: roles verify exit 0 (round 2 blocking=0), full suite after the merge 4480 passed, scope check clean. Open non-blocking findings: the profile is read from the PR head; the check reads the working tree, not the committed head; CR handling, a trailing space in a porcelain path, a ref with a leading space; running from a subdirectory; mode-only changes.
+- review: Final review: not stated in the plan, added by the worker: extra usage errors (--check needs --version, --check cannot be combined with --write or --bump, --write needs --version or --bump), a --date shape check and an is-outside-the-repository path confinement.
 
 ## p5-release-skill
 
 - worker: The skill description is wrapped in double quotes (the brief text contains a colon-space that breaks YAML). Playbook step 2 says "Create the branch chore/release-<X-Y-Z>" instead of a git checkout -b span, because tests/adapters/claude/test_hooks_compat.py rejects the placeholder inside a git span.
 - worker: The evals baseline hashes were refreshed as the brief allows (playbooks linked by recorded commands changed; no recorded task is affected).
 - review: Orchestrator checks: roles verify exit 0 (blocking=0, 7 non-blocking), scope check clean, full suite after the merge 4502 passed, evals check-baseline exit 0. Open non-blocking findings: main can move between the post-merge check and the dispatch; changelog text is pasted into the PR body and the ask; the newest-run lookup can match another actor run; log lines are shown verbatim; the version input has no format check in the playbook (release-prepare checks it); the merged head of the release PR
+- review: Continuation of the findings entry above: the merged head of the release PR is not compared with the pushed head; the structural tests of the playbook are line-based.
 
 ## p6-docs-reference
 
@@ -52,7 +55,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: Round 1 (changes, 1 blocking): tld ops release-prepare --version minor|patch|major was treated as --bump; the plan says exit 1 with minor is not X.Y.Z. Sent to fix-1.
 
 ## Finishing
 
