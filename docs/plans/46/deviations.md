@@ -12,7 +12,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-release-profile
 
-- pending
+- worker: Added a path confinement (release.version_files paths must resolve inside the repository root, else the existing file-not-found error) and a 1,000,000 character read cap for version files; section 3.2 does not say this, the security reviewer required it.
+- worker: One extra sentence in the release.version_files row of profile-reference.md: the pattern is trusted input, avoid nested quantifiers. Four mutants VP13 to VP16 added, all killed.
+- review: Orchestrator diff review found nothing else outside the brief; full suite after the merge: 4272 passed. Open non-blocking: a catastrophic-backtracking profile pattern can hang profile validate (needs a plan decision).
 
 ## p3-release-dispatch-guard
 
