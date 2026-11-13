@@ -329,6 +329,13 @@ def test_the_release_marker_does_not_open_a_git_ops_run_named_by_a_field_value(f
     'curl -X POST -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/$REPO/actions/workflows/'
     'tld-release.yml/dispatches -d \'{"inputs":{"dry_run":"false"}}\'',
     'curl -X POST "$U" -d x',
+    'U=https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches; '
+    'curl -H "Authorization: token $T" -d\'{"inputs":{"dry_run":"false","skip_checks":"true"}}\' "$U"',
+    'U=https://x.invalid/a; curl -d@body.json "$U"',
+    'U=https://x.invalid/a; curl -sd @body.json "$U"',
+    'U=https://x.invalid/a; curl -sXPOST -d@b "$U"',
+    "curl -d'{\"tag_name\":\"v9\"}' https://api.github.com/repos/o/r/releases",
+    "curl -d@b https://api.github.com/repos/o/r/releases",
     'curl -X POST https://$HOST/repos/o/r/actions/workflows/tld-release.yml/dispatches -d x',
     'curl -X POST https://api.github.com/repos/o/r/actions/workflows/$WF/dispatches -d x',
     'curl -X POST "$API/repos/o/r/git/refs" -d \'{"ref":"refs/tags/v9","sha":"abc"}\'',

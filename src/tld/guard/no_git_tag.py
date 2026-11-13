@@ -297,6 +297,10 @@ def _curl_method_and_data(words: list[str]) -> tuple[str, list[str]]:
             elif not eq:
                 val, i = (words[i] if i < len(words) else ""), i + 1
             method = val.upper()
+        elif re.match(r"^-[A-Za-z]*[dFTX]", w) and not w.startswith("--") and w not in ("-X",) and name not in CURL_DATA:
+            # attached values and clusters (`-d@f`, `-sd x`, `-sXPOST`): a body or a method the parser cannot split
+            # safely, so count it as data and the call as non-GET
+            data.append(w)
         elif name in CURL_DATA:
             if not eq:
                 val, i = (words[i] if i < len(words) else ""), i + 1
@@ -337,7 +341,7 @@ def check_curl(ctx: Ctx, it: Item) -> str | None:
     msg = check_curl_tag_api(it)
     if msg:
         return msg
-    if _curl_method_and_data(it.words)[0] not in ("GET", "HEAD", "OPTIONS") and curl_dynamic_url(it.words):
+    if curl_dynamic_url(it.words):  # whatever the method parser thinks: `-d@f`, `-sd x`, `-sXPOST` hide a body
         return deny(UNREADABLE_RELEASE)
     for w in it.words[1:]:
         if curl_dispatch_glob(w):

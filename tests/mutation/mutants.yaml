@@ -603,5 +603,5 @@ mutants:
 - id: GT17
   file: src/tld/guard/no_git_tag.py
   why: a curl URL built from a variable is not checked
-  old: '    if _curl_method_and_data(it.words)[0] not in ("GET", "HEAD", "OPTIONS") and curl_dynamic_url(it.words):'
+  old: '    if curl_dynamic_url(it.words):  # whatever the method parser thinks: `-d@f`, `-sd x`, `-sXPOST` hide a body'
   new: '    if False:'
