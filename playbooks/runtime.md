@@ -184,6 +184,15 @@ manual step uses when it tells the owner where to store a secret.
 Wake this session after `delay` with a short note of what to resume, whether or not anything else
 happens. Returns an id that cancels it.
 
+## Usage
+
+### read_usage()
+
+Returns the newest account-wide rate-limit reading the runtime has seen in this session, or nothing. The reading
+is a JSON object with a `five_hour` and a `seven_day` window, each holding a `utilization` (a fraction of the
+limit) and a reset time. Nothing is returned when the session has seen no reading or the runtime refuses to say;
+the caller then goes on without one. The runtime map says where the reading comes from.
+
 ## GitHub
 
 All of them act on this repository unless they name another. A refusal is reported, never worked around.

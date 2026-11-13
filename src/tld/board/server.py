@@ -6,7 +6,8 @@
         [--insecure-cookie] [--session-hours N] [--trust-proxy]
 
 Environment: TLD_BOARD_TOKEN, TLD_BOARD_OWNER_PASSPHRASE, TLD_BOARD_SECRET, TLD_BOARD_DB (--db),
-TLD_BOARD_PUBLIC_ORIGIN (--public-origin), TLD_BOARD_SESSION_URL (the https base of a session link).
+TLD_BOARD_PUBLIC_ORIGIN (--public-origin), TLD_BOARD_SESSION_URL (the https base of a session link),
+TLD_BOARD_PLAN (standard or max: turns the usage readings on), TLD_BOARD_MAX_FACTOR (Max = this many times Standard).
 
 Two principals. A **session** sends `Authorization: Bearer $TLD_BOARD_TOKEN`: it writes status records,
 creates, reads and cancels asks, and calls `POST /mcp`; it can never answer an ask. The **owner** logs in on
@@ -38,6 +39,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from tld.board import build as build_board
 from tld.board import mcp as board_mcp
+from tld.board import usage
 from tld.board.store import Conflict, Invalid, NotFound, Store
 
 MAX_BODY = 1048576
@@ -67,6 +69,7 @@ ROUTES = (
     (re.compile(r"^/api/asks/([^/]+)/answer$"), "answer", ("POST",)),
     (re.compile(r"^/api/asks/([^/]+)/cancel$"), "cancel", ("POST",)),
     (re.compile(r"^/mcp$"), "mcp", ("POST",)),
+    (re.compile(r"^/api/usage$"), "usage", ("GET", "POST")),
 )
 ANY, SESSION, OWNER = "any", "session", "owner"
 # Who may call a route with a method. "any" needs no credentials.
@@ -87,6 +90,8 @@ POLICY: dict[tuple[str, str], frozenset[str]] = {
     ("answer", "POST"): frozenset({OWNER}),
     ("cancel", "POST"): frozenset({SESSION, OWNER}),
     ("mcp", "POST"): frozenset({SESSION}),
+    ("usage", "POST"): frozenset({SESSION}),
+    ("usage", "GET"): frozenset({OWNER}),
 }
 OWNER_UI = ("page", "login", "logout", "session")
 
@@ -601,6 +606,28 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._json(200, ask)
 
+    # -- usage ----------------------------------------------------------------------------------
+
+    def _do_usage(self, method, item_id, principal) -> None:
+        plan, factor = self.server.usage_plan
+        now = int(self.server.clock())
+        if method == "GET":
+            rows = self.server.store.list_usage()
+            self._json(200, {"now": now, "plan": plan, "factor": factor,
+                             "windows": usage.windows(rows, factor, now)})
+            return
+        if plan is None:
+            self._error(409, "usage_off")
+            return
+        ok, payload = self._read_json(usage.MAX_BODY)
+        if not ok:
+            return
+        samples, source, errors = usage.validate(payload, now)
+        if errors:
+            self._error(422, "invalid", errors=errors)
+            return
+        self._json(200, {"stored": self.server.store.add_usage(samples, source, plan, factor, now)})
+
     # -- MCP ------------------------------------------------------------------------------------
 
     def _rpc_error(self, status: int, code: int, message: str) -> None:
@@ -679,7 +706,8 @@ def make_server(store: Store, tokens: Tokens, title: str, host: str, port: int,
                 allow_origins: tuple[str, ...] = (), owner: OwnerAuth | None = None,
                 session_url: str | None = None, public_origin: str | None = None,
                 trust_proxy: bool = False, limiter: LoginLimiter | None = None,
-                max_connections: int = MAX_CONNECTIONS) -> ThreadingHTTPServer:
+                max_connections: int = MAX_CONNECTIONS, usage_plan: tuple[str | None, float] = (None, 5.0),
+                clock=time.time) -> ThreadingHTTPServer:
     server = BoardServer((host, port), Handler, max_connections)
     if owner is not None and owner.revocations is None:
         owner.revocations = store  # logouts survive a restart
@@ -691,6 +719,8 @@ def make_server(store: Store, tokens: Tokens, title: str, host: str, port: int,
     server.allow_origins = allow_origins  # type: ignore[attr-defined]
     server.public_origin = public_origin  # type: ignore[attr-defined]
     server.trust_proxy = trust_proxy  # type: ignore[attr-defined]
+    server.usage_plan = usage_plan  # type: ignore[attr-defined]
+    server.clock = clock  # type: ignore[attr-defined]
     return server
 
 
@@ -754,6 +784,11 @@ def main(argv: list[str] | None = None) -> int:
     if passphrase and hmac.compare_digest(passphrase.encode(), write.encode()):
         print("board_server: TLD_BOARD_OWNER_PASSPHRASE must differ from TLD_BOARD_TOKEN", file=sys.stderr)
         return 2
+    try:
+        usage_plan = usage.parse_plan(os.environ)
+    except ValueError as exc:
+        print(f"board_server: {exc}", file=sys.stderr)
+        return 2
     if not 1 <= args.session_hours <= 24 * 30:
         print("board_server: --session-hours must be between 1 and 720", file=sys.stderr)
         return 2
@@ -773,7 +808,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"board_server: {exc}", file=sys.stderr)
         return 2
     server = make_server(store, Tokens(write), args.title, args.host, args.port, tuple(args.allow_origin),
-                         owner, session_url, args.public_origin, args.trust_proxy)
+                         owner, session_url, args.public_origin, args.trust_proxy, usage_plan=usage_plan)
     print(f"board_server: listening on http://{args.host}:{server.server_address[1]}",
           file=sys.stderr, flush=True)
     if owner is None:

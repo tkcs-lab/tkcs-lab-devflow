@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""SQLite storage for the board: status records and asks. Imported by the server; it has no command line.
+"""SQLite storage for the board: status records, asks and usage readings. Imported by the server; it has no command line.
 
     from tld.board.store import Store, Conflict, Invalid
 
-Four tables. `records(id, version, data)`: `Store.set` validates a status record (tld.board.record) and
+Five tables. `records(id, version, data)`: `Store.set` validates a status record (tld.board.record) and
 enforces optimistic concurrency with `if_version`. `asks(id, state, created_at, data)`: `Store.create_ask`
 validates an ask (tld.board.ask) and assigns its id; `answer_ask` and `cancel_ask` move an open ask to its
 final state. `revoked_sessions(nonce, expires)` keeps the owner sessions a logout ended, so a logout survives a
 restart of the server. `dismissals(doc_id, version, dismissed_at)` keeps the owner's dismissal of a record
-next to it (never inside it); it counts only while the record is still at that version. The schema version is SQLite's `user_version`; opening an older database adds what is missing
+next to it (never inside it); it counts only while the record is still at that version. `usage_samples(kind, resets_at, observed_at,
+utilization, plan, factor, source)` keeps the raw subscription readings (`add_usage`, `list_usage`; limits in
+tld.board.usage); the plan and the factor are applied when they are read, not when they are stored. The schema version is SQLite's `user_version`; opening an older database adds what is missing
 and keeps every record. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
@@ -22,10 +24,11 @@ from datetime import datetime, timezone
 
 from tld.board import ask as ask_model
 from tld.board import record as validate_status_record
+from tld.board import usage as usage_model
 
 MAX_RECORD = 262144
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 MAX_OPEN_ASKS = 200
 
 
@@ -83,6 +86,12 @@ class Store:
         self._db.execute(
             "CREATE TABLE IF NOT EXISTS dismissals("
             "doc_id TEXT PRIMARY KEY, version INTEGER NOT NULL, dismissed_at TEXT NOT NULL)")
+        # 5: raw subscription usage readings; plan and factor are applied on read (tld.board.usage).
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS usage_samples("
+            "kind TEXT NOT NULL, resets_at INTEGER NOT NULL, observed_at INTEGER NOT NULL, "
+            "utilization REAL NOT NULL, plan TEXT NOT NULL, factor REAL NOT NULL, source TEXT NOT NULL, "
+            "PRIMARY KEY (kind, resets_at, observed_at))")
         self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self._db.commit()
 
@@ -184,6 +193,40 @@ class Store:
     def session_revoked(self, nonce: str) -> bool:
         with self._lock:
             return self._db.execute("SELECT 1 FROM revoked_sessions WHERE nonce = ?", (nonce,)).fetchone() is not None
+
+    # -- usage readings -------------------------------------------------------------------------
+
+    def add_usage(self, samples: list[dict], source: str, plan: str, factor: float, now: int) -> int:
+        """Store validated samples (tld.board.usage.validate) observed at `now`, then trim in the same
+        transaction: at most MAX_PER_WINDOW samples per window (the oldest by observed_at go), no window that
+        ended more than RETENTION_DAYS before `now`, at most MAX_ROWS rows (the oldest by resets_at go)."""
+        with self._lock:
+            with self._db:
+                for sample in samples:
+                    self._db.execute(
+                        "INSERT OR REPLACE INTO usage_samples(kind, resets_at, observed_at, utilization, plan, "
+                        "factor, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (sample["kind"], sample["resets_at"], now, sample["utilization"], plan, factor, source))
+                for sample in samples:
+                    self._db.execute(
+                        "DELETE FROM usage_samples WHERE kind = ? AND resets_at = ? AND observed_at NOT IN ("
+                        "SELECT observed_at FROM usage_samples WHERE kind = ? AND resets_at = ? "
+                        "ORDER BY observed_at DESC LIMIT ?)",
+                        (sample["kind"], sample["resets_at"], sample["kind"], sample["resets_at"],
+                         usage_model.MAX_PER_WINDOW))
+                self._db.execute("DELETE FROM usage_samples WHERE resets_at < ?",
+                                 (now - usage_model.RETENTION_DAYS * 86400,))
+                self._db.execute(
+                    "DELETE FROM usage_samples WHERE rowid IN (SELECT rowid FROM usage_samples "
+                    "ORDER BY resets_at DESC, observed_at DESC LIMIT -1 OFFSET ?)", (usage_model.MAX_ROWS,))
+        return len(samples)
+
+    def list_usage(self) -> list[tuple]:
+        """Every stored sample as (kind, resets_at, observed_at, utilization, plan, factor, source)."""
+        with self._lock:
+            return self._db.execute(
+                "SELECT kind, resets_at, observed_at, utilization, plan, factor, source FROM usage_samples "
+                "ORDER BY kind, resets_at, observed_at").fetchall()
 
     # -- asks -----------------------------------------------------------------------------------
 

@@ -87,7 +87,61 @@ function place(entry, asks, nowMs) {
   return { section: section(rec, nowMs), badge: null, ask: null };
 }
 
+// Usage page. A bar is drawn to 100% at most; above 100% of the limit it is marked over.
+function usageBar(pct) { return { fill: Math.min(pct, 100), over: pct > 100 }; }
+
+// The window still running: the one with the largest resets_at after nowSec, else null.
+function usageNow(windows, nowSec) {
+  var best = null;
+  (windows || []).forEach(function (w) {
+    if (w.resets_at > nowSec && (best === null || w.resets_at > best.resets_at)) best = w;
+  });
+  return best;
+}
+
+// Seconds as "just now", "<m> min" or "<h> h <m> min".
+function usageAgo(seconds) {
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return Math.floor(seconds / 60) + " min";
+  var h = Math.floor(seconds / 3600);
+  return h + " h " + Math.floor((seconds - h * 3600) / 60) + " min";
+}
+
+var USAGE_RANGE_DAYS = { five_hour: 30, seven_day: 56 };
+var USAGE_MIN_WINDOWS = { five_hour: 6, seven_day: 2 };
+
+// Would Standard have been enough? Counts the finished, busy windows lived on Max in the history range.
+function usageVerdict(windows, kind, nowSec) {
+  var from = nowSec - USAGE_RANGE_DAYS[kind] * 86400;
+  var used = (windows || []).filter(function (w) {
+    return w.complete === true && w.idle !== true && w.plan === "max" && w.resets_at >= from;
+  });
+  var n = used.length;
+  var min = USAGE_MIN_WINDOWS[kind];
+  if (n < min) return { kind: "few", text: "Not enough finished windows yet (" + n + " of " + min + " needed)." };
+  var over = used.filter(function (w) { return w.over === true; });
+  var pct = Math.round(over.length / n * 100);
+  var peaks = used.map(function (w) { return w.peak_standard; }).sort(function (a, b) { return a - b; });
+  var p90 = peaks[Math.ceil(0.9 * n) - 1];
+  var result;
+  if (over.length / n >= 0.25) {
+    result = { kind: "max", text: "Max makes sense: Standard would have run out in " + over.length + " of " + n + " windows (" + pct + "%)." };
+  } else if (over.length === 0 && p90 < 80) {
+    result = { kind: "standard", text: "Standard would have been enough: it stayed below its limit in all " + n +
+      " windows (busiest: " + Math.round(peaks[n - 1]) + "% of Standard)." };
+  } else {
+    result = { kind: "borderline", text: "Borderline: Standard would have run out in " + over.length + " of " + n + " windows (" + pct + "%)." };
+  }
+  if (over.length > 0) {
+    var hours = 0;
+    over.forEach(function (w) { hours += typeof w.blocked_hours === "number" ? w.blocked_hours : 0; });
+    result.text += " Standard would have blocked you for at least " + hours.toFixed(1) + " h in total.";
+  }
+  return result;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { elapsed: elapsed, isHidden: isHidden, isSilent: isSilent, section: section, drift: drift,
-    isDismissed: isDismissed, linksTo: linksTo, linkedAsks: linkedAsks, answerReceived: answerReceived, place: place };
+    isDismissed: isDismissed, linksTo: linksTo, linkedAsks: linkedAsks, answerReceived: answerReceived, place: place,
+    usageBar: usageBar, usageNow: usageNow, usageAgo: usageAgo, usageVerdict: usageVerdict };
 }

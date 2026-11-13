@@ -139,7 +139,7 @@ def test_documented_operations_pass_every_hook(feature_repo, command_name):
 
 
 def test_every_command_file_is_covered():
-    assert set(COMPAT) | {"board"} == {p.stem for p in (CLAUDE / "commands").glob("*.md")}, "a new command needs COMPAT rows"
+    assert set(COMPAT) | {"board", "usage"} == {p.stem for p in (CLAUDE / "commands").glob("*.md")}, "a new command needs COMPAT rows"
 
 
 def test_the_known_allowed_set(feature_repo):
