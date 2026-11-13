@@ -29,7 +29,11 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p4-release-prepare
 
-- pending
+- worker: The coverage acceptance command fails as written (pyproject source_pkgs makes the total cover the whole package, 4.2%); the module itself measures 98.4% branch coverage, and the orchestrator confirmed 98.40% with --cov-config=/dev/null.
+- worker: release-prepare --check --base diffs the working tree against git merge-base REF HEAD, not REF...HEAD, so the playbook can run it before the commit; the plan text says REF...HEAD plus git status.
+- worker: After the security review (3 blocking, fixed): each changed version file must equal its base blob with only the version replaced; diff lines are taken after the first @@ only; a REF starting with a dash is rejected; renames are shown as an added and a deleted path (--no-renames).
+- worker: With no version argument the command also refuses an empty unreleased section, so a release of nothing is caught early.
+- review: Orchestrator checks: roles verify exit 0 (round 2 blocking=0), full suite after the merge 4480 passed, scope check clean. Open non-blocking findings: the profile is read from the PR head; the check reads the working tree, not the committed head; CR handling, a trailing space in a porcelain path, a ref with a leading space; running from a subdirectory; mode-only changes.
 
 ## p5-release-skill
 
