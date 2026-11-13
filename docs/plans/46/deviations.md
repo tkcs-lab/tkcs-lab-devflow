@@ -36,6 +36,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - worker: With no version argument the command also refuses an empty unreleased section, so a release of nothing is caught early.
 - review: Orchestrator checks: roles verify exit 0 (round 2 blocking=0), full suite after the merge 4480 passed, scope check clean. Open non-blocking findings: the profile is read from the PR head; the check reads the working tree, not the committed head; CR handling, a trailing space in a porcelain path, a ref with a leading space; running from a subdirectory; mode-only changes.
 - review: Final review: not stated in the plan, added by the worker: extra usage errors (--check needs --version, --check cannot be combined with --write or --bump, --write needs --version or --bump), a --date shape check and an is-outside-the-repository path confinement.
+- retry: fix-1 (final review round 1, blocking): release-prepare treated --version patch|minor|major as --bump; now any non-X.Y.Z --version exits 1 with "<v> is not X.Y.Z" (plan 3.5). Fixed in 5eb006f, roles ok, suite 4626 passed. Open non-blocking: SEMVER accepts a trailing newline and non-ASCII digits.
 
 ## p5-release-skill
 
