@@ -7,10 +7,14 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Added
 
+- The board has a Usage page (`#usage`): for the 5-hour and the weekly window, two bars (Standard and Max, Max = 5x Standard), a 30-day history of finished windows, and a verdict whether Standard would have been enough. Set `TLD_BOARD_PLAN` (`standard` or `max`, no default) and optionally `TLD_BOARD_MAX_FACTOR` on the board host.
+- `POST /api/usage` and `GET /api/usage` on the board, and `tld board usage FILE|- [--source final|scheduled]`, which sends the newest rate-limit reading. A tld command that writes a status record sends a reading when its run ends.
+- `/usage` (`/tld:usage`): an unattended command at the fast level for a schedule every few hours; it sends the account's 5-hour and weekly use to the Usage page and writes no status record.
 - A single-session prompt from /make-plan now shows on the status board: its worker writes a `run` record (`<project>--run--issue-<n>`, no plan link, no phases) from `starting` to `pr_open` with "Review PR #<n>", or a stop that needs you. The record validator accepts a run with `plan_url: null`.
 
 ### Changed
 
+- The board database moves to schema 5 (new table `usage_samples`). An older board image cannot open it again without a backup.
 - The board page's Dismiss button is on every card outside "Hidden" (PR open, Running, Done, answer received), not only on "Needs you" cards; a dismissed card of any state is in the first list of `/tld:board prune`. The dismiss endpoint no longer answers `409 not_needs_you`.
 
 ### Fixed
