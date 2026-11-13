@@ -1,4 +1,5 @@
 """tld plan summary-check (src/tld/plan/summary.py): placement, labels, words and echoed text."""
+import os
 import subprocess
 import sys
 import time
@@ -655,6 +656,7 @@ def test_the_command_is_registered_in_the_cli():
 def test_the_script_runs_as_a_module(tmp_path):
     path = tmp_path / "plan.md"
     path.write_text(plan_doc())
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(ROOT / "src"), os.environ.get("PYTHONPATH", "")])}
     r = subprocess.run([sys.executable, "-m", "tld.plan.summary", str(path), "--kind", "plan"],
-                       capture_output=True, text=True, cwd=ROOT)
-    assert (r.returncode, r.stdout) == (0, f"summary: OK ({PLAN_BASE} words)\n")
+                       capture_output=True, text=True, cwd=ROOT, env=env)
+    assert (r.returncode, r.stdout) == (0, f"summary: OK ({PLAN_BASE} words)\n"), r.stderr
