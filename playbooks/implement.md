@@ -387,14 +387,18 @@ text>`; exit 1 counts as `changes`. Then:
    has one.
 
    **The body.** With `tracking_issue`, it begins with `Closes #<tracking_issue>` and one `Closes #<n>` per entry
-   of `closes`; the `Closes` lines stay first. Directly after them comes `## Summary` (below). Then it lists each
-   phase with its merge commit, the combined acceptance checklist, the final review's verdict and its
-   non-blocking findings, every out-of-scope finding the workers reported, a **Scope** section (the output of
-   `tld plan scope-check section --results <results>`, pasted as is), a `## Deviations` section with the content
-   of the deviations file, a **Manual verification** section (each `manual_after` item as an unchecked box, with
-   a link to the plan's Manual steps section), and `## Branches left on origin` with that ledger list and the
-   sentence "The owner deletes them in the GitHub UI." When the repository has a pull request template, its
-   sections come after the Summary.
+   of `closes`; the `Closes` lines stay first. Directly after them comes `## Summary` (below), and right after
+   the Summary its own `## Phases` heading, so nothing but the Summary text sits under `## Summary`. Under
+   `## Phases` come the list of each phase with its merge commit, the combined acceptance checklist, the final
+   review's verdict and its non-blocking findings, and every out-of-scope finding the workers reported. Then a
+   **Scope** section (the output of `tld plan scope-check section --results <results>`, pasted as is), a
+   `## Deviations` section with the content of the deviations file, a **Manual verification** section (each
+   `manual_after` item as an unchecked box, with a link to the plan's Manual steps section), and
+   `## Branches left on origin` with that ledger list and the sentence "The owner deletes them in the GitHub UI."
+   When pasting the deviations file, demote its `#` and `##` headings to `###` and `####`: the check reads any
+   other `## ` heading in the body as a near miss of the Summary heading. When the repository has a pull request
+   template, its sections come after the Summary; if the template has its own `## Summary` heading, merge it
+   into the checked Summary or leave it out (two Summary headings fail the check).
 
    **The Summary.** At most 175 words, under the labels `**Deviations:**`, `**Scope:**` (optional),
    `**Security:**` and `**Performance:**` (only when relevant) and `**Review focus:**`, in this order. Write it

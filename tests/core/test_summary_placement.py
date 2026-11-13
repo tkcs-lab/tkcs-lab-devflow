@@ -52,12 +52,30 @@ PR_DOC = """Closes #36
 
 **Review focus:** Read the changed playbooks first.
 
+## Phases
+
+- p1-summary-check: merged abc1234
+
+**Acceptance:**
+
+- [x] The check passes.
+
+**Final review:** approve. Non-blocking findings: none.
+
 ## Scope
 
 Text.
+
+## Deviations
+
+DEVIATIONS_BODY
+
+## Manual verification
+
+- [ ] Nothing to do.
 """
 DEVIATIONS = "# Deviations\n\n- None.\n"
-FIXTURES = {"plan": PLAN_DOC, "issue": ISSUE_DOC, "pr": PR_DOC}
+FIXTURES = {"plan": PLAN_DOC, "issue": ISSUE_DOC, "pr": PR_DOC.replace("DEVIATIONS_BODY", "- None.")}
 
 
 def summary_calls(path):
@@ -154,3 +172,38 @@ def test_the_playbooks_state_the_limits_and_labels_of_the_command():
     assert str(summary.MAX_WORDS["plan"]) in make_plan
     assert str(summary.MAX_WORDS["pr"]) in make_plan
     assert re.search(r"\b175\b[^\n]*Summary|Summary[^\n]*\b175\b", implement)
+
+
+REAL_DOC = PR_DOC.replace("**Deviations:** None.", "**Deviations:** The summary check was reworked after a retry, and the final review found two placement problems in the body steps.")
+
+
+def demote(text):
+    """The deviations file as step 6.3 pastes it: `#`/`##` headings become `###`/`####`."""
+    return re.sub(r"^(#{1,2}) ", lambda m: "##" + m.group(1) + " ", text, flags=re.M)
+
+
+def test_implement_says_to_demote_the_pasted_deviations_headings():
+    text = section(IMPLEMENT.read_text(), "## 6. Finishing")
+    assert "###" in text and "####" in text
+
+
+def test_implement_gives_the_phase_list_its_own_heading():
+    assert "`## Phases`" in section(IMPLEMENT.read_text(), "## 6. Finishing")
+
+
+def test_the_real_deviations_file_pasted_as_step_6_3_says_passes(tmp_path):
+    dev = ROOT / "docs" / "plans" / "36" / "deviations.md"
+    body = tmp_path / "body.md"
+    body.write_text(REAL_DOC.replace("DEVIATIONS_BODY", demote(dev.read_text())))
+    r = subprocess.run(tld_cmd("plan", "summary-check", str(body), "--kind", "pr", "--deviations", str(dev)),
+                       capture_output=True, text=True, timeout=60)
+    assert (r.returncode, r.stdout.startswith("summary: OK")) == (0, True), r.stdout + r.stderr
+
+
+def test_the_same_file_pasted_without_demoting_fails(tmp_path):
+    dev = ROOT / "docs" / "plans" / "36" / "deviations.md"
+    body = tmp_path / "body.md"
+    body.write_text(REAL_DOC.replace("DEVIATIONS_BODY", dev.read_text()))
+    r = subprocess.run(tld_cmd("plan", "summary-check", str(body), "--kind", "pr", "--deviations", str(dev)),
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 1
