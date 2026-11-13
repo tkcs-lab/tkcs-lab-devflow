@@ -37,10 +37,12 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
                                           "allow writing tld-land.yml / tld-release.yml for the next 15 minutes"),
     ("guard", "allow-git-ops"): ("tld.guard.protect_paths", ("--allow-git-ops",),
                                  "allow a git-ops dispatch with dry_run false for the next 10 minutes"),
+    ("guard", "allow-release"): ("tld.guard.protect_paths", ("--allow-release",),
+                                 "allow a dispatch of the release workflow with dry_run false for the next 10 minutes"),
     ("guard", "allow-plan"): ("tld.guard.protect_paths", ("--allow-plan",),
                               "let every session in this checkout edit files for 8 hours (a plan-gate marker for /implement workers)"),
     ("guard", "end-allow"): ("tld.guard.protect_paths", ("--end-allow",),
-                             "end every allow-* marker (profile, workflow install, git-ops)"),
+                             "end every allow-* marker (profile, workflow install, git-ops, release)"),
     ("board", "server"): ("tld.board.server", (), "serve the status board"),
     ("board", "client"): ("tld.board.client", (), "health | list | get | set | delete of status records"),
     ("board", "mcp-stdio"): ("tld.board.mcp_stdio", (), "MCP stdio bridge to the board server"),
@@ -75,7 +77,7 @@ TOP: dict[str, tuple[str, str]] = {
 # --help` prints the one-line help and the module's docstring instead of running it.
 DOC_HELP = {("profile", "survey"), ("profile", "survey-docs"), ("profile", "survey-signals"),
             ("profile", "survey-proposal"), ("dod", "exempt"), ("guard", "allow-profile"),
-            ("guard", "allow-workflow-install"), ("guard", "allow-git-ops"), ("guard", "allow-plan"),
+            ("guard", "allow-workflow-install"), ("guard", "allow-git-ops"), ("guard", "allow-release"), ("guard", "allow-plan"),
             ("guard", "end-allow"),
             ("board", "mcp-stdio"), ("version", "show")}
 

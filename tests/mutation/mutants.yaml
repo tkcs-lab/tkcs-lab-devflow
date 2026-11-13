@@ -40,6 +40,7 @@ tests:
   - tests/core/test_hook_no_merge.py
   src/tld/guard/no_git_tag.py:
   - tests/core/test_hook_no_git_tag.py
+  - tests/core/test_guard_markers.py
   - tests/core/test_guard_corpus.py
   src/tld/guard/_wrappers.py:
   - tests/core/test_guard_mutations.py
@@ -560,3 +561,23 @@ mutants:
   why: release match count ok
   old: 'if count != 1:'
   new: 'if count == 1:'
+- id: GT10
+  file: src/tld/guard/no_git_tag.py
+  why: a release dispatch with skip_checks true allowed
+  old: '    if any(_is_true(v) for v in values.get("skip_checks", [])):'
+  new: '    if False:'
+- id: GT11
+  file: src/tld/guard/no_git_tag.py
+  why: the release marker opens any workflow, not only the one it names
+  old: '        if isinstance(have, str) and re.sub(r"\.ya?ml$", "", os.path.basename(have)) == want:'
+  new: '        if isinstance(have, str):'
+- id: GT12
+  file: src/tld/guard/no_git_tag.py
+  why: one true dry_run among several values lets a real run through
+  old: '    if not dry or any(not _is_true(v) for v in dry):'
+  new: '    if not dry or all(not _is_true(v) for v in dry):'
+- id: GT13
+  file: src/tld/guard/no_git_tag.py
+  why: unreadable release inputs allowed while the marker is set
+  old: "    if unreadable:\n        return deny(UNREADABLE_RELEASE)\n    return release_inputs_problem(ctx, ident, values)\n\n\ndef _release_api"
+  new: "    if unreadable and markers.read(ctx.project_dir, \"release\") is None:\n        return deny(UNREADABLE_RELEASE)\n    return release_inputs_problem(ctx, ident, values)\n\n\ndef _release_api"

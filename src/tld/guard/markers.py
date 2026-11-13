@@ -21,6 +21,7 @@ KINDS = {
     "profile": ("protect-paths-profile.json", 7200),            # /setup edits .tld/toolkit.yaml
     "workflow-install": ("protect-paths-workflow.json", 900),   # /land or repo-admin installs a tld workflow file
     "git-ops": ("git-ops-confirm.json", 600),                    # a real (dry_run false) git-ops run after the user's yes
+    "release": ("release-confirm.json", 600),                    # a real (dry_run false) release run after the user's yes
     "plan-open": ("plan-gate-open.json", 28800),                 # /implement workers: edits allowed in this checkout (plan-gate)
 }
 KEEP_ON_CLEAR = ("plan-open",)   # `end-allow` leaves these in place
@@ -90,13 +91,20 @@ def cli(argv: list[str]) -> int:
         where = write(project, "git-ops")
         print(f"no-git-tag: git-ops may run with dry_run false for the next 10 minutes ({where})")
         return 0
+    if argv[:1] == ["--allow-release"]:
+        if len(argv) < 2 or not argv[1].strip():
+            print("usage: tld guard allow-release <workflow-file>", file=sys.stderr)
+            return 2
+        where = write(project, "release", workflow=os.path.basename(argv[1]))
+        print(f"no-git-tag: the release workflow may be dispatched with dry_run false for the next 10 minutes ({where})")
+        return 0
     if argv[:1] == ["--allow-plan"]:
         where = write(project, "plan-open")
         print(f"plan-gate: edits are allowed in this checkout for the next 8 hours ({where})")
         return 0
     if argv[:1] == ["--end-allow"]:
         clear(project)
-        print("protect-paths: .tld/toolkit.yaml is protected again; workflow installs and real git-ops runs are off")
+        print("protect-paths: .tld/toolkit.yaml is protected again; workflow installs, real git-ops runs and real release runs are off")
         return 0
-    print("usage: tld guard allow-profile | allow-workflow-install <file>... | allow-git-ops | allow-plan | end-allow", file=sys.stderr)
+    print("usage: tld guard allow-profile | allow-workflow-install <file>... | allow-git-ops | allow-release <workflow-file> | allow-plan | end-allow", file=sys.stderr)
     return 2

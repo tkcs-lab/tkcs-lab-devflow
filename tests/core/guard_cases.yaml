@@ -110,6 +110,26 @@
 - {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: D13,
    command: "curl -X POST https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches"}
 
+# ---------------- D13: a session starts the release workflow only with dry_run true or the release marker ----------------
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: D13,
+   command: "gh workflow run tld-release.yml -f dry_run=false"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: D13,
+   command: "gh workflow run tld-release.yml -f dry_run=true -f dry_run=false"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: D13,
+   command: "gh workflow run tld-release.yml -f dry_run=true -f skip_checks=true"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: deny, note: D13,
+   command: "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches -f ref=main -f inputs[dry_run]=false"}
+- {guard: no-git-tag, repo: plain, kind: github_op, expect: deny, note: D13,
+   op: actions_run_trigger, args: {method: run_workflow, workflow_id: tld-release.yml, ref: main, inputs: {dry_run: false}}}
+- {guard: no-git-tag, repo: plain, kind: github_op, expect: deny, note: D13,
+   op: actions_run_trigger, args: {method: run_workflow, workflow_id: tld-release.yml, ref: main, inputs: [dry_run]}}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: allow,
+   command: "gh workflow run tld-release.yml -f dry_run=true"}
+- {guard: no-git-tag, repo: plain, kind: shell, expect: allow,
+   command: "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches -f ref=main -f inputs[dry_run]=true"}
+- {guard: no-git-tag, repo: plain, kind: github_op, expect: allow,
+   op: actions_run_trigger, args: {method: run_workflow, workflow_id: tld-release.yml, ref: main, inputs: {dry_run: true}}}
+
 # ---------------- S13: the tld workflow files only with the install marker ----------------
 - {guard: protect-paths, repo: plain, kind: write, path: .github/workflows/tld-land.yml, expect: deny, note: S13}
 - {guard: protect-paths, repo: plain, kind: write, path: .github/workflows/tld-release.yml, expect: deny, note: S13}

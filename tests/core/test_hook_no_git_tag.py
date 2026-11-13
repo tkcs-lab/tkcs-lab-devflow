@@ -1,6 +1,12 @@
 """no-git-tag: no creating, moving, deleting or pushing tags; reading stays allowed."""
+import json
+import subprocess
+import sys
+import time
+
 import pytest
 
+from conftest import BIN
 from hooks_helpers import bash, event, git, make_repo, make_repo_with_origin, run, run_script
 
 HOOK = "no-git-tag"
@@ -141,6 +147,7 @@ RELEASE_DENIED = [
     "gh workflow run tld-release.yml -f dry_run=false -f version=9.9.9", "gh workflow run tld-release",
     "gh workflow run .github/workflows/tld-release.yml",
     "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches -f ref=main",
+    "curl -X POST https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches",
     "gh release edit v1 --tag v3", "gh release edit v1 --tag=v3",
     "gh api -X PATCH repos/o/r/releases/1 -f tag_name=v2", "gh api -X DELETE repos/o/r/releases/1",
 ]
@@ -176,3 +183,169 @@ def test_release_dispatch_denied(feature_repo):
     assert _mcp(feature_repo, method="run_workflow", workflow_id="test.yml", ref="main") == 0
     assert _mcp(feature_repo, method="run_workflow", workflow_id="tld-git-ops.yml", ref="main") == 0
     assert _mcp(feature_repo, method="cancel_workflow_run", run_id=5) == 0
+
+
+# --------------------------------------------------------------------------- the guarded release dispatch
+
+
+def _tld(repo, *args):
+    return subprocess.run([sys.executable, str(BIN), "guard", *args], cwd=repo, capture_output=True, text=True, timeout=60)
+
+
+def _age(repo, seconds):
+    marker = repo / ".git" / "tld" / "release-confirm.json"
+    data = json.loads(marker.read_text())
+    data["written_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - seconds))
+    marker.write_text(json.dumps(data))
+
+
+def _code(repo, command):
+    return run(HOOK, bash(command, repo)).code
+
+
+RUN = "gh workflow run tld-release.yml"
+# (command, denied without the marker, denied with the marker for tld-release.yml)
+MATRIX = [
+    (RUN, True, False),
+    (RUN + " -f dry_run=true", False, False),
+    (RUN + " -f dry_run=false", True, False),
+    (RUN + " -f dry_run=true -f dry_run=false", True, False),
+    (RUN + " -f dry_run=false -f dry_run=true", True, False),
+    (RUN + " -f dry_run=true -f skip_checks=false", False, False),
+    (RUN + " -f dry_run=false -f skip_checks=true", True, True),
+    (RUN + " -f dry_run=false -f skip_checks=True", True, True),
+    (RUN + " -f dry_run=false -f skip_checks=YES", True, True),
+    (RUN + " -f dry_run=false -f skip_checks=1", True, True),
+    (RUN + " -f dry_run=true -f skip_checks=true", True, True),
+    (RUN + " -f dry_run=false -f skip_checks=false -f skip_checks=true", True, True),
+    (RUN + " -f dry_run=False", True, False),
+    (RUN + " -f dry_run=0", True, False),
+    (RUN + " -f dry_run=''", True, False),
+    ("gh workflow run tld-release -f dry_run=false", True, False),
+    ("gh workflow run .github/workflows/tld-release.yml -f dry_run=false", True, False),
+    (RUN + " --json", True, True),
+    (RUN + " -f dry_run=false -F x=@f", True, True),
+    (RUN + " -f dry_run=false --field=x=@f", True, True),
+]
+
+
+@pytest.mark.parametrize("command,denied,denied_with_marker", MATRIX)
+def test_release_dispatch_matrix(fresh_repo, command, denied, denied_with_marker):
+    assert (_code(fresh_repo, command) == 2) is denied, command
+    assert _tld(fresh_repo, "allow-release", "tld-release.yml").returncode == 0
+    assert (_code(fresh_repo, command) == 2) is denied_with_marker, command
+
+
+@pytest.mark.parametrize("marker_for", ["release.yml", "other.yml"])
+def test_a_marker_for_another_workflow_does_not_open_this_one(fresh_repo, marker_for):
+    _tld(fresh_repo, "allow-release", marker_for)
+    assert _code(fresh_repo, RUN + " -f dry_run=false") == 2
+
+
+def test_an_expired_marker_denies(fresh_repo):
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    _age(fresh_repo, 601)
+    assert _code(fresh_repo, RUN + " -f dry_run=false") == 2
+
+
+def test_the_stem_is_covered_by_a_marker_for_the_file(fresh_repo):
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert _code(fresh_repo, "gh workflow run tld-release -f dry_run=false") == 0
+
+
+def test_the_marker_for_the_stem_covers_the_file(fresh_repo):
+    _tld(fresh_repo, "allow-release", "tld-release")
+    assert _code(fresh_repo, RUN + " -f dry_run=false") == 0
+
+
+@pytest.mark.parametrize("command", [
+    RUN + " --json", RUN + " -f dry_run=true -F body=@f", RUN + " -f dry_run=true --field body=@f",
+    "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches -f inputs[dry_run]=true -F inputs[skip_checks]=@f",
+    "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches --input missing.json",
+    "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches --input -",
+    "curl -X POST https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches",
+    "curl -X POST -d '{\"ref\":\"main\",\"inputs\":{\"dry_run\":\"true\"}}' "
+    "https://api.github.com/repos/o/r/actions/workflows/tld-release.yml/dispatches",
+])
+def test_unreadable_release_inputs_deny_even_with_the_marker(fresh_repo, command):
+    assert _code(fresh_repo, command) == 2
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    r = run(HOOK, bash(command, fresh_repo))
+    assert r.code == 2 and "cannot be read" in r.stderr, (command, r.stderr)
+
+
+API = "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches -f ref=main "
+
+
+@pytest.mark.parametrize("fields,denied,denied_with_marker", [
+    ("", True, False),
+    ("-f 'inputs[dry_run]=true'", False, False),
+    ("-f 'inputs[dry_run]=false'", True, False),
+    ("-f 'inputs[dry_run]=true' -f 'inputs[dry_run]=false'", True, False),
+    ("-f 'inputs[dry_run]=false' -f 'inputs[skip_checks]=true'", True, True),
+    ("-f 'inputs[dry_run]=true' -f 'inputs[skip_checks]=yes'", True, True),
+])
+def test_release_dispatch_through_gh_api(fresh_repo, fields, denied, denied_with_marker):
+    assert (_code(fresh_repo, API + fields) == 2) is denied, fields
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert (_code(fresh_repo, API + fields) == 2) is denied_with_marker, fields
+
+
+def test_release_dispatch_through_gh_api_input_file(fresh_repo):
+    base = "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches --input "
+    bodies = {"dry.json": {"inputs": {"dry_run": "true"}}, "real.json": {"inputs": {"dry_run": "false"}},
+              "skip.json": {"inputs": {"dry_run": "false", "skip_checks": True}}, "list.json": {"inputs": [1]}}
+    for name, body in bodies.items():
+        (fresh_repo / name).write_text(json.dumps(body))
+    (fresh_repo / "bad.json").write_text("{not json")
+    assert _code(fresh_repo, base + "dry.json") == 0
+    assert _code(fresh_repo, base + "real.json") == 2
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert _code(fresh_repo, base + "real.json") == 0
+    for name in ("skip.json", "list.json", "bad.json"):
+        assert _code(fresh_repo, base + name) == 2, name
+
+
+def _mcp_release(repo, **extra):
+    return _mcp(repo, method="run_workflow", workflow_id="tld-release.yml", ref="main", **extra)
+
+
+def test_release_dispatch_through_mcp(fresh_repo):
+    assert _mcp_release(fresh_repo, inputs={"dry_run": True}) == 0
+    assert _mcp_release(fresh_repo, inputs={"dry_run": "true"}) == 0
+    assert _mcp_release(fresh_repo, inputs='{"dry_run": "true"}') == 0
+    assert _mcp_release(fresh_repo, inputs={"dry_run": False}) == 2
+    assert _mcp_release(fresh_repo) == 2
+    assert _mcp_release(fresh_repo, inputs={}) == 2
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert _mcp_release(fresh_repo, inputs={"dry_run": False}) == 0
+    assert _mcp_release(fresh_repo, inputs={"dry_run": "false"}) == 0
+    assert _mcp_release(fresh_repo, inputs={"dry_run": False, "skip_checks": True}) == 2
+    assert _mcp_release(fresh_repo, inputs={"dry_run": True, "skip_checks": "yes"}) == 2
+    assert _mcp_release(fresh_repo, inputs=["dry_run"]) == 2
+    assert _mcp_release(fresh_repo, inputs="[1]") == 2
+    assert _mcp_release(fresh_repo, inputs="not json") == 2
+
+
+def test_numeric_ids_and_reruns_stay_denied_with_the_marker(fresh_repo):
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert _mcp(fresh_repo, method="run_workflow", workflow_id=123456, ref="main", inputs={"dry_run": True}) == 2
+    assert _mcp(fresh_repo, method="run_workflow", workflow_id="123456", ref="main") == 2
+    assert _mcp(fresh_repo, method="rerun_workflow_run", run_id=5) == 2
+    assert _mcp(fresh_repo, method="rerun_failed_jobs", run_id=5) == 2
+    assert _code(fresh_repo, "gh workflow run 123456 -f dry_run=true") == 2
+    assert _code(fresh_repo, "git tag v9") == 2
+
+
+def test_the_profiles_release_workflow_is_guarded_by_name(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/x")
+    profile = repo / ".tld" / "toolkit.yaml"
+    profile.write_text(profile.read_text() + "release:\n  workflow: release.yml\n  version_files:\n"
+                       "    - {path: pyproject.toml, pattern: '^version = \"(.+)\"$'}\n")
+    assert _code(repo, "gh workflow run release.yml -f dry_run=false") == 2
+    assert _code(repo, "gh workflow run release -f dry_run=false") == 2
+    assert _code(repo, "gh workflow run release.yml -f dry_run=true") == 0
+    _tld(repo, "allow-release", "release.yml")
+    assert _code(repo, "gh workflow run release.yml -f dry_run=false") == 0
+    assert _code(repo, "gh workflow run release.yml -f dry_run=false -f skip_checks=true") == 2
+    assert _code(repo, "gh workflow run test.yml") == 0

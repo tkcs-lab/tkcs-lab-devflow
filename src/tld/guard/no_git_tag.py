@@ -2,7 +2,10 @@
 """PreToolUse hook `no-git-tag`: no creating, moving, deleting or pushing tags.
 
 Reading stays allowed (`git tag -l`, `git describe`, `git fetch --tags`, `git ls-remote --tags`).
-Tags have one route (D13): the release workflow, which the owner runs by hand; a session may not dispatch it.
+Tags have one route (D13): the release workflow, which the owner approves in GitHub. A session starts it only
+through the release skill, after the owner's yes: `dry_run=true`, or `dry_run=false` while the release marker of
+`tld guard allow-release <workflow-file>` is set (10 minutes). `skip_checks` and inputs the hook cannot read
+(`--json`, a field file, every curl dispatch) are denied even with the marker.
 The hook also guards the one other ref-changing workflow, git-ops (it deletes branches): a dispatch with
 `dry_run` false needs the confirm marker of `tld guard allow-git-ops` (S12).
 """
@@ -21,10 +24,11 @@ from tld.guard._shell import ParseError, is_dynamic
 from tld.guard.integrity import dynamic_command, integrity
 
 NAME = "no-git-tag"
-INSTEAD = ("Tags are cut only by the release workflow (tld-release), which the owner runs by hand on the main "
-           "branch; there is no other route (git-ops deletes branches only). Do not create, move, delete or push "
-           "a tag from a session, and do not dispatch the release workflow; say in your report that a release is "
-           "due instead. Reading is fine: `git tag -l`, `git describe`, `git fetch --tags`, `git ls-remote --tags`.")
+INSTEAD = ("Tags are cut only by the release workflow, which the owner approves in GitHub; there is no other "
+           "route (git-ops deletes branches only). A session starts that workflow only through the release skill, "
+           "after the owner's yes. Do not create, move, delete or push a tag from a session; say in your report "
+           "that a release is due instead. Reading is fine: `git tag -l`, `git describe`, `git fetch --tags`, "
+           "`git ls-remote --tags`.")
 TAG_REF = re.compile(r"^repos/[^/]+/[^/]+/git/refs/tags(/.*)?$")
 
 LIST_LONG = ("list", "verify", "contains", "no-contains", "points-at", "merged", "no-merged")
@@ -98,9 +102,67 @@ DISPATCH = re.compile(r"^repos/[^/]+/[^/]+/actions/workflows/([^/]+)/dispatches$
 PUSH_KEY = re.compile(r"^remote\.[^=]*\.(push|mirror)$", re.I)
 
 
-def is_release_workflow(name: str) -> bool:
-    base = os.path.basename(name.strip())
-    return base in (RELEASE_WORKFLOW, "tld-release")
+TRUE_WORDS = ("true", "1", "yes", "on")
+UNREADABLE_RELEASE = ("this release dispatch has inputs that cannot be read, so dry_run and skip_checks cannot be "
+                      "checked; dispatch with plain -f fields or the MCP inputs")
+
+
+def _profiles(ctx: Ctx) -> list:
+    """The working tree's profile and the trusted copy (both: stricter, never looser)."""
+    profiles = [ctx.profile]
+    try:
+        trusted, available = ctx.trusted()
+        if available:
+            profiles.append(trusted)
+    except Exception:  # noqa: BLE001 - the trusted copy is a bonus here
+        pass
+    return profiles
+
+
+def _release_names(ctx: Ctx) -> set[str]:
+    """File names (and stems) of the release workflow: `tld-release.yml`, plus `release.workflow` of the working
+    tree's profile and of the trusted copy."""
+    names = {RELEASE_WORKFLOW}
+    for prof in _profiles(ctx):
+        section = (prof or {}).get("release")
+        value = section.get("workflow") if isinstance(section, dict) else None
+        if isinstance(value, str) and value.strip():
+            names.add(os.path.basename(value.strip()))
+    return names | {re.sub(r"\.ya?ml$", "", n) for n in names}
+
+
+def is_release_workflow(ctx: Ctx, ident) -> bool:
+    return isinstance(ident, str) and os.path.basename(ident.strip()) in _release_names(ctx)
+
+
+def _is_true(value) -> bool:
+    if value is True:
+        return True
+    return isinstance(value, str) and value.strip().lower() in TRUE_WORDS
+
+
+def release_real_run(ctx: Ctx, ident, why: str) -> str | None:
+    """The deny message for a real release run, or None while the release marker names this workflow."""
+    marker = markers.read(ctx.project_dir, "release")
+    if marker is not None and isinstance(ident, str):
+        want = re.sub(r"\.ya?ml$", "", os.path.basename(ident.strip()))
+        have = marker.get("workflow")
+        if isinstance(have, str) and re.sub(r"\.ya?ml$", "", os.path.basename(have)) == want:
+            return None
+    return (f"blocked: {why}. A real release run tags the head of the main branch and publishes a release. Only the "
+            "release skill starts one: after the owner's yes it runs 'tld guard allow-release <workflow-file>' (it "
+            "lapses after 10 minutes), dispatches, and runs 'tld guard end-allow' afterwards.")
+
+
+def release_inputs_problem(ctx: Ctx, ident, values: dict[str, list]) -> str | None:
+    """Judge a release dispatch whose `dry_run` / `skip_checks` values are known (each key maps to every value
+    given): skip_checks true is always denied; a real run needs the marker."""
+    if any(_is_true(v) for v in values.get("skip_checks", [])):
+        return deny("this release dispatch sets skip_checks; a session never skips the green-commit check")
+    dry = values.get("dry_run", [])
+    if not dry or any(not _is_true(v) for v in dry):
+        return release_real_run(ctx, ident, "this release dispatch does not set dry_run to true")
+    return None
 
 
 # ---- S12: git-ops runs for real only after the user's yes -----------------------------------------------
@@ -164,6 +226,68 @@ def _workflow_run_fields(words: list[str]) -> tuple[dict[str, str], bool]:
         elif name == "--json":
             unreadable = True
     return fields, unreadable
+
+
+def _release_gh_run(ctx: Ctx, it: Item, ident: str) -> str | None:
+    """`gh workflow run <release workflow>`: every -f/-F value of dry_run and skip_checks is read."""
+    values: dict[str, list] = {"dry_run": [], "skip_checks": []}
+    unreadable, i, words = False, 0, it.words
+    while i < len(words):
+        w = words[i]
+        i += 1
+        name, eq, val = w.partition("=")
+        short = w[:2] in ("-f", "-F") and len(w) > 2 and not w.startswith("--")
+        if name in ("-f", "--raw-field", "-F", "--field") or short:
+            if short:
+                val = w[2:]
+            elif not eq:
+                val = words[i] if i < len(words) else ""
+                i += 1
+            key, _, v = val.partition("=")
+            if w.startswith(("-F", "--field")) and v.startswith("@"):
+                unreadable = True
+            if key in values:
+                values[key].append(v)
+        elif name == "--json":
+            unreadable = True
+    if unreadable:
+        return deny(UNREADABLE_RELEASE)
+    return release_inputs_problem(ctx, ident, values)
+
+
+def _release_api(ctx: Ctx, it: Item, api, ident: str) -> str | None:
+    """`gh api .../dispatches` of the release workflow: inputs[dry_run] / inputs[skip_checks] fields or a JSON body."""
+    if api.field_files:
+        return deny(UNREADABLE_RELEASE)
+    values: dict[str, list] = {"dry_run": [], "skip_checks": []}
+    words, i = it.words, 2
+    while i < len(words):
+        w = words[i]
+        i += 1
+        name, eq, val = w.partition("=")
+        short = w[:2] in ("-f", "-F") and len(w) > 2 and not w.startswith("--")
+        if name in ("-f", "--raw-field", "-F", "--field") or short:
+            if short:
+                val = w[2:]
+            elif not eq:
+                val = words[i] if i < len(words) else ""
+                i += 1
+            key, _, v = val.partition("=")
+            for k in values:
+                if key == f"inputs[{k}]":
+                    values[k].append(v)
+    if api.input_file:
+        body = read_input_text(api, it.dir)
+        try:
+            inputs = json.loads(body).get("inputs") if body is not None else None
+        except (ValueError, AttributeError):
+            return deny(UNREADABLE_RELEASE)
+        if body is None or (inputs is not None and not isinstance(inputs, dict)):
+            return deny(UNREADABLE_RELEASE)
+        for k in values:
+            if inputs and k in inputs:
+                values[k].append(inputs[k])
+    return release_inputs_problem(ctx, ident, values)
 
 
 def check_git_ops_gh_run(ctx: Ctx, it: Item) -> str | None:
@@ -244,8 +368,8 @@ def _uncheckable_workflow_id(ident: str) -> bool:
 def check_gh(ctx: Ctx, it: Item) -> str | None:
     path = gh_path(it.words)
     if path[:2] == ["workflow", "run"] and len(path) > 2:
-        if is_release_workflow(path[2]):
-            return deny("this dispatches the release workflow")
+        if is_release_workflow(ctx, path[2]):
+            return _release_gh_run(ctx, it, path[2])
         if is_git_ops_workflow(ctx, path[2]):
             return check_git_ops_gh_run(ctx, it)
         if _uncheckable_workflow_id(path[2]):  # S10: a numeric id could be the release workflow
@@ -259,8 +383,8 @@ def check_gh(ctx: Ctx, it: Item) -> str | None:
         api = parse_gh_api(it.words)
         ep = api.endpoint
         m = DISPATCH.match(ep)
-        if api.method != "GET" and m and is_release_workflow(m.group(1)):
-            return deny("this dispatches the release workflow")
+        if api.method != "GET" and m and is_release_workflow(ctx, m.group(1)):
+            return _release_api(ctx, it, api, m.group(1))
         if api.method != "GET" and m and is_git_ops_workflow(ctx, m.group(1)):
             return check_git_ops_api(ctx, it, api)
         if api.method != "GET" and m and _uncheckable_workflow_id(m.group(1)):  # S10: numeric workflow id
@@ -332,7 +456,7 @@ def check_curl_tag_api(it: Item) -> str | None:
 
 
 def check_curl(ctx: Ctx, it: Item) -> str | None:
-    """A raw API call to a workflow dispatch: the release one is denied, a git-ops one needs the confirm marker
+    """A raw API call to a workflow dispatch: the release one is denied (its body is never read), a git-ops one needs the confirm marker
     (its body is not parsed). A call that creates or edits a release or tag is denied like its `gh api` form."""
     msg = check_curl_tag_api(it)
     if msg:
@@ -341,14 +465,29 @@ def check_curl(ctx: Ctx, it: Item) -> str | None:
         m = CURL_DISPATCH.search(w) if not is_dynamic(w) else None
         if not m:
             continue
-        if is_release_workflow(m.group(1)):
-            return deny("this request dispatches the release workflow")
+        if is_release_workflow(ctx, m.group(1)):
+            return deny(UNREADABLE_RELEASE)
         if is_git_ops_workflow(ctx, m.group(1)):
             return git_ops_real_run(ctx, "this request dispatches git-ops with a body this hook does not read")
         if _uncheckable_workflow_id(m.group(1)):
             return deny("this request dispatches a workflow by numeric id, which cannot be checked against the "
                         "release workflow")
     return None
+
+
+def _release_mcp(ctx: Ctx, wid: str, inputs) -> str | None:
+    if isinstance(inputs, str):
+        try:
+            inputs = json.loads(inputs)
+        except ValueError:
+            return deny(UNREADABLE_RELEASE)
+    if inputs is None:
+        inputs = {}
+    if not isinstance(inputs, dict):
+        return deny(UNREADABLE_RELEASE)
+    values = {k: [("true" if v is True else "false" if v is False else str(v))] for k, v in inputs.items()
+              if k in ("dry_run", "skip_checks")}
+    return release_inputs_problem(ctx, wid, values)
 
 
 def check_mcp(ctx: Ctx) -> str | None:
@@ -363,8 +502,8 @@ def check_mcp(ctx: Ctx) -> str | None:
         return None
     wid = args.get("workflow_id")
     if isinstance(wid, str) and wid.lower().endswith((".yml", ".yaml")):
-        if is_release_workflow(wid):
-            return deny("this dispatches the release workflow")
+        if is_release_workflow(ctx, wid):
+            return _release_mcp(ctx, wid, args.get("inputs"))
         if is_git_ops_workflow(ctx, wid):
             inputs = args.get("inputs")
             if isinstance(inputs, str):
