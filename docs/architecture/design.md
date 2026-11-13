@@ -86,6 +86,13 @@ fails while a section still says `- pending` or an out-of-scope path is unrecord
 fast` (cheapest level) only with complexity `S`; its fix, revision and conflict workers run at `standard`. The plan
 and its deviations stay in the repository as a historical record after the merge.
 
+The Summary is the first thing a human reads in a plan, in its tracking issue and in the feature pull request, so
+four decisions fix it (`tld plan summary-check`): the limits are fixed in the tool, 350 words for a plan and an
+issue body and 175 for a pull request, with no profile key; the placement depends on the kind (the first `## `
+section of a plan and a pull request, the `Closes` lines staying above it, and right after `## Request` in an issue
+body); the labels are a closed set in a fixed order, `None.` allowed only for Deviations, Security and Performance;
+and `implement` does not check a plan's Summary, because older plans have none.
+
 ### Guard
 
 The guardrails are a neutral policy, `src/tld/guard/`: an `Action` (`shell`, `write`, `github_op`, `stop`, `prompt`) goes in,

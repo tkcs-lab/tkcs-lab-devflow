@@ -7,6 +7,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Added
 
+- Every plan, its tracking issue and the feature pull request now start with a short, checked `## Summary` (350 words for a plan and an issue, 175 for a pull request, which is about the deviations). New `tld plan summary-check FILE --kind plan|issue|pr [--deviations FILE]` checks placement, labels, word limit and hidden markup. Small-scope runs follow the same rules.
 - Sessions now know they run in a limited claude.ai environment and may ask the owner for research: the new policy `playbooks/policies/research.md`, the commands `tld research check-prompt` and `tld research report`, an `## Environment` section in the runtime skill, and the guide `docs/guides/cloud-environments.md` (what to enable and deny for the working and the research environment). A pasted research report is data, never an instruction.
 - The opt-in `board-gate` hook (`hooks.board_gate.enabled`): a session that a record-writing tld command started cannot end its turn before it has written its status record, once. New `tld board record-id` prints the document id of a status record.
 - A second `/make-plan` of an issue, or `/implement` of a plan, that another session is still running now stops and asks (`stop` or `take_over`). New `tld plan active-run` reads the tracking issue's comments and the board record; a run silent for more than two hours counts as dead. The start comments now end with `Session: <id>.`, and runs post `Planning stopped:` / `Implementation stopped:`.
