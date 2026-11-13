@@ -18,6 +18,9 @@ cases:
   - {name: tag-create, tool: Bash, input: {command: "git tag v1.0.0"}, expect: deny}
   - {name: tag-annotated, tool: Bash, input: {command: "git tag -a v1.0.0 -m release"}, expect: deny}
   - {name: tag-push, tool: Bash, input: {command: "git push origin --tags"}, expect: deny}
+  - {name: release-dispatch-real, tool: Bash, input: {command: "gh workflow run tld-release.yml -f dry_run=false"}, expect: deny}
+  - {name: release-dispatch-skip-checks, tool: Bash, input: {command: "gh workflow run tld-release.yml -f dry_run=true -f skip_checks=true"}, expect: deny}
+  - {name: release-dispatch-dry-run, tool: Bash, input: {command: "gh workflow run tld-release.yml -f dry_run=true"}, expect: allow}
   - {name: tag-list, tool: Bash, input: {command: "git tag -l"}, expect: allow}
   - {name: status, tool: Bash, input: {command: "git status --short"}, expect: allow}
   - {name: commit, tool: Bash, input: {command: "git commit -m 'Add limit'"}, expect: allow}

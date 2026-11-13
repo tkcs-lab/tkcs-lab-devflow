@@ -29,6 +29,7 @@ Plans (`<n>/plan.md`) and `deviations.md` are kept history, transient and not li
 - [guides/cloud-environments.md](guides/cloud-environments.md) - what to enable and deny in the working claude.ai environment and the research environment, and how to run a research request; read when setting up or changing an environment.
 - [guides/admin.md](guides/admin.md) - repo-admin: auditing organisation and repository settings, the rulesets and the agent account; read when changing it.
 - [guides/git-ops.md](guides/git-ops.md) - the central git-ops workflow for branch deletion; read when changing it.
+- [guides/release.md](guides/release.md) - cutting a release with /tld:release: the profile's release section, the flow and the one approval in GitHub; read when releasing or changing the release skill.
 - [migrating-privacyfence.md](migrating-privacyfence.md) - historical: how the first project moved onto claude-toolkit (pinned: linked from outside this repo); read for that history only.
 
 ## Core content

@@ -1,4 +1,4 @@
-"""The short-lived allow markers: the tld workflow files (S13) and real git-ops runs (S12)."""
+"""The short-lived allow markers: the tld workflow files (S13), real git-ops runs (S12) and real release runs."""
 import json
 import subprocess
 import sys
@@ -92,6 +92,7 @@ def test_the_markers_themselves_are_protected(fresh_repo):
     r = run("protect-paths", bash("echo '{}' > .git/tld/protect-paths-workflow.json", fresh_repo))
     assert r.code == 2
     assert write(fresh_repo, ".git/tld/git-ops-confirm.json").code == 2
+    assert write(fresh_repo, ".git/tld/release-confirm.json").code == 2
 
 
 # --------------------------------------------------------------------------- S12: real git-ops runs
@@ -157,10 +158,46 @@ def test_a_git_ops_workflow_renamed_in_the_profile_is_guarded_too(tmp_path):
     assert run("no-git-tag", bash("gh workflow run branch-ops.yml -f dry_run=true", repo)).code == 0
 
 
-def test_the_marker_never_opens_the_release_workflow(fresh_repo):
+def test_the_git_ops_marker_never_opens_the_release_workflow(fresh_repo):
     tld(fresh_repo, "allow-git-ops")
     r = run("no-git-tag", bash("gh workflow run tld-release.yml -f dry_run=false", fresh_repo))
-    assert r.code == 2 and "only by the release workflow (tld-release), which the owner runs by hand" in r.stderr
+    assert r.code == 2 and "tld guard allow-release" in r.stderr
+
+
+def test_the_release_marker_never_opens_a_real_git_ops_run(fresh_repo):
+    tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert run("no-git-tag", bash(REAL, fresh_repo)).code == 2
+
+
+# --------------------------------------------------------------------------- real release runs
+
+RELEASE_MARKER = "release-confirm.json"
+REAL_RELEASE = "gh workflow run tld-release.yml -f dry_run=false"
+
+
+def test_allow_release_writes_the_marker_with_the_workflow_name(fresh_repo):
+    r = tld(fresh_repo, "allow-release", ".github/workflows/release.yml")
+    assert r.returncode == 0 and "for the next 10 minutes" in r.stdout, r.stderr
+    data = json.loads((fresh_repo / ".git" / "tld" / RELEASE_MARKER).read_text())
+    assert data["workflow"] == "release.yml"
+
+
+def test_allow_release_without_an_argument_exits_2(fresh_repo):
+    r = tld(fresh_repo, "allow-release")
+    assert r.returncode == 2 and "usage: tld guard allow-release <workflow-file>" in r.stderr
+    assert not (fresh_repo / ".git" / "tld" / RELEASE_MARKER).exists()
+
+
+def test_the_release_marker_lapses_after_ten_minutes_and_end_allow_ends_it(fresh_repo):
+    tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert run("no-git-tag", bash(REAL_RELEASE, fresh_repo)).code == 0
+    age(fresh_repo, RELEASE_MARKER, 11 * 60)
+    assert run("no-git-tag", bash(REAL_RELEASE, fresh_repo)).code == 2
+    tld(fresh_repo, "allow-release", "tld-release.yml")
+    assert run("no-git-tag", bash(REAL_RELEASE, fresh_repo)).code == 0
+    assert tld(fresh_repo, "end-allow").returncode == 0
+    assert not (fresh_repo / ".git" / "tld" / RELEASE_MARKER).exists()
+    assert run("no-git-tag", bash(REAL_RELEASE, fresh_repo)).code == 2
 
 
 # --------------------------------------------------------------------------- plan-gate: the worker marker

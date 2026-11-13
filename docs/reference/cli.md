@@ -43,8 +43,9 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld guard allow-profile` | `tld.guard.protect_paths` | let the session edit the profile for the next 2 hours |
 | `tld guard allow-workflow-install FILE...` | `tld.guard.protect_paths` | let the session write `tld-land.yml` / `tld-release.yml` for the next 15 minutes |
 | `tld guard allow-git-ops` | `tld.guard.protect_paths` | let a git-ops dispatch with `dry_run` false through for the next 10 minutes |
+| `tld guard allow-release WORKFLOW-FILE` | `tld.guard.protect_paths` | let a dispatch of the release workflow with `dry_run` false through for the next 10 minutes |
 | `tld guard allow-plan` | `tld.guard.protect_paths` | let every session in this checkout edit files for 8 hours (a plan-gate marker for /implement workers) |
-| `tld guard end-allow` | `tld.guard.protect_paths` | end the profile, workflow-install and git-ops markers; it does not end the plan marker |
+| `tld guard end-allow` | `tld.guard.protect_paths` | end the profile, workflow-install, git-ops and release markers; it does not end the plan marker |
 | `tld board server [--host H] [--port N] [--db F] [--insecure-cookie] ...` | `tld.board.server` | serve the board: status records, asks, the owner's page ([board-server.md](../guides/board-server.md)) |
 | `tld board client health\|list\|get\|set\|delete ...` | `tld.board.client` | status records on the board server |
 | `tld board usage FILE\|- [--source final\|scheduled]` | `tld.board.usage_client` | send the newest rate-limit reading to the board's Usage page; exit 3 no board, 1 refused or not understood |
@@ -66,6 +67,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld research report --id ID --reply FILE\|- [--rest FILE]` | `tld.research` | the marked research report from the owner's reply; exit 3 no complete report, 1 wrong id, too long or no Answer line, 2 an unreadable reply, a bad --id or an unwritable --rest; --rest gets only the lines before the first start line (what follows a report may be web text) |
 | `tld ops land-order [FILE] [--max N]` | `tld.ops.land_order` | order the open pull requests for `/land` |
 | `tld ops pick-release --pattern RE ...` | `tld.ops.pick_release` | pick the newest eligible release tag |
+| `tld ops release-prepare [--version X.Y.Z \| --bump patch\|minor\|major] [--date D] [--write] [--check [--base REF]]` | `tld.ops.release_prepare` | prepare a release: without a version print the current version, the candidates and the unreleased entry; with one (and `--write`) bump `release.version_files` and open the changelog's version heading; `--check --version X.Y.Z` verifies it, with `--base` also that only the changelog and the version lines changed since REF; exit 1 a problem, 2 a usage error |
 | `tld ops upstream-sync plan\|prepare ...` | `tld.ops.upstream_sync` | sync a fork to an upstream release |
 | `tld ops repo-admin validate-policy\|whoami\|audit\|apply ...` | `tld.ops.repo_admin` | audit and update organisation and repository settings |
 | `tld ops docs-index check\|inventory\|move ...` | `tld.ops.docs_index` | the docs index rules and doc moves (`move` also rewrites the profile's paths; a dry run unless `--apply`) |
