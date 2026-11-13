@@ -315,17 +315,21 @@ each reading and applied when the page reads it, so a wrong setting only affects
 window is deleted 120 days after it ended, and at most 20,000 rows are kept (the oldest go first). Upgrading moves
 the database to schema 5: an older board image cannot open it again, so keep the backup from before the upgrade
 (Backup and restore) if you may roll back. The factor (`TLD_BOARD_MAX_FACTOR`, default 5) is an assumption about
-how much more Max allows than Standard; the Max figures are Standard figures divided by it. Whoever holds the session token can post readings and so push older history out of the 20,000-row limit; the readings can be collected again.
+how much more Max allows than Standard; the Max figures are Standard figures divided by it. Whoever holds the session token can post readings and so push older history out of the 20,000-row
+limit; the readings can be collected again.
 
 The page is `#usage` (the `Usage` link in the header). For the 5-hour and the weekly window it shows two bars, Standard
 and Max, for the newest window that has not ended; the Standard bar is marked "limit passed" above 100%. Below the
-bars is the history of finished windows, one column each: 30 days for the 5-hour kind, 56 days for the weekly kind
-(the board returns at most the newest 60 windows per kind). Each kind gets a verdict from the finished windows of
+bars is the history of finished windows, one column each: up to 30 days for the 5-hour kind, 56 days for the weekly kind.
+The board returns only the newest 60 windows per kind before that range is applied, so the 5-hour history and its
+verdict reach back about 12 days at most. Each kind gets a verdict from the finished windows of
 that range that were read on Max. It needs 6 finished 5-hour windows or 2 weekly windows, else it says "not enough
 finished windows". With `over` the windows where Standard would have run out (above 100%) and `n` all counted
 windows: "Max makes sense" when `over / n` is 25% or more; "Standard would have been enough" when none passed 100%
 and the 90th percentile of the peaks is below 80% of Standard; otherwise "borderline". A window whose peak is below
-5% of Standard is idle (typically only the scheduled reading started it) and is kept out of the verdict.
+5% of Standard is idle (typically only the scheduled reading started it) and is kept out of the verdict. When any
+counted window passed 100%, the verdict adds the hours Standard would have blocked you: from the first reading above
+100% to the window end, summed over those windows.
 
 Read the numbers with these limits in mind:
 
@@ -337,7 +341,8 @@ Read the numbers with these limits in mind:
   window in particular. One factor serves both kinds. A new value applies to readings taken after the restart and to
   the Max figures; older readings keep the factor stored with them.
 - `resets_at` is floored to the minute when stored. Jitter that stays inside one minute merges into one window; a
-  larger drift, or jitter that crosses a minute boundary, shows up as a second window (a second column with its own readings). This is a known and
+  larger drift, or jitter that crosses a minute boundary, shows up as a second window (a second column with its
+  own readings). This is a known and
   accepted blemish.
 
 ## MCP tools
