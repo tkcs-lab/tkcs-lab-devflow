@@ -31,6 +31,11 @@ def test_no_playbook_hand_builds_a_document_id():
 def test_status_board_policy_names_record_id_in_the_table_row():
     rows = [ln for ln in _text(POLICY).splitlines() if ln.startswith("| document id")]
     assert rows and "tld board record-id" in rows[0]
+    t = _text(POLICY)
+    kind = [ln for ln in t.splitlines() if ln.startswith("| `kind`")]
+    assert kind and "single-session prompt" in kind[0]
+    slug = [ln for ln in t.splitlines() if ln.startswith("| `plan_slug`")]
+    assert slug and "`plan_url` `null`" in slug[0] and "`phases: []`" in slug[0]
 
 
 def test_every_record_writer_names_record_id():
@@ -60,3 +65,17 @@ def test_status_board_policy_names_the_already_running_exception():
     assert "write no record yet" in board_gate.MESSAGE
     for name in ("implement", "make-plan"):
         assert 'status-board.md` "When to write"' in _text(PLAYBOOKS / f"{name}.md")
+
+
+def test_status_board_policy_lists_the_single_session_prompt_run():
+    assert "single-session prompt" in _text(POLICY).split("## Where the board is")[0]
+
+
+def test_make_plan_prompt_finish_writes_a_run_record():
+    t = _text(PLAYBOOKS / "make-plan.md")
+    small = t.split("## Small scope")[1].split("## 1. The feature branch")[0]
+    for needle in ("--run --plan-slug <slug>", "`issue-<n>`", "`plan_url: null`", "`phases: []`", "`starting`",
+                   "`running`", "`pr_open`", "`Review PR #<n>`", "`waiting_user`", "skipped silently when",
+                   "policies/status-board.md", "`failed`", "`finished_at`", "`Fix dod: <failing row>`",
+                   "`Answer: <question>`", "`kind: run`", "`next_check_at: null`"):
+        assert needle in small, needle

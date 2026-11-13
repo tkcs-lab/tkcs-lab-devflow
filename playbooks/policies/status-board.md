@@ -2,8 +2,8 @@
 
 The board is the owner's inbox (D7, D8): it holds a status record of every run and every ask a playbook puts
 to the owner. These playbooks write a status record, so the owner sees each run in one place: setup, review,
-make-plan, implement, land, deps, upstream, docs and migrate. dod and board write none (a report and the board
-itself), nor do git-ops and repo-admin. The record
+make-plan, implement, land, deps, upstream, docs and migrate, and the worker of a single-session prompt (make-plan's small scope). dod and board write none
+(a report and the board itself), nor do git-ops and repo-admin. The record
 format is `src/tld/schema/status-record.schema.json`; `tld board validate-record FILE --doc-id ID` checks one.
 Asks are [runtime.md](../runtime.md)'s `ask_human`. This file says where, how and when to write records.
 
@@ -26,8 +26,9 @@ never a reason to skip the record.
 
 | Field | Value |
 |---|---|
-| `kind` | `run` for implement; `command` for every other playbook (deps, upstream, land, setup, docs, review, make-plan, migrate) |
+| `kind` | `run` for implement and for a single-session prompt's worker; `command` for every other playbook (deps, upstream, land, setup, docs, review, make-plan, migrate) |
 | `command` | `null` for a run; else the playbook: `setup`, `review`, `make-plan`, `deps`, `upstream`, `land`, `docs`, `migrate` |
+| `plan_slug`, `plan_url`, `feature_branch` | a run's plan and branch; a single-session prompt's run has `plan_slug` `issue-<n>`, `plan_url` `null`, its branch and `phases: []`; all `null` for a command |
 | `project` | `tld board project-slug <owner>/<repo>`: the repository name, lower case, other characters as `-` |
 | document id | from `tld board record-id` (see "Keys and a record that already exists"): `<project>--run--<plan>` for a run, `<project>--<command>--<tail>` for an attended command, `<project>--<command>` for a scheduled one |
 | `attended` | `true` when a person started the command and can answer; `false` for a scheduled run |

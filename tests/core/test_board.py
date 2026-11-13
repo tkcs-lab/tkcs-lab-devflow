@@ -84,6 +84,14 @@ def test_render_check():
 
 
 @pytest.mark.slow
+def test_prompt_run_check():
+    need_browser()
+    result = subprocess.run(["node", str(ROOT / "tests" / "board_prompt_run_check.js")], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == "OK"
+
+
+@pytest.mark.slow
 def test_fixture_page_has_no_dismiss_or_restore_buttons(tmp_path):
     need_browser()
     result, out = build(tmp_path, "--fixture", str(FIXTURE), "--now", NOW)

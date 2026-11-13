@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "kind": "run",
+  "command": null,
+  "project": "tkcs-lab-devflow",
+  "repo": "tkcs-lab/tkcs-lab-devflow",
+  "plan_slug": "issue-42",
+  "plan_url": null,
+  "feature_branch": "feature/prompt-run-record",
+  "orchestrator_session": "session_01...",
+  "attended": true,
+  "status": "pr_open",
+  "needs_you": true,
+  "needs_you_reason": "Review PR #12",
+  "needs_you_since": "2026-11-09T11:00:00Z",
+  "phases": [],
+  "pr": {
+    "number": 12,
+    "url": "https://github.com/tkcs-lab/tkcs-lab-devflow/pull/12",
+    "state": "open",
+    "ci": "pending",
+    "awaiting": "codeowner"
+  },
+  "last_event": "PR #12 opened",
+  "next_check_at": null,
+  "finished_at": null,
+  "updated_at": "2026-11-09T11:00:00Z"
+}
