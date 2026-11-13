@@ -292,6 +292,12 @@ def test_release_dispatch_through_gh_api(fresh_repo, fields, denied, denied_with
     assert (_code(fresh_repo, API + fields) == 2) is denied_with_marker, fields
 
 
+@pytest.mark.parametrize("endpoint", ["https://api.github.com//repos/o/c/actions/workflows/tld-git-ops.yml/dispatches",
+                                      "repos/o/c/actions/workflows/./tld-git-ops.yml/dispatches#x"])
+def test_git_ops_dispatch_endpoint_forms_are_normalised_too(fresh_repo, endpoint):
+    assert _code(fresh_repo, f"gh api -X POST {endpoint} -f 'inputs[dry_run]=false'") == 2
+
+
 def test_a_body_file_is_never_read_for_a_release_dispatch(fresh_repo):
     base = "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches --input "
     (fresh_repo / "dry.json").write_text(json.dumps({"inputs": {"dry_run": "true"}}))
@@ -314,6 +320,8 @@ def test_a_body_file_is_never_read_for_a_release_dispatch(fresh_repo):
     RUN + " -f dry_run=true -f skip_checks=t", RUN + " -f 'dry_run= true'", RUN + " -f dry_run=TRUE",
     "gh workflow run -f version=9.yml tld-release.yml -f dry_run=false",
     "gh workflow run --ref tld-git-ops.yml tld-release.yml -f dry_run=false",
+    "gh api -X POST https://api.github.com//repos/o/r/actions/workflows/tld-release.yml/dispatches -f 'inputs[dry_run]=false'",
+    "gh api -X POST https://api.github.com///repos/o/r/actions/workflows/tld-release.yml/dispatches?x=1 -f 'inputs[dry_run]=false'",
     "gh api 'repos/o/r/actions/workflows/tld-release.yml/dispatches#x' -f 'inputs[dry_run]=false'",
     "gh api 'repos/o/r/actions/workflows/tld-release.yml/dispatches?a=1#x' -f 'inputs[dry_run]=false'",
     "gh api -X POST repos/o/r/actions/workflows/tld%2Drelease.yml/dispatches -f 'inputs[dry_run]=false'",

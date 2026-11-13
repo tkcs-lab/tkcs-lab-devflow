@@ -378,7 +378,8 @@ def check_gh(ctx: Ctx, it: Item) -> str | None:
         api = parse_gh_api(it.words)
         ep = api.endpoint
         clean = posixpath.normpath(re.sub(r"%([0-9a-fA-F]{2})", lambda h: chr(int(h[1], 16)), re.split(r"[?#]", ep)[0])) if ep else ep
-        m = DISPATCH.match(re.sub(r"^api/v3/", "", clean))
+        ep = re.sub(r"^api/v3/", "", clean.lstrip("/")) if ep else ep
+        m = DISPATCH.match(ep)
         if api.method != "GET" and m and is_release_workflow(ctx, m.group(1)):
             return _release_api(ctx, it, api, m.group(1))
         if api.method != "GET" and m and is_git_ops_workflow(ctx, m.group(1)):
