@@ -792,12 +792,17 @@ def ruleset_bodies(cfg: dict) -> list[dict]:
     return out
 
 
-def _params_differ(kind: str, want: dict, have: dict) -> bool:
+def _param_diffs(kind: str, want: dict, have: dict) -> list[str]:
+    """The wanted parameters of rule `kind` that `have` does not match. GitHub leaves a false
+    boolean out of a rule it returns (the tag ruleset's update rule comes back without
+    update_allows_fetch_and_merge), so a missing key matches a wanted False."""
     if kind == "required_status_checks":
         contexts = lambda p: sorted(c.get("context") for c in p.get("required_status_checks") or [])  # noqa: E731
-        return (contexts(want) != contexts(have) or bool(have.get("strict_required_status_checks_policy"))
-                != want["strict_required_status_checks_policy"])
-    return any(have.get(k) != v for k, v in want.items())
+        keys = ["required_status_checks"] if contexts(want) != contexts(have) else []
+        if bool(have.get("strict_required_status_checks_policy")) != want["strict_required_status_checks_policy"]:
+            keys.append("strict_required_status_checks_policy")
+        return keys
+    return [k for k, v in want.items() if have.get(k, False if v is False else None) != v]
 
 
 def ruleset_diffs(want: dict, have: dict) -> tuple[list[str], bool]:
@@ -816,8 +821,8 @@ def ruleset_diffs(want: dict, have: dict) -> tuple[list[str], bool]:
         kind = rule["type"]
         if kind not in have_rules:
             diffs.append(f"rule {kind} is missing")
-        elif _params_differ(kind, rule.get("parameters") or {}, have_rules[kind]):
-            diffs.append(f"rule {kind} has other parameters")
+        elif keys := _param_diffs(kind, rule.get("parameters") or {}, have_rules[kind]):
+            diffs.append(f"rule {kind} has other parameters: {', '.join(keys)}")
     extra = sorted(set(have_rules) - {r["type"] for r in want["rules"]})
     if extra:
         diffs.append(f"extra rules {', '.join(map(str, extra))}")
