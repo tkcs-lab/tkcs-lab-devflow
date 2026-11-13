@@ -102,7 +102,9 @@ DISPATCH = re.compile(r"^repos/[^/]+/[^/]+/actions/workflows/([^/]+)/dispatches$
 PUSH_KEY = re.compile(r"^remote\.[^=]*\.(push|mirror)$", re.I)
 
 
-TRUE_WORDS = ("true", "1", "yes", "on")
+RUN_VALUE_OPTS = ("--ref", "-r", "-R", "--repo")
+API_VALUE_OPTS = ("-q", "--jq", "-t", "--template", "-H", "--header", "-p", "--preview", "--hostname", "--cache",
+                  "-X", "--method", "--input")
 UNREADABLE_RELEASE = ("this release dispatch has inputs that cannot be read, so dry_run and skip_checks cannot be "
                       "checked; dispatch with plain -f fields or the MCP inputs")
 
@@ -136,9 +138,11 @@ def is_release_workflow(ctx: Ctx, ident) -> bool:
 
 
 def _is_true(value) -> bool:
-    if value is True:
-        return True
-    return isinstance(value, str) and value.strip().lower() in TRUE_WORDS
+    return value is True or (isinstance(value, str) and value.strip().lower() == "true")
+
+
+def _is_exactly_false(value) -> bool:
+    return value is False or (isinstance(value, str) and value.strip().lower() == "false")
 
 
 def release_real_run(ctx: Ctx, ident, why: str) -> str | None:
@@ -157,8 +161,8 @@ def release_real_run(ctx: Ctx, ident, why: str) -> str | None:
 def release_inputs_problem(ctx: Ctx, ident, values: dict[str, list]) -> str | None:
     """Judge a release dispatch whose `dry_run` / `skip_checks` values are known (each key maps to every value
     given): skip_checks true is always denied; a real run needs the marker."""
-    if any(_is_true(v) for v in values.get("skip_checks", [])):
-        return deny("this release dispatch sets skip_checks; a session never skips the green-commit check")
+    if any(not _is_exactly_false(v) for v in values.get("skip_checks", [])):
+        return deny("this release dispatch sets skip_checks to something other than false; a session never skips the green-commit check")
     dry = values.get("dry_run", [])
     if not dry or any(not _is_true(v) for v in dry):
         return release_real_run(ctx, ident, "this release dispatch does not set dry_run to true")
@@ -228,10 +232,11 @@ def _workflow_run_fields(words: list[str]) -> tuple[dict[str, str], bool]:
     return fields, unreadable
 
 
-def _release_gh_run(ctx: Ctx, it: Item, ident: str) -> str | None:
-    """`gh workflow run <release workflow>`: every -f/-F value of dry_run and skip_checks is read."""
+def _release_fields(words: list[str], start: int, skip_opts: tuple[str, ...], keymap: dict[str, str]):
+    """(values, unreadable): every -f/-F value whose key is in `keymap` (key -> name, matched case-insensitively).
+    An option that takes a value consumes the next word verbatim, even one that looks like a flag."""
     values: dict[str, list] = {"dry_run": [], "skip_checks": []}
-    unreadable, i, words = False, 0, it.words
+    unreadable, i = False, start
     while i < len(words):
         w = words[i]
         i += 1
@@ -239,54 +244,37 @@ def _release_gh_run(ctx: Ctx, it: Item, ident: str) -> str | None:
         short = w[:2] in ("-f", "-F") and len(w) > 2 and not w.startswith("--")
         if name in ("-f", "--raw-field", "-F", "--field") or short:
             if short:
-                val = w[2:]
+                val = w[2:].lstrip("=") if w[2:3] == "=" else w[2:]
             elif not eq:
-                val = words[i] if i < len(words) else ""
-                i += 1
+                val, i = (words[i] if i < len(words) else ""), i + 1
             key, _, v = val.partition("=")
             if w.startswith(("-F", "--field")) and v.startswith("@"):
                 unreadable = True
-            if key in values:
-                values[key].append(v)
-        elif name == "--json":
+            if key.lower() in keymap:
+                values[keymap[key.lower()]].append(v)
+        elif name == "--json" or name == "--input":
             unreadable = True
-    if unreadable:
-        return deny(UNREADABLE_RELEASE)
-    return release_inputs_problem(ctx, ident, values)
+            i += 0 if eq or name == "--json" else 1
+        elif name in skip_opts and not eq:
+            i += 1
+        elif w[:2] in skip_opts and not w.startswith("--") and len(w) == 2:
+            i += 1
+    return values, unreadable
+
+
+def _release_gh_run(ctx: Ctx, it: Item, ident: str) -> str | None:
+    """`gh workflow run <release workflow>`: every -f/-F value of dry_run and skip_checks is read."""
+    values, unreadable = _release_fields(it.words, 0, RUN_VALUE_OPTS, {"dry_run": "dry_run", "skip_checks": "skip_checks"})
+    return deny(UNREADABLE_RELEASE) if unreadable else release_inputs_problem(ctx, ident, values)
 
 
 def _release_api(ctx: Ctx, it: Item, api, ident: str) -> str | None:
-    """`gh api .../dispatches` of the release workflow: inputs[dry_run] / inputs[skip_checks] fields or a JSON body."""
-    if api.field_files:
+    """`gh api .../dispatches` of the release workflow: inputs[dry_run] / inputs[skip_checks] fields. A body file is
+    never read (it can change between the check and the run)."""
+    keymap = {"inputs[dry_run]": "dry_run", "inputs[skip_checks]": "skip_checks"}
+    values, unreadable = _release_fields(it.words, 2, API_VALUE_OPTS, keymap)
+    if unreadable or api.field_files or api.input_file:
         return deny(UNREADABLE_RELEASE)
-    values: dict[str, list] = {"dry_run": [], "skip_checks": []}
-    words, i = it.words, 2
-    while i < len(words):
-        w = words[i]
-        i += 1
-        name, eq, val = w.partition("=")
-        short = w[:2] in ("-f", "-F") and len(w) > 2 and not w.startswith("--")
-        if name in ("-f", "--raw-field", "-F", "--field") or short:
-            if short:
-                val = w[2:]
-            elif not eq:
-                val = words[i] if i < len(words) else ""
-                i += 1
-            key, _, v = val.partition("=")
-            for k in values:
-                if key == f"inputs[{k}]":
-                    values[k].append(v)
-    if api.input_file:
-        body = read_input_text(api, it.dir)
-        try:
-            inputs = json.loads(body).get("inputs") if body is not None else None
-        except (ValueError, AttributeError):
-            return deny(UNREADABLE_RELEASE)
-        if body is None or (inputs is not None and not isinstance(inputs, dict)):
-            return deny(UNREADABLE_RELEASE)
-        for k in values:
-            if inputs and k in inputs:
-                values[k].append(inputs[k])
     return release_inputs_problem(ctx, ident, values)
 
 
@@ -485,8 +473,10 @@ def _release_mcp(ctx: Ctx, wid: str, inputs) -> str | None:
         inputs = {}
     if not isinstance(inputs, dict):
         return deny(UNREADABLE_RELEASE)
-    values = {k: [("true" if v is True else "false" if v is False else str(v))] for k, v in inputs.items()
-              if k in ("dry_run", "skip_checks")}
+    values: dict[str, list] = {"dry_run": [], "skip_checks": []}
+    for k, v in inputs.items():
+        if isinstance(k, str) and k.lower() in values:
+            values[k.lower()].append("true" if v is True else "false" if v is False else v if isinstance(v, str) else "?")
     return release_inputs_problem(ctx, wid, values)
 
 

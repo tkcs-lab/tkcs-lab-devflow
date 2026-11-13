@@ -220,6 +220,7 @@ MATRIX = [
     (RUN + " -f dry_run=false -f skip_checks=false -f skip_checks=true", True, True),
     (RUN + " -f dry_run=False", True, False),
     (RUN + " -f dry_run=0", True, False),
+    (RUN + " -f dry_run=1", True, False),
     (RUN + " -f dry_run=''", True, False),
     ("gh workflow run tld-release -f dry_run=false", True, False),
     ("gh workflow run .github/workflows/tld-release.yml -f dry_run=false", True, False),
@@ -291,19 +292,40 @@ def test_release_dispatch_through_gh_api(fresh_repo, fields, denied, denied_with
     assert (_code(fresh_repo, API + fields) == 2) is denied_with_marker, fields
 
 
-def test_release_dispatch_through_gh_api_input_file(fresh_repo):
+def test_a_body_file_is_never_read_for_a_release_dispatch(fresh_repo):
     base = "gh api -X POST repos/o/r/actions/workflows/tld-release.yml/dispatches --input "
-    bodies = {"dry.json": {"inputs": {"dry_run": "true"}}, "real.json": {"inputs": {"dry_run": "false"}},
-              "skip.json": {"inputs": {"dry_run": "false", "skip_checks": True}}, "list.json": {"inputs": [1]}}
-    for name, body in bodies.items():
-        (fresh_repo / name).write_text(json.dumps(body))
-    (fresh_repo / "bad.json").write_text("{not json")
-    assert _code(fresh_repo, base + "dry.json") == 0
-    assert _code(fresh_repo, base + "real.json") == 2
-    _tld(fresh_repo, "allow-release", "tld-release.yml")
-    assert _code(fresh_repo, base + "real.json") == 0
-    for name in ("skip.json", "list.json", "bad.json"):
+    (fresh_repo / "dry.json").write_text(json.dumps({"inputs": {"dry_run": "true"}}))
+    for name in ("dry.json", "missing.json", "-"):
         assert _code(fresh_repo, base + name) == 2, name
+    _tld(fresh_repo, "allow-release", "tld-release.yml")
+    for name in ("dry.json", "missing.json", "-"):
+        assert _code(fresh_repo, base + name) == 2, name
+
+
+@pytest.mark.parametrize("command", [
+    RUN + " -f dry_run=true --ref -f -f dry_run=false",
+    RUN + " -f dry_run=true -r -f -f dry_run=false",
+    RUN + " -f dry_run=true -f skip_checks=false --ref -f -f skip_checks=true",
+    API + "-f 'inputs[dry_run]=true' -q -f -f 'inputs[dry_run]=false'",
+    API + "-f 'inputs[dry_run]=true' --jq -f -f 'inputs[skip_checks]=true'",
+    API + "-f 'inputs[dry_run]=true' --hostname -f -f 'inputs[dry_run]=false'",
+    API + "-f 'inputs[dry_run]=true' -H -f -f 'inputs[dry_run]=false'",
+    RUN + " -f DRY_RUN=false", RUN + " -f dry_run=true -f Skip_Checks=true",
+    RUN + " -f dry_run=true -f skip_checks=t", RUN + " -f dry_run=1", RUN + " -f dry_run=yes",
+    API + "-f 'inputs[dry_run]=true' -f 'inputs[SKIP_CHECKS]=true'",
+])
+def test_option_values_and_odd_spellings_do_not_hide_inputs(fresh_repo, command):
+    assert _code(fresh_repo, command) == 2, command
+    _tld(fresh_repo, "allow-release", "tld-release.yml")   # a real run is then allowed, skip_checks never
+    assert (_code(fresh_repo, command) == 2) is ("skip_checks" in command.lower()), command
+
+
+@pytest.mark.parametrize("command", [
+    RUN + " -f dry_run=true --ref main", RUN + " -f dry_run=TRUE -r main -R o/r",
+    API + "-f 'inputs[dry_run]=true' -q .x -H 'Accept: x'",
+])
+def test_option_values_are_skipped_when_reading_inputs(fresh_repo, command):
+    assert _code(fresh_repo, command) == 0, command
 
 
 def _mcp_release(repo, **extra):
@@ -311,6 +333,7 @@ def _mcp_release(repo, **extra):
 
 
 def test_release_dispatch_through_mcp(fresh_repo):
+    assert _mcp_release(fresh_repo, inputs={"DRY_RUN": 1}) == 2
     assert _mcp_release(fresh_repo, inputs={"dry_run": True}) == 0
     assert _mcp_release(fresh_repo, inputs={"dry_run": "true"}) == 0
     assert _mcp_release(fresh_repo, inputs='{"dry_run": "true"}') == 0
@@ -323,6 +346,9 @@ def test_release_dispatch_through_mcp(fresh_repo):
     assert _mcp_release(fresh_repo, inputs={"dry_run": False, "skip_checks": True}) == 2
     assert _mcp_release(fresh_repo, inputs={"dry_run": True, "skip_checks": "yes"}) == 2
     assert _mcp_release(fresh_repo, inputs=["dry_run"]) == 2
+    assert _mcp_release(fresh_repo, inputs={"dry_run": False, "skip_checks": ["true"]}) == 2
+    assert _mcp_release(fresh_repo, inputs={"dry_run": False, "SKIP_CHECKS": True}) == 2
+
     assert _mcp_release(fresh_repo, inputs="[1]") == 2
     assert _mcp_release(fresh_repo, inputs="not json") == 2
 
