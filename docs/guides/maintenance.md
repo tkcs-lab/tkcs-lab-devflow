@@ -2,8 +2,8 @@
 
 Six commands keep a repository up to date and tidy without you doing the work: `/deps`, `/ci`, `/upstream`,
 `/land`, `/docs tidy` and `/usage`. `/deps`, `/ci`, `/upstream`, `/docs tidy` and `/usage` run unattended from a scheduled task; `/land` is run by you. None
-of them ever merges, approves or enables auto-merge. Each writes a status record to the board (see
-below) when one exists. What the spike found about what a cloud session can and cannot do is in
+of them ever merges, approves or enables auto-merge. Each, except `/usage`, writes a status record to the board (see
+below) when one exists; `/usage` writes none (see its section). What the spike found about what a cloud session can and cannot do is in
 [maintenance-spike.md](../architecture/maintenance-spike.md).
 
 ## What each command does
@@ -150,7 +150,7 @@ The environment these tasks run in (what to enable and deny) is in [cloud-enviro
 ## The board
 
 The board is the self-hosted server described in [board-server.md](board-server.md): it stores the
-status record of every command run (C7) and every ask a command puts to you, and serves the page you
+status record of every command run that writes one (C7) and every ask a command puts to you, and serves the page you
 log in to. Set two variables in every environment that should write to it: `TLD_BOARD_URL`
 (not a secret) and `TLD_BOARD_TOKEN` (board-server.md says how to keep the token in a network secret). Without
 them the commands skip every board step. `/board` checks the connection and reports how many records
@@ -160,7 +160,7 @@ A phase chip shows `drift <n>` when the phase changed `n` files outside its `tou
 when the check was unavailable): a count only, the paths are in the pull request's Scope section. What
 is recorded, what is not and why it never blocks: [scope-drift.md](../architecture/scope-drift.md).
 
-Every command writes a record (D8), and every run and every attended session has its own, so two runs or two
+Every command except `/usage` writes a record (D8), and every run and every attended session has its own, so two runs or two
 sessions never replace each other's card. `/implement` writes a `run` record under `<project>--run--<plan>`; the worker of a single-session prompt writes one under `<project>--run--issue-<n>` (no plan link, no phases); an
 attended `setup`, `review`, `make-plan`, `land`, `docs init` or `migrate` writes `<project>--<command>--<session tail>`
 (the last 8 letters and digits of its session id); the unattended `deps`, `ci`, `upstream` and `docs tidy` keep
