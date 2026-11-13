@@ -8,7 +8,8 @@ from conftest import ROOT
 sys.path.insert(0, str(ROOT / "tests" / "mutation"))
 import run_mutants  # noqa: E402
 
-MODULES = ("src/tld/guard/", "src/tld/profile/validate.py", "src/tld/plan/manifest.py", "src/tld/plan/active.py")
+MODULES = ("src/tld/guard/", "src/tld/profile/validate.py", "src/tld/plan/manifest.py", "src/tld/plan/active.py",
+           "src/tld/plan/summary.py")
 
 
 def test_every_mutant_applies():
