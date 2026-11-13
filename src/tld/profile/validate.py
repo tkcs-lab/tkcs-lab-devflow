@@ -152,6 +152,19 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
             re.compile(tag_pattern)
         except re.error as exc:
             errors.append(f"'upstream.tag_pattern': not a valid regular expression ({exc})")
+    release = profile.get("release")
+    if isinstance(release, dict):
+        if "changelog" not in docs:
+            errors.append("'release' needs 'docs.changelog' (the release skill turns its unreleased section "
+                          "into a version heading)")
+        for i, vf in enumerate(release.get("version_files", [])):
+            try:
+                groups = re.compile(vf["pattern"], re.M).groups
+            except re.error as exc:
+                errors.append(f"'release.version_files[{i}].pattern': not a valid regular expression ({exc})")
+                continue
+            if groups != 1:
+                errors.append(f"'release.version_files[{i}].pattern': needs exactly one capture group, the version")
     stacks = profile.get("stacks", [])
     apple = [s for s in ("swift", "ipados") if s in stacks]
     if apple and not profile.get("ci", {}).get("dispatchable"):
@@ -200,6 +213,27 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
         for p in paths:
             if not (root_dir / p.split("#")[0]).exists():
                 errors.append(f"file not found: '{p}' (listed in the profile; checked from {root_dir})")
+        if isinstance(release, dict):
+            wf = release.get("workflow")
+            if wf is not None and not (root_dir / ".github" / "workflows" / wf).is_file():
+                errors.append(f"file not found: '.github/workflows/{wf}' (listed in the profile; checked from {root_dir})")
+            for i, vf in enumerate(release.get("version_files", [])):
+                target = (root_dir / vf["path"]).resolve()
+                inside = target.is_relative_to(root_dir.resolve())
+                if not inside or not target.is_file():
+                    errors.append(f"file not found: '{vf['path']}' (listed in the profile; checked from {root_dir})")
+                    continue
+                try:
+                    rx = re.compile(vf["pattern"], re.M)
+                except re.error:
+                    continue
+                if rx.groups != 1:
+                    continue
+                with target.open(errors="replace") as fh:
+                    count = len(rx.findall(fh.read(1_000_000)))
+                if count != 1:
+                    errors.append(f"'release.version_files[{i}]': the pattern matches {count} times in "
+                                  f"{vf['path']} (needs exactly 1)")
     return errors, warnings
 
 

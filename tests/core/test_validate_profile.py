@@ -341,3 +341,81 @@ def test_profile_with_the_old_status_key_is_rejected(tmp_path):
                             capture_output=True, text=True)
     assert result.returncode == 1
     assert "unknown key 'status'" in result.stderr
+
+
+def _release(version_files=None, **extra):
+    p = copy.deepcopy(MINIMAL)
+    p["docs"]["changelog"] = {"file": "CHANGELOG.md", "section": "## [Unreleased]"}
+    p["release"] = {"workflow": "release.yml",
+                    "version_files": version_files or [{"path": "v.txt", "pattern": r'^version = "(\d+\.\d+\.\d+)"$'}],
+                    **extra}
+    return p
+
+
+def _release_tree(tmp_path, text='version = "1.0.0"\n'):
+    (tmp_path / ".github" / "workflows").mkdir(parents=True)
+    (tmp_path / ".github" / "workflows" / "release.yml").write_text("on: workflow_dispatch\n")
+    (tmp_path / "v.txt").write_text(text)
+    return tmp_path
+
+
+def test_valid_release_section_passes(vp, tmp_path):
+    assert errs(vp, _release()) == []
+    assert errs(vp, _release(), _release_tree(tmp_path)) == []
+
+
+def test_release_pattern_must_compile(vp):
+    e = errs(vp, _release([{"path": "v.txt", "pattern": "("}]))
+    assert len(e) == 1 and e[0].startswith("'release.version_files[0].pattern': not a valid regular expression (")
+
+
+@pytest.mark.parametrize("pattern", [r"^version = \d+$", r"^(\d+)\.(\d+)$"])
+def test_release_pattern_needs_exactly_one_group(vp, pattern):
+    assert errs(vp, _release([{"path": "v.txt", "pattern": pattern}])) == [
+        "'release.version_files[0].pattern': needs exactly one capture group, the version"]
+
+
+def test_release_needs_docs_changelog(vp):
+    p = _release()
+    del p["docs"]["changelog"]
+    assert errs(vp, p) == ["'release' needs 'docs.changelog' (the release skill turns its unreleased section "
+                           "into a version heading)"]
+
+
+def test_release_files_must_exist(vp, tmp_path):
+    e = errs(vp, _release(), tmp_path)
+    assert f"file not found: '.github/workflows/release.yml' (listed in the profile; checked from {tmp_path})" in e
+    assert f"file not found: 'v.txt' (listed in the profile; checked from {tmp_path})" in e
+
+
+@pytest.mark.parametrize("text,n", [("nothing\n", 0), ('version = "1.0.0"\nversion = "2.0.0"\n', 2)])
+def test_release_pattern_must_match_once(vp, tmp_path, text, n):
+    e = errs(vp, _release(), _release_tree(tmp_path, text))
+    assert e == [f"'release.version_files[0]': the pattern matches {n} times in v.txt (needs exactly 1)"]
+
+
+def test_release_extra_keys_are_errors(vp):
+    assert errs(vp, _release(extra=1))
+    p = _release()
+    p["release"]["version_files"][0]["x"] = 1
+    assert errs(vp, p)
+
+
+def test_release_workflow_has_no_slash(vp):
+    p = _release()
+    p["release"]["workflow"] = "../x.yml"
+    assert errs(vp, p)
+
+
+def test_release_version_files_not_empty(vp):
+    p = _release()
+    p["release"]["version_files"] = []
+    assert errs(vp, p)
+
+
+@pytest.mark.parametrize("path", ["../outside.txt", "/etc/hostname"])
+def test_release_version_file_outside_the_root_is_not_found(vp, tmp_path, path):
+    root = _release_tree(tmp_path / "repo") if (tmp_path / "repo").mkdir() is None else None
+    (tmp_path / "outside.txt").write_text('version = "1.0.0"\n')
+    e = errs(vp, _release([{"path": path, "pattern": r'version = "(\d+\.\d+\.\d+)"'}]), root)
+    assert e == [f"file not found: '{path}' (listed in the profile; checked from {root})"]
