@@ -48,7 +48,13 @@ def parse_plan(env) -> tuple[str | None, float]:
 
 
 def _number(value: object) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    if isinstance(value, bool):
+        return False
+    return isinstance(value, int) or (isinstance(value, float) and math.isfinite(value))
+
+
+def _name(key: object) -> str:
+    return str(key)[:40]
 
 
 def validate(body: object, now: int) -> tuple[list[dict], str, list[str]]:
@@ -59,7 +65,7 @@ def validate(body: object, now: int) -> tuple[list[dict], str, list[str]]:
     errors: list[str] = []
     for key in body:
         if key not in KINDS and key != "source":
-            errors.append(f"{key} is not allowed")
+            errors.append(f"{_name(key)} is not allowed")
     source = body.get("source")
     if source not in SOURCES:
         errors.append("source must be one of " + ", ".join(SOURCES))
@@ -75,7 +81,7 @@ def validate(body: object, now: int) -> tuple[list[dict], str, list[str]]:
         bad = False
         for key in window:
             if key not in ("utilization", "resets_at"):
-                errors.append(f"{kind}.{key} is not allowed")
+                errors.append(f"{kind}.{_name(key)} is not allowed")
                 bad = True
         utilization, resets_at = window.get("utilization"), window.get("resets_at")
         if not _number(utilization) or not 0 <= utilization <= MAX_UTILIZATION:

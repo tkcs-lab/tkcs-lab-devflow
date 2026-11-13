@@ -315,7 +315,7 @@ only when the page reads the samples, so a wrong setting can be corrected later.
 window is deleted 120 days after it ended, and at most 20,000 rows are kept (the oldest go first). Upgrading moves
 the database to schema 5: an older board image cannot open it again, so keep the backup from before the upgrade
 (Backup and restore) if you may roll back. The factor (`TLD_BOARD_MAX_FACTOR`, default 5) is an assumption about
-how much more Max allows than Standard; the Max figures are Standard figures divided by it.
+how much more Max allows than Standard; the Max figures are Standard figures divided by it. Whoever holds the session token can post readings and so push older history out of the 20,000-row limit; the readings can be collected again.
 
 ## MCP tools
 

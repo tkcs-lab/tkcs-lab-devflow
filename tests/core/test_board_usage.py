@@ -76,7 +76,7 @@ def test_validate_floors_resets_at_to_the_minute():
     assert errors == [] and samples[0]["resets_at"] % 60 == 0 and samples[0]["resets_at"] == (NOW + 3659) // 60 * 60
 
 
-@pytest.mark.parametrize("value", [-0.1, 1.6, True, "0.2", None, float("nan")])
+@pytest.mark.parametrize("value", [-0.1, 1.6, True, "0.2", None, float("nan"), 10**400])
 def test_validate_rejects_a_bad_utilization(value):
     _, _, errors = usage.validate(body(five_hour={"utilization": value, "resets_at": NOW + 60}), NOW)
     assert errors == ["five_hour.utilization must be a number from 0 to 1.5"]
@@ -87,7 +87,7 @@ def test_validate_accepts_the_utilization_bounds(value):
     assert usage.validate(body(five_hour={"utilization": value, "resets_at": NOW + 60}), NOW)[2] == []
 
 
-@pytest.mark.parametrize("value", [NOW - 10, NOW, NOW + 18601, NOW + 60.0, True, "x", None])
+@pytest.mark.parametrize("value", [NOW - 10, NOW, NOW + 18601, NOW + 60.0, True, "x", None, 10**400])
 def test_validate_rejects_a_bad_resets_at(value):
     _, _, errors = usage.validate(body(five_hour={"utilization": 0.1, "resets_at": value}), NOW)
     assert len(errors) == 1 and errors[0].startswith("five_hour.resets_at must be an integer")
@@ -353,3 +353,13 @@ def test_the_stored_sample_uses_the_server_clock_and_settings(tmp_path):
         assert post(srv, body(source="scheduled"))[0] == 200
         assert srv.store.list_usage() == [("five_hour", (NOW + 3600) // 60 * 60, NOW, 0.3, "standard", 4.0,
                                            "scheduled")]
+
+
+def test_a_huge_integer_is_422_not_a_crash(board):
+    raw = b'{"source": "final", "five_hour": {"utilization": 1' + b"0" * 400 + b', "resets_at": 1}}'
+    assert post(board, raw=raw)[0] == 422
+
+
+def test_an_unknown_key_is_echoed_cut_to_40_characters():
+    _, _, errors = usage.validate(body(**{"k" * 500: 1}), NOW)
+    assert errors == ["k" * 40 + " is not allowed"]
