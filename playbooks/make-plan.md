@@ -132,7 +132,18 @@ the pull request in one go. In this order:
 6. **Acceptance**: each item a named test, a grep or a command.
 7. **Stop conditions**: what the worker sees if this prompt is wrong, and that it then stops and asks; a fact that
    only the open web can settle, which the worker reports as blocked with a `Research:` line.
-8. **Finish**: the branch name (`<branch pattern>`), the comment `Implementation started.` on the tracking issue
+8. **Finish**: the branch name (`<branch pattern>`), the run's status record as
+   [policies/status-board.md](policies/status-board.md) says, skipped silently when
+   there is no board: `kind: run`, `command: null`, `attended: true`, document id from
+   `tld board record-id --repo <owner>/<repo> --run --plan-slug <slug>` where `<slug>` is `issue-<n>` (the tracking
+   issue; without one, the part of the branch name after the first `/`), `plan_slug` that slug, `plan_url: null`,
+   `feature_branch` the branch, `orchestrator_session` the worker's session id, `phases: []`,
+   `next_check_at: null`; written `starting` before the first change, `running` after the first commit, `pr_open`
+   once the pull request is open (with `pr` filled and `needs_you` true, `needs_you_since` set and the reason
+   `Review PR #<n>`), and on a stop `waiting_user` with `needs_you` true, `needs_you_since` and the reason
+   `Answer: <question>` (a stop condition) or `failed` with `finished_at`, `needs_you` true, `needs_you_since` and
+   the reason `Fix dod: <failing row>` (a dod failure it cannot fix),
+   the comment `Implementation started.` on the tracking issue
    before the first change, the dod playbook, one pull request following the repository template whose body
    starts with `Closes #<n>` (the tracking issue; one more per issue the ask named) and then a `## Summary` of at
    most 175 words that says how the result differs from this prompt (labels `**Deviations:**`, `**Review focus:**`

@@ -5,6 +5,10 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+### Added
+
+- A single-session prompt from /make-plan now shows on the status board: its worker writes a `run` record (`<project>--run--issue-<n>`, no plan link, no phases) from `starting` to `pr_open` with "Review PR #<n>", or a stop that needs you. The record validator accepts a run with `plan_url: null`.
+
 ### Changed
 
 - The board page's Dismiss button is on every card outside "Hidden" (PR open, Running, Done, answer received), not only on "Needs you" cards; a dismissed card of any state is in the first list of `/tld:board prune`. The dismiss endpoint no longer answers `409 not_needs_you`.
