@@ -18,7 +18,14 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-release-dispatch-guard
 
-- pending
+- worker: Stricter than the plan: a release dispatch is denied if any skip_checks value is not exactly false; dry_run counts as true only for the exact value true (not 1, yes, on); gh api --input is denied for the release workflow; dynamic or glob words are denied even with the marker; gh workflow run, gh api and curl endpoints are normalised (percent-decoding, dot segments, slashes, fragments, api/v3 prefix).
+- worker: The workflow argument of gh workflow run is the first positional word, and a curl URL built from a variable is denied for dispatch and tag calls; curl bodies as attached or clustered options are treated as unreadable. The release-confirm.json marker was added to the protected-marker test.
+- gate: Owner approved on the board: the release dispatch code moved to a new module src/tld/guard/_release_dispatch.py (size cap), and the expected --end-allow string in tests/core/test_hook_protect_paths_setup.py was updated.
+- retry: First worker stopped blocked (size cap, an outdated test string, open security findings); a follow-up worker finished the phase.
+- review: Worker admitted reading some required docs only in part; the orchestrator ran the full suite after the merge (4412 passed).
+- scope: scope: src/tld/guard/_release_dispatch.py and tests/core/test_hook_protect_paths_setup.py (outside touches; owner-approved, see gate entry)
+- review: ROLES GATE NOT PASSED, OWNER-ACCEPTED: a read-only security review of 23f11f8 reported blocking=6 non_blocking=12, so tld roles verify exits 1 for this phase. The owner chose accept on the board and the merge went ahead. Blocking: (1) curl -d@f and -sd@f bodies pass the git/refs exemption; (2) curl unique long-option prefixes (--data-r, --data-b, --upload-f) read as GET; (3) curl -K config file hides URL and body; (4) curl glob ranges hide keywords; (5) the dynamic-URL check skips words by curl 
+- review: Non-blocking findings of that review, owner-accepted residual risk: raw-word tag endpoint match (dot segments, percent escapes); JSON-escaped ref in a git/refs body; gh api --input body not read; GraphQL createRef on a tag; repositories/<id> API alias; case-sensitive workflow names; encoded path as workflow id; older MCP tool name run_workflow; curlrc and wget -i planted config; dispatch ref not constrained to main; release.workflow not yet in the profile (manual step ma1); gh run rerun in Bash.
 
 ## p4-release-prepare
 
