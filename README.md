@@ -68,17 +68,17 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | `/tld:board [prune]` | checks the connection to your board, or prunes its stale records and clears cards whose pull requests are done, after you confirm |
 | `/tld:migrate` | moves a repository from claude-toolkit to tld: shows the plan, writes it on a branch after you confirm, one pull request |
 
-No command merges, approves, tags or force-pushes. Three skills run on request:
+No command merges, approves, tags or force-pushes. Four skills run on request:
 `tld:repo-admin` (audit and apply organisation and repository settings, rulesets, environments and workflows from
 a policy file; [guide](docs/guides/admin.md)) and `tld:git-ops` (delete a remote branch through a central workflow;
-[guide](docs/guides/git-ops.md)) and `tld:ask` (invoked as `/tld:ask`: answers a question or discusses an idea without changing anything and proposes `/tld:make-plan` for a change). The maintenance commands and scheduling: [docs/guides/maintenance.md](docs/guides/maintenance.md).
+[guide](docs/guides/git-ops.md)) and `tld:release` (prepares a release in one pull request, waits for your merge and starts the release workflow after one board yes; [guide](docs/guides/release.md)) and `tld:ask` (invoked as `/tld:ask`: answers a question or discusses an idea without changing anything and proposes `/tld:make-plan` for a change). The maintenance commands and scheduling: [docs/guides/maintenance.md](docs/guides/maintenance.md).
 
 ## Guardrails: seatbelt and control
 
 - **Control: GitHub.** `tld ops repo-admin` sets up the rulesets `tld-main` (pull request with one approval,
   required checks, no force push, no deletion) and `tld-tags` (no workflow token can tag), an agent account with
   the `write` role, and the environments `tld-agent` and `tld-release` that hold `TLD_AGENT_TOKEN` and
-  `TLD_RELEASE_TOKEN`. Tags have one route: the release workflow, run by the owner.
+  `TLD_RELEASE_TOKEN`. Tags have one route: the release workflow; the owner approves its publish job in GitHub (after `/tld:release` or by running the workflow).
 - **Seatbelt: the hooks.** `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths` and the opt-in
   `dod-gate` deny the action before it runs and tell the agent what to do instead; `model-check` only warns when a session runs on the most expensive level. The protect lists and
   `hooks.disable` are read from the profile on the remote default branch. They need `python3` 3.11+ and PyYAML in

@@ -8,10 +8,13 @@ entry of the released version at the top of the GitHub release, above the list o
 ### Added
 
 - A single-session prompt from /make-plan now shows on the status board: its worker writes a `run` record (`<project>--run--issue-<n>`, no plan link, no phases) from `starting` to `pr_open` with "Review PR #<n>", or a stop that needs you. The record validator accepts a run with `plan_url: null`.
+- `/tld:release` (skill): updates the changelog and the version files in one pull request, waits for its merge and starts the release workflow after one board yes. New profile section `release` (workflow file and version files), new commands `tld ops release-prepare` and `tld guard allow-release`.
 
 ### Changed
 
 - The board page's Dismiss button is on every card outside "Hidden" (PR open, Running, Done, answer received), not only on "Needs you" cards; a dismissed card of any state is in the first list of `/tld:board prune`. The dismiss endpoint no longer answers `409 not_needs_you`.
+- The `no-git-tag` guard lets a session dispatch the release workflow with `dry_run=true` (exactly), or with `dry_run=false` while the release marker is set. A `skip_checks` that is not exactly `false`, `gh api --input`, every curl dispatch and any dynamic or glob word are always denied, and a workflow under another name is guarded only once the profile names it (`release.workflow`). The marker is a deliberate step, not a control: the controls are the owner's merge and publish approval.
+- This repository's release workflow needs one approval (the publish job); the build job checks the commit is green and pushes the board image by digest, and publish adds the tags.
 
 ### Fixed
 
