@@ -266,15 +266,27 @@ class Store:
         with self._lock:
             return self._get_ask(ask_id)
 
-    def list_asks(self, state: str | None = None, limit: int = 200) -> list[dict]:
-        """Asks, open ones first (oldest first), then the others (newest first)."""
+    def list_asks(self, state: str | None = None, limit: int = 200, since: str | None = None,
+                  ascending: bool = False) -> list[dict]:
+        """Asks created after `since`; open ones first (oldest first), then the others (newest first).
+
+        `ascending` lists every ask oldest first (by creation time, then id). The limit applies after the filter.
+        """
         query = "SELECT data FROM asks"
-        params: tuple = ()
+        conditions, params = [], []
         if state is not None:
-            query += " WHERE state = ?"
-            params = (state,)
-        query += (" ORDER BY CASE state WHEN 'open' THEN 0 ELSE 1 END,"
-                  " CASE state WHEN 'open' THEN created_at END ASC, created_at DESC LIMIT ?")
+            conditions.append("state = ?")
+            params.append(state)
+        if since is not None:
+            conditions.append("created_at > ?")
+            params.append(since)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        if ascending:
+            query += " ORDER BY created_at ASC, id ASC LIMIT ?"
+        else:
+            query += (" ORDER BY CASE state WHEN 'open' THEN 0 ELSE 1 END,"
+                      " CASE state WHEN 'open' THEN created_at END ASC, created_at DESC LIMIT ?")
         with self._lock:
             rows = self._db.execute(query, (*params, limit)).fetchall()
         return [json.loads(row[0]) for row in rows]
