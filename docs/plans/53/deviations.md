@@ -5,7 +5,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p1-board
 
-- pending
+- worker: The worker also capped the limit parameter at four characters before converting it, after a security-review finding, and added a test for a very long digit string.
+- worker: The worker ran without the toolkit root and the venv, using the repository cli and system python; the full suite passed on the merged branch here.
 
 ## p2-digest
 
