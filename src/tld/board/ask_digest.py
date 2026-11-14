@@ -21,6 +21,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tld.board import ask as board_ask
 from tld.board import client as board_client
 from tld.board.record import TIMESTAMP, parse_doc_id, project_slug
 
@@ -37,6 +38,9 @@ MIN_REPOSTED = 2
 MIN_CANCELLED = 3
 TRUNCATION_SIZES = (200, 1000)
 EXCLUDED_COMMAND = "questions"
+MAX_INPUT = 2000  # characters of a question read before masking; only MAX_TEMPLATE are emitted
+MAX_TOKEN = 200  # a longer run without whitespace is cut, so no pattern backtracks over it
+KINDS = ("text", "choice", "confirm")
 
 _PLACEHOLDERS = "code|url|email|login|path|host|n|sha|slug|word"
 _PLACEHOLDER = re.compile(rf"#?<(?:{_PLACEHOLDERS})>")
@@ -47,7 +51,7 @@ _MASKS = (
     (re.compile(r"https?://[^\s`]+"), "<url>"),
     (re.compile(r"\S+@\S+\.\S+"), "<email>"),
     (re.compile(r"@[a-z0-9_-]+"), "<login>"),
-    (re.compile(r"\S*/\S*"), "<path>"),
+    (re.compile(r"\S*[/\\]\S*"), "<path>"),
     (re.compile(r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\b"), "<host>"),
     (re.compile(r"#\d+"), "#<n>"),
     (re.compile(r"\b[0-9a-f]{7,40}\b"), "<sha>"),
@@ -58,7 +62,7 @@ _MASKS = (
 
 def mask(text: str) -> str:
     """The question text with every identifying token replaced, lower case, cut at MAX_TEMPLATE characters."""
-    out = text.lower()
+    out = " ".join(tok[:MAX_TOKEN] for tok in text[:MAX_INPUT].lower().split())
     for pattern, repl in _MASKS:
         out = pattern.sub(repl, out)
     out = " ".join(out.split())
@@ -72,16 +76,22 @@ def mask(text: str) -> str:
     return out.rstrip()
 
 
+def _vocab_piece(text: str, vocab: set[str] | frozenset[str]) -> str:
+    """Letter runs outside `vocab` become `<word>`; a character that is no letter, digit, space or ASCII
+    punctuation (a circled letter, a symbol) becomes a space, so it cannot carry text."""
+    text = "".join(c if c.isalnum() or c.isspace() or (c.isascii() and c.isprintable()) else " " for c in text)
+    return _LETTERS.sub(lambda m: m.group(0) if m.group(0) in vocab else "<word>", text)
+
+
 def apply_vocab(template: str, vocab: set[str] | frozenset[str]) -> str:
     """Replace every run of letters outside a placeholder that is not in `vocab` by `<word>`."""
     pieces: list[str] = []
     last = 0
     for found in _PLACEHOLDER.finditer(template):
-        pieces.append(_LETTERS.sub(lambda m: m.group(0) if m.group(0) in vocab else "<word>",
-                                   template[last:found.start()]))
+        pieces.append(_vocab_piece(template[last:found.start()], vocab))
         pieces.append(found.group(0))
         last = found.end()
-    pieces.append(_LETTERS.sub(lambda m: m.group(0) if m.group(0) in vocab else "<word>", template[last:]))
+    pieces.append(_vocab_piece(template[last:], vocab))
     return "".join(pieces)
 
 
@@ -128,8 +138,15 @@ def _is_stamp(value: object) -> bool:
 
 
 def _questions(ask: dict) -> list[dict]:
+    """The questions of an ask that have text and a known kind; an id that is no question id becomes `q<n>`."""
     raw = ask.get("questions")
-    return [q for q in raw if isinstance(q, dict) and isinstance(q.get("text"), str)] if isinstance(raw, list) else []
+    found = []
+    for index, q in enumerate(raw if isinstance(raw, list) else []):
+        if not (isinstance(q, dict) and isinstance(q.get("text"), str) and q.get("kind") in KINDS):
+            continue
+        qid = q.get("id")
+        found.append({**q, "id": qid if isinstance(qid, str) and board_ask.QID_RE.match(qid) else f"q{index}"})
+    return found
 
 
 def _took_recommended(ask: dict, question: dict) -> bool | None:
@@ -222,7 +239,10 @@ def digest(asks: list, repo: str, since: str | None, now: str, vocab: set[str] |
     project = project_slug(repo)
     frozen = frozenset(vocab) if vocab is not None else None
     truncated = len(asks) in TRUNCATION_SIZES
-    rows = [a for a in asks if isinstance(a, dict) and _is_stamp(a.get("created_at"))
+    rows = [{**a, "record": a["record"] if isinstance(a.get("record"), str) else None,
+             "answers": a["answers"] if isinstance(a.get("answers"), dict) else {}}
+            for a in asks if isinstance(a, dict) and _is_stamp(a.get("created_at"))
+            and isinstance(a.get("id"), str) and board_ask.ID_RE.match(a["id"])
             and (since is None or a["created_at"] > since)]
     own: list[dict] = []
     foreign: list[dict] = []
@@ -383,7 +403,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"tld board: cannot read the asks ({type(exc).__name__}: {exc})", file=sys.stderr)
         return 1
     now = args.now or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    print(json.dumps(digest(rows, args.repo, args.since, now, vocab), separators=(",", ":")))
+    try:
+        result = digest(rows, args.repo, args.since, now, vocab)
+    except (TypeError, ValueError, KeyError, AttributeError, RecursionError) as exc:
+        print(f"tld board: cannot digest the asks ({type(exc).__name__})", file=sys.stderr)
+        return 1
+    print(json.dumps(result, separators=(",", ":")))
     return 0
 
 

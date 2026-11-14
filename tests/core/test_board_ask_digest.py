@@ -301,6 +301,42 @@ def test_corpus_asks_are_valid_stored_asks(corpus):
         assert board_ask.validate_stored(ask) == [], ask["id"]
 
 
+def test_hostile_ask_fields_never_reach_the_output(corpus):
+    hostile = make_ask(40, "hello there")
+    hostile.update(id="TOP-SECRET-ID")
+    odd = make_ask(41, "hello there", record=["x"], answers=None, kind="hunter2 password")
+    weird = make_ask(42, "hello there", record={"a": 1}, id="q")
+    weird["questions"][0]["id"] = ["list"]
+    named = make_ask(43, "hello there")
+    named["questions"][0]["id"] = "my secret token"
+    result = run(corpus + [hostile, odd, weird, named])
+    text = json.dumps(result)
+    for leak in ("TOP-SECRET-ID", "hunter2", "my secret token", "list"):
+        assert leak not in text
+    assert result["asks"] == 12 + 3  # the ask with a bad id is dropped; the others are read
+
+
+def test_main_exits_1_when_the_digest_cannot_be_built(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(ask_digest, "digest", lambda *a, **k: (_ for _ in ()).throw(TypeError("x")))
+    path = tmp_path / "a.json"
+    path.write_text("[]", encoding="utf-8")
+    code, _, err = run_main(["--repo", REPO, "--file", str(path)], capsys)
+    assert code == 1 and err.startswith("tld board: ")
+
+
+def test_mask_is_fast_on_hostile_text():
+    import time
+    start = time.monotonic()
+    for text in ("a@" * 20000, "a-" * 20000, "a" * 50000, "a.b" * 20000):
+        ask_digest.mask(text)
+    assert time.monotonic() - start < 2
+
+
+def test_mask_hides_windows_paths_and_apply_vocab_drops_symbols():
+    assert ask_digest.mask("open C:\\Users\\bob\\x.txt now") == "open <path> now"
+    assert ask_digest.apply_vocab("hello \u24d7\u24e4 hello", {"hello"}) == "hello    hello"
+
+
 # the command line
 
 def run_main(argv, capsys):
