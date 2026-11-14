@@ -48,6 +48,30 @@ def running(tmp_path, owner=True, insecure=True, **kwargs):
         thread.join(5)
 
 
+@contextlib.contextmanager
+def running_pair(tmp_path, insecure=True, **kwargs):
+    """A page listener and an API listener over one store, each on a free loopback port; yields (page, api)."""
+    store = Store(str(tmp_path / "b.sqlite3"))
+    tokens = board_server.Tokens(WRITE)
+    auth = board_server.OwnerAuth(PASSPHRASE, SECRET, secure=not insecure)
+    page = board_server.make_server(store, tokens, "T", "127.0.0.1", 0, owner=auth,
+                                    role=board_server.PAGE_ROLE, **kwargs)
+    api = board_server.make_server(store, tokens, "T", "127.0.0.1", 0, owner=None,
+                                   role=board_server.API_ROLE, **kwargs)
+    threads = [threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+               for srv in (page, api)]
+    for thread in threads:
+        thread.start()
+    try:
+        yield page, api
+    finally:
+        for srv in (page, api):
+            srv.shutdown()
+            srv.server_close()
+        for thread in threads:
+            thread.join(5)
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None

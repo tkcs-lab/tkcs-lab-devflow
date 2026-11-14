@@ -3,10 +3,10 @@
 
     TLD_BOARD_TOKEN=<24+ chars> TLD_BOARD_OWNER_PASSPHRASE=<16+ chars> tld board server
         [--host H] [--port N] [--db FILE] [--title T] [--allow-origin URL] [--public-origin URL]
-        [--insecure-cookie] [--session-hours N] [--trust-proxy]
+        [--insecure-cookie] [--session-hours N] [--trust-proxy] [--api-port N]
 
 Environment: TLD_BOARD_TOKEN, TLD_BOARD_OWNER_PASSPHRASE, TLD_BOARD_SECRET, TLD_BOARD_DB (--db),
-TLD_BOARD_PUBLIC_ORIGIN (--public-origin), TLD_BOARD_SESSION_URL (the https base of a session link),
+TLD_BOARD_PUBLIC_ORIGIN (--public-origin), TLD_BOARD_API_PORT (--api-port), TLD_BOARD_SESSION_URL (the https base of a session link),
 TLD_BOARD_PLAN (standard or max: turns the usage readings on), TLD_BOARD_MAX_FACTOR (Max = this many times Standard).
 
 Two principals. A **session** sends `Authorization: Bearer $TLD_BOARD_TOKEN`: it writes status records,
@@ -16,6 +16,12 @@ and cancels asks, and can never write a record. Without a passphrase the owner U
 passphrase under 16 characters stops the server. The cookie is signed with TLD_BOARD_SECRET or with a secret
 generated once into `<db>.secret`. Secrets come from the environment only. The server speaks plain HTTP: put a
 TLS proxy in front (docs/guides/board-server.md). Python 3.11+, stdlib only.
+
+Two endpoints. With --api-port the board listens on two ports over one store. --port is the page endpoint: the
+page, login, and the owner's reads and answers; it answers 403 wrong_endpoint to any request that carries an
+Authorization header. --api-port is the API endpoint: only the sessions' routes and the bearer token; it never
+reads the cookie. A route or method the endpoint does not serve is 404 there. Each endpoint can then sit behind
+its own host and rules (docs/guides/board-cloudflare.md). Without --api-port one port serves everything.
 """
 from __future__ import annotations
 
@@ -94,6 +100,17 @@ POLICY: dict[tuple[str, str], frozenset[str]] = {
     ("usage", "GET"): frozenset({OWNER}),
 }
 OWNER_UI = ("page", "login", "logout", "session")
+BOTH_ROLE, PAGE_ROLE, API_ROLE = "both", "page", "api"
+
+
+def served_by(role: str, name: str, method: str) -> bool:
+    """Whether a listener of this role serves the route and method (derived from POLICY)."""
+    if role == BOTH_ROLE:
+        return True
+    allowed = POLICY[(name, method)]
+    if role == PAGE_ROLE:
+        return name in OWNER_UI or OWNER in allowed
+    return name not in OWNER_UI and SESSION in allowed
 
 
 class Tokens:
@@ -329,10 +346,14 @@ class Handler(BaseHTTPRequestHandler):
         return morsel.value if morsel else None
 
     def _principal(self) -> str | None:
-        """SESSION for a valid bearer token, OWNER for a valid cookie, "bad" for a wrong token, else None."""
+        """SESSION for a valid bearer token, OWNER for a valid cookie, "bad" for a wrong token, else None.
+        On the page endpoint any Authorization header is "wrong_endpoint"; the API endpoint never reads the cookie."""
+        role = self.server.role
+        if role == PAGE_ROLE and self.headers.get("Authorization") is not None:
+            return "wrong_endpoint"
         if self.headers.get("Authorization") is not None:
             return SESSION if self.server.tokens.valid(self.headers.get("Authorization")) else "bad"
-        if self.server.owner is not None and self.server.owner.verify(self._cookie()):
+        if role != API_ROLE and self.server.owner is not None and self.server.owner.verify(self._cookie()):
             return OWNER
         return None
 
@@ -369,13 +390,21 @@ class Handler(BaseHTTPRequestHandler):
             self._error(404, "not_found")
             return
         name, item_id, methods = route
+        role = self.server.role
+        served = [m for m in methods if served_by(role, name, m)]
+        if not served or (method in methods and method not in served):
+            self._error(404, "not_found")
+            return
         if method not in methods:
-            self._error(405, "method_not_allowed", {"Allow": ", ".join(methods)})
+            self._error(405, "method_not_allowed", {"Allow": ", ".join(served)})
             return
         if name in OWNER_UI and self.server.owner is None:
             self._error(404, "owner_ui_disabled")
             return
         principal = self._principal()
+        if principal == "wrong_endpoint":
+            self._error(403, "wrong_endpoint")
+            return
         if principal == "bad":
             self._error(401, "unauthorized", {"WWW-Authenticate": 'Bearer realm="tld board"'})
             return
@@ -707,7 +736,9 @@ def make_server(store: Store, tokens: Tokens, title: str, host: str, port: int,
                 session_url: str | None = None, public_origin: str | None = None,
                 trust_proxy: bool = False, limiter: LoginLimiter | None = None,
                 max_connections: int = MAX_CONNECTIONS, usage_plan: tuple[str | None, float] = (None, 5.0),
-                clock=time.time) -> ThreadingHTTPServer:
+                clock=time.time, role: str = BOTH_ROLE) -> ThreadingHTTPServer:
+    if role not in (BOTH_ROLE, PAGE_ROLE, API_ROLE):
+        raise ValueError(f"unknown role {role!r}")
     server = BoardServer((host, port), Handler, max_connections)
     if owner is not None and owner.revocations is None:
         owner.revocations = store  # logouts survive a restart
@@ -721,6 +752,7 @@ def make_server(store: Store, tokens: Tokens, title: str, host: str, port: int,
     server.trust_proxy = trust_proxy  # type: ignore[attr-defined]
     server.usage_plan = usage_plan  # type: ignore[attr-defined]
     server.clock = clock  # type: ignore[attr-defined]
+    server.role = role  # type: ignore[attr-defined]
     return server
 
 
@@ -771,6 +803,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--session-hours", type=int, default=12, dest="session_hours")
     parser.add_argument("--trust-proxy", action="store_true", dest="trust_proxy",
                         help="rate-limit logins by the last X-Forwarded-For entry (behind exactly one reverse proxy)")
+    parser.add_argument("--api-port", type=int, dest="api_port",
+                        default=os.environ.get("TLD_BOARD_API_PORT") or None,
+                        help="a second port that serves only the sessions' API; --port then serves only the owner's page")
     args = parser.parse_args(argv)
     write = os.environ.get("TLD_BOARD_TOKEN", "")
     passphrase = os.environ.get("TLD_BOARD_OWNER_PASSPHRASE", "")
@@ -792,6 +827,14 @@ def main(argv: list[str] | None = None) -> int:
     if not 1 <= args.session_hours <= 24 * 30:
         print("board_server: --session-hours must be between 1 and 720", file=sys.stderr)
         return 2
+    if args.api_port is not None:
+        if not 0 <= args.api_port <= 65535 or (args.api_port != 0 and args.api_port == args.port):
+            print("board_server: --api-port must be 0 to 65535 and differ from --port", file=sys.stderr)
+            return 2
+        if not passphrase:
+            print("board_server: --api-port needs TLD_BOARD_OWNER_PASSPHRASE (the page endpoint serves only the owner)",
+                  file=sys.stderr)
+            return 2
     try:
         session_url = check_session_url(os.environ.get("TLD_BOARD_SESSION_URL"))
         if args.public_origin:
@@ -807,18 +850,44 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"board_server: {exc}", file=sys.stderr)
         return 2
-    server = make_server(store, Tokens(write), args.title, args.host, args.port, tuple(args.allow_origin),
-                         owner, session_url, args.public_origin, args.trust_proxy, usage_plan=usage_plan)
-    print(f"board_server: listening on http://{args.host}:{server.server_address[1]}",
+    tokens = Tokens(write)
+    split = args.api_port is not None
+    server = api_server = api_thread = None
+    try:
+        server = make_server(store, tokens, args.title, args.host, args.port, tuple(args.allow_origin),
+                             owner, session_url, args.public_origin, args.trust_proxy, usage_plan=usage_plan,
+                             role=PAGE_ROLE if split else BOTH_ROLE)
+        if split:
+            api_server = make_server(store, tokens, args.title, args.host, args.api_port, tuple(args.allow_origin),
+                                     None, session_url, args.public_origin, args.trust_proxy,
+                                     usage_plan=usage_plan, role=API_ROLE)
+    except OSError as exc:
+        if server is not None:
+            server.server_close()
+        print(f"board_server: {exc}", file=sys.stderr)
+        return 2
+    suffix = " (page)" if split else ""
+    print(f"board_server: listening on http://{args.host}:{server.server_address[1]}{suffix}",
           file=sys.stderr, flush=True)
+    if api_server is not None:
+        print(f"board_server: listening on http://{args.host}:{api_server.server_address[1]} (api)",
+              file=sys.stderr, flush=True)
     if owner is None:
         print("board_server: TLD_BOARD_OWNER_PASSPHRASE is not set: the owner UI is off (API only)",
               file=sys.stderr, flush=True)
     try:
+        if api_server is not None:
+            api_thread = threading.Thread(target=api_server.serve_forever, daemon=True)
+            api_thread.start()
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        if api_server is not None:
+            api_server.shutdown()
+            api_server.server_close()
+            if api_thread is not None:
+                api_thread.join(5)
         server.server_close()
     return 0
 
