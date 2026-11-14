@@ -10,7 +10,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-digest
 
-- pending
+- worker: The worker added input hardening after a security review: ids must fully match the board id pattern, unknown question kinds and malformed fields are skipped, input is length-bounded before masking, backslash tokens count as paths, and main exits 1 if digest raises.
+- review: No deviation from the plan text in the diff. Open worker findings for later phases: the playbook must always pass the vocabulary option and treat qid as data; the email pattern is quadratic on hostile input, kept as the plan spells it.
+- retry: No retry; the worker reran the security role once after fixing blocking findings itself.
 
 ## p3a-policy
 
