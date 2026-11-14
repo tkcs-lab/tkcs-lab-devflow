@@ -3,8 +3,10 @@ import json
 import os
 import subprocess
 import tempfile
+import socket
 import threading
 import time
+import types
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -196,6 +198,85 @@ def test_answers_wait_returns_as_soon_as_the_owner_answers(server):
         timer.cancel()
     assert result.returncode == 0 and json.loads(result.stdout) == {"SEC-1": "plan", "go": False}
     assert time.monotonic() - started < 20
+
+
+@pytest.mark.slow
+def test_answers_wait_unreachable_board_exits_1():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    result = tld("answers", "a-0000000000000000", "--wait", "2", "--interval", "1",
+                 env=env_for(f"http://127.0.0.1:{port}"))
+    assert result.returncode == 1
+    assert result.stderr.count("board unreachable") == 1 and WRITE not in result.stderr
+
+
+# ---- answers --wait survives a blip ---------------------------------------------------------------
+
+def scripted(monkeypatch, replies):
+    """Script `_get` with `replies` (an exception instance is raised, the last item repeats) and fake the clock."""
+    state = {"calls": 0, "now": 0.0, "sleeps": []}
+    items = list(replies)
+
+    def fake_get(config, ask_id):
+        state["calls"] += 1
+        item = items.pop(0) if len(items) > 1 else items[0]
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+    def fake_sleep(seconds):
+        state["sleeps"].append(seconds)
+        state["now"] += seconds
+
+    monkeypatch.setattr(inbox, "_config", lambda: inbox.board_client.Config("http://board.invalid", "t"))
+    monkeypatch.setattr(inbox, "_get", fake_get)
+    monkeypatch.setattr(inbox, "time", types.SimpleNamespace(monotonic=lambda: state["now"], sleep=fake_sleep))
+    return state
+
+
+def answers_main(*extra):
+    return inbox.main(["answers", "a-0000000000000000", *extra])
+
+
+def test_answers_wait_retries_a_transient_failure_until_answered(monkeypatch, capsys):
+    state = scripted(monkeypatch, [OSError(), (503, {}), (429, {}),
+                                   (200, {"state": "answered", "answers": {"go": True}})])
+    assert answers_main("--wait", "60", "--interval", "1") == 0
+    out = capsys.readouterr()
+    assert json.loads(out.out) == {"go": True}
+    assert out.err.count("board unreachable, retrying until the wait ends") == 1
+    assert state["sleeps"] and all(s == 1 for s in state["sleeps"])
+
+
+def test_answers_wait_unreachable_for_the_whole_wait_is_exit_1(monkeypatch, capsys):
+    scripted(monkeypatch, [OSError()])
+    assert answers_main("--wait", "5", "--interval", "1") == 1
+    assert capsys.readouterr().err.strip().splitlines()[-1] == "tld board: cannot reach the board (OSError)"
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404])
+def test_answers_wait_does_not_retry_client_errors(monkeypatch, status):
+    state = scripted(monkeypatch, [(status, {})])
+    assert answers_main("--wait", "60", "--interval", "1") == 1
+    assert state["calls"] == 1 and state["sleeps"] == []
+
+
+def test_answers_wait_deadline_reports_the_last_error(monkeypatch, capsys):
+    scripted(monkeypatch, [OSError(), (503, {})])
+    assert answers_main("--wait", "3", "--interval", "1") == 1
+    assert capsys.readouterr().err.strip().splitlines()[-1] == "tld board: the board answered HTTP 503"
+
+
+def test_answers_wait_open_after_a_failure_is_exit_3(monkeypatch):
+    scripted(monkeypatch, [(503, {}), (200, {"state": "open"})])
+    assert answers_main("--wait", "3", "--interval", "1") == 3
+
+
+def test_answers_without_wait_tries_once(monkeypatch, capsys):
+    state = scripted(monkeypatch, [(503, {})])
+    assert answers_main() == 1
+    assert state["calls"] == 1 and "board unreachable" not in capsys.readouterr().err
 
 
 def test_cancel(server):
