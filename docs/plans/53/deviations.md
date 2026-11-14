@@ -31,8 +31,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - review: The worker ran the dod rows by hand, not the dod playbook; this merge ran the full suite, docs index and baseline checks green. Open non-blocking security notes for the final review: a stale document naming the public questions record id could close a later waiting run; a version-conflict retry should repeat the questions and waiting_user checks; the guard test only checks phrases.
 
 ## p4-retire
+- worker: The guide has a few lines beyond the brief steps (78 lines, under the limit) and states the own-total reporting, the review apply guards and the accepted forged-branch risk. The security role did not run again after the last two wording edits of the guide.
+- review: Open items the worker raised for the final review and the owner: SECURITY.md has no entry for the forged-branch risk; step 0 of the questions playbook trusts the decisions_ask of a branch header without checking it belongs to this repository; the digest allows a run without the vocabulary option and only the playbook prevents it; no branch ruleset scopes review/questions branches to the agent account.
 
-- pending
 
 ## Final review
 
