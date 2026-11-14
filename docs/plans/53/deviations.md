@@ -17,8 +17,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - final: A question whose id does not match the board question id pattern is emitted with the id q followed by its index, instead of being skipped.
 - final: The cut treats the number placeholder as one unit and cuts before its hash sign, where the plan says to cut before the angle bracket.
 - final: Tokens are cut to 200 characters before masking, as input bounding added after the security review.
-- final: Owner decision (board ask, answer hash_emitted): the cluster fingerprint now hashes the emitted, vocabulary-filtered template with source and kind, not the template before the filter. This departs from plan 3.2 and from the p2 acceptance wording that the fingerprint is equal with a vocabulary; the corpus value without a vocabulary is unchanged. A changed vocabulary changes fingerprints, so an earlier finding can resurface once, and clusters that differ only in filtered words can now share a fing
-- retry: Fix worker fix-1 (Plan-Phase question-review/fix-1) made the change above and added two tests for similarity of empty word sets and for the empty flag of an unanswered ask.
+- final: Owner decision (board ask, answer hash_emitted): the cluster fingerprint now hashes the emitted, vocabulary-filtered template with source and kind, not the template before the filter. This departs from plan 3.2 and from the p2 acceptance wording that the fingerprint is equal with a vocabulary.
+- final: Effects of that decision: the corpus value without a vocabulary is unchanged; a changed vocabulary changes fingerprints, so an earlier finding can resurface once; clusters that differ only in filtered words, also two in one digest, can share a fingerprint, and step 4 of the questions playbook then hides a later finding of either.
+- fix: Fix worker fix-1 (Plan-Phase question-review/fix-1) made the change above and added two tests for similarity of empty word sets and for the empty flag of an unanswered ask.
 
 ## p3a-policy
 
@@ -45,6 +46,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - final: Blocking 1, p2-digest: the fingerprint is an unkeyed hash of the masked text before the vocabulary filter and is published beside the filtered template. The plan fixes this form, so the owner decides; see the board ask.
 - final: Blocking 2, p2-digest: four digest behaviours were missing from the deviations file; added by the orchestrator under p2-digest.
+- final: Round 1 blocking 1 resolved: owner answered hash_emitted, fix-1 merged; see p2-digest.
+- final: Round 2 blocking 1, p2-digest: the owner-decision entry was cut at 500 characters by the deviations CLI; rewritten as two entries by the orchestrator.
 
 ## Finishing
 
