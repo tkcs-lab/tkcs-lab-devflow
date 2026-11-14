@@ -145,7 +145,7 @@ land:
 
 Create one scheduled task per repository **in the claude.ai UI, with the repository attached to the
 task**, weekly (`/ci` daily), with the prompt `/deps`, `/ci`, `/upstream`, `/docs tidy` or `/questions` (weekly), permission mode **auto**, and an environment
-that has the variables `TLD_BOARD_URL` and `TLD_BOARD_TOKEN` (see the next section). All three commands ask nothing and stop
+that has the variables `TLD_BOARD_URL` and `TLD_BOARD_TOKEN` (see the next section). All of them except `/questions` (one decisions ask) ask nothing and stop
 cleanly with `needs_you` on the status record when they are unsure. Pick a time outside the hours when
 you work in the repository.
 

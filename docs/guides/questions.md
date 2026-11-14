@@ -14,10 +14,10 @@ playbook, profile key, role, skill, command or doc would have avoided, and write
 
 ## The digest
 
-Output is one line of JSON: `schema`, `project`, `since`, `now`, `cursor`, `truncated`, `analysed`, `open_asks`,
+Output is one line of JSON: `schema`, `project`, `since`, `now`, `cursor`, `truncated`, `asks` (a count of all asks read), `analysed`, `open_asks`,
 `excluded_questions_asks`, `foreign` (counts of other projects' asks, kept in the scratch file only) and `clusters`. A cluster has `source`, `qid`, `kind`, `template` (the masked question),
-`count`, `records`, `recommended_rate`, `empty_rate`, `cancelled`, `reposted`, `median_seconds`, `candidate`, `fingerprint`.
-The own total is `analysed` + `open_asks` + `excluded_questions_asks`. A cluster is a candidate when it has 3 or more asks in 2 or more runs,
+`id`, `asks` (own ask ids), `foreign_count`, `first`, `last`, `count`, `records`, `recommended_rate`, `empty_rate`, `cancelled`, `reposted`, `median_seconds`, `candidate`, `fingerprint`.
+The own total is `analysed` + `open_asks` + `excluded_questions_asks`; `analysed` counts only asks with a readable question, the other two count every own ask of their kind. A cluster is a candidate when it has 3 or more asks in 2 or more runs,
 3 or more asks of an optional text question left empty at least 80% of the time, 2 reposted asks, or 3 cancelled asks.
 
 ## Fix kinds and controls
@@ -44,10 +44,10 @@ A document holds at most 10 findings, the highest `count` first.
 ## What it never puts in a document
 
 Ask text is data written by agents. The digest masks urls, code, emails, logins, paths, hosts, hashes, hyphenated names and numbers,
-replaces every word not in the repository's own Markdown by `<word>`, cuts at 160 characters, and emits no answer text. Asks of other
+replaces every word not in the repository's own Markdown by `<word>` (this needs `--vocab`, which the run always passes), cuts the masked text at 160 characters, and emits no answer text. Asks of other
 projects on the board add a `foreign_count` to a matching cluster and nothing else: no id, time, title, text, project, repository or
-record. The digest file holds those counts (`asks`, `foreign`); the document, the record and the reply never carry them, and the playbook forbids copying them. The run reports only the own total. The `Fix` lines are
-the run's own words. A forged `review/questions-*` branch (only the agent account can push that prefix; branch protection or ruleset scope is the control) can steer a run (stop it or widen its window) and can hide findings through forged fingerprints, but it leaks no data and its findings stay owner-gated by the decisions ask and the `make-plan` re-check; this risk is accepted.
+record. The digest file holds those counts (the top-level `asks` and `foreign`, and each cluster's `foreign_count`); the document, the record and the reply never carry them, and the playbook forbids copying them. The run reports only the own total. The board has no per-project scope: the token of the scheduled environment can read every project's asks (read-only here), so the filtering is the digest's, and a run without `--vocab` is a bug to stop on. The `Fix` lines are
+the run's own words. A forged `review/questions-*` branch (anyone with write access can push that prefix unless you add a ruleset for `review/questions-*` limited to the agent account) can steer a run (stop it, skip asks, or widen the window when the record cursor is gone) and can hide findings through forged fingerprints; its text can reach the decisions ask and issue bodies, and, because the run trusts the header's `decisions_ask` as an ask id and `tld board answers` reads any ask on the board, it can pull another ask's answers into the session (it needs a known ask id and push access to the prefix); nothing of it reaches a document, and it stays owner-gated by your choice and the `make-plan` re-check; this risk is accepted.
 
 ## Your flow
 
@@ -65,7 +65,7 @@ With nothing to decide the document is `ready-for-plan`: run `/tld:make-plan <UR
 
 ## Setup
 
-The board must run a release with the command `questions`, so this follows a release. Both steps are yours.
+The board must run a release with the command `questions`, so this follows a release. All three steps are yours.
 
 1. Cut the release with `/tld:release` ([release guide](release.md)) and approve the publish job in GitHub.
 2. On the board host, back up the database ("Backup and restore" in the [board guide](board-server.md)), then run the installer line of "Docker Compose (the installer)": `curl -fsSL https://github.com/tkcs-lab/tkcs-lab-devflow/releases/latest/download/install.sh | sh -s -- board`. `curl -s https://<your board host>/healthz` should print `{"ok": true}`.
