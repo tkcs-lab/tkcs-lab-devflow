@@ -144,7 +144,7 @@ def defined_actions() -> set[str]:
 
 # A bare code span that looks like a runtime action (`check_in`, `stop_worker`, `github.pr_read`) must be one (C8).
 ACTION_LIKE = re.compile(r"^(github\.[a-z_]+|(?:start|read|message|stop|check|wait_for|run|ask|notify|show|"
-                         r"schedule|secrets)_[a-z_]+|identity)$")
+                         r"schedule|secrets|watch)_[a-z_]+|identity)$")
 
 
 def used_actions(path: Path) -> set[str]:
@@ -164,17 +164,25 @@ def test_the_action_checker_sees_bare_spans_and_unknown_groups():
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         f = Path(tmp) / "x.md"
-        f.write_text("Then `stop_workers` and `github.pr_merge` and `run_role`, then `tld plann branch-name`.\n")
-        assert used_actions(f) == {"stop_workers", "github.pr_merge", "run_role"}
+        f.write_text("Then `stop_workers` and `github.pr_merge` and `run_role` and `watch_board`, then `tld plann branch-name`.\n")
+        assert used_actions(f) == {"stop_workers", "github.pr_merge", "run_role", "watch_board"}
         assert [m.group(1) for c in code_texts(f.read_text()) for m in TLD_CALL.finditer(c)] == ["plann"]
 
 
 def test_runtime_defines_the_actions_of_the_plan():
     names = defined_actions()
     for action in ("start_worker", "wait_for_workers", "check_in", "message_worker", "stop_worker", "run_role",
-                   "ask_human", "notify_human", "schedule_wakeup", "identity", "read_worker", "run_helper"):
+                   "ask_human", "notify_human", "schedule_wakeup", "identity", "read_worker", "run_helper", "watch_command"):
         assert action in names, action
     assert any(n.startswith("github.") for n in names)
+
+
+def test_claude_adapter_maps_every_runtime_action():
+    skill = (ROOT / "adapters" / "claude" / "skills" / "runtime" / "SKILL.md").read_text()
+    for name in sorted(n for n in defined_actions() if "." not in n):
+        assert name in skill, f"the Claude runtime map does not mention {name}"
+    line = next(l for l in skill.splitlines() if l.startswith("| `watch_command"))
+    assert "run_in_background" in line and "TaskStop" in line
 
 
 @pytest.mark.parametrize("path", sorted(PLAYBOOKS.rglob("*.md")), ids=rel)

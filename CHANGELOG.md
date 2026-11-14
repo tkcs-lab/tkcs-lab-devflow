@@ -5,6 +5,14 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+### Added
+
+- An attended session that asks the owner on the board now watches the ask in the background (`watch_command` with `tld board answers <id> --wait`) and wakes within about 15 seconds of the answer, instead of on its next 10-minute timer; the timer stays, every 60 minutes, as a fallback.
+
+### Changed
+
+- `tld board answers ID --wait S` retries an unreachable board (no connection, HTTP 429 or 5xx) until the wait ends instead of exiting 1 at once.
+
 ## [1.2.0] - 2026-11-13
 
 ### Added

@@ -17,7 +17,8 @@ never writes to GitHub: the session posts the body with its own GitHub tool. The
 
 `answers ID` prints the answers as one JSON object (question id -> answer) once the owner answered. Exit 0
 answered; 3 still open (after --wait seconds of polling every --interval seconds); 4 cancelled; 1 not found,
-no board, or the board cannot be reached.
+no board, or the board cannot be reached; with --wait, an unreachable board (no connection, HTTP 429 or 5xx) is
+retried until the wait ends.
 
 `answers --from-issue` reads the replies to a fallback comment. COMMENTS.json is a JSON list of
 {"author": LOGIN, "permission": admin|maintain|write|read|none, "body": TEXT}, oldest first, as the session
@@ -381,12 +382,33 @@ def cmd_answers(args: argparse.Namespace) -> int:
         return 1
     deadline = time.monotonic() + max(0, args.wait)
     interval = max(1.0, args.interval)
+    waiting = args.wait > 0
+    failure = None  # the last transient failure, while --wait retries
+    announced = False
     while True:
         try:
             status, payload = _get(config, args.id)
         except OSError as exc:
-            _err(f"cannot reach the board ({type(exc).__name__})")
-            return 1
+            if not waiting:
+                _err(f"cannot reach the board ({type(exc).__name__})")
+                return 1
+            status, payload = None, f"cannot reach the board ({type(exc).__name__})"
+        else:
+            if waiting and (status == 429 or status >= 500):
+                payload = f"the board answered HTTP {status}"
+                status = None
+        if status is None:
+            if not announced:
+                announced = True
+                print("board unreachable, retrying until the wait ends", file=sys.stderr)
+            failure = payload
+            left = deadline - time.monotonic()
+            if left <= 0:
+                _err(failure)
+                return 1
+            time.sleep(min(interval, left))
+            continue
+        failure = None
         if status != 200 or not isinstance(payload, dict):
             _err("no such ask" if status == 404 else f"the board answered HTTP {status}")
             return 1
