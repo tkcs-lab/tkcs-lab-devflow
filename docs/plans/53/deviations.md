@@ -13,6 +13,10 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - worker: The worker added input hardening after a security review: ids must fully match the board id pattern, unknown question kinds and malformed fields are skipped, input is length-bounded before masking, backslash tokens count as paths, and main exits 1 if digest raises.
 - review: No deviation from the plan text in the diff. Open worker findings for later phases: the playbook must always pass the vocabulary option and treat qid as data; the email pattern is quadratic on hostile input, kept as the plan spells it.
 - retry: No retry; the worker reran the security role once after fixing blocking findings itself.
+- final: The digest turns every non-ASCII character that is not a letter or digit into a space when a vocabulary is given, which the plan does not state.
+- final: A question whose id does not match the board question id pattern is emitted with the id q followed by its index, instead of being skipped.
+- final: The cut treats the number placeholder as one unit and cuts before its hash sign, where the plan says to cut before the angle bracket.
+- final: Tokens are cut to 200 characters before masking, as input bounding added after the security review.
 
 ## p3a-policy
 
@@ -37,7 +41,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: Blocking 1, p2-digest: the fingerprint is an unkeyed hash of the masked text before the vocabulary filter and is published beside the filtered template. The plan fixes this form, so the owner decides; see the board ask.
+- final: Blocking 2, p2-digest: four digest behaviours were missing from the deviations file; added by the orchestrator under p2-digest.
 
 ## Finishing
 
