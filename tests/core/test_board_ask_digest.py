@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import io
 import json
 import re
@@ -130,15 +131,24 @@ def test_digest_cursor_is_null_without_own_asks(corpus):
     assert result["clusters"] == []
 
 
+def _fingerprint(source, kind, template):
+    return hashlib.sha256(f"{source or '-'}|{kind}|{template}".encode()).hexdigest()[:16]
+
+
 def test_digest_groups_the_verify_confirmations(corpus):
     c1 = run(corpus)["clusters"][0]
     assert (c1["source"], c1["kind"], c1["count"], c1["records"], c1["foreign_count"]) == ("run", "confirm", 4, 4, 1)
     assert (c1["recommended_rate"], c1["empty_rate"], c1["median_seconds"]) == (1.0, None, 90)
     assert (c1["first"], c1["last"], c1["candidate"]) == ("2026-01-05T10:00:00Z", "2026-01-13T10:00:00Z", True)
     assert c1["asks"] == [find(corpus, n)["id"] for n in (1, 2, 3, 10)]
-    assert c1["fingerprint"] == "fb642a6b0656518f"
+    assert c1["fingerprint"] == _fingerprint("run", "confirm", c1["template"]) == "fb642a6b0656518f"
     vocab = set(re.findall(r"[a-z]+", ask_digest.mask(VERIFY_TEXT)))
-    assert run(corpus, vocab=vocab)["clusters"][0]["fingerprint"] == "fb642a6b0656518f"
+    full = run(corpus, vocab=vocab)["clusters"][0]
+    assert full["fingerprint"] == _fingerprint("run", "confirm", full["template"]) == "fb642a6b0656518f"
+    stripped = run(corpus, vocab=vocab - {"pytest"})["clusters"][0]
+    assert "<word>" in stripped["template"]
+    assert stripped["fingerprint"] == _fingerprint("run", "confirm", stripped["template"]) == "20a20556e8e429d0"
+    assert stripped["fingerprint"] != c1["fingerprint"]
 
 
 def test_digest_reports_unfilled_optional_text(corpus):
@@ -449,3 +459,16 @@ def test_an_id_with_a_trailing_newline_is_not_valid():
     other["questions"][0]["id"] = "q1\n"
     result = run([ask, other])
     assert result["asks"] == 1 and result["clusters"][0]["qid"] == "q0"
+
+
+def test_similar_with_two_empty_word_sets_needs_equal_templates():
+    empty = frozenset()
+    assert ask_digest._similar(empty, "<n>", empty, "<n>") is True
+    assert ask_digest._similar(empty, "<n>", empty, "<path>") is False
+
+
+def test_empty_is_false_for_an_ask_that_was_not_answered():
+    ask = make_ask(1, "anything else?", kind="text", required=False, state="open")
+    assert ask_digest._empty(ask, ask["questions"][0]) is False
+    answered = make_ask(2, "anything else?", kind="text", required=False, answers={}, answered_at="2026-03-01T10:01:00Z")
+    assert ask_digest._empty(answered, answered["questions"][0]) is True
