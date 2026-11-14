@@ -5,7 +5,7 @@ from tld.guard import board_gate
 
 PLAYBOOKS = ROOT / "playbooks"
 POLICY = PLAYBOOKS / "policies" / "status-board.md"
-WRITERS = ("implement", "make-plan", "review", "migrate", "setup", "land", "deps", "upstream", "ci", "docs")
+WRITERS = ("implement", "make-plan", "review", "migrate", "setup", "land", "deps", "upstream", "ci", "docs", "questions")
 
 
 def _text(path):

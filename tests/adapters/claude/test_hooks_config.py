@@ -195,7 +195,7 @@ EXEMPT_LINE = "`tld dod exempt`"
 
 
 @pytest.mark.parametrize("name, exempt", [("implement", True), ("make-plan", True), ("review", True), ("land", True),
-                                          ("setup", True), ("deps", False), ("ci", False), ("docs", False), ("upstream", False),
+                                          ("setup", True), ("deps", False), ("ci", False), ("docs", False), ("upstream", False), ("questions", True),
                                           ("dod", False), ("board", False)])
 def test_which_playbooks_mark_the_session_exempt(name, exempt):
     assert (EXEMPT_LINE in " ".join((ROOT / "playbooks" / f"{name}.md").read_text().split())) is exempt

@@ -246,7 +246,7 @@ while a session has no plan, a write into the repository is denied and the agent
 to propose `/tld:make-plan` (the `ask` skill, `/tld:ask`, says how).
 
 - **Opens per session, from the prompt hook.** A prompt that starts with `make-plan`, `implement`, `review`, `setup`,
-  `migrate`, `release`, `land`, `deps`, `upstream`, `docs` or `repo-admin` (`/tld:<name>` or `/<name>`) opens that session id. Other
+  `migrate`, `release`, `land`, `deps`, `upstream`, `questions`, `docs` or `repo-admin` (`/tld:<name>` or `/<name>`) opens that session id. Other
   known commands (`/tld:dod`, `/tld:ask`) neither open it nor add context. A skill the model starts itself does not pass
   through `UserPromptSubmit`, so it cannot open the gate. The prompt may also arrive expanded
   (`<command-name>/tld:<name></command-name>` after any leading `<system-reminder>` blocks), which opens it too; a
@@ -275,7 +275,7 @@ the working tree, `disable` from the trusted copy.
 ### `board-gate`
 
 Opt-in, off by default: set `hooks.board_gate.enabled` to `true`. The gate covers the commands that always write a status
-record (`make-plan`, `implement`, `review`, `setup`, `migrate`, `land`, `deps`, `upstream`, `ci`), and `docs` only in its
+record (`make-plan`, `implement`, `review`, `setup`, `migrate`, `land`, `deps`, `upstream`, `ci`, `questions`), and `docs` only in its
 `init` and `tidy` modes (`/tld:docs` and `/tld:docs check` write none, so they neither open the state nor block). A
 session that one of them started must write its status record to the board once before it ends a turn. It is a nudge,
 not a control.

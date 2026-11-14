@@ -16,7 +16,7 @@ from tld.guard import _writes, markers, protect_paths
 from tld.guard._common import Ctx, ProfileError
 
 NAME = "plan-gate"
-OPENING = ("make-plan", "implement", "review", "setup", "migrate", "land", "deps", "upstream", "docs", "repo-admin", "release")
+OPENING = ("make-plan", "implement", "review", "setup", "migrate", "land", "deps", "upstream", "questions", "docs", "repo-admin", "release")
 CONTENT_WRITES = ("push_files", "create_or_update_file", "delete_file")   # GitHub MCP tools that write files
 SESSION_TTL_SECONDS = 24 * 3600
 WORKER_COMMAND = "tld guard allow-" + "plan"   # in an /implement worker brief; split so the deny text path never names it

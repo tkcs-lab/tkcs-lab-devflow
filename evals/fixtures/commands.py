@@ -8,6 +8,7 @@ judgement, so the task checks the command still reads the profile and stops wher
 - `ci`: `ci.lookback_hours: 0`, out of range, so ci stops with the validation message.
 - `docs`: a docs index that misses one doc (`docs/sync.md`); `docs check` reports it and changes nothing.
 - `board`: no board variables; the board check prints the setup text.
+- `questions`: no board variables, so questions stops with `questions: no board`.
 - `implement`: a plan on `feature/tags` whose manifest has a dependency cycle; implement must stop before it
   starts a worker.
 - `migrate`: a claude-toolkit era profile in `.claude/toolkit.yaml` (model names, `models.planner`, no
@@ -76,6 +77,9 @@ def build(dest: Path, command: str = "land") -> dict:
     elif command == "usage":
         files[".tld/toolkit.yaml"] = _profile()
         expected["stop_message"] = "usage: no reading"
+    elif command == "questions":
+        files[".tld/toolkit.yaml"] = _profile()
+        expected["stop_message"] = "questions: no board"
     elif command == "implement":
         files[".tld/toolkit.yaml"] = _profile()
     elif command == "migrate":
