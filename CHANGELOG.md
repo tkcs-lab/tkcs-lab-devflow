@@ -11,6 +11,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Changed
 
+- The research prompt states the 3500-character report limit first and as a hard rule, gives the report parts a budget (6 findings of 350 characters, 400 for Unknowns, 300 for the answer), and tells the researcher to count and trim before replying. `tld research report` still rejects a longer report.
 - `tld board answers ID --wait S` retries an unreachable board (no connection, HTTP 429 or 5xx) until the wait ends instead of exiting 1 at once.
 
 ## [1.2.0] - 2026-11-13

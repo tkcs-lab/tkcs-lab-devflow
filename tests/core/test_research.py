@@ -49,8 +49,35 @@ def prompt_file(tmp_path, text):
 
 # ---- the template and check-prompt -----------------------------------------------------------------
 
-def test_the_template_has_904_characters():
-    assert len(TEMPLATE.read_text(encoding="utf-8")) == 904
+def test_the_template_has_1186_characters():
+    assert len(TEMPLATE.read_text(encoding="utf-8")) == 1186
+
+
+def test_the_template_states_the_hard_limit_before_the_first_section():
+    text = TEMPLATE.read_text(encoding="utf-8")
+    assert re.search(r"^HARD LIMIT: .*\b3500\b", text, re.M)
+    assert text.index("3500") < text.index("\nQuestion:")
+    assert "Report format, exactly" in text
+    assert "Count the characters before replying; over 3500" in text
+
+
+def test_a_report_at_the_template_budgets_fits_the_limit():
+    text = TEMPLATE.read_text(encoding="utf-8")
+    m = re.search(r"at most (\d+) findings of (\d+) characters, Unknowns (\d+)", text)
+    a = re.search(r"^Answer: <at most (\d+) characters>$", text, re.M)
+    assert m is not None and a is not None
+    n, f, u = map(int, m.groups())
+    ans = int(a.group(1))
+    body = ("Answer: " + "a" * ans + "\nFindings:\n"
+            + "".join(f"{i}. " + "c" * f + "\n" for i in range(1, n + 1))
+            + "Confidence: medium\nUnknowns: " + "u" * u)
+    status, text2, _ = research.split_reply(report(body=body), RID)
+    assert status == "ok"
+    assert len(text2) <= research.MAX_REPORT - 500
+
+
+def test_the_filled_template_leaves_room_for_a_real_question():
+    assert len(fill()) + 700 <= research.MAX_PROMPT
 
 
 def test_check_prompt_accepts_the_filled_template(tmp_path):
