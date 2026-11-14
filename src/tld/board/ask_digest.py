@@ -211,14 +211,15 @@ def _cluster_dict(number: int, members: list[dict], vocab: frozenset[str] | None
     candidate = ((count >= MIN_COUNT and records >= MIN_RECORDS)
                  or (count >= MIN_COUNT and empty_rate is not None and empty_rate >= MIN_EMPTY_RATE)
                  or reposted >= MIN_REPOSTED or cancelled >= MIN_CANCELLED)
-    fingerprint = hashlib.sha256(f"{seed['source'] or '-'}|{kind}|{seed['raw']}".encode()).hexdigest()[:16]
+    template = apply_vocab(seed["raw"], vocab) if vocab is not None else seed["raw"]
+    fingerprint = hashlib.sha256(f"{seed['source'] or '-'}|{kind}|{template}".encode()).hexdigest()[:16]
     return {
         "id": f"c{number}",
         "fingerprint": fingerprint,
         "source": seed["source"],
         "qid": qid,
         "kind": kind,
-        "template": apply_vocab(seed["raw"], vocab) if vocab is not None else seed["raw"],
+        "template": template,
         "count": count,
         "records": records,
         "asks": sorted({e["ask"] for e in members})[:MAX_CLUSTER_ASKS],
