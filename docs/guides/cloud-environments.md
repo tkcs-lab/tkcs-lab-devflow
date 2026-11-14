@@ -24,6 +24,8 @@ Every playbook assumes these settings.
 | Setup script | none, unless the project needs one; never a secret in it | it is stored in plain text |
 | Repositories | the repositories sessions work on | nothing else is cloned |
 
+With the split board (`--api-port`) use the API host in the Allowed domains, the network secret and `TLD_BOARD_URL` ([board-cloudflare.md](board-cloudflare.md)).
+
 Deny:
 
 - Full network access on this environment.
