@@ -1,0 +1,16 @@
+id: questions-no-board
+description: "/questions in a session with no board must say questions: no board and change nothing"
+command: /tld:questions
+arguments: ""
+fixture:
+  builder: commands
+  params:
+    command: questions
+model: sonnet
+repeats: 3
+timeout_s: 300
+cost_ceiling_usd: 0.6
+graders:
+  - name: result_mentions
+    key: stop_message
+  - no_changes

@@ -22,7 +22,7 @@ RUNTIME = PLAYBOOKS / "runtime.md"
 CORE_DIRS = [ROOT / d for d in ("playbooks", "roles", "checklists", "stacks")]
 CORE_FILES = sorted(p for d in CORE_DIRS for p in d.rglob("*.md"))
 ADAPTER_FILES = sorted(CLAUDE.rglob("*.md"))
-COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "ci", "upstream", "docs", "board", "migrate", "usage")
+COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "ci", "upstream", "docs", "board", "migrate", "usage", "questions")
 
 cli = _load("tld.cli")
 dispatch = _load("tld.roles.dispatch")
@@ -276,7 +276,7 @@ def test_every_command_playbook_writes_a_status_record_or_says_why_not(name):
 
 def test_record_commands_cover_the_playbooks():
     record = _load("tld.board.record")
-    expected = {"setup", "review", "make-plan", "deps", "ci", "upstream", "land", "docs", "migrate"}
+    expected = {"setup", "review", "make-plan", "deps", "ci", "upstream", "land", "docs", "migrate", "questions"}
     assert set(record.COMMANDS) == expected
 
 
@@ -308,7 +308,7 @@ def test_model_ids_live_in_one_file():
 
 
 # ---- research policy (plan 33) --------------------------------------------------------------
-RESEARCH_PLAYBOOKS = ("implement", "make-plan", "review", "ask", "deps", "ci", "upstream", "docs")
+RESEARCH_PLAYBOOKS = ("implement", "make-plan", "review", "ask", "deps", "ci", "upstream", "docs", "questions")
 
 
 @pytest.mark.parametrize("name", RESEARCH_PLAYBOOKS)
@@ -316,7 +316,7 @@ def test_playbooks_link_the_research_policy(name):
     assert "(policies/research.md)" in (PLAYBOOKS / f"{name}.md").read_text(), name
 
 
-@pytest.mark.parametrize("name", ("deps", "ci", "upstream", "docs"))
+@pytest.mark.parametrize("name", ("deps", "ci", "upstream", "docs", "questions"))
 def test_unattended_playbooks_report_open_research_questions(name):
     assert "Open research questions:" in (PLAYBOOKS / f"{name}.md").read_text(), name
 
@@ -374,3 +374,22 @@ def test_research_follow_up_brief_and_ask_keep_their_data_rules():
         assert phrase in impl, phrase
     ask = " ".join((PLAYBOOKS / "ask.md").read_text().split())
     assert "--forbid <owner>/<repo>" in ask and "never share a prompt it rejects" in ask
+
+
+# ---- questions (plan 53) ---------------------------------------------------------------------
+def test_questions_playbook_reads_only_digest_fields():
+    digest_mod = _load("tld.board.ask_digest")
+    corpus = json.loads((ROOT / "tests" / "fixtures" / "ask-digest-corpus.json").read_text())
+    out = digest_mod.digest(corpus["asks"], "acme/demo-app", None, "2026-01-20T00:00:00Z")
+    keys = set(out) | {k for c in out["clusters"] for k in c}
+    line = next(l for l in (PLAYBOOKS / "questions.md").read_text().splitlines() if l.strip().startswith("Digest fields it reads:"))
+    names = re.findall(r"`([^`]+)`", line)
+    assert names and "candidate" in names
+    assert [n for n in names if n not in keys] == []
+
+
+def test_questions_playbook_names_the_stop_message_of_its_eval():
+    text = (ROOT / "evals" / "fixtures" / "commands.py").read_text()
+    m = re.search(r'command == "questions":.*?expected\["stop_message"\] = "([^"]+)"', text, re.S)
+    assert m, "no questions stop_message in evals/fixtures/commands.py"
+    assert m.group(1) in (PLAYBOOKS / "questions.md").read_text()

@@ -409,6 +409,27 @@ def test_if_version_true_is_400(server):
 
 # ---- asks -----------------------------------------------------------------------------------------
 
+def test_get_asks_since_limit_and_order(server):
+    ids = [new_ask(server)["id"] for _ in range(3)]
+    _, _, everything = call(server, "GET", "/api/asks?order=asc&limit=1000", token=WRITE)
+    assert [a["id"] for a in everything["asks"]] == sorted(ids, key=lambda i: next(
+        (a["created_at"], a["id"]) for a in everything["asks"] if a["id"] == i))
+    _, _, one = call(server, "GET", "/api/asks?order=asc&limit=1", token=WRITE)
+    assert [a["id"] for a in one["asks"]] == [everything["asks"][0]["id"]]
+    _, _, none = call(server, "GET", "/api/asks?since=2999-01-01T00:00:00Z", token=WRITE)
+    assert none == {"asks": []}
+    _, _, all_ = call(server, "GET", "/api/asks?since=2000-01-01T00:00:00Z&order=desc", token=WRITE)
+    assert len(all_["asks"]) == 3
+    assert call(server, "GET", "/api/asks?since=", token=WRITE)[0] == 200
+
+
+@pytest.mark.parametrize("query", ["since=2026-01-01", "since=x", "limit=0", "limit=1001", "limit=-1", "limit=1.5",
+                                   "limit=abc", "limit=" + "9" * 5000, "order=ASC", "order=up"])
+def test_get_asks_rejects_bad_since_limit_and_order(server, query):
+    status, _, body = call(server, "GET", f"/api/asks?{query}", token=WRITE)
+    assert (status, body) == (400, {"error": "bad_request"})
+
+
 def test_ask_lifecycle(server, owner):
     cookie, csrf = owner
     ask = new_ask(server)

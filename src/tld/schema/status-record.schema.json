@@ -195,7 +195,7 @@
         "run",
         "command"
       ],
-      "description": "'run' is an implement orchestration or a single-session prompt run; 'command' is the record of any other command (setup, review, make-plan, deps, upstream, ci, land, docs, migrate)."
+      "description": "'run' is an implement orchestration or a single-session prompt run; 'command' is the record of any other command (setup, review, make-plan, deps, upstream, ci, land, docs, migrate, questions)."
     },
     "command": {
       "enum": [
@@ -208,7 +208,8 @@
         "docs",
         "review",
         "make-plan",
-        "migrate"
+        "migrate",
+        "questions"
       ],
       "description": "null when kind is 'run', else the command."
     },

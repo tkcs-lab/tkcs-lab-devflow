@@ -8,6 +8,9 @@ entry of the released version at the top of the GitHub release, above the list o
 ### Added
 
 - The board can serve its page and its sessions' API on two ports (`--api-port`, `TLD_BOARD_API_PORT`), so the page can sit behind Cloudflare Access and the API behind an IP allowlist; see `docs/guides/board-cloudflare.md`.
+- `/questions` (`/tld:questions`): a weekly unattended command that turns the asks agents put to you into a review document of the questions a better playbook, profile key, role, skill, command or doc would have avoided; the board needs this release (new status-record command `questions`).
+- `tld board ask-digest`, and `since`, `limit` and `order` on `GET /api/asks`: the digest groups a project's asks into clusters of similar questions and counts only for other projects.
+- A review document may carry a `status_record:` header; `review apply` then closes that record.
 - An attended session that asks the owner on the board now watches the ask in the background (`watch_command` with `tld board answers <id> --wait`) and wakes within about 15 seconds of the answer, instead of on its next 10-minute timer; the timer stays, every 60 minutes, as a fallback.
 
 ### Changed

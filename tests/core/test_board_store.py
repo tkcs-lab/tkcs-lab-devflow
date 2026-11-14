@@ -185,6 +185,41 @@ def test_asks_are_listed_open_first(tmp_path):
     assert store.get_ask(a["id"])["answered_at"] == "2026-11-09T12:00:03Z"
 
 
+def _timed_store(tmp_path, times):
+    stamps = iter(times)
+    return Store(str(tmp_path / "t.sqlite3"), clock=lambda: next(stamps))
+
+
+T = [f"2026-11-09T12:00:0{n}Z" for n in range(5)]
+
+
+def test_list_asks_since_keeps_only_newer_asks(tmp_path):
+    store = _timed_store(tmp_path, T)
+    asks = [store.create_ask(ask_doc()) for _ in T]
+    got = store.list_asks(since=T[1])
+    assert sorted(x["id"] for x in got) == sorted(a["id"] for a in asks[2:])
+    assert {x["created_at"] for x in got} == set(T[2:])
+
+
+def test_list_asks_limit_applies_after_since(tmp_path):
+    store = _timed_store(tmp_path, T)
+    for _ in T:
+        store.create_ask(ask_doc())
+    assert [x["created_at"] for x in store.list_asks(since=T[1], limit=2, ascending=True)] == [T[2], T[3]]
+
+
+def test_list_asks_ascending_lists_oldest_first(tmp_path):
+    same = "2026-11-09T12:00:01Z"
+    store = _timed_store(tmp_path, [T[0], same, same, T[3], T[4]])
+    first = store.create_ask(ask_doc())
+    b = store.create_ask(ask_doc())
+    c = store.create_ask(ask_doc())
+    newest_open = store.create_ask(ask_doc())
+    store.answer_ask(first["id"], {"SEC-1": "plan", "go": True})  # answered_at is not a created_at
+    got = store.list_asks(ascending=True)
+    assert [x["id"] for x in got] == [first["id"], *sorted([b["id"], c["id"]]), newest_open["id"]]
+
+
 def test_answers_are_validated_and_normalised(tmp_path):
     store = Store(str(tmp_path / "a.sqlite3"))
     ask = store.create_ask(ask_doc())

@@ -293,7 +293,7 @@ board's own `Origin` and the `X-CSRF-Token` header the login returned; the login
 | `DELETE /api/records/<id>` | yes | 403 | 200 `{"deleted": true}` | 404 `not_found` |
 | `POST /api/records/<id>/dismiss` | 403 | yes | 200 `{"id", "version", "dismissed_at"}`; body `{"version": n}` | 400 `bad_request`, 404 `not_found`, 409 `version_conflict` (`current`), 403 `csrf` |
 | `POST /api/records/<id>/restore` | 403 | yes | 200 `{"id", "dismissed_at": null}`; empty body | 404 `not_found` |
-| `GET /api/asks[?state=open]` | yes | yes | 200 `{"asks": [...]}`, open ones first | 400 for an unknown state |
+| `GET /api/asks[?state=open&since=<ISO>&limit=<n>&order=asc]` | yes | yes | 200 `{"asks": [...]}`; `since` keeps asks created after it, `limit` is 1 to 1000 (default 200), `order=asc` lists the oldest first (the default lists open asks first, then the newest first) | 400 for an unknown state, a bad since, limit or order |
 | `POST /api/asks` | yes | 403 | 201, the stored ask with its `id`; body the ask | 422 `invalid` (`errors`) |
 | `GET /api/asks/<id>` | yes | yes | 200, the ask | 404 `not_found` |
 | `POST /api/asks/<id>/answer` | 403 | yes | 200, the answered ask; body `{"answers": {"<question id>": value}}` | 409 `not_open`, 422 `invalid`, 403 `csrf` |
