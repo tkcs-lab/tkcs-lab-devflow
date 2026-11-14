@@ -1,7 +1,7 @@
 # Maintenance commands and the status board
 
-Six commands keep a repository up to date and tidy without you doing the work: `/deps`, `/ci`, `/upstream`,
-`/land`, `/docs tidy` and `/usage`. `/deps`, `/ci`, `/upstream`, `/docs tidy` and `/usage` run unattended from a scheduled task; `/land` is run by you. None
+Seven commands keep a repository up to date and tidy without you doing the work: `/deps`, `/ci`, `/upstream`,
+`/land`, `/docs tidy`, `/usage` and `/questions`. `/deps`, `/ci`, `/upstream`, `/docs tidy`, `/usage` and `/questions` run unattended from a scheduled task; `/land` is run by you. None
 of them ever merges, approves or enables auto-merge. Each, except `/usage`, writes a status record to the board (see
 below) when one exists; `/usage` writes none (see its section). What the spike found about what a cloud session can and cannot do is in
 [maintenance-spike.md](../architecture/maintenance-spike.md).
@@ -93,6 +93,15 @@ After a release that adds it:
    scheduled session may read its own stream (`usage: no reading` if not).
 4. After a day compare the Max bars with https://claude.ai/settings/usage; they should agree within 5 points.
 
+### `/questions`
+
+Weekly, unattended. It reads the asks agents put to you on the board since its last run, finds those a better playbook,
+profile key, role, skill, command or doc would have avoided, and writes a triaged review document on
+`review/questions-<date>`; with something to decide it posts one decisions ask. Its record id comes from
+`tld board record-id --command questions --unattended`. It needs the board release that knows the command `questions`
+(without it the run replies `questions: upgrade the board, it does not know the command questions`). Details,
+the controls it never removes and the setup: [questions.md](questions.md).
+
 ## Profile sections
 
 All sections are optional (`/ci` runs without its `ci` keys, on their defaults). A command whose section is missing stops with
@@ -132,11 +141,11 @@ land:
 
 `/land` also needs `git.bot_login`, the login of the account that opens the pull requests.
 
-## Scheduling `/deps`, `/ci`, `/upstream` and `/docs tidy`
+## Scheduling `/deps`, `/ci`, `/upstream`, `/docs tidy` and `/questions`
 
 Create one scheduled task per repository **in the claude.ai UI, with the repository attached to the
-task**, weekly (`/ci` daily), with the prompt `/deps`, `/ci`, `/upstream` or `/docs tidy`, permission mode **auto**, and an environment
-that has the variables `TLD_BOARD_URL` and `TLD_BOARD_TOKEN` (see the next section). All three commands ask nothing and stop
+task**, weekly (`/ci` daily), with the prompt `/deps`, `/ci`, `/upstream`, `/docs tidy` or `/questions` (weekly), permission mode **auto**, and an environment
+that has the variables `TLD_BOARD_URL` and `TLD_BOARD_TOKEN` (see the next section). All of them except `/questions` (one decisions ask) ask nothing and stop
 cleanly with `needs_you` on the status record when they are unsure. Pick a time outside the hours when
 you work in the repository.
 

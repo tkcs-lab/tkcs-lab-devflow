@@ -37,7 +37,7 @@ survey, at text level (`tld profile patch`), so comments survive; the survey pro
 ### Playbooks
 
 Every procedure is a neutral playbook in `playbooks/` (D6): `setup`, `review`, `make-plan`, `implement`, `dod`,
-`land`, `deps`, `upstream`, `docs`, `board`, `migrate`, and `git-ops`, `repo-admin` and `ask` (`/tld:ask`: answers without changing anything and proposes `/make-plan`), which run on request. A
+`land`, `deps`, `upstream`, `docs`, `board`, `questions`, `migrate`, and `git-ops`, `repo-admin` and `ask` (`/tld:ask`: answers without changing anything and proposes `/make-plan`), which run on request. A
 playbook is plain steps: git, shell, `tld` commands, and named **runtime actions** for what only the runtime can do.
 Rules that several playbooks share live once in `playbooks/policies/`: the profile, untrusted text (D10), pull
 request stewardship, the status board, roles and docs.

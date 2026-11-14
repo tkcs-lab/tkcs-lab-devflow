@@ -67,6 +67,7 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | `/tld:docs [check \| init \| tidy]` | a thin CLAUDE.md, one docs index, docs read only when a row matches ([guide](docs/guides/docs-index.md)) |
 | `/tld:board [prune]` | checks the connection to your board, or prunes its stale records and clears cards whose pull requests are done, after you confirm |
 | `/tld:usage` | unattended, every few hours: sends the account's 5-hour and weekly subscription use to the board's Usage page |
+| `/tld:questions` | weekly, unattended: reads the asks agents put to you since its last run, finds those a better playbook, profile key, role, skill, command or doc would have avoided, and writes a triaged review document for `/tld:review apply` and `/tld:make-plan` ([guide](docs/guides/questions.md)) |
 | `/tld:migrate` | moves a repository from claude-toolkit to tld: shows the plan, writes it on a branch after you confirm, one pull request |
 
 No command merges, approves, tags or force-pushes. Four skills run on request:
