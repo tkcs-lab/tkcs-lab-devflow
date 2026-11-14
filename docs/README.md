@@ -27,6 +27,7 @@ Plans (`<n>/plan.md`) and `deviations.md` are kept history, transient and not li
 - [guides/maintenance.md](guides/maintenance.md) - /deps, /upstream, /land and /docs tidy, scheduling them, the status board; read when changing or scheduling them.
 - [guides/questions.md](guides/questions.md) - the weekly /questions run: how the board's asks become a review document of questions better tld would have avoided, the controls it never removes, privacy and scheduling; read when changing /questions or scheduling it.
 - [guides/board-server.md](guides/board-server.md) - deploying and running the board server (the owner's inbox: status records, asks, login); read when deploying or changing the board.
+- [guides/board-cloudflare.md](guides/board-cloudflare.md) - the board as a page host behind Cloudflare Access and an API host limited to Claude's IP ranges (--api-port); read when exposing the board through Cloudflare or changing --api-port.
 - [guides/cloud-environments.md](guides/cloud-environments.md) - what to enable and deny in the working claude.ai environment and the research environment, and how to run a research request; read when setting up or changing an environment.
 - [guides/admin.md](guides/admin.md) - repo-admin: auditing organisation and repository settings, the rulesets and the agent account; read when changing it.
 - [guides/git-ops.md](guides/git-ops.md) - the central git-ops workflow for branch deletion; read when changing it.
