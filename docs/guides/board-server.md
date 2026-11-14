@@ -302,11 +302,11 @@ board's own `Origin` and the `X-CSRF-Token` header the login returned; the login
 | `POST /api/usage` | yes | 403 | 200 `{"stored": n}`; body `{"five_hour": {"utilization", "resets_at"}, "seven_day": {...}, "source": "final"}` (at least one window; `source` is `final` or `scheduled`) | 409 `usage_off` (no plan set), 422 `invalid` (`errors`), 413 `payload_too_large` (over 4096 bytes) |
 | `POST /mcp` | yes | 403 | JSON-RPC answer, see the next section | |
 
-With `--api-port` the page endpoint serves the owner's routes and refuses the token with 403 `wrong_endpoint`; the API endpoint serves the session routes and ignores the cookie; every other route is 404 on that endpoint, and `/healthz` answers on both.
+With `--api-port` the page endpoint serves the owner's routes and refuses the token with 403 `wrong_endpoint`; the API endpoint serves the session routes and ignores the cookie; every other route or method is 404 on that endpoint (405 `Allow` lists only the methods the endpoint serves), and `/healthz` answers on both. The server then prints two lines, `listening on http://H:P (page)` and `listening on http://H:P (api)`; with `--api-port 0` read the port from the second.
 
 A write without `if_version` creates the record and conflicts when it exists; with `if_version` it succeeds
 only when the stored version equals it. Other errors are `{"error": "<code>"}`: 401 `unauthorized`, 403
-`forbidden` (the other principal's route), 404 `not_found`, 405 `method_not_allowed` (with `Allow`), 413
+`forbidden` (the other principal's route), 403 `wrong_endpoint` (a token on the page port), 404 `not_found`, 405 `method_not_allowed` (with `Allow`), 413
 `payload_too_large` (over 1048576 bytes; 4096 for the login). The ask format is
 `src/tld/schema/ask.schema.json`: at most 30 questions of kind `choice` (2 to 10 options), `confirm` or `text`,
 each text at most 2000 characters, the whole ask at most 64 KiB, and at most 200 open asks.
@@ -416,7 +416,7 @@ unchanged.
   server too, and the logged-out session is kept in the database (`revoked_sessions`, schema version 4), so a
   restart does not bring it back.
 * With `--api-port` each port serves only its own principal: the page port answers 403 `wrong_endpoint` to a
-  request with an `Authorization` header, the API port never reads the cookie, so a proxy rule can limit each
+  request with an `Authorization` header on a route it serves, the API port never reads the cookie, so a proxy rule can limit each
   host to its own callers ([board-cloudflare.md](board-cloudflare.md)). The server has no IP check itself.
 * Every owner `POST` checks the `Origin` (and `Sec-Fetch-Site` when sent) and a CSRF token bound to the
   session. The session token cannot answer asks; the cookie cannot write records.

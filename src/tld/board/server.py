@@ -18,7 +18,7 @@ generated once into `<db>.secret`. Secrets come from the environment only. The s
 TLS proxy in front (docs/guides/board-server.md). Python 3.11+, stdlib only.
 
 Two endpoints. With --api-port the board listens on two ports over one store. --port is the page endpoint: the
-page, login, and the owner's reads and answers; it answers 403 wrong_endpoint to any request that carries an
+page, login, and the owner's reads and answers; on a route it serves it answers 403 wrong_endpoint to a request that carries an
 Authorization header. --api-port is the API endpoint: only the sessions' routes and the bearer token; it never
 reads the cookie. A route or method the endpoint does not serve is 404 there. Each endpoint can then sit behind
 its own host and rules (docs/guides/board-cloudflare.md). Without --api-port one port serves everything.

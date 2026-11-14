@@ -11,9 +11,10 @@ so Cloudflare cannot ask for a login on the page and an IP limit on the API on t
 board has two listeners over one store:
 
 - **Page endpoint** (`--port`, 8787): the page, login, and the owner's reads and answers. Any request with an
-  `Authorization` header gets 403 `wrong_endpoint`.
-- **API endpoint** (`--api-port`, 8788): the sessions' routes and the bearer token only. It never reads the cookie.
-- Every other route on a listener is 404. `/healthz` answers on both. The server has no IP check: the proxy does it.
+  `Authorization` header to a route it serves gets 403 `wrong_endpoint`.
+- **API endpoint** (`--api-port`, 8788): the sessions' routes and the bearer token only. It never reads the cookie:
+  a request without a token is 401 `unauthorized`, even with a valid owner cookie.
+- Every other route or method on a listener is 404 (also for a token on the page port, for example `PUT /api/records/x`). `/healthz` answers on both. The server has no IP check: the proxy does it.
 
 ## The picture
 
@@ -37,7 +38,7 @@ services:
     ports: ["127.0.0.1:8788:8788"]
 ```
 
-Then `docker compose up -d` and check both listeners:
+Then `docker compose up -d` and check both listeners (the log prints `listening on ... (page)` and `... (api)`):
 
 ```bash
 curl -sS http://127.0.0.1:8787/healthz
