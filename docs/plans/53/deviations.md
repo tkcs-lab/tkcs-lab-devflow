@@ -19,7 +19,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - final: Tokens are cut to 200 characters before masking, as input bounding added after the security review.
 - final: Owner decision (board ask, answer hash_emitted): the cluster fingerprint now hashes the emitted, vocabulary-filtered template with source and kind, not the template before the filter. This departs from plan 3.2 and from the p2 acceptance wording that the fingerprint is equal with a vocabulary.
 - final: Effects of that decision: the corpus value without a vocabulary is unchanged; a changed vocabulary changes fingerprints, so an earlier finding can resurface once; clusters that differ only in filtered words, also two in one digest, can share a fingerprint, and step 4 of the questions playbook then hides a later finding of either.
-- fix: Fix worker fix-1 (Plan-Phase question-review/fix-1) made the change above and added two tests for similarity of empty word sets and for the empty flag of an unanswered ask.
+- retry: Fix worker fix-1 (Plan-Phase question-review/fix-1) made the change above and added two tests for similarity of empty word sets and for the empty flag of an unanswered ask.
+- retry: Fix worker fix-2 (Plan-Phase question-review/fix-2), chosen by the owner on the board: step 3 of the questions playbook now treats clusters with an equal fingerprint as one finding with summed counts; the guide says a changed vocabulary changes fingerprints; a shared-fingerprint test was added; the test helper that copied the formula was dropped.
+- scope: scope: docs/guides/questions.md, playbooks/questions.md and evals/baselines/default.json are owned by other phases; touched by the owner-chosen fix-2, accepted.
 
 ## p3a-policy
 
@@ -48,6 +50,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - final: Blocking 2, p2-digest: four digest behaviours were missing from the deviations file; added by the orchestrator under p2-digest.
 - final: Round 1 blocking 1 resolved: owner answered hash_emitted, fix-1 merged; see p2-digest.
 - final: Round 2 blocking 1, p2-digest: the owner-decision entry was cut at 500 characters by the deviations CLI; rewritten as two entries by the orchestrator.
+- final: Round 2 non-blocking findings 2 to 5 fixed by fix-2 at the owner request; findings 3 and 4 of round 1 and the rest stay open and are listed in the pull request.
+- final: Round 2 non-blocking findings 2 to 5 fixed by fix-2 at the owner request; the other non-blocking findings stay open and are listed in the pull request.
 
 ## Finishing
 
