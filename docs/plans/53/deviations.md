@@ -55,4 +55,5 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Finishing
 
-- pending
+- scope: scope: only fix-2 drifted (docs/guides/questions.md, playbooks/questions.md, evals/baselines/default.json); all three paths remain in the final diff, accepted.
+- final: The dod gate passed on the feature branch; the tech-writer found five non-blocking documentation notes, listed in the pull request.
