@@ -1,5 +1,4 @@
 import copy
-import hashlib
 import io
 import json
 import re
@@ -131,24 +130,32 @@ def test_digest_cursor_is_null_without_own_asks(corpus):
     assert result["clusters"] == []
 
 
-def _fingerprint(source, kind, template):
-    return hashlib.sha256(f"{source or '-'}|{kind}|{template}".encode()).hexdigest()[:16]
-
-
 def test_digest_groups_the_verify_confirmations(corpus):
     c1 = run(corpus)["clusters"][0]
     assert (c1["source"], c1["kind"], c1["count"], c1["records"], c1["foreign_count"]) == ("run", "confirm", 4, 4, 1)
     assert (c1["recommended_rate"], c1["empty_rate"], c1["median_seconds"]) == (1.0, None, 90)
     assert (c1["first"], c1["last"], c1["candidate"]) == ("2026-01-05T10:00:00Z", "2026-01-13T10:00:00Z", True)
     assert c1["asks"] == [find(corpus, n)["id"] for n in (1, 2, 3, 10)]
-    assert c1["fingerprint"] == _fingerprint("run", "confirm", c1["template"]) == "fb642a6b0656518f"
+    assert c1["fingerprint"] == "fb642a6b0656518f"
     vocab = set(re.findall(r"[a-z]+", ask_digest.mask(VERIFY_TEXT)))
     full = run(corpus, vocab=vocab)["clusters"][0]
-    assert full["fingerprint"] == _fingerprint("run", "confirm", full["template"]) == "fb642a6b0656518f"
+    assert full["fingerprint"] == "fb642a6b0656518f"
     stripped = run(corpus, vocab=vocab - {"pytest"})["clusters"][0]
     assert "<word>" in stripped["template"]
-    assert stripped["fingerprint"] == _fingerprint("run", "confirm", stripped["template"]) == "20a20556e8e429d0"
+    assert stripped["fingerprint"] == "20a20556e8e429d0"
     assert stripped["fingerprint"] != c1["fingerprint"]
+
+
+def test_digest_clusters_differing_only_in_filtered_words_share_a_fingerprint():
+    asks = [make_ask(1, "deploy zebra", created="2026-03-01T10:00:00Z"),
+            make_ask(2, "deploy yak", created="2026-03-02T10:00:00Z")]
+    unfiltered = run(asks)["clusters"]
+    assert len(unfiltered) == 2
+    assert unfiltered[0]["fingerprint"] != unfiltered[1]["fingerprint"]
+    filtered = run(asks, vocab={"deploy"})["clusters"]
+    assert len(filtered) == 2
+    assert [c["template"] for c in filtered] == ["deploy <word>"] * 2
+    assert [c["fingerprint"] for c in filtered] == ["995aff88465c865c"] * 2
 
 
 def test_digest_reports_unfilled_optional_text(corpus):
