@@ -134,6 +134,7 @@ Environment variables:
 | `TLD_BOARD_PUBLIC_ORIGIN` | server | Default for `--public-origin`. |
 | `TLD_BOARD_SESSION_URL` | server | Optional https base, ending in `/`, that a session id is appended to for the page's session links. Without it the page shows no session links. For Claude Code on the web: `https://claude.ai/code/`. |
 | `TLD_BOARD_DB` | server | Default for `--db`. |
+| `TLD_BOARD_API_PORT` | server | Default for `--api-port`. |
 | `TLD_BOARD_URL` | client, bridge | Base URL of the server, for example `https://board.example.org`. Not a secret. |
 | `TLD_BOARD_PLAN` | server | `standard` or `max`: the plan the account is on. Unset: the usage readings are off (`POST /api/usage` answers 409 `usage_off`). Anything else: the server does not start. |
 | `TLD_BOARD_MAX_FACTOR` | server | How many times the Standard limit Max gives: a number above 1 and at most 20, default 5. Anything else: the server does not start. It is an assumption, not a measured value. |
@@ -155,6 +156,7 @@ Server flags (secrets come from the environment only):
 | `--session-hours` | `12` | How long a login lasts (1 to 720). |
 | `--trust-proxy` | off (on in the image) | Rate-limit logins by the last `X-Forwarded-For` entry; only behind a proxy that sets it. |
 | `--allow-origin` | none | An `Origin` that may call `POST /mcp`; repeatable. Clients that are not browsers send no `Origin`. |
+| `--api-port` | `$TLD_BOARD_API_PORT`, else off | A second port, on `--host`, that serves only the sessions' API; `--port` then serves only the owner's page. Needs `TLD_BOARD_OWNER_PASSPHRASE`. `0` picks a free port. See [board-cloudflare.md](board-cloudflare.md). |
 
 ## Docker
 
@@ -177,7 +179,9 @@ docker run -d --name tld-board --restart unless-stopped \
 `-e NAME` without a value passes the variable from your shell, so no secret appears in the command line. The
 container runs as an unprivileged user (uid 10001), keeps `/data/board.sqlite3` and `/data/board.sqlite3.secret`
 in the volume, rate-limits logins per client behind the proxy (`--trust-proxy`), and has a health check on
-`/healthz`. Publish the port on `127.0.0.1` only: the proxy is the one way in.
+`/healthz`. Publish the port on `127.0.0.1` only: the proxy is the one way in. For the split of page and API
+(`--api-port`) add `-p 127.0.0.1:8788:8788` and `-e TLD_BOARD_API_PORT=8788` to the `docker run` (the image
+command is fixed; the port comes from the variable).
 
 ## Docker Compose (the installer)
 
@@ -298,6 +302,8 @@ board's own `Origin` and the `X-CSRF-Token` header the login returned; the login
 | `POST /api/usage` | yes | 403 | 200 `{"stored": n}`; body `{"five_hour": {"utilization", "resets_at"}, "seven_day": {...}, "source": "final"}` (at least one window; `source` is `final` or `scheduled`) | 409 `usage_off` (no plan set), 422 `invalid` (`errors`), 413 `payload_too_large` (over 4096 bytes) |
 | `POST /mcp` | yes | 403 | JSON-RPC answer, see the next section | |
 
+With `--api-port` the page endpoint serves the owner's routes and refuses the token with 403 `wrong_endpoint`; the API endpoint serves the session routes and ignores the cookie; every other route is 404 on that endpoint, and `/healthz` answers on both.
+
 A write without `if_version` creates the record and conflicts when it exists; with `if_version` it succeeds
 only when the stored version equals it. Other errors are `{"error": "<code>"}`: 401 `unauthorized`, 403
 `forbidden` (the other principal's route), 404 `not_found`, 405 `method_not_allowed` (with `Allow`), 413
@@ -409,6 +415,9 @@ unchanged.
   `__Host-tld_owner`, signed with HMAC-SHA256 and valid for `--session-hours`. Logout ends the session on the
   server too, and the logged-out session is kept in the database (`revoked_sessions`, schema version 4), so a
   restart does not bring it back.
+* With `--api-port` each port serves only its own principal: the page port answers 403 `wrong_endpoint` to a
+  request with an `Authorization` header, the API port never reads the cookie, so a proxy rule can limit each
+  host to its own callers ([board-cloudflare.md](board-cloudflare.md)). The server has no IP check itself.
 * Every owner `POST` checks the `Origin` (and `Sec-Fetch-Site` when sent) and a CSRF token bound to the
   session. The session token cannot answer asks; the cookie cannot write records.
 * Dismissals are kept in the database (`dismissals`, schema version 4), next to a record and never inside it.

@@ -46,7 +46,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld guard allow-release WORKFLOW-FILE` | `tld.guard.protect_paths` | let a dispatch of the release workflow with `dry_run` false through for the next 10 minutes |
 | `tld guard allow-plan` | `tld.guard.protect_paths` | let every session in this checkout edit files for 8 hours (a plan-gate marker for /implement workers) |
 | `tld guard end-allow` | `tld.guard.protect_paths` | end the profile, workflow-install, git-ops and release markers; it does not end the plan marker |
-| `tld board server [--host H] [--port N] [--db F] [--insecure-cookie] ...` | `tld.board.server` | serve the board: status records, asks, the owner's page ([board-server.md](../guides/board-server.md)) |
+| `tld board server [--host H] [--port N] [--db F] [--insecure-cookie] [--api-port N] ...` | `tld.board.server` | serve the board: status records, asks, the owner's page ([board-server.md](../guides/board-server.md)) |
 | `tld board client health\|list\|get\|set\|delete ...` | `tld.board.client` | status records on the board server |
 | `tld board usage FILE\|- [--source final\|scheduled]` | `tld.board.usage_client` | send the newest rate-limit reading to the board's Usage page; exit 3 no board, 1 refused or not understood |
 | `tld board ask FILE\|- [--fallback-issue O/R[#N]] [--mention LOGIN] [--profile P]` | `tld.board.inbox` | post an ask and print its id; exit 3 no board, 5 the fallback comment body is on stdout |

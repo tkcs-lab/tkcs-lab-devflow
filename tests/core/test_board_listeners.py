@@ -353,11 +353,11 @@ def test_main_stops_both_listeners_on_interrupt(tmp_path):
             socket.create_connection(("127.0.0.1", port), timeout=2)
 
 
-def test_main_reports_an_api_port_in_use():
+def test_main_reports_an_api_port_in_use(tmp_path):
     with socket.socket() as taken:
         taken.bind(("127.0.0.1", 0))
         taken.listen()
-        result = run_main({}, "--api-port", str(taken.getsockname()[1]))
+        result = run_main({}, "--api-port", str(taken.getsockname()[1]), "--db", str(tmp_path / "b.sqlite3"))
     assert result.returncode == 2 and "board_server: " in result.stderr
 
 
