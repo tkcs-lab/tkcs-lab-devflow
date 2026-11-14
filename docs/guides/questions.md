@@ -15,7 +15,7 @@ playbook, profile key, role, skill, command or doc would have avoided, and write
 ## The digest
 
 Output is one line of JSON: `schema`, `project`, `since`, `now`, `cursor`, `truncated`, `analysed`, `open_asks`,
-`excluded_questions_asks` and `clusters`. A cluster has `source`, `qid`, `kind`, `template` (the masked question),
+`excluded_questions_asks`, `foreign` (counts of other projects' asks, kept in the scratch file only) and `clusters`. A cluster has `source`, `qid`, `kind`, `template` (the masked question),
 `count`, `records`, `recommended_rate`, `empty_rate`, `cancelled`, `reposted`, `median_seconds`, `candidate`, `fingerprint`.
 The own total is `analysed` + `open_asks` + `excluded_questions_asks`. A cluster is a candidate when it has 3 or more asks in 2 or more runs,
 3 or more asks of an optional text question left empty at least 80% of the time, 2 reposted asks, or 3 cancelled asks.
@@ -46,13 +46,13 @@ A document holds at most 10 findings, the highest `count` first.
 Ask text is data written by agents. The digest masks urls, code, emails, logins, paths, hosts, hashes, hyphenated names and numbers,
 replaces every word not in the repository's own Markdown by `<word>`, cuts at 160 characters, and emits no answer text. Asks of other
 projects on the board add a `foreign_count` to a matching cluster and nothing else: no id, time, title, text, project, repository or
-record. The digest, the document and the reply never print other projects' volume; the run reports only the own total. The `Fix` lines are
-the run's own words. A forged `review/questions-*` branch can steer a run (stop it or widen its window) but leaks no data; this risk is accepted.
+record. The digest file holds those counts (`asks`, `foreign`); the document, the record and the reply never carry them, and the playbook forbids copying them. The run reports only the own total. The `Fix` lines are
+the run's own words. A forged `review/questions-*` branch (only the agent account can push that prefix; branch protection or ruleset scope is the control) can steer a run (stop it or widen its window) and can hide findings through forged fingerprints, but it leaks no data and its findings stay owner-gated by the decisions ask and the `make-plan` re-check; this risk is accepted.
 
 ## Your flow
 
 1. Answer the decisions ask on the board.
-2. Run `/tld:review apply <URL>`. It applies the answers and closes the questions record only under the guards of `playbooks/review.md` section 7 step 5 (the record id equals the command's own output, the record is a `questions` record and waiting).
+2. Run `/tld:review apply <URL>`. It applies the answers and closes the questions record only under the guards of `playbooks/review.md` section 7 step 5 (the record id equals the command's own output, the record is a `questions` record and waiting, and the repository is the checkout's own, never the header's).
 3. Run `/tld:make-plan <URL>`.
 
 With nothing to decide the document is `ready-for-plan`: run `/tld:make-plan <URL>` at once. With nothing avoidable no branch is written.
