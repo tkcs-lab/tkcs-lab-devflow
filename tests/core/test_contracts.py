@@ -276,7 +276,7 @@ def test_every_command_playbook_writes_a_status_record_or_says_why_not(name):
 
 def test_record_commands_cover_the_playbooks():
     record = _load("tld.board.record")
-    expected = {"setup", "review", "make-plan", "deps", "ci", "upstream", "land", "docs", "migrate"}
+    expected = {"setup", "review", "make-plan", "deps", "ci", "upstream", "land", "docs", "migrate", "questions"}
     assert set(record.COMMANDS) == expected
 
 

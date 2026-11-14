@@ -40,6 +40,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from tld.board import build as build_board
 from tld.board import mcp as board_mcp
 from tld.board import usage
+from tld.board.record import TIMESTAMP
 from tld.board.store import Conflict, Invalid, NotFound, Store
 
 MAX_BODY = 1048576
@@ -552,11 +553,18 @@ class Handler(BaseHTTPRequestHandler):
     def _do_asks(self, method, item_id, principal) -> None:
         store = self.server.store
         if method == "GET":
-            state = (parse_qs(urlsplit(self.path).query).get("state") or [None])[0]
-            if state not in (None, "open", "answered", "cancelled"):
+            query = parse_qs(urlsplit(self.path).query)
+            state = (query.get("state") or [None])[0]
+            since = (query.get("since") or [None])[0]
+            limit = (query.get("limit") or ["200"])[0]
+            order = (query.get("order") or ["desc"])[0]
+            if (state not in (None, "open", "answered", "cancelled")
+                    or (since is not None and not TIMESTAMP.fullmatch(since))
+                    or not (limit.isascii() and limit.isdigit() and 1 <= int(limit) <= 1000)
+                    or order not in ("asc", "desc")):
                 self._error(400, "bad_request")
                 return
-            self._json(200, {"asks": store.list_asks(state)})
+            self._json(200, {"asks": store.list_asks(state, int(limit), since, order == "asc")})
             return
         ok, payload = self._read_json()
         if not ok:
