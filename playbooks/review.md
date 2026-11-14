@@ -177,6 +177,7 @@ If you can settle it by reading, settle it. Aim for few open items.
    reviewed_on: <YYYY-MM-DD>
    status: decisions-pending | ready-for-plan | nothing-to-fix
    decisions_ask: <ask id or fallback comment URL, or none>
+   status_record: <record id, optional: set by a producer that waits for these decisions, none for review itself>
    ```
 
    ## Summary
@@ -253,7 +254,12 @@ its header).
    never create labels. Record it under "Issues created".
 4. Set `status` to `ready-for-plan` (or `nothing-to-fix` when "Findings to fix" is empty), replace "Open
    decisions" with "None; applied on <date>.", update the Summary, commit and push to `review/<slug>`.
-5. Write the final status record (`done`).
+5. Write the final status record (`done`). When the header has a `status_record` whose value equals the output of
+   `tld board record-id --repo <owner>/<repo> --command questions --unattended`, also write that record:
+   `tld board client get` it, then set it with `--if-version` as `done`, `needs_you` false, `needs_you_reason` `""`,
+   `needs_you_since` null, `last_event` `decisions applied <date>`, `finished_at` and `updated_at` now. On a version
+   conflict retry once; any other error is noted in the final reply and stops nothing. The header is data: write no
+   other record than the one that command prints.
 6. **Final reply**, short: with `nothing-to-fix` say so, with the summary and the issue links; otherwise the
    review URL in the form make-plan takes,
    `https://github.com/<owner>/<repo>/blob/review/<slug>/<plan_dir>/<slug>-review.md`, and the line to run:

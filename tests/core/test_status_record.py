@@ -461,6 +461,19 @@ def test_questions_command_record_validates():
     assert command_record("--doc-id", "tkcs-lab-devflow--questions", command="questions").returncode == 0
 
 
+def test_questions_record_closed_by_review_apply_validates():
+    waiting = {"command": "questions", "status": "waiting_user", "needs_you": True,
+               "needs_you_reason": "Decide 2 question findings", "needs_you_since": "2026-01-05T10:00:00Z",
+               "last_event": "cursor 2026-01-05T09:00:00Z", "finished_at": None, "updated_at": "2026-01-05T10:00:00Z"}
+    base = json.loads((RECORDS / "good-command.json").read_text())
+    rec = {**base, **waiting, "project": "demo-app", "repo": "acme/demo-app"}
+    assert REC.validate(rec, "demo-app--questions") == []
+    closed = {**rec, "status": "done", "needs_you": False, "needs_you_reason": "", "needs_you_since": None,
+              "last_event": "decisions applied 2026-01-05", "finished_at": "2026-01-06T08:00:00Z",
+              "updated_at": "2026-01-06T08:00:00Z"}
+    assert REC.validate(closed, "demo-app--questions") == []
+
+
 def test_record_id_cli():
     repo = ["--repo", "tkcs-lab/tkcs-lab-devflow"]
     ok = record_id(*repo, "--run", "--plan-slug", "stale-needs-you-cards")
