@@ -52,6 +52,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - final: Round 2 blocking 1, p2-digest: the owner-decision entry was cut at 500 characters by the deviations CLI; rewritten as two entries by the orchestrator.
 - final: Round 2 non-blocking findings 2 to 5 fixed by fix-2 at the owner request; findings 3 and 4 of round 1 and the rest stay open and are listed in the pull request.
 - final: Round 2 non-blocking findings 2 to 5 fixed by fix-2 at the owner request; the other non-blocking findings stay open and are listed in the pull request.
+- scope: scope: docs/guides/questions.md
+- scope: scope: evals/baselines/default.json
+- scope: scope: playbooks/questions.md
 
 ## Finishing
 
