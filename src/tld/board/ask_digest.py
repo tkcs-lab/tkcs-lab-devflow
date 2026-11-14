@@ -145,7 +145,7 @@ def _questions(ask: dict) -> list[dict]:
         if not (isinstance(q, dict) and isinstance(q.get("text"), str) and q.get("kind") in KINDS):
             continue
         qid = q.get("id")
-        found.append({**q, "id": qid if isinstance(qid, str) and board_ask.QID_RE.match(qid) else f"q{index}"})
+        found.append({**q, "id": qid if isinstance(qid, str) and board_ask.QID_RE.fullmatch(qid) else f"q{index}"})
     return found
 
 
@@ -242,7 +242,7 @@ def digest(asks: list, repo: str, since: str | None, now: str, vocab: set[str] |
     rows = [{**a, "record": a["record"] if isinstance(a.get("record"), str) else None,
              "answers": a["answers"] if isinstance(a.get("answers"), dict) else {}}
             for a in asks if isinstance(a, dict) and _is_stamp(a.get("created_at"))
-            and isinstance(a.get("id"), str) and board_ask.ID_RE.match(a["id"])
+            and isinstance(a.get("id"), str) and board_ask.ID_RE.fullmatch(a["id"])
             and (since is None or a["created_at"] > since)]
     own: list[dict] = []
     foreign: list[dict] = []

@@ -440,3 +440,12 @@ def test_digest_does_not_change_its_input(corpus):
     before = copy.deepcopy(corpus)
     run(corpus)
     assert corpus == before
+
+
+def test_an_id_with_a_trailing_newline_is_not_valid():
+    ask = make_ask(50, "hello there")
+    ask["id"] = "a-0123456789abcdef\n"
+    other = make_ask(51, "hello there")
+    other["questions"][0]["id"] = "q1\n"
+    result = run([ask, other])
+    assert result["asks"] == 1 and result["clusters"][0]["qid"] == "q0"
