@@ -16,7 +16,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3a-policy
 
-- pending
+- None.
+- review: No deviation in the diff. Worker notes for p3b and p3c: the questions playbook must push only review/questions branches, and review apply must write the record only when status_record equals the computed record id.
 
 ## p3b-command
 
