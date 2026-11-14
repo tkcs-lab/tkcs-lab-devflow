@@ -2,7 +2,7 @@
 
 The board is the owner's inbox (D7, D8): it holds a status record of every run and every ask a playbook puts
 to the owner. These playbooks write a status record, so the owner sees each run in one place: setup, review,
-make-plan, implement, land, deps, upstream, docs and migrate, and the worker of a single-session prompt (make-plan's small scope). dod and board write none
+make-plan, implement, land, deps, upstream, docs, questions and migrate, and the worker of a single-session prompt (make-plan's small scope). dod and board write none
 (a report and the board itself), nor do git-ops, repo-admin and release. The record
 format is `src/tld/schema/status-record.schema.json`; `tld board validate-record FILE --doc-id ID` checks one.
 Asks are [runtime.md](../runtime.md)'s `ask_human`. This file says where, how and when to write records.
@@ -26,8 +26,8 @@ never a reason to skip the record.
 
 | Field | Value |
 |---|---|
-| `kind` | `run` for implement and for a single-session prompt's worker; `command` for every other playbook (deps, upstream, land, setup, docs, review, make-plan, migrate) |
-| `command` | `null` for a run; else the playbook: `setup`, `review`, `make-plan`, `deps`, `upstream`, `land`, `docs`, `migrate` |
+| `kind` | `run` for implement and for a single-session prompt's worker; `command` for every other playbook (deps, upstream, land, setup, docs, review, make-plan, questions, migrate) |
+| `command` | `null` for a run; else the playbook: `setup`, `review`, `make-plan`, `deps`, `upstream`, `land`, `docs`, `questions`, `migrate` |
 | `plan_slug`, `plan_url`, `feature_branch` | a run's plan and branch; a single-session prompt's run has `plan_slug` `issue-<n>`, `plan_url` `null`, its branch and `phases: []`; all `null` for a command |
 | `project` | `tld board project-slug <owner>/<repo>`: the repository name, lower case, other characters as `-` |
 | document id | from `tld board record-id` (see "Keys and a record that already exists"): `<project>--run--<plan>` for a run, `<project>--<command>--<tail>` for an attended command, `<project>--<command>` for a scheduled one |
@@ -79,11 +79,12 @@ very first write means a record of an earlier run exists: read it and write over
 - After the final write of a run (`done`, `failed` or `pr_open`), call `read_usage()` ([runtime.md](../runtime.md))
   and, when it returns a reading, save it to a scratch file and run `tld board usage <file>`. Best effort: an
   error is never reported and never stops the run. The usage playbook is excluded: it writes no record.
+- `review apply` is the resume step of `questions`: it writes the questions record `done` when the document names it in `status_record`.
 
 ## Best effort
 
 A board error never stops the run. Note it once in your reply and carry on without retrying until the next
-planned write.
+planned write. The command questions reads its input from the board: without a board, or on a board that refuses its record, it stops with the message its playbook names.
 
 ## No secrets
 
