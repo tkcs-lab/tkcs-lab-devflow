@@ -21,7 +21,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3b-command
 
-- pending
+- worker: Design change: the playbook and the document report the own total (analysed plus open_asks plus excluded_questions_asks) instead of the digest top-level asks count, and leave foreign_count out of the fields it reads, because asks and foreign_count carry other projects volume and plan section 3.6 forbids showing it. Plan section 3.6 text that puts asks in What was reviewed is therefore not followed.
+- worker: Added hardening lines the plan lacks: format checks for the review/questions branch name, asks_until and decisions_ask, a timestamp-form check on the input since and the record cursor passed as one quoted argument, and a note that the helper brief carries finding ids and Where lines only.
+- review: The security role was not re-run after the last wording edits of the worker; the final review runs it again. Residual risk accepted for now: a forged review/questions branch can steer a run (stop or widen the window) without leaking data.
 
 ## p3c-review-header
 
