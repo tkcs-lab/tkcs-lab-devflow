@@ -474,6 +474,15 @@ def test_questions_record_closed_by_review_apply_validates():
     assert REC.validate(closed, "demo-app--questions") == []
 
 
+def test_review_apply_guards_the_status_record_write():
+    text = (ROOT / "playbooks" / "review.md").read_text()
+    step = text[text.index("5. Write the final status record"):text.index("6. **Final reply**")]
+    for phrase in ("--command questions --unattended", "never the header's `repository`", "compare the two strings exactly",
+                   "`waiting_user`", "retry once", "--if-version"):
+        assert phrase in step, phrase
+    assert "status_record:" in text
+
+
 def test_record_id_cli():
     repo = ["--repo", "tkcs-lab/tkcs-lab-devflow"]
     ok = record_id(*repo, "--run", "--plan-slug", "stale-needs-you-cards")
