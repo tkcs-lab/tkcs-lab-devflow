@@ -424,7 +424,7 @@ def test_get_asks_since_limit_and_order(server):
 
 
 @pytest.mark.parametrize("query", ["since=2026-01-01", "since=x", "limit=0", "limit=1001", "limit=-1", "limit=1.5",
-                                   "limit=abc", "order=ASC", "order=up"])
+                                   "limit=abc", "limit=" + "9" * 5000, "order=ASC", "order=up"])
 def test_get_asks_rejects_bad_since_limit_and_order(server, query):
     status, _, body = call(server, "GET", f"/api/asks?{query}", token=WRITE)
     assert (status, body) == (400, {"error": "bad_request"})

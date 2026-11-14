@@ -560,7 +560,7 @@ class Handler(BaseHTTPRequestHandler):
             order = (query.get("order") or ["desc"])[0]
             if (state not in (None, "open", "answered", "cancelled")
                     or (since is not None and not TIMESTAMP.fullmatch(since))
-                    or not (limit.isascii() and limit.isdigit() and 1 <= int(limit) <= 1000)
+                    or not (len(limit) <= 4 and limit.isascii() and limit.isdigit() and 1 <= int(limit) <= 1000)
                     or order not in ("asc", "desc")):
                 self._error(400, "bad_request")
                 return
