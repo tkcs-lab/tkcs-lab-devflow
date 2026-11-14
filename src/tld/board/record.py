@@ -39,7 +39,7 @@ CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 PR_FIELDS = ("number", "url", "state", "ci", "awaiting")
 
 KINDS = ("run", "command")
-COMMANDS = ("deps", "upstream", "ci", "land", "setup", "docs", "review", "make-plan", "migrate")
+COMMANDS = ("deps", "upstream", "ci", "land", "setup", "docs", "review", "make-plan", "migrate", "questions")
 FINAL = ("done", "failed", "pr_open")
 STATUSES = ("starting", "running", "waiting_user", "reviewing", "pr_open", "done", "failed")
 ITEM_STATES = {
@@ -120,6 +120,25 @@ def owns_doc_id(project: str, doc_id: str) -> bool:
     if parts[0] in COMMANDS:
         return len(parts) == 1 or (len(parts) == 2 and bool(parts[1]))
     return False
+
+
+def parse_doc_id(doc_id: str) -> tuple[str, str, str] | None:
+    """Split a document id into (project, "run", plan) or (project, "command", command); None for any other input.
+
+    The project is the part before the first `--`. `parse_doc_id(x)` is not None exactly when
+    `owns_doc_id(project, x)` holds for that project and `x` is not the bare project id.
+    """
+    if not (isinstance(doc_id, str) and DOC_ID_RE.match(doc_id)):
+        return None
+    project, sep, rest = doc_id.partition("--")
+    if not sep:
+        return None
+    parts = rest.split("--")
+    if parts[0] == "run":
+        return (project, "run", parts[1]) if len(parts) == 2 and parts[1] else None
+    if parts[0] in COMMANDS and (len(parts) == 1 or (len(parts) == 2 and parts[1])):
+        return (project, "command", parts[0])
+    return None
 
 
 def _is_timestamp(value) -> bool:

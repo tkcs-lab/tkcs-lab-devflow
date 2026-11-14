@@ -80,6 +80,12 @@ COMPAT = {
         ("git push -u origin chore/docs-tidy-20260101", "git push -u origin chore/docs-tidy-<yyyymmdd>"),
         ("git mv docs/design.md docs/architecture/design.md", "ops docs-index move"),
     ],
+    "questions": [
+        ("git fetch origin review/questions-2026-01-05", "git fetch origin <branch>"),
+        ("git show FETCH_HEAD:docs/plans/questions-2026-01-05-review.md", "git show FETCH_HEAD:<path>"),
+        ("git checkout -b review/questions-2026-01-05 origin/main", "git checkout -b <branch> origin/<main>"),
+        ("git push -u origin review/questions-2026-01-05", "git push -u origin <branch>"),
+    ],
     "upstream": [
         ("git ls-remote --tags https://github.com/o/r.git", "git ls-remote --tags"),
         ("git fetch origin main", "git fetch origin <main>"),

@@ -25,6 +25,7 @@ Plans (`<n>/plan.md`) and `deviations.md` are kept history, transient and not li
 - [../CHANGELOG.md](../CHANGELOG.md) - what changed in each release; read when upgrading or releasing.
 - [../SECURITY.md](../SECURITY.md) - threat model (rulesets are the control, hooks a seatbelt) and how to report; read when changing a guard or a control.
 - [guides/maintenance.md](guides/maintenance.md) - /deps, /upstream, /land and /docs tidy, scheduling them, the status board; read when changing or scheduling them.
+- [guides/questions.md](guides/questions.md) - the weekly /questions run: how the board's asks become a review document of questions better tld would have avoided, the controls it never removes, privacy and scheduling; read when changing /questions or scheduling it.
 - [guides/board-server.md](guides/board-server.md) - deploying and running the board server (the owner's inbox: status records, asks, login); read when deploying or changing the board.
 - [guides/cloud-environments.md](guides/cloud-environments.md) - what to enable and deny in the working claude.ai environment and the research environment, and how to run a research request; read when setting up or changing an environment.
 - [guides/admin.md](guides/admin.md) - repo-admin: auditing organisation and repository settings, the rulesets and the agent account; read when changing it.

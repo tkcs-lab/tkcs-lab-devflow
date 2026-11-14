@@ -62,7 +62,7 @@ def test_session_start_is_only_used_by_model_check():
 # ---- commands -------------------------------------------------------------------------------
 def test_every_playbook_command_has_a_wrapper():
     assert COMMANDS == tuple(sorted(("setup", "review", "make-plan", "implement", "dod", "land", "deps",
-                                     "upstream", "docs", "board", "migrate", "ci", "usage")))
+                                     "upstream", "docs", "board", "migrate", "ci", "usage", "questions")))
 
 
 @pytest.mark.parametrize("name", COMMANDS)

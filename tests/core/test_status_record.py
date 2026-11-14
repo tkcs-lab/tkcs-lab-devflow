@@ -419,13 +419,68 @@ def test_attended_record_rewritten_by_a_new_session():
             "'tkcs-lab-devflow--setup--01xyzxyz'") in result.stdout
 
 
+GOOD_IDS = ("p", "p--run--x", "p--deps", "p--make-plan--abcdefgh")
+BAD_IDS = ("p--run--", "p--run", "p--nope--abcdefgh", "q--run--x", "p--deps--a--b", "p--run--a--b", "",
+           "P--run--x", "p--run--" + "x" * 93)
+
+
 def test_owns_doc_id():
-    for good in ("p", "p--run--x", "p--deps", "p--make-plan--abcdefgh"):
+    for good in GOOD_IDS:
         assert REC.owns_doc_id("p", good), good
-    for bad in ("p--run--", "p--run", "p--nope--abcdefgh", "q--run--x", "p--deps--a--b", "p--run--a--b", "",
-                "P--run--x", "p--run--" + "x" * 93):
+    for bad in BAD_IDS:
         assert not REC.owns_doc_id("p", bad), bad
     assert len("p--run--" + "x" * 93) == 101
+
+
+def test_parse_doc_id_run():
+    assert REC.parse_doc_id("demo-app--run--alpha") == ("demo-app", "run", "alpha")
+
+
+def test_parse_doc_id_command_with_and_without_tail():
+    assert REC.parse_doc_id("p--questions") == ("p", "command", "questions")
+    assert REC.parse_doc_id("demo-app--make-plan--abc123") == ("demo-app", "command", "make-plan")
+
+
+@pytest.mark.parametrize("doc_id", [*GOOD_IDS, *BAD_IDS, "q--run--x", "p--questions", "p--run--a--b"])
+def test_parse_doc_id_rejects_what_owns_doc_id_rejects(doc_id):
+    project = doc_id.split("--")[0]
+    assert (REC.parse_doc_id(doc_id) is not None) == (REC.owns_doc_id(project, doc_id) and doc_id != project)
+
+
+@pytest.mark.parametrize("doc_id", ["p--run", "p--run--", "p--deps--a--b", "p--run--a--b", "P--run--x", "", None, "p"])
+def test_parse_doc_id_cases(doc_id):
+    assert REC.parse_doc_id(doc_id) is None
+
+
+def test_command_enum_matches_commands():
+    enum = [c for c in json.loads(SCHEMA.read_text())["properties"]["command"]["enum"] if c is not None]
+    assert enum == list(REC.COMMANDS)
+
+
+def test_questions_command_record_validates():
+    assert command_record("--doc-id", "tkcs-lab-devflow--questions", command="questions").returncode == 0
+
+
+def test_questions_record_closed_by_review_apply_validates():
+    waiting = {"command": "questions", "status": "waiting_user", "needs_you": True,
+               "needs_you_reason": "Decide 2 question findings", "needs_you_since": "2026-01-05T10:00:00Z",
+               "last_event": "cursor 2026-01-05T09:00:00Z", "finished_at": None, "updated_at": "2026-01-05T10:00:00Z"}
+    base = json.loads((RECORDS / "good-command.json").read_text())
+    rec = {**base, **waiting, "project": "demo-app", "repo": "acme/demo-app"}
+    assert REC.validate(rec, "demo-app--questions") == []
+    closed = {**rec, "status": "done", "needs_you": False, "needs_you_reason": "", "needs_you_since": None,
+              "last_event": "decisions applied 2026-01-05", "finished_at": "2026-01-06T08:00:00Z",
+              "updated_at": "2026-01-06T08:00:00Z"}
+    assert REC.validate(closed, "demo-app--questions") == []
+
+
+def test_review_apply_guards_the_status_record_write():
+    text = (ROOT / "playbooks" / "review.md").read_text()
+    step = text[text.index("5. Write the final status record"):text.index("6. **Final reply**")]
+    for phrase in ("--command questions --unattended", "never the header's `repository`", "compare the two strings exactly",
+                   "`waiting_user`", "retry once", "--if-version"):
+        assert phrase in step, phrase
+    assert "status_record:" in text
 
 
 def test_record_id_cli():
@@ -436,6 +491,8 @@ def test_record_id_cli():
     assert (ok.returncode, ok.stdout) == (0, "tkcs-lab-devflow--make-plan--efghijkl\n")
     ok = record_id(*repo, "--command", "deps", "--unattended")
     assert (ok.returncode, ok.stdout) == (0, "tkcs-lab-devflow--deps\n")
+    ok = record_id(*repo, "--command", "questions", "--unattended")
+    assert (ok.returncode, ok.stdout) == (0, "tkcs-lab-devflow--questions\n")
     for args in (
         [*repo, "--run"],
         [*repo, "--command", "x"],

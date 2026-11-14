@@ -1,0 +1,343 @@
+{
+ "asks": [
+  {
+   "schema": 1,
+   "kind": "ask",
+   "id": "a-0000000000000001",
+   "project": "demo-app",
+   "repo": "acme/demo-app",
+   "title": "Start alpha",
+   "created_by": "demo",
+   "context_url": null,
+   "fallback_issue": null,
+   "record": "demo-app--run--alpha",
+   "questions": [
+    {
+     "id": "verify",
+     "text": "These commands run on this machine after each merge. Run them? 1. pytest tests/core -q",
+     "kind": "confirm"
+    }
+   ],
+   "state": "answered",
+   "answers": {
+    "verify": true
+   },
+   "created_at": "2026-01-05T10:00:00Z",
+   "answered_at": "2026-01-05T10:01:00Z"
+  },
+  {
+   "schema": 1,
+   "kind": "ask",
+   "id": "a-0000000000000002",
+   "project": "demo-app",
+   "repo": "acme/demo-app",
+   "title": "Start beta",
+   "created_by": "demo",
+   "context_url": null,
+   "fallback_issue": null,
+   "record": "demo-app--run--beta",
+   "questions": [
+    {
+     "id": "verify",
+     "text": "These commands run on this machine after each merge. Run them? 1. pytest tests/adapters -q",
+     "kind": "confirm"
+    }
+   ],
+   "state": "answered",
+   "answers": {
+    "verify": true
+   },
+   "created_at": "2026-01-06T10:00:00Z",
+   "answered_at": "2026-01-06T10:02:00Z"
+  },
+  {
+   "schema": 1,
+   "kind": "ask",
+   "id": "a-0000000000000003",
+   "project": "demo-app",
+   "repo": "acme/demo-app",
+   "title": "Start gamma",
+   "created_by": "demo",
+   "context_url": null,
+   "fallback_issue": null,
+   "record": "demo-app--run--gamma",
+   "questions": [
+    {
+     "id": "verify",
+     "text": "These commands run on this machine after each merge. Run them? 1. pytest -x",
+     "kind": "confirm"
+    }
+   ],
+   "state": "answered",
+   "answers": {
+    "verify": true
+   },
+   "created_at": "2026-01-07T10:00:00Z",
+   "answered_at": "2026-01-07T10:03:00Z"
+  },
+  {
+   "schema": 1,
+   "kind": "ask",
+   "id": "a-0000000000000004",
+   "project": "demo-app",
+   "repo": "acme/demo-app",
+   "title": "Plan #12: size",
+   "created_by": "demo",
+   "context_url": null,
+   "fallback_issue": null,
+   "record": "demo-app--make-plan--abc123",
+   "questions": [
+    {
+     "id": "limits",
+     "text": "Which word limit should the summary have?",
+     "kind": "choice",
+     "options": [
+      {
+       "value": "w350"
+      },
+      {
+       "value": "w500"
+      }
+     ]
+    },
+    {
+     "id": "notes",
+     "text": "Anything else the plan should know? One line.",
+     "kind": "text",
+     "required": false
+    }
+   ],
+   "state": "answered",
+   "answers": {
+    "limits": "w350"
+   },
+   "created_at": "2026-01-08T10:00:00Z",
+   "answered_at": "2026-01-08T10:00:30Z"
+  },
+  {
+   "schema": 1,
+   "kind": "ask",
+   "id": "a-0000000000000005",
+   "project": "demo-app",
+   "repo": "acme/demo-app",
+   "title": "Plan #13: scope",
+   "created_by": "demo",
+   "context_url": null,
+   "fallback_issue": null,
+   "record": "demo-app--make-plan--def456",
+   "questions": [
+    {
+     "id": "scope",
+     "text": "Should the scope include the website?",
+     "kind": "choice",
+     "options": [
+      {
+       "value": "no"
+      },
+      {
+       "value": "yes"
+      }
+     ]
+    },
+    {
+     "id": "notes",
+     "text": "Anything else the plan should know? One line.",
+     "kind": "text",
+     "required": false
+    }
+   ],
+   "state": "answered",
+   "answers": {
+    "scope": "yes"
+   },
+   "created_at": "2026-01-09T10:00:00Z",
+   "answered_at": "2026-01-09T10:01:30Z"
+  },
+  {
+   "schema": 1,
+   "kind": "ask",
+   "id": "a-0000000000000006",
+   "project": "demo-app",
+   "repo": "acme/demo-app",
+   "title": "Plan #14: names",
+   "created_by": "demo",
+   "context_url": null,
+   "fallback_issue": null,
+   "record": "demo-app--make-plan--ghi789",
+   "questions": [
+    {
+     "id": "notes",
+     "text": "Anything else the plan should know? One line.",
+     "kind": "text",
+     "required": false
+    }
+   ],
+   "state": "answered",
+   "answers": {},
+   "created_at": "2026-01-10T10:00:00Z",
+   "answered_at": "2026-01-10T10:00:10Z"
+  },
+  {
+   "schema": 1,
+   "kind": "ask",
+   "id": "a-0000000000000007",
+   "project": "demo-app",
+   "repo": "acme/demo-app",
+   "title": "Review scope: decisions",
+   "created_by": "demo",
+   "context_url": null,
+   "fallback_issue": null,
+   "record": "demo-app--review--r1",
+   "questions": [
+    {
+     "id": "d1",
+     "text": "Apply the review?",
+     "kind": "confirm"
+    }
+   ],
+   "state": "cancelled",
+   "answers": {},
+   "created_at": "2026-01-11T10:00:00Z",
+   "answered_at": null
+  },
+  {
+   "schema": 1,
+   "kind": "ask",
+   "id": "a-0000000000000008",
+   "project": "demo-app",
+   "repo": "acme/demo-app",
+   "title": "Review scope: decisions",
+   "created_by": "demo",
+   "context_url": null,
+   "fallback_issue": null,
+   "record": "demo-app--review--r1",
+   "questions": [
+    {
+     "id": "d1",
+     "text": "Apply the review?",
+     "kind": "confirm"
+    }
+   ],
+   "state": "answered",
+   "answers": {
+    "d1": true
+   },
+   "created_at": "2026-01-11T10:10:00Z",
+   "answered_at": "2026-01-11T10:10:40Z"
+  },
+  {
+   "schema": 1,
+   "kind": "ask",
+   "id": "a-0000000000000009",
+   "project": "demo-app",
+   "repo": "acme/demo-app",
+   "title": "Questions review: 2 decisions",
+   "created_by": "demo",
+   "context_url": null,
+   "fallback_issue": null,
+   "record": "demo-app--questions--q1",
+   "questions": [
+    {
+     "id": "QST-1",
+     "text": "Apply this finding?",
+     "kind": "choice",
+     "options": [
+      {
+       "value": "plan"
+      },
+      {
+       "value": "drop"
+      }
+     ]
+    }
+   ],
+   "state": "open",
+   "answers": {},
+   "created_at": "2026-01-12T10:00:00Z",
+   "answered_at": null
+  },
+  {
+   "schema": 1,
+   "kind": "ask",
+   "id": "a-000000000000000a",
+   "project": "demo-app",
+   "repo": "acme/demo-app",
+   "title": "Start delta",
+   "created_by": "demo",
+   "context_url": null,
+   "fallback_issue": null,
+   "record": null,
+   "questions": [
+    {
+     "id": "verify",
+     "text": "These commands run on this machine after each merge. Run them? 1. pytest -k fast",
+     "kind": "confirm"
+    }
+   ],
+   "state": "answered",
+   "answers": {
+    "verify": true
+   },
+   "created_at": "2026-01-13T10:00:00Z",
+   "answered_at": "2026-01-13T10:00:20Z"
+  },
+  {
+   "schema": 1,
+   "kind": "ask",
+   "id": "a-0000000000000011",
+   "project": "other-app",
+   "repo": "acme/other-app",
+   "title": "Start zeta",
+   "created_by": "demo",
+   "context_url": null,
+   "fallback_issue": null,
+   "record": "other-app--run--zeta",
+   "questions": [
+    {
+     "id": "verify",
+     "text": "These commands run on this machine after each merge. Run them? 1. make test",
+     "kind": "confirm"
+    }
+   ],
+   "state": "answered",
+   "answers": {
+    "verify": true
+   },
+   "created_at": "2026-01-06T11:00:00Z",
+   "answered_at": "2026-01-06T11:00:30Z"
+  },
+  {
+   "schema": 1,
+   "kind": "ask",
+   "id": "a-0000000000000012",
+   "project": "other-app",
+   "repo": "acme/other-app",
+   "title": "Unrelated",
+   "created_by": "demo",
+   "context_url": null,
+   "fallback_issue": null,
+   "record": "other-app--run--eta",
+   "questions": [
+    {
+     "id": "vendor",
+     "text": "Which cloud vendor account holds the staging database?",
+     "kind": "choice",
+     "options": [
+      {
+       "value": "a"
+      },
+      {
+       "value": "b"
+      }
+     ]
+    }
+   ],
+   "state": "answered",
+   "answers": {
+    "vendor": "a"
+   },
+   "created_at": "2026-01-09T11:00:00Z",
+   "answered_at": "2026-01-09T11:00:30Z"
+  }
+ ]
+}

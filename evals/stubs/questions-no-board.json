@@ -1,0 +1,8 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "questions: no board",
+  "actions": []
+}
