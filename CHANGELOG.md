@@ -5,6 +5,8 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-14
+
 ### Added
 
 - The board can serve its page and its sessions' API on two ports (`--api-port`, `TLD_BOARD_API_PORT`), so the page can sit behind Cloudflare Access and the API behind an IP allowlist; see `docs/guides/board-cloudflare.md`.
