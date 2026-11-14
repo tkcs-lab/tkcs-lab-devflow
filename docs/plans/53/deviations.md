@@ -17,6 +17,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - final: A question whose id does not match the board question id pattern is emitted with the id q followed by its index, instead of being skipped.
 - final: The cut treats the number placeholder as one unit and cuts before its hash sign, where the plan says to cut before the angle bracket.
 - final: Tokens are cut to 200 characters before masking, as input bounding added after the security review.
+- final: Owner decision (board ask, answer hash_emitted): the cluster fingerprint now hashes the emitted, vocabulary-filtered template with source and kind, not the template before the filter. This departs from plan 3.2 and from the p2 acceptance wording that the fingerprint is equal with a vocabulary; the corpus value without a vocabulary is unchanged. A changed vocabulary changes fingerprints, so an earlier finding can resurface once, and clusters that differ only in filtered words can now share a fing
+- retry: Fix worker fix-1 (Plan-Phase question-review/fix-1) made the change above and added two tests for similarity of empty word sets and for the empty flag of an unanswered ask.
 
 ## p3a-policy
 
