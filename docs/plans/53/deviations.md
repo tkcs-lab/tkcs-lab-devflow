@@ -27,7 +27,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3c-review-header
 
-- pending
+- worker: The worker added guards beyond the brief to the review apply sentence: the repository is the checkout, never the header; exact string comparison; only the command output is used as the record id; the write happens only when the record read is a questions record in waiting_user. It also added a second guard test. The baseline refresh also updated the questions playbook hash, which was stale after p3b (hashes only).
+- review: The worker ran the dod rows by hand, not the dod playbook; this merge ran the full suite, docs index and baseline checks green. Open non-blocking security notes for the final review: a stale document naming the public questions record id could close a later waiting run; a version-conflict retry should repeat the questions and waiting_user checks; the guard test only checks phrases.
 
 ## p4-retire
 
