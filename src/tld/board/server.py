@@ -866,28 +866,29 @@ def main(argv: list[str] | None = None) -> int:
             server.server_close()
         print(f"board_server: {exc}", file=sys.stderr)
         return 2
-    suffix = " (page)" if split else ""
-    print(f"board_server: listening on http://{args.host}:{server.server_address[1]}{suffix}",
-          file=sys.stderr, flush=True)
-    if api_server is not None:
-        print(f"board_server: listening on http://{args.host}:{api_server.server_address[1]} (api)",
-              file=sys.stderr, flush=True)
-    if owner is None:
-        print("board_server: TLD_BOARD_OWNER_PASSPHRASE is not set: the owner UI is off (API only)",
-              file=sys.stderr, flush=True)
+    api_thread = (threading.Thread(target=api_server.serve_forever, daemon=True)
+                  if api_server is not None else None)
     try:
+        suffix = " (page)" if split else ""
+        print(f"board_server: listening on http://{args.host}:{server.server_address[1]}{suffix}",
+              file=sys.stderr, flush=True)
         if api_server is not None:
-            api_thread = threading.Thread(target=api_server.serve_forever, daemon=True)
+            print(f"board_server: listening on http://{args.host}:{api_server.server_address[1]} (api)",
+                  file=sys.stderr, flush=True)
+        if owner is None:
+            print("board_server: TLD_BOARD_OWNER_PASSPHRASE is not set: the owner UI is off (API only)",
+                  file=sys.stderr, flush=True)
+        if api_thread is not None:
             api_thread.start()
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         if api_server is not None:
-            api_server.shutdown()
-            api_server.server_close()
-            if api_thread is not None:
+            if api_thread.ident is not None:  # shutdown() waits for a serve_forever that never ran otherwise
+                api_server.shutdown()
                 api_thread.join(5)
+            api_server.server_close()
         server.server_close()
     return 0
 
