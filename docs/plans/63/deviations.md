@@ -11,7 +11,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-env-command-check
 
-- pending
+- None.
+- review: Review found nothing outside the brief. Security-reviewer left 2 non-blocking findings: step 5 does not clean or cut the environment name and variable value it passes to the alert, and environment_name() does not say only the name field is used; left as the plan words them.
 
 ## p3-retire
 
