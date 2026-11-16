@@ -5,6 +5,15 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+### Added
+
+- A worker that needs a change to a protected file (the profile, a workflow) reports it; the owner approves the diff on the board and it becomes one pull request to the main branch (#62).
+
+### Changed
+
+- Worker briefs start with a toolkit preamble (the path of tld, and the line "tld: unavailable" when it is missing); plan-gate opens a worker's session on a "tld-worker:" line (#62).
+- tld plan validate-manifest warns about a protected path in a phase's touches, and the protect-paths denial texts point to the protected-change report (#62).
+
 ## [1.3.0] - 2026-11-14
 
 ### Added
