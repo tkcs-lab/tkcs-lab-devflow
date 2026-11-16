@@ -60,11 +60,26 @@ run on the session's own model, so start the session on that model for the whole
 
 | Action | Tool |
 |---|---|
-| `start_worker(brief, level, base, branch, title)` | `create_session` with `source_url` the repository's git URL, `source_revision` `base`, `outcome_branch` `branch` (omit for a read-only worker), `title`, `model` the level's id, `prompt` the brief. Omit `permission_mode` so the child inherits yours; never `plan` (nobody approves a child's plan). Returns the session id. |
+| `start_worker(brief, level, base, branch, title)` | `create_session` with `source_url` the repository's git URL, `source_revision` `base`, `outcome_branch` `branch` (omit for a read-only worker), `title`, `model` the level's id, `prompt` the brief. Omit `permission_mode` so the child inherits yours; never `plan` (nobody approves a child's plan). Returns the session id. Put the toolkit preamble below in front of every brief. |
 | `read_worker(worker)` | `get_session`: `status_bucket` `working` is working; `blocked`, `review_ready` and `completed` are finished; `failed` is failed. The last report is the newest assistant message: `list_events` with `kinds: ["assistant", "result"]`. |
 | `message_worker(worker, text)` | `send_message` with `session_id` the worker; `message_worker(parent, ...)` is `send_message` with `session_id: "@parent"`. |
 | `stop_worker(worker)` | `archive_session` |
 | `check_in(interval)` / `wait_for_workers(interval)` | arm one `send_later` (`delay_minutes`) and end the turn. After every wake cancel the armed one (`delete_trigger` with the id `send_later` returned) and arm again for what still runs. |
+
+### Toolkit preamble
+
+```
+tld-worker: <title>
+Toolkit: `tld` is not on PATH. Everywhere this brief or a playbook says `tld <args>`, run `<tld cli> <args>`.
+Check once, first: `test -x <tld cli> && <tld cli> --version`. When that fails, run
+`ls -d /root/.claude/plugins/synced/*/tld/cli/tld`; use the path only when exactly one line is printed and
+its `--version` equals `<tld version>`. Otherwise `tld` is unavailable: make no `tld` call at all, run the
+verify commands this brief quotes, and put the line `tld: unavailable` directly under your PHASE-REPORT
+line. The orchestrator runs the `tld` steps for you. If a guard hook then denies an edit, stop with
+status=blocked and say so.
+```
+
+<tld cli> is your own expansion of "<tld root>/cli/tld" from the Names table, absolute and without quotes; <tld version> is the output of <tld cli> --version without the word "tld ".
 
 **Check-in intervals.** Short: **15 minutes** (a running phase of complexity S). Long: **30 minutes** (an M phase,
 a phase without complexity, a review, fix or conflict worker). Fallback: **5 minutes** for the rest of the run once
