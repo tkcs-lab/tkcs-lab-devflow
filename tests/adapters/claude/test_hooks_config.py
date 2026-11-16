@@ -40,8 +40,8 @@ def test_hooks_json_is_valid_and_every_script_exists():
             assert matcher and re.compile(matcher)
         else:
             assert matcher is None
-    expected = sorted([f"{m}.py" for m in MODULES.values()] + ["plan_gate.py", "model_check.py", "board_gate.py", "board_gate.py"])
-    assert sorted(scripts) == expected, "each hook is registered once, plan_gate.py twice (UserPromptSubmit and PreToolUse), model_check.py twice (UserPromptSubmit and SessionStart), board_gate.py three times (UserPromptSubmit, PostToolUse, Stop)"
+    expected = sorted([f"{m}.py" for m in MODULES.values()] + ["plan_gate.py", "model_check.py", "env_check.py", "board_gate.py", "board_gate.py"])
+    assert sorted(scripts) == expected, "each hook is registered once, plan_gate.py twice (UserPromptSubmit and PreToolUse), model_check.py twice (UserPromptSubmit and SessionStart), env_check.py twice (UserPromptSubmit and SessionStart), board_gate.py three times (UserPromptSubmit, PostToolUse, Stop)"
 
 
 @pytest.mark.parametrize("script, tool, listens", [

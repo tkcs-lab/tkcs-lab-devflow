@@ -82,7 +82,7 @@ a policy file; [guide](docs/guides/admin.md)) and `tld:git-ops` (delete a remote
   the `write` role, and the environments `tld-agent` and `tld-release` that hold `TLD_AGENT_TOKEN` and
   `TLD_RELEASE_TOKEN`. Tags have one route: the release workflow; the owner approves its publish job in GitHub (after `/tld:release` or by running the workflow).
 - **Seatbelt: the hooks.** `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths` and the opt-in
-  `dod-gate` deny the action before it runs and tell the agent what to do instead; `model-check` only warns when a session runs on the most expensive level. The protect lists and
+  `dod-gate` deny the action before it runs and tell the agent what to do instead; `model-check` only warns when a session runs on the most expensive level, and `env-check` only warns when a cloud session runs in an environment the profile does not list (`runtime.environments`). The protect lists and
   `hooks.disable` are read from the profile on the remote default branch. They need `python3` 3.11+ and PyYAML in
   the session, and every repository in a Project that enables `tld` needs at least `git.main_branch` in its profile.
 

@@ -284,12 +284,14 @@ def test_record_commands_cover_the_playbooks():
 RUNTIME_WORDS = re.compile(
     r"create_session|send_later|send_message|get_session|archive_session|AskUserQuestion|Artifact|PushNotification|"
     r"SendUserFile|subagent|get_me|mcp__|\bAgent tool|CLAUDE_PLUGIN_ROOT|/tld:|\bopus\b|\bsonnet\b|\bhaiku\b|"
-    r"claude-(opus|sonnet|haiku)|ToolSearch|subscribe_pr_activity|actions_run_trigger|issue_write\b|claude\.ai")
+    r"claude-(opus|sonnet|haiku)|ToolSearch|subscribe_pr_activity|actions_run_trigger|issue_write\b|get_environment|claude-code-remote|claude\.ai")
 
 
 def test_runtime_words_catch_the_claude_ai_host_and_not_a_lookalike():
     assert RUNTIME_WORDS.search("a claude.ai environment")
     assert not RUNTIME_WORDS.search("claude-ai")
+    assert RUNTIME_WORDS.search("get_environment")
+    assert RUNTIME_WORDS.search("claude-code-remote")
 
 
 

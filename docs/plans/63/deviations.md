@@ -1,0 +1,29 @@
+# Deviations: environment-check
+
+Written by the implement orchestrator after each phase merge; workers never edit this file.
+Every deviation from the plan is listed under its phase. "None." means the phase followed the plan.
+
+## p1-env-hook
+
+- None.
+- retry: First report was blocked on a broken link in the plan quote; the owner chose to fix the link target in plan.md (and add a note to the p2 brief that profile.md keeps ../runtime.md); the worker was sent back to merge the fix and run dod and the security-reviewer role.
+- review: Review found nothing outside the brief. Security-reviewer left 4 non-blocking findings (line separators U+2028/2029 in names, whitespace-only schema names, hook timeout versus git lookup, no cap on the number of names); left as the plan specifies them.
+- final: Final review fix-1: _names now gives [] when any entry of runtime.environments is not a string, as plan 3.3 says; test case [TLD, 3] added.
+
+## p2-env-command-check
+
+- None.
+- review: Review found nothing outside the brief. Security-reviewer left 2 non-blocking findings: step 5 does not clean or cut the environment name and variable value it passes to the alert, and environment_name() does not say only the name field is used; left as the plan words them.
+
+## p3-retire
+
+- None.
+- review: Review found nothing outside the brief. Security-reviewer left 3 non-blocking findings (advisory and spoofable variable not stated in the guide, hooks.disable comment lacks the two hook names, set-but-unlisted versus unset not told apart); the worker did not run the acceptance grep itself, the orchestrator did (2 lines).
+
+## Final review
+
+- final: Blocking: _names kept the string entries of a mixed list (environments [TLD, 3] gave [TLD]) although plan 3.3 gives [] for any shape that is not a list of strings; a fix worker corrects it and adds the case to the malformed-shapes test. Non-blocking, left: quote character in a name, test message assertion, line layout of HOOK_NAMES.
+
+## Finishing
+
+- final: Scope: every phase merge was checked and no path was out of scope; nothing to settle. Dod rows of the profile and the full test run (5020) passed on the feature branch; docs-index check has 0 errors and 2 existing line-count warnings.
