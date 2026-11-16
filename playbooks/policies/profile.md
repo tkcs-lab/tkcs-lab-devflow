@@ -24,6 +24,7 @@ follow from that:
 3. **Load the stack guides.** For each name in `stacks`, read `stacks/<name>.md`. If one does not exist,
    say which and stop.
 4. **Load the project's own policy.** If `project_steward` is set, read that file now.
+5. **Check the environment.** When the profile has `runtime.environments`, call `environment_name()` ([../runtime.md](../runtime.md)). When it returns a name that is none of the listed names (compared after trimming, ignoring case), call `notify_human("<project>: this session runs in the environment <name>, this repository expects <names>")` once and say the same in your first reply, then carry on: this step never stops a run and never changes what the playbook does. A worker started by another session puts the line in its final report and does not call `notify_human`. When `environment_name()` returns nothing, or the profile has no such key, skip this step without a word. Whenever `environment_name()` returns a name and the shell variable `TLD_ENVIRONMENT` is set and differs from it (also when the name is listed), say in your first reply the line `TLD_ENVIRONMENT says <value> but the session runs in <name>: update the variable in the environment's settings.` and add it to the alert when one is sent.
 
 ## Keys, in the order the playbooks use them
 
@@ -48,6 +49,7 @@ follow from that:
 | `ci.dispatchable` | The dispatch table in [pr-steward.md](pr-steward.md); what is not "manual" in a plan |
 | `stacks` | Which `stacks/<name>.md` guides to load |
 | `scope.ignore` | Globs implement does not count as scope drift |
+| `runtime.environments` | The environment names this repository's sessions run in; step 5 of "Loading the profile" and the `env-check` hook warn on another |
 | `project_steward` | A project doc with policy that fits none of the keys |
 | `deps`, `upstream`, `land`, `admin`, `git_ops`, `hooks` | The playbook or guard of the same name |
 
