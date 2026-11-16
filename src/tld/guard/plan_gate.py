@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -20,6 +21,8 @@ OPENING = ("make-plan", "implement", "review", "setup", "migrate", "land", "deps
 CONTENT_WRITES = ("push_files", "create_or_update_file", "delete_file")   # GitHub MCP tools that write files
 SESSION_TTL_SECONDS = 24 * 3600
 WORKER_COMMAND = "tld guard allow-" + "plan"   # in an /implement worker brief; split so the deny text path never names it
+
+WORKER_TOKEN = re.compile(r"(?m)^tld-worker: \S")   # first line of an /implement worker brief
 
 PROMPT_CONTEXT = ("tld plan-gate: this session has no plan. Answer or research only; do not edit files or run commands "
                   "that write. If the message asks for a change, restate it in one or two sentences and propose "
@@ -108,6 +111,9 @@ def _evaluate(ctx: Ctx) -> str | None:
         if ctx.disabled(NAME):
             return None
         if a.invoked in OPENING and a.session_id:
+            open_session(ctx.project_dir, a.session_id)
+            return None
+        if a.invoked is None and a.session_id and WORKER_TOKEN.search(a.prompt or ""):
             open_session(ctx.project_dir, a.session_id)
             return None
         if a.invoked is not None or gate_open(ctx):
