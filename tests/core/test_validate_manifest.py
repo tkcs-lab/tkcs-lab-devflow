@@ -166,6 +166,59 @@ def test_a_plan_record_in_touches_is_an_error(vm):
     assert touching("docs/adr/x.md", plan_dir="docs/") == []
 
 
+def _warns(vm, entry, profile=None):
+    m = mutated(lambda m: m["phases"][0].update(touches=[entry]))
+    return vm.validate(m, profile)
+
+
+def test_a_protected_path_in_touches_is_a_warning(vm):
+    for entry in (".tld/toolkit.yaml", ".github/workflows/ci.yml"):
+        errs, warns = _warns(vm, entry)
+        assert errs == [], entry
+        assert any(f"touches '{entry}' is a protected path" in w and "protected-changes.md" in w for w in warns), entry
+
+
+def test_a_wildcard_over_protected_paths_is_a_warning(vm):
+    errs, warns = _warns(vm, ".github/**")
+    assert errs == []
+    assert any("touches '.github/**' could name a protected path" in w for w in warns)
+
+
+def test_a_directory_entry_is_checked_like_its_glob(vm):
+    errs, warns = _warns(vm, ".github/")
+    assert errs == []
+    assert any("touches '.github/' could name a protected path" in w for w in warns)
+
+
+def test_lockfiles_and_env_files_in_touches_give_no_warning(vm):
+    for entry in ("uv.lock", "package-lock.json", ".env.example"):
+        errs, warns = _warns(vm, entry)
+        assert errs == [] and warns == [], entry
+
+
+def test_a_wildcard_away_from_protected_paths_does_not_warn(vm):
+    m = mutated(lambda m: m["phases"][0].update(touches=["src/**", "docs/*.md"]))
+    m["phases"][0]["depends_on"] = []
+    errs, warns = vm.validate(m)
+    assert warns == []
+    assert vm.validate(GOOD)[1] == []
+
+
+def test_the_profile_protect_list_replaces_the_default(vm):
+    profile = {"hooks": {"protect_paths": ["secrets/x/**"]}}
+    errs, warns = _warns(vm, ".tld/toolkit.yaml", profile)
+    assert errs == [] and warns == []
+    errs, warns = _warns(vm, "secrets/x/a.txt", profile)
+    assert errs == []
+    assert any("touches 'secrets/x/a.txt' is a protected path" in w for w in warns)
+
+
+def test_a_profile_without_hooks_gives_the_default_check(vm):
+    errs, warns = _warns(vm, ".tld/toolkit.yaml", {"git": {}})
+    assert errs == []
+    assert any("is a protected path" in w for w in warns)
+
+
 def test_ref_must_be_main_or_the_feature_branch_or_the_legacy_plan_branch(vm, tmp_path, capsys):
     f = tmp_path / "m.yaml"
     f.write_text(yaml.safe_dump(GOOD))
