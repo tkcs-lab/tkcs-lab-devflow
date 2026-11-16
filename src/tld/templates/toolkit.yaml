@@ -123,6 +123,10 @@ stacks: []               # REQUIRED (may be []). Stack guides to load (stacks/<n
 #   extra_context:       # lines added to every role's context
 #     - "<a project rule every role should check>"
 
+# runtime:               # optional: where this repository's sessions run (docs/reference/profile-reference.md).
+#   environments:        # the environment names the sessions belong in; the env-check hook and every command warn on another
+#     - TLD
+
 # hooks:                 # optional: settings of the guardrail hooks tld ships (docs/architecture/hooks.md).
 #                        # The values below are the defaults; with no `hooks` section all hooks but dod-gate are on.
 #   disable: []          # escape hatch: names of hooks to switch off here, any of
