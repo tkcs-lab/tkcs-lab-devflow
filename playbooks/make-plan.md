@@ -14,7 +14,8 @@ The plan goes to the feature branch (the manifest's `feature_branch`) at `<plan_
 `<main>` with the feature in the feature pull request, where it stays as a historical record.
 
 Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text.md),
-[policies/status-board.md](policies/status-board.md), [policies/research.md](policies/research.md). Runtime actions: [runtime.md](runtime.md).
+[policies/status-board.md](policies/status-board.md), [policies/research.md](policies/research.md),
+[policies/protected-changes.md](policies/protected-changes.md). Runtime actions: [runtime.md](runtime.md).
 
 ## Setup
 
@@ -279,6 +280,8 @@ here so the worker only has to execute. Every phase passes all of these:
   or `verify.dod` entry, a prefix in `verify.after_merge_allow`, or such a dispatch): implement runs them
   without a question; any other command is put to the owner before implement runs it (S14).
 
+- **A phase never lists a protected path in `touches`**; its brief says: do not edit <path>, report
+  protected-change: <path> - <why> with the diff (policies/protected-changes.md).
 - **`worker_level: fast`** is allowed only for a phase that is complexity `S`, whose brief gives the literal text
   or the literal edit for every change (docs, strings, config values, renames, fixture or baseline refreshes),
   contains no new control flow or function, and whose acceptance is a named test or a grep. The default is the
