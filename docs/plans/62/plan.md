@@ -4,7 +4,7 @@
 
 ## Summary
 
-**Use it:** `/tld:implement` starts every worker with a toolkit preamble: the full path of `tld` and a `tld-worker:` line, so the worker can run `tld` and can edit files. A worker that cannot find `tld` says `tld: unavailable` under its report line and the orchestrator runs the tld steps for it. A worker never edits a protected file (the profile, workflows, lockfiles, `.env`): it reports `protected-change: <path> - <why>` with the diff. The orchestrator shows the diff to you (board, else chat and the tracking issue), and after your `apply` it opens one pull request to the main branch.
+**Use it:** `/tld:implement` starts every worker with a toolkit preamble: the full path of `tld` and a `tld-worker:` line, so the worker can run `tld` and can edit files. A worker that cannot find `tld` says `tld: unavailable` under its report line and the orchestrator runs the tld steps for it. A worker never edits a protected file (the profile, a workflow): it reports `protected-change: <path> - <why>` with the diff. The orchestrator shows the diff to you (board, else chat and the tracking issue), and after your `apply` it opens one pull request to the main branch.
 
 **Scope:** the worker brief and merge steps of implement, one new policy `protected-changes` with a new runtime action `github.file_put`, a worker token for plan-gate, new deny texts of protect-paths, a manifest warning when a phase lists a protected path in `touches`, and the make-plan rule behind it. Not changed: the protected lists, the markers (`allow-profile`, `allow-plan`, ...), the board, `/setup`.
 
