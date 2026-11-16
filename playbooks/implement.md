@@ -170,7 +170,9 @@ Docs changed>; add the docs index row for each.`
 >
 > Rules:
 > 0. Before any change run `tld guard allow-plan` once. The plan-gate hook, where the repository enables it, refuses edits in a session that no tld command started, and your first prompt is this brief. This session's network may be limited: follow `playbooks/policies/research.md`; never wait for research: stop with `status=blocked` and a line `Research: <one question>`.
-> 1. Stay inside this phase's `brief`, and inside its `touches` list if it has one. Never edit a `<protected path>`
+> 1. Stay inside this phase's `brief`, and inside its `touches` list if it has one. A protected path
+>    (playbooks/policies/protected-changes.md) is never edited: finish the rest of your phase and report each
+>    needed change as protected-change: <path> - <why> followed by the unified diff in a fenced block. Never edit a `<protected path>`
 >    (the plan's own directory `<plan_dir>/<n>/` for a new-layout plan; the deviations file and the plan file for
 >    an old-layout plan, except that the retirement phase, the last phase of the manifest, may delete the plan
 >    file; they belong to the orchestrator). Work that belongs to
@@ -195,7 +197,8 @@ Docs changed>; add the docs index row for each.`
 >    the report text and run `tld roles verify --required <json> --report <text>`; it must exit 0.
 > 5. Your final commit message ends with the trailer `Plan-Phase: <plan slug>/<phase id>`.
 > 6. End your last turn with a report in exactly this shape: `PHASE-REPORT <phase id> status=<done|blocked>
->    head=<sha>` on its own line, then the line `Deviations: <one line each, or "none">` (required, "none"
+>    head=<sha>` on its own line, then (under the PHASE-REPORT line, the line "tld: unavailable" when you could
+>    run no tld step), the line `Deviations: <one line each, or "none">` (required, "none"
 >    included), then the dod table, the `AGENT-REPORT` lines, the acceptance checklist, and any out-of-scope
 >    findings.
 > 7. Then call `message_worker(parent, "PHASE-REPORT <phase id> status=<done|blocked> head=<sha>")` with the
@@ -247,11 +250,22 @@ On each check-in, for each `running` phase, `read_worker(<its worker>)`:
    plan file of an old-layout plan)? Check it with `git diff --name-status <base>...origin/<phase branch>`: the
    one allowed change is status `D` on the old-layout plan file, made by the retirement phase (the last phase of
    the manifest); any other status (`M`, `R`, `A`) on it, a deletion by another phase, and any diff under the
-   other `<protected paths>` is sent back. Anything wrong goes back to the worker as above.
-3. **Required roles.** Save `git diff --name-only <base>...origin/<phase branch>` to a file, run
+   other `<protected paths>` is sent back. A diff that touches a protected path of the main profile (its effective
+   protect list plus the paths `playbooks/policies/protected-changes.md` excludes from the flow) is sent back. `BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of `GUARDED_WORKFLOWS`, `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow pattern matches them. Check
+   it with `git diff --name-only --no-renames <base>...origin/<phase branch>` (a deleted protected path counts). A hit in the
+   excluded set is never routed into the flow. A lockfile in a phase diff is sent back whoever produced it; lockfile changes are made outside implement (the deps playbook or by the owner). Each `protected-change:` line of the report is handled with
+   the protected-changes policy (the merge is not held back). Anything wrong goes back to the worker as above.
+3. **Required roles.** Unless the report has the line `tld: unavailable` (see below), save `git diff --name-only <base>...origin/<phase branch>` to a file, run
    `tld roles required --profile .tld/toolkit.yaml --at implement_phase --changed <file>` (save the JSON) and
    `tld roles verify --required <json> --report <the PHASE-REPORT text>`. Exit 1 goes back to the worker like
    any defect, with the output of `verify` as the instruction.
+
+   A PHASE-REPORT with the line `tld: unavailable` is handled like this: run `tld roles required` as above, then
+   run every listed role yourself with `run_role` in `review` mode (also the edit roles: you never edit a phase),
+   print each `AGENT-REPORT` line, run `tld roles verify --required <json> --report <those reports>`, and with
+   `docs.index` set run `tld ops docs-index check --profile .tld/toolkit.yaml`. A blocking finding or a failing
+   check goes back to the worker like any defect (its brief again starting with the preamble). Nothing else of
+   Merge changes.
 4. **Scope check (monitoring only, never a gate).** With `<feature>` checked out, run (`<results>` is
    `scope-results.json` in your scratch directory):
 
@@ -344,7 +358,9 @@ When every phase is `merged`, merge `origin/<main>` into the feature branch once
 > The network may be limited and you cannot ask: put each open research question on a line `research: <question>` before the REVIEW-REPORT line, and follow `playbooks/policies/research.md`.
 >
 > End with `REVIEW-REPORT verdict=<approve|changes>` on its own line, then one numbered finding per line:
-> `blocking|non-blocking`, `path:line`, the phase id it belongs to, what is wrong and the fix. `changes` means
+> `blocking|non-blocking`, `path:line`, the phase id it belongs to, what is wrong and the fix. A diff that
+> touches a protected path (playbooks/policies/protected-changes.md; its effective list and excluded set) is a blocking finding. `BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of `GUARDED_WORKFLOWS`, `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow pattern matches them.
+> A lockfile in the diff is a blocking finding whoever produced it; lockfile changes are made outside implement (the deps playbook or by the owner). `changes` means
 > at least one blocking finding. Only something you would refuse to merge is blocking.
 
 A blocking finding that the deviations file lacks an entry is fixed by you, not by a worker: `tld plan

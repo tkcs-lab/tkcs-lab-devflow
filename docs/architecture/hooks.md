@@ -186,7 +186,7 @@ anything under `$CLAUDE_PLUGIN_ROOT` (the installed plugin). Protected on their 
 (S8): `~/.gitconfig` and `~/.config/git/**` (git's own configuration), and the files the Claude adapter adds —
 `~/.claude/**`, `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/**` and `.mcp.json`, since a
 session that edits Claude Code's own configuration could switch the hooks off. Always allowed, whatever the profile says: `.env.example`, `.env.sample`,
-`.env.template`, `.env.dist`; add your own with `hooks.protect_paths_allow`. **The tld workflow files (S13).** `tld-land.yml` (it uses `TLD_AGENT_TOKEN`) and `tld-release.yml` in `.github/workflows/`
+`.env.template`, `.env.dist`; add your own with `hooks.protect_paths_allow`. A denied profile-listed path is not edited by hand: the session reports "protected-change: <path> - <why>" with the diff, the owner approves it, and it lands as one pull request to the main branch (playbooks/policies/protected-changes.md). The always-protected paths keep their old text. **The tld workflow files (S13).** `tld-land.yml` (it uses `TLD_AGENT_TOKEN`) and `tld-release.yml` in `.github/workflows/`
 are protected whatever the profile says. `tld guard allow-workflow-install <file>` (run by `/land` step 4) lets that one
 file through for 15 minutes, until `tld guard end-allow`; `repo-admin` installs through the API and needs no marker.
 
@@ -279,7 +279,8 @@ to propose `/tld:make-plan` (the `ask` skill, `/tld:ask`, says how).
   read-only commands, `create_pull_request`.
 - **Workers.** An `/implement` worker's first prompt is a brief, so its brief tells it to run `tld guard allow-plan`,
   which writes `plan-gate-open.json` into `<git dir>/tld/` (per checkout, 8 hours; `tld guard end-allow` keeps it). A
-  prompt containing `tld guard allow-plan` gets no context.
+  prompt containing `tld guard allow-plan` gets no context, and a prompt with a line starting `tld-worker: ` (no slash
+  command, with a session id) also opens the session.
 - **Lifetime.** The session record (`<git dir>/tld/plan-gate/`, named by a hash of the session id) lapses 24 hours after
   last use; every use refreshes it. No session id and no marker: the gate allows. `enabled` is read from the working
   tree (like `dod-gate`), `hooks.disable` from the trusted copy; a malformed `hooks.plan_gate` fails open with a notice.

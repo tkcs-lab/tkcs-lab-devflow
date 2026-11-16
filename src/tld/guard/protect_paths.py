@@ -154,7 +154,7 @@ def violation(ctx: Ctx, path: str, here: str) -> str | None:
     for rel in relative(ctx, path, here):
         for pat in always:
             if matches(pat, rel):
-                return message(rel, pat)
+                return message(rel, pat, flow=False)
         if rel in GUARDED_WORKFLOWS:
             if workflow_install_allowed(ctx.project_dir, rel):
                 continue
@@ -231,20 +231,28 @@ def expand_braces(word: str) -> list[str] | None:
     return [word]
 
 
-def message(rel: str, pattern: str) -> str:
+def message(rel: str, pattern: str, flow: bool = True) -> str:
     name = os.path.basename(rel)
+    report = (f'Report "protected-change: {rel} - <why>" with the diff in a fenced block '
+              "(playbooks/policies/protected-changes.md); edit nothing here.")
     if rel == ".tld/toolkit.yaml":
-        hint = "The project profile is changed by people or by /setup, not by a session; tell the user what should change."
+        hint = ("The profile changes only in its own pull request to the main branch, after the owner approved the diff. "
+                + report) if flow else \
+            "The project profile is changed by people or by /setup, not by a session; tell the user what should change."
     elif name.startswith(".env"):
         hint = "Environment files hold secrets and are never edited by a session; document a variable in .env.example instead."
     elif name.endswith(".lock") or name in ("package-lock.json", "go.sum"):
         hint = "Regenerate lockfiles with the project's own lock command (see deps.lock_freshness), never by hand."
     elif rel.startswith(".github/workflows/"):
-        hint = "Workflow changes are made by the owner; describe the change you need in your report or the pull request."
+        hint = report if flow else \
+            "Workflow changes are made by the owner; describe the change you need in your report or the pull request."
     else:
-        hint = "Describe the change you need in your report instead."
-    return (f"blocked: `{rel}` is a protected path (it matches `{pattern}` in hooks.protect_paths). {hint} "
-            "If the task really requires it, ask the user to make the change or to list the path under "
+        hint = report if flow else "Describe the change you need in your report instead."
+    text = f"blocked: `{rel}` is a protected path (it matches `{pattern}` in hooks.protect_paths). {hint}"
+    if flow:
+        return text
+    return (text + " If the task really "
+            "requires it, ask the user to make the change or to list the path under "
             "hooks.protect_paths_allow in .tld/toolkit.yaml.")
 
 

@@ -17,6 +17,9 @@ from pathlib import Path
 
 import yaml
 
+from tld.guard import protect_paths
+from tld.guard._common import BUILTIN_PROTECT_ALLOW, DEFAULT_PROTECT_PATHS
+
 HEADING = "## Implementation manifest"
 LEVELS = ("strong", "standard", "fast")
 WILDCARDS = "*?["
@@ -97,6 +100,32 @@ def paths_overlap(a: str, b: str) -> bool:
     if b_glob:
         return path_matches(a, b)
     return path_matches(b, a) or path_matches(a, b)
+
+
+def _protect_patterns(profile: dict | None) -> list[str]:
+    """The patterns of the effective protect list that contain a '/' (a slash-less pattern is left out: see plan 3.6)."""
+    hooks = (profile or {}).get("hooks")
+    listed = hooks.get("protect_paths") if isinstance(hooks, dict) else None
+    patterns = listed if isinstance(listed, list) else DEFAULT_PROTECT_PATHS
+    return [p for p in patterns if isinstance(p, str) and "/" in p]
+
+
+def _protect_allow(profile: dict | None) -> list[str]:
+    hooks = (profile or {}).get("hooks")
+    extra = hooks.get("protect_paths_allow") if isinstance(hooks, dict) else None
+    return list(BUILTIN_PROTECT_ALLOW) + [p for p in (extra if isinstance(extra, list) else []) if isinstance(p, str)]
+
+
+def _protected_touch(entry: str, patterns: list[str], allow: list[str]) -> str | None:
+    """'is' or 'could name' when a touches entry names a protected path, else None."""
+    name = _norm(entry)
+    if name.endswith("/"):
+        name += "**"
+    if not name or any(protect_paths.matches(a, name) for a in allow):
+        return None
+    if any(c in name for c in WILDCARDS):
+        return "could name" if any(paths_overlap(name, p) for p in patterns) else None
+    return "is" if any(protect_paths.matches(p, name) for p in patterns) else None
 
 
 def _reach(phases: dict[str, list[str]]) -> dict[str, set[str]]:
@@ -255,6 +284,7 @@ def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/pla
         errors.append("'phases' must be a non-empty list")
         return errors, warnings
 
+    protect, allow = _protect_patterns(profile), _protect_allow(profile)
     ids: list[str] = []
     deps: dict[str, list[str]] = {}
     touches: dict[str, list[str]] = {}
@@ -301,6 +331,11 @@ def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/pla
                 if _is_plan_record(entry, plan_dir, known):
                     errors.append(f"phase '{pid}': touches '{entry}' is a plan record; "
                                   "a phase never edits a plan or its deviations file")
+                kind = _protected_touch(entry, protect, allow)
+                if kind:
+                    warnings.append(
+                        f"phase '{pid}': touches '{entry}' {kind} a protected path; a phase never edits it. "
+                        "Its brief reports a protected-change instead (playbooks/policies/protected-changes.md)")
         if "human_gate" in ph and not isinstance(ph["human_gate"], bool):
             errors.append(f"phase '{pid}': human_gate must be true or false")
 
