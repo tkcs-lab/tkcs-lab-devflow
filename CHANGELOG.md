@@ -8,6 +8,7 @@ entry of the released version at the top of the GitHub release, above the list o
 ### Added
 
 - A worker that needs a change to a protected file (the profile, a workflow) reports it; the owner approves the diff on the board and it becomes one pull request to the main branch (#62).
+- The `env-check` hook and the profile key `runtime.environments`: a cloud session that runs in an environment the profile does not list gets a warning at its start and when a tld command starts. Set `TLD_ENVIRONMENT=<environment name>` in each working environment's settings, and add the key to a profile only after the release is installed (an older tld rejects it). Every tld command also checks the name through the new runtime action `environment_name()` when it loads the profile, sends one alert and carries on. Switch the hook off with `hooks.disable: [env-check]`.
 
 ### Changed
 

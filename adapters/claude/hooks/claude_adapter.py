@@ -28,7 +28,8 @@ GUARDS = {"no-merge": ("tld.guard.no_merge", True), "no-force-push": ("tld.guard
           "no-git-tag": ("tld.guard.no_git_tag", True), "secret-scan": ("tld.guard.secret_scan", False),
           "protect-paths": ("tld.guard.protect_paths", False), "dod-gate": ("tld.dod.gate", False),
           "plan-gate": ("tld.guard.plan_gate", False), "model-check": ("tld.guard.model_check", False),
-          "board-gate": ("tld.guard.board_gate", False)}
+          "board-gate": ("tld.guard.board_gate", False),
+          "env-check": ("tld.guard.env_check", False)}
 WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 # Claude Code's own configuration: a session that edits it could switch the hooks off.
 PROTECTED = ("~/.claude/**", ".claude/settings.json", ".claude/settings.local.json", ".claude/hooks/**", ".mcp.json")
@@ -199,10 +200,14 @@ def to_action(payload: dict, project_dir: str | None = None) -> Action | None:
         invoked = invoked_command(text)
         return Action("prompt", project, cwd, prompt=text, invoked=invoked, session_id=_sid(payload),
                       session_level=transcript_level(payload.get("transcript_path")),
-                      command_level=command_level(invoked) if invoked else None)
+                      command_level=command_level(invoked) if invoked else None,
+                      remote=os.environ.get("CLAUDE_CODE_REMOTE") == "true",
+                      runtime_environment=os.environ.get("TLD_ENVIRONMENT") or None)
     if payload.get("hook_event_name") == "SessionStart":
         return Action("session_start", project, cwd, session_id=_sid(payload),
-                      session_level=level_of(payload.get("model")))
+                      session_level=level_of(payload.get("model")),
+                      remote=os.environ.get("CLAUDE_CODE_REMOTE") == "true",
+                      runtime_environment=os.environ.get("TLD_ENVIRONMENT") or None)
     if payload.get("hook_event_name") == "Stop" or (not tool and "stop_hook_active" in payload):
         return Action("stop", project, cwd, session_id=_sid(payload),
                       continuing=bool(payload.get("stop_hook_active")))

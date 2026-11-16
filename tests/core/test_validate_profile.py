@@ -419,3 +419,36 @@ def test_release_version_file_outside_the_root_is_not_found(vp, tmp_path, path):
     (tmp_path / "outside.txt").write_text('version = "1.0.0"\n')
     e = errs(vp, _release([{"path": path, "pattern": r'version = "(\d+\.\d+\.\d+)"'}]), root)
     assert e == [f"file not found: '{path}' (listed in the profile; checked from {root})"]
+
+
+# ---- runtime.environments and the env-check hook name ------------------------------------------
+def _with_runtime(runtime):
+    return {**copy.deepcopy(MINIMAL), "runtime": runtime}
+
+
+def test_env_check_runtime_environments_validate(vp):
+    assert errs(vp, _with_runtime({"environments": ["TLD"]})) == []
+    assert errs(vp, _with_runtime({"environments": ["TLD", "TLD Swift"]})) == []
+
+
+def test_env_check_empty_list_is_rejected(vp):
+    assert any("needs at least 1 item" in e for e in errs(vp, _with_runtime({"environments": []})))
+
+
+@pytest.mark.parametrize("name", ["a\x01", "a\x9b", "a‮", "TLD\n", "a​b", "", "x" * 101, 3])
+def test_env_check_bad_names_are_rejected(vp, name):
+    assert errs(vp, _with_runtime({"environments": [name]}))
+
+
+def test_env_check_one_hundred_characters_validate(vp):
+    assert errs(vp, _with_runtime({"environments": ["x" * 100]})) == []
+
+
+def test_env_check_unknown_runtime_key_is_rejected(vp):
+    assert any("unknown key 'runtime.other'" in e for e in errs(vp, _with_runtime({"other": 1})))
+
+
+def test_env_check_is_a_valid_hook_to_disable(vp):
+    p = copy.deepcopy(MINIMAL)
+    p["hooks"] = {"disable": ["env-check"]}
+    assert errs(vp, p) == []

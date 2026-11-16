@@ -128,8 +128,7 @@ count. Sessions reach it through `tld board client` / `ask` / `answers` or the `
 
 - **A SessionStart hook that installs the toolkit into `~/.claude/`.** It worked in a probe, but it needs a pin in
   every repository and a fetch at every start; plugins in the Claude Project are the one delivery route
-  ([delivery.md](../guides/delivery.md)). (The `model-check` hook does use a SessionStart event, but only to record the
-  session's model; it installs or fetches nothing.)
+  ([delivery.md](../guides/delivery.md)). (The `model-check` and `env-check` hooks do use a SessionStart event, `model-check` only to record the session's model and `env-check` only to compare the environment name with the profile; neither installs or fetches anything.)
 - **Separate plugins per stack, or for the agents.** One plugin and one version keep the playbooks, roles and
   guides in step.
 - **Hooks as the security boundary.** A manipulated agent can run code the hooks cannot read; GitHub rulesets

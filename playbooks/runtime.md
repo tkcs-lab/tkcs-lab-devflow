@@ -192,6 +192,10 @@ runtime's own file channel. Files never go into an ask or a status record.
 Where the runtime keeps environment secrets for sessions, in the runtime's current wording: the text a
 manual step uses when it tells the owner where to store a secret.
 
+### environment_name()
+
+The name of the environment the session runs in (the named setup of network access, variables and setup script the runtime started it with), or nothing when the runtime cannot say: a local session, a runtime without named environments, a refused or failed lookup. Never an error, and never a reason to stop.
+
 ## Time
 
 ### schedule_wakeup(delay)
