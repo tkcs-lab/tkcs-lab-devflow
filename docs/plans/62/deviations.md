@@ -54,4 +54,5 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Finishing
 
-- pending
+- scope: scope disposition: no phase changed a path outside its touches (6 phases, none out of scope, no collisions); fix-1 was reviewed by hand against its allowed file list
+- final: dod gate passed (pytest 5021, profile and policy validation, privacyfence manifests, docs index 0 errors); tech-writer found 7 non-blocking items (hooks.md sentence too broad, file_put row lacks sha, rule 0 vs preamble, cli.md and design.md omit the new warning, changelog omits the lockfile rule and file_put, duplicated allow-set sentence) left for a follow-up
