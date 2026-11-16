@@ -27,9 +27,9 @@ def _clean(text: str) -> str:
 def _names(profile: dict | None) -> list[str]:
     runtime = profile.get("runtime") if isinstance(profile, dict) else None
     envs = runtime.get("environments") if isinstance(runtime, dict) else None
-    if not isinstance(envs, list):
+    if not isinstance(envs, list) or not all(isinstance(e, str) for e in envs):
         return []
-    cleaned = [_clean(e).strip() for e in envs if isinstance(e, str)]
+    cleaned = [_clean(e).strip() for e in envs]
     return [n for n in cleaned if n]
 
 
