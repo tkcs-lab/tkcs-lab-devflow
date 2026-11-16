@@ -34,6 +34,8 @@ class Action:
     invoked: str | None = None                      # prompt: the tld command or skill the runtime found at the start of it
     session_level: str | None = None                # session_start, prompt: strong | standard | fast of the session's model
     command_level: str | None = None                # prompt: the level the invoked command is meant for
+    remote: bool = False                            # session_start, prompt: the session runs in the cloud
+    runtime_environment: str | None = None          # session_start, prompt: the environment name the session says it runs in
     output: str | None = None                       # tool_result: the text the tool returned
 
     def __post_init__(self):

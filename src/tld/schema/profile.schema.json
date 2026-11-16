@@ -539,6 +539,22 @@
         }
       }
     },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Facts about where this repository's sessions run. Every key is optional.",
+      "properties": {
+        "environments": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[^\\x00-\\x1f\\x7f-\\x9f\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff]{1,100}(?![\\s\\S])"
+          },
+          "description": "The environment names this repository's sessions belong in. The env-check hook and every command warn when a session runs in another one; nothing stops. Names are compared after trimming, ignoring case."
+        }
+      }
+    },
     "hooks": {
       "type": "object",
       "additionalProperties": false,
@@ -556,7 +572,8 @@
               "dod-gate",
               "plan-gate",
               "model-check",
-              "board-gate"
+              "board-gate",
+              "env-check"
             ]
           },
           "x-hook-default": [],

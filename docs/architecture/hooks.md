@@ -42,6 +42,7 @@ shims; `CLAUDE_PROJECT_DIR` and `stop_hook_active` are read only here.
 | `plan-gate` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, the GitHub MCP content-write tools (`push_files`, `create_or_update_file`, `delete_file`); UserPromptSubmit (opt-in) | writes into the repository from a session no tld command started | A chat message must not start an implementation | `echo x > README.md`; `ls` |
 | `board-gate` | UserPromptSubmit, PostToolUse (`Bash`, the `board_set` tool of the board MCP server), Stop (opt-in) | ending a turn before the status record is written, once | A session that skips its record is not on the board | stop after `/tld:docs x` with no record write; stop after `board_set` succeeded |
 | `model-check` | SessionStart, UserPromptSubmit | nothing (a `systemMessage` warning only) | The most expensive level is easy to forget | strong session + `/tld:implement x` warns; strong session + `/tld:make-plan x` does not |
+| `env-check` | SessionStart, UserPromptSubmit | nothing (a `systemMessage` warning only) | A session started in the wrong environment works with the wrong network, variables and credentials | a cloud session whose `TLD_ENVIRONMENT` is `Default` with a profile that lists `TLD` warns; with `TLD` it is silent |
 | `dod-gate` | Stop | stopping while `verify.dod` is red (opt-in) | Work is not done until the definition of done passes | stop with a failing test; stop after `/dod` is green |
 
 A denial is exit code 2 with the reason on stderr, which Claude Code hands back to the agent. Every message says what to do
@@ -239,6 +240,22 @@ command is meant for a lower one.
 - **Limits.** After a strong command such as `/tld:make-plan` the next prompt may be warned though the session model is
   lower (the warning says so). A session with no `model` in its start event and no assistant entry yet is silent.
 
+### `env-check`
+
+- **The key.** `runtime.environments` of the working tree's profile: a non-empty list of environment names. Silent without
+  the key and when it is malformed.
+- **The name.** The variable `TLD_ENVIRONMENT`, which the owner sets in each working environment's settings to that
+  environment's name. It is trimmed and compared ignoring case. The runtime puts no name into the container, so the
+  variable is the only source a hook has.
+- **When.** At SessionStart and for a prompt that starts a tld command, only when `CLAUDE_CODE_REMOTE` is `true`. Local
+  sessions are silent. The warning repeats after a compaction (the session starts again).
+- **Output.** `systemMessage` only; it never denies and adds no context. Control and format characters are removed from
+  the names and they are cut at 100 characters. `hooks.disable: [env-check]` turns it off; that list is looked up only
+  when the hook would warn.
+- **Limits.** The variable is the environment's own claim, so a duplicated or renamed environment keeps a stale name; that
+  is why every command also asks the runtime for the name in step 5 of
+  [profile.md](../../playbooks/policies/profile.md). Whether the claude.ai app shows a SessionStart message is not known.
+
 ### `plan-gate`
 
 Opt-in, off by default: set `hooks.plan_gate.enabled` to `true`. A plain chat message must not start an implementation:
@@ -369,7 +386,7 @@ Reference: [profile-reference.md](../reference/profile-reference.md).
 
 ```yaml
 hooks:
-  disable: [protect-paths]   # any of no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate, plan-gate, model-check, board-gate
+  disable: [protect-paths]   # any of no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate, plan-gate, model-check, board-gate, env-check
 ```
 
 `hooks.disable` and the protect lists are read from the **trusted copy** of the profile, not from the working tree, so a
