@@ -37,3 +37,16 @@ def test_the_preamble_names_the_unavailable_line():
     block = _preamble()
     assert "tld: unavailable" in block
     assert "status=blocked" in block
+
+
+def test_the_preamble_scopes_the_stop_to_the_plan_gate_and_other_guards():
+    flat = " ".join(_preamble().split())
+    assert ("If the plan-gate or any guard other than protect-paths denies an action, or protect-paths names a path "
+            "that the protected-changes flow excludes, stop with status=blocked and say so; any other protected "
+            "path is reported as protected-change, see your brief.") in flat
+
+
+def test_the_prose_names_the_placeholders_in_backticks():
+    text = _text()
+    for name in ("<tld cli>", "<tld root>", "<tld version>"):
+        assert f"`{name}`" in text.split("```\n", 2)[2]

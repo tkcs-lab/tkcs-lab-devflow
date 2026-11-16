@@ -13,6 +13,11 @@ def slice_of(path, start, end):
 
 
 IMPLEMENT = "playbooks/implement.md"
+ALLOW_SENTENCE = (
+    "`BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the "
+    "effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of "
+    "`GUARDED_WORKFLOWS`, `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow "
+    "pattern matches them.")
 
 
 def test_the_worker_brief_names_the_protected_change_report():
@@ -47,3 +52,24 @@ def test_make_plan_links_the_policy():
     text = (ROOT / "playbooks/make-plan.md").read_text()
     assert "policies/protected-changes.md" in text.split("## Setup")[0]
     assert "protected path" in slice_of("playbooks/make-plan.md", "### Sizing", "worker_level: strong")
+
+
+def test_merge_step_two_and_the_final_reviewer_share_the_allow_and_lockfile_rule():
+    merge = slice_of(IMPLEMENT, "2. Review the diff", "3. **Required roles.**")
+    final = slice_of(IMPLEMENT, "> You are the final reviewer", "at least one blocking finding.")
+    for s in (merge, final):
+        flat = " ".join(s.split())
+        assert ALLOW_SENTENCE in flat
+        assert "lockfile changes are made outside implement (the deps playbook or by the owner)" in flat
+        assert "lock command" not in flat and "not blocking" not in flat
+    assert "A lockfile in a phase diff is sent back whoever produced it" in " ".join(merge.split())
+    assert "A lockfile in the diff is a blocking finding whoever produced it" in " ".join(final.split())
+
+
+def test_merge_step_three_starts_with_the_unavailable_exception():
+    s = slice_of(IMPLEMENT, "3. **Required roles.**", "4. **Scope check")
+    assert s.startswith("3. **Required roles.** Unless the report has the line `tld: unavailable`")
+
+
+def test_rule_zero_keeps_allow_plan():
+    assert (ROOT / IMPLEMENT).read_text().count("allow-plan") >= 2

@@ -75,11 +75,12 @@ Check once, first: `test -x <tld cli> && <tld cli> --version`. When that fails, 
 `ls -d /root/.claude/plugins/synced/*/tld/cli/tld`; use the path only when exactly one line is printed and
 its `--version` equals `<tld version>`. Otherwise `tld` is unavailable: make no `tld` call at all, run the
 verify commands this brief quotes, and put the line `tld: unavailable` directly under your PHASE-REPORT
-line. The orchestrator runs the `tld` steps for you. If a guard hook then denies an edit, stop with
-status=blocked and say so.
+line. The orchestrator runs the `tld` steps for you. If the plan-gate or any guard other than protect-paths denies an action, or protect-paths names a path that the
+protected-changes flow excludes, stop with status=blocked and say so; any other protected path is reported as
+protected-change, see your brief.
 ```
 
-<tld cli> is your own expansion of "<tld root>/cli/tld" from the Names table, absolute and without quotes; <tld version> is the output of <tld cli> --version without the word "tld ".
+`<tld cli>` is your own expansion of "`<tld root>`/cli/tld" from the Names table, absolute and without quotes; `<tld version>` is the output of `<tld cli> --version` without the word "tld ".
 
 **Check-in intervals.** Short: **15 minutes** (a running phase of complexity S). Long: **30 minutes** (an M phase,
 a phase without complexity, a review, fix or conflict worker). Fallback: **5 minutes** for the rest of the run once
