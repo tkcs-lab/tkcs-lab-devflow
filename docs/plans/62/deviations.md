@@ -47,6 +47,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - final: blocking (p4/p5): the lockfile rule differed between the policy, Merge step 2 and the final reviewer line; one rule is written in all three places by fix-1
 - final: blocking (p4/p5): .env.example and the profile allow list were caught by the protected-path checks; the allow lists are subtracted in the policy and Merge step 2 by fix-1
 - final: the p4 send-backs changed the design in these named ways: apply is not recommended for a workflow or profile diff; the pull request for a workflow path is a draft; a mechanical feature-branch check was added before a pull request is opened; file_put takes the recorded blob id as sha instead of reading it from the target branch; the base SHA is pinned; the branch is checked after the write
+- final: fix-1 send-back: the first fix let the allow list reopen guarded paths and kept a lockfile exemption that rests on the worker word; fix-1 is revised so the allow list never removes guarded or always-protected paths, and any lockfile change in a phase diff is blocking (owner decision for a lockfile phase is outside implement)
 
 ## Finishing
 
