@@ -48,3 +48,18 @@ def test_pr_steward_lists_the_protected_branch():
     text = STEWARD.read_text()
     assert "chore/protected-<slug>-<yyyymmdd>" in text
     assert "implement, an attended session" in text
+
+
+def test_the_flow_pins_the_base_and_checks_the_write():
+    text = POLICY.read_text()
+    flow = section(text, "## The flow")
+    for needle in ("pinned SHA", "blob", "never reuse it", "git hash-object", "exactly one commit",
+                   "git diff --name-only", "fail closed", "extended git header"):
+        assert needle in flow, needle
+    for needle in ("GUARDED_WORKFLOWS", "ALWAYS_PROTECTED", ".mcp.json"):
+        assert needle in section(text, "## What is protected"), needle
+
+
+def test_the_skill_row_reads_the_blob_at_the_target_branch():
+    row = [ln for ln in SKILL.read_text().splitlines() if ln.startswith("| `github.file_put")][0]
+    assert "`ref` = the target branch" in row
