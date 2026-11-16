@@ -7,6 +7,7 @@ import pytest
 import hooks_helpers as hh
 from hooks_helpers import make_repo, make_repo_with_origin
 from tld.guard import _common, markers, plan_gate
+from tld.dod.gate import state_dir
 from tld.guard.action import Action
 
 ON = hh.PROFILE + "hooks:\n  plan_gate:\n    enabled: true\n"
@@ -67,6 +68,32 @@ def test_git_checkout_of_a_name_is_denied_in_a_closed_session(repo):
 
 def test_worker_brief_prompt_gets_no_context(repo):
     assert prompt(repo, "Run tld guard allow-plan first, then do the work").context is None
+
+
+def test_a_prompt_with_the_worker_token_opens_the_session(repo):
+    assert prompt(repo, "tld-worker: demo p1\nDo the work.").context is None
+    assert write(repo, repo / "a.txt").verdict == "allow"
+
+
+def test_the_worker_token_must_start_a_line(repo):
+    prompt(repo, "please note tld-worker: demo p1")
+    assert write(repo, repo / "a.txt").verdict == "deny"
+
+
+def test_the_worker_token_without_a_session_id_opens_nothing(repo):
+    d = prompt(repo, "tld-worker: demo p1\nDo the work.", sid=None)
+    assert d.context == plan_gate.PROMPT_CONTEXT
+    assert not (state_dir(str(repo)) / "plan-gate").exists() or not list((state_dir(str(repo)) / "plan-gate").iterdir())
+
+
+def test_the_worker_token_with_nothing_after_it_opens_nothing(repo):
+    prompt(repo, "tld-worker: \nDo the work.")
+    assert write(repo, repo / "a.txt").verdict == "deny"
+
+
+def test_the_worker_token_in_a_slash_command_opens_nothing(repo):
+    prompt(repo, "tld-worker: demo p1\n/tld:dod", invoked="dod")
+    assert write(repo, repo / "a.txt").verdict == "deny"
 
 
 @pytest.mark.parametrize("cmd", ["ls", "git status", "cat README.md", "git log"])

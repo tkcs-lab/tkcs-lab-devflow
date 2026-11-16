@@ -22,7 +22,7 @@ def test_file_tools_are_denied(feature_repo, tool, path):
     for form in (path, str(feature_repo / path)):
         r = run(HOOK, event(tool, feature_repo, **{key: form}))
         assert r.code == 2, (tool, form)
-        assert "protected path" in r.stderr and "hooks.protect_paths_allow" in r.stderr
+        assert "protected path" in r.stderr and "If the task really requires it" not in r.stderr
 
 
 @pytest.mark.parametrize("path", ALLOWED_FILES)
@@ -41,10 +41,36 @@ def test_a_symlink_to_a_protected_file_is_followed(fresh_repo):
 
 
 def test_messages_say_what_to_do_instead(feature_repo):
-    expected = {".tld/toolkit.yaml": "changed by people", ".env": ".env.example", "uv.lock": "lock command",
-                ".github/workflows/ci.yml": "owner"}
+    expected = {".tld/toolkit.yaml": "protected-change: .tld/toolkit.yaml - <why>", ".env": ".env.example",
+                "uv.lock": "lock command", ".github/workflows/ci.yml": "protected-change: .github/workflows/ci.yml - <why>"}
     for path, words in expected.items():
         assert words in run(HOOK, event("Write", feature_repo, file_path=path, content="x")).stderr, path
+
+
+def _msg(repo, path):
+    return run(HOOK, event("Write", repo, file_path=path, content="x")).stderr
+
+
+def test_a_protected_path_denial_names_the_protected_change_report(feature_repo):
+    assert "protected-change:" in _msg(feature_repo, ".tld/toolkit.yaml")
+    assert "protected-change:" in _msg(feature_repo, ".github/workflows/x.yml")
+    assert "protected-change:" not in _msg(feature_repo, ".git/config")
+
+
+def test_env_and_lock_denials_keep_their_hints(feature_repo):
+    env, lock = _msg(feature_repo, ".env"), _msg(feature_repo, "a.lock")
+    assert "Environment files hold secrets" in env and "Regenerate lockfiles" in lock
+    assert "protected-change:" not in env and "protected-change:" not in lock
+
+
+def test_a_profile_listed_path_names_its_protected_change(tmp_path):
+    repo = make_repo_with_origin(tmp_path / "r", committed="git:\n  main_branch: main\nhooks:\n  protect_paths: ['secrets/**']\n")
+    assert "protected-change: secrets/a.txt" in _msg(repo, "secrets/a.txt")
+
+
+def test_no_denial_text_contains_the_allow_plan_command(feature_repo):
+    for path in (".tld/toolkit.yaml", ".env", "a.lock", ".github/workflows/x.yml", ".github/workflows/tld-land.yml", ".git/config"):
+        assert "tld guard allow-plan" not in _msg(feature_repo, path), path
 
 
 DENIED_BASH = [
