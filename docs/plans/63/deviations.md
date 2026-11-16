@@ -26,4 +26,4 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Finishing
 
-- pending
+- final: Scope: every phase merge was checked and no path was out of scope; nothing to settle. Dod rows of the profile and the full test run (5020) passed on the feature branch; docs-index check has 0 errors and 2 existing line-count warnings.
