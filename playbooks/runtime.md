@@ -34,6 +34,8 @@ name. Returns the worker's id. A worker never runs in a mode that waits for a hu
 nobody watches it. When the runtime rejects the model a level maps to, it uses the nearest model it has
 and the orchestrator notes which in its ledger.
 
+The runtime puts its toolkit preamble in front of the brief (the adapter's runtime map defines it): where tld is, and that a report line "tld: unavailable" means the worker ran no tld step and the orchestrator runs them.
+
 ### read_worker(worker)
 
 The worker's state, one of `working`, `finished` (its turn ended; it may be waiting for input) or `failed`
@@ -232,6 +234,7 @@ All of them act on this repository unless they name another. A refusal is report
 | `github.pr_update_branch(n)` | bring a pull request's branch up to date with its base |
 | `github.pr_subscribe(n)` | get woken by the pull request's checks, reviews and comments |
 | `github.branch_create(name, sha)` | create a branch through the API (when a plain push is refused) |
+| `github.file_put(branch, path, content, message)` | write one file to a branch through the API |
 | `github.branch_list(repo)` | list a repository's branches |
 | `github.workflow_dispatch(repo, workflow, ref, inputs)` | dispatch a workflow run |
 | `github.workflow_runs(repo, workflow)` | list a workflow's runs |
