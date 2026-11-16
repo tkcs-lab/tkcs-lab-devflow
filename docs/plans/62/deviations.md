@@ -25,6 +25,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - retry: send-back: the security review found 6 blocking gaps in the policy text (pinned base SHA, branch reuse and post-write check, excluded paths, exact-path check, mechanical feature-branch check, full-diff display); worker asked to fix inside the phase touches
 - retry: second send-back: the re-review found 2 blocking gaps (rename detection in the feature-branch check, excluded paths missing from it); worker asked to fix with the non-blocking hardening items
+- worker: none
+- review: third security review (non-blocking): patch should be forced to unified format, the secret scan floor is not named, the post-write path listing needs --no-renames, the file mode at the pinned SHA is not checked, lockfile hits of the feature-branch check are blocking even for a deps phase
+- review: follow-up outside this plan: protect-paths does not cover MCP file writes (create_or_update_file, push_files); the policy relies on a mechanical diff check instead
 
 ## p5-implement-and-make-plan
 
