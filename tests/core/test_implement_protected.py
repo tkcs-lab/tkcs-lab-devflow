@@ -47,3 +47,20 @@ def test_make_plan_links_the_policy():
     text = (ROOT / "playbooks/make-plan.md").read_text()
     assert "policies/protected-changes.md" in text.split("## Setup")[0]
     assert "protected path" in slice_of("playbooks/make-plan.md", "### Sizing", "worker_level: strong")
+
+
+def test_merge_step_two_and_the_final_reviewer_share_the_allow_and_lockfile_rule():
+    merge = slice_of(IMPLEMENT, "2. Review the diff", "3. **Required roles.**")
+    final = slice_of(IMPLEMENT, "> You are the final reviewer", "at least one blocking finding.")
+    for s in (merge, final):
+        assert "BUILTIN_PROTECT_ALLOW" in s and "protect_paths_allow" in s
+        assert "lock command" in s and "not blocking" in s
+
+
+def test_merge_step_three_starts_with_the_unavailable_exception():
+    s = slice_of(IMPLEMENT, "3. **Required roles.**", "4. **Scope check")
+    assert s.startswith("3. **Required roles.** Unless the report has the line `tld: unavailable`")
+
+
+def test_rule_zero_keeps_allow_plan():
+    assert (ROOT / IMPLEMENT).read_text().count("allow-plan") >= 2

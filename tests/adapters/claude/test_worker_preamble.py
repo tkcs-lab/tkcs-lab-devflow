@@ -37,3 +37,15 @@ def test_the_preamble_names_the_unavailable_line():
     block = _preamble()
     assert "tld: unavailable" in block
     assert "status=blocked" in block
+
+
+def test_the_preamble_scopes_the_stop_to_the_plan_gate():
+    block = _preamble()
+    assert "If the plan-gate denies an edit, stop with" in block
+    assert "report it as protected-change" in block
+
+
+def test_the_prose_names_the_placeholders_in_backticks():
+    text = _text()
+    for name in ("<tld cli>", "<tld root>", "<tld version>"):
+        assert f"`{name}`" in text.split("```\n", 2)[2]

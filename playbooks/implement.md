@@ -251,12 +251,13 @@ On each check-in, for each `running` phase, `read_worker(<its worker>)`:
    one allowed change is status `D` on the old-layout plan file, made by the retirement phase (the last phase of
    the manifest); any other status (`M`, `R`, `A`) on it, a deletion by another phase, and any diff under the
    other `<protected paths>` is sent back. A diff that touches a protected path of the main profile (its effective
-   protect list plus the paths `playbooks/policies/protected-changes.md` excludes from the flow) is sent back; check
+   protect list plus the paths `playbooks/policies/protected-changes.md` excludes from the flow, both without
+   `BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow`) is sent back; check
    it with `git diff --name-only --no-renames <base>...origin/<phase branch>` (a deleted protected path counts). A hit in the
-   excluded set is never routed into the flow. A lockfile hit that the phase produced with the project's own
-   package-manager command is reported, not blocking. Each `protected-change:` line of the report is handled with
+   excluded set is never routed into the flow. A lockfile that the project's own lock command produced is reported,
+   not blocking (the final reviewer checks that the lock command ran). Each `protected-change:` line of the report is handled with
    the protected-changes policy (the merge is not held back). Anything wrong goes back to the worker as above.
-3. **Required roles.** Save `git diff --name-only <base>...origin/<phase branch>` to a file, run
+3. **Required roles.** Unless the report has the line `tld: unavailable` (see below), save `git diff --name-only <base>...origin/<phase branch>` to a file, run
    `tld roles required --profile .tld/toolkit.yaml --at implement_phase --changed <file>` (save the JSON) and
    `tld roles verify --required <json> --report <the PHASE-REPORT text>`. Exit 1 goes back to the worker like
    any defect, with the output of `verify` as the instruction.
@@ -360,7 +361,9 @@ When every phase is `merged`, merge `origin/<main>` into the feature branch once
 >
 > End with `REVIEW-REPORT verdict=<approve|changes>` on its own line, then one numbered finding per line:
 > `blocking|non-blocking`, `path:line`, the phase id it belongs to, what is wrong and the fix. A diff that
-> touches a protected path (playbooks/policies/protected-changes.md) is a blocking finding. `changes` means
+> touches a protected path (playbooks/policies/protected-changes.md; its effective list and excluded set, both without
+> `BUILTIN_PROTECT_ALLOW` and `hooks.protect_paths_allow`) is a blocking finding, except a lockfile that the project's own lock
+> command produced: check that the lock command ran; it is not blocking. `changes` means
 > at least one blocking finding. Only something you would refuse to merge is blocking.
 
 A blocking finding that the deviations file lacks an entry is fixed by you, not by a worker: `tld plan

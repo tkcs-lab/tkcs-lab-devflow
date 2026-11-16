@@ -71,3 +71,14 @@ def test_the_flow_checks_the_whole_diff_and_the_excluded_set():
                    "/dev/null", "more than one", "patch --dry-run -p1", "bidi", "longer than any backtick run",
                    "head SHA", "a draft for a workflow path", "run the workflow at once"):
         assert needle in flow, needle
+
+
+def test_the_allow_set_and_the_lockfile_rule_are_in_the_policy():
+    text = POLICY.read_text()
+    protected = section(text, "## What is protected")
+    flow = section(text, "## The flow")
+    for part in (protected, flow):
+        assert "BUILTIN_PROTECT_ALLOW" in part and "protect_paths_allow" in part
+        assert "lock command" in part and "not blocking" in part
+    assert "deliberately not marked recommended" in flow
+    assert "with a tracking issue, the diff of the posted comment" in flow
