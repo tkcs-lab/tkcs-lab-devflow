@@ -38,7 +38,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p6-retire
 
-- pending
+- worker: none
+- review: changelog line for validate-manifest says warns about instead of rejects (the plan text said rejects; p2 added a warning only), set in the worker brief
+- retry: tld unavailable in the worker session: the orchestrator ran the roles and the roles verify step itself
 
 ## Final review
 
