@@ -1,0 +1,39 @@
+"""The Claude adapter puts the toolkit preamble in front of every worker brief."""
+
+import re
+from pathlib import Path
+
+SKILL = Path(__file__).resolve().parents[3] / "adapters/claude/skills/runtime/SKILL.md"
+
+
+def _text():
+    return SKILL.read_text(encoding="utf-8")
+
+
+def _preamble():
+    section = _text().split("### Toolkit preamble", 1)[1]
+    match = re.search(r"```\n(.*?)\n```", section, re.S)
+    assert match, "no fenced preamble block"
+    return match.group(1)
+
+
+def test_the_start_worker_row_names_the_preamble():
+    rows = [line for line in _text().splitlines() if line.startswith("| `start_worker(")]
+    assert len(rows) == 1
+    assert "Put the toolkit preamble below in front of every brief." in rows[0]
+
+
+def test_the_preamble_starts_with_the_worker_token_line():
+    assert _preamble().splitlines()[0] == "tld-worker: <title>"
+
+
+def test_the_preamble_says_tld_is_not_on_path_and_checks_it():
+    block = _preamble()
+    for needle in ("is not on PATH", "test -x", "--version"):
+        assert needle in block
+
+
+def test_the_preamble_names_the_unavailable_line():
+    block = _preamble()
+    assert "tld: unavailable" in block
+    assert "status=blocked" in block
