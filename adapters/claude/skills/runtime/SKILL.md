@@ -135,6 +135,7 @@ for Claude Code on the web set it to `https://claude.ai/code/` (the session id i
 | `github.pr_update_branch` | `update_pull_request_branch` |
 | `github.pr_subscribe` | `subscribe_pr_activity` (missing in some scheduled sessions: then the playbook's no-wait rule applies) |
 | `github.branch_create` | `create_branch` |
+| `github.file_put` | `create_or_update_file` (pass the recorded blob id of the existing file as `sha`, the API's optimistic-concurrency check, instead of re-reading it; omit `sha` for a new file) |
 | `github.branch_list` | `list_branches` |
 | `github.workflow_dispatch` | `actions_run_trigger` with `method: "run_workflow"`, `owner`, `repo`, `workflow_id`, `ref`, `inputs` (strings) |
 | `github.workflow_runs` | `actions_list` with `method: "list_workflow_runs"`, `resource_id` the workflow file name |
