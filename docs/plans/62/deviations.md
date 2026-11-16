@@ -5,7 +5,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p1-gate-and-messages
 
-- pending
+- worker: none
+- review: security review (non-blocking): hooks.md still says the profile deny text mentions /setup, and the WORKER_TOKEN comment says first line while the regex matches any line (as plan 3.3 specifies)
+- retry: tld unavailable in the worker session: the orchestrator ran the roles and the roles verify step itself
 
 ## p2-manifest-protected-touches
 
