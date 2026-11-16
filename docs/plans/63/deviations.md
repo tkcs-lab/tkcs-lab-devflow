@@ -16,7 +16,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-retire
 
-- pending
+- None.
+- review: Review found nothing outside the brief. Security-reviewer left 3 non-blocking findings (advisory and spoofable variable not stated in the guide, hooks.disable comment lacks the two hook names, set-but-unlisted versus unset not told apart); the worker did not run the acceptance grep itself, the orchestrator did (2 lines).
 
 ## Final review
 
