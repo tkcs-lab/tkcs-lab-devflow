@@ -9,7 +9,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-manifest-protected-touches
 
-- pending
+- worker: none
+- review: security review (non-blocking): the warning does not normalise ".." segments or a leading "/", leaves out the always-protected and guarded-workflow patterns, trusts a non-mapping profile, and prints the touches entry raw; the guard still blocks the write in every case
+- retry: tld unavailable in the worker session: the orchestrator ran the roles and the roles verify step itself
 
 ## p3-worker-preamble
 
