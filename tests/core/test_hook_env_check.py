@@ -92,7 +92,7 @@ def test_env_check_names_from_the_profile_are_cleaned_and_cut(tmp_path):
 
 
 @pytest.mark.parametrize("runtime", ["runtime: TLD\n", "runtime:\n  environments: TLD\n", "runtime:\n  environments: []\n",
-                                     "runtime:\n  environments: [3]\n", "runtime:\n  environments: [\"  \"]\n"])
+                                     "runtime:\n  environments: [3]\n", "runtime:\n  environments: [TLD, 3]\n", "runtime:\n  environments: [\"  \"]\n"])
 def test_env_check_malformed_shapes_are_silent(tmp_path, runtime):
     repo = make_repo(tmp_path / "r", "feature/demo", profile=hh.PROFILE + runtime)
     silent(prompt(repo, "Default"))
