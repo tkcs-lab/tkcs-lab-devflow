@@ -21,7 +21,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: Blocking: _names kept the string entries of a mixed list (environments [TLD, 3] gave [TLD]) although plan 3.3 gives [] for any shape that is not a list of strings; a fix worker corrects it and adds the case to the malformed-shapes test. Non-blocking, left: quote character in a name, test message assertion, line layout of HOOK_NAMES.
 
 ## Finishing
 
