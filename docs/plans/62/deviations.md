@@ -17,7 +17,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-worker-preamble
 
-- pending
+- worker: none
+- review: security review (non-blocking): the ls glob fallback trusts a binary by version only; the preamble gives workers a working tld including allow-* guard commands; the path and title are not validated; the tests check only a few phrases
+- retry: tld unavailable in the worker session: the orchestrator ran the roles and the roles verify step itself
 
 ## p4-protected-changes-policy
 
