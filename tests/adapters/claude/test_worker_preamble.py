@@ -39,10 +39,11 @@ def test_the_preamble_names_the_unavailable_line():
     assert "status=blocked" in block
 
 
-def test_the_preamble_scopes_the_stop_to_the_plan_gate():
-    block = _preamble()
-    assert "If the plan-gate denies an edit, stop with" in block
-    assert "report it as protected-change" in block
+def test_the_preamble_scopes_the_stop_to_the_plan_gate_and_other_guards():
+    flat = " ".join(_preamble().split())
+    assert ("If the plan-gate or any guard other than protect-paths denies an action, or protect-paths names a path "
+            "that the protected-changes flow excludes, stop with status=blocked and say so; any other protected "
+            "path is reported as protected-change, see your brief.") in flat
 
 
 def test_the_prose_names_the_placeholders_in_backticks():

@@ -73,12 +73,22 @@ def test_the_flow_checks_the_whole_diff_and_the_excluded_set():
         assert needle in flow, needle
 
 
+ALLOW_SENTENCE = (
+    "`BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the "
+    "effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of "
+    "`GUARDED_WORKFLOWS`, `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow "
+    "pattern matches them.")
+
+
 def test_the_allow_set_and_the_lockfile_rule_are_in_the_policy():
     text = POLICY.read_text()
     protected = section(text, "## What is protected")
     flow = section(text, "## The flow")
     for part in (protected, flow):
-        assert "BUILTIN_PROTECT_ALLOW" in part and "protect_paths_allow" in part
-        assert "lock command" in part and "not blocking" in part
+        flat = " ".join(part.split())
+        assert ALLOW_SENTENCE in flat
+        assert "A lockfile in a phase diff is blocking whoever produced it" in flat
+        assert "outside implement (the deps playbook or by the owner)" in flat
+        assert "lock command" not in flat and "not blocking" not in flat
     assert "deliberately not marked recommended" in flow
     assert "with a tracking issue, the diff of the posted comment" in flow
