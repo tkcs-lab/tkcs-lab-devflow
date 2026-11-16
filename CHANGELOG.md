@@ -5,6 +5,8 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-16
+
 ### Added
 
 - A worker that needs a change to a protected file (the profile, a workflow) reports it; the owner approves the diff on the board and it becomes one pull request to the main branch (#62).
