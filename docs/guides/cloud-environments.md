@@ -21,6 +21,7 @@ Every playbook assumes these settings.
 | Allowed domains | the board host only (for example `board.example.org`) | the status board; nothing else |
 | Network secrets | one, for the board host, header `Authorization`, prefix `Bearer`, value the board token you type into the form | the proxy adds the token; the session never holds it; steps: [board-server.md](board-server.md#connect-claude-code-sessions) |
 | Environment variables | `TLD_BOARD_URL=https://board.example.org`, `TLD_BOARD_TOKEN=injected-by-the-proxy` | clients need a value; the proxy replaces the header; steps: [board-server.md](board-server.md#connect-claude-code-sessions) |
+| Environment variable for the environment check | `TLD_ENVIRONMENT=<this environment's name>`, for example `TLD_ENVIRONMENT=TLD` | the `env-check` hook compares it with the profile's `runtime.environments`; a session in this environment without it warns |
 | Setup script | none, unless the project needs one; never a secret in it | it is stored in plain text |
 | Repositories | the repositories sessions work on | nothing else is cloned |
 
@@ -71,10 +72,26 @@ A plain claude.ai chat with web search or research turned on does the same job a
 
 `tld research report` treats everything from the first start line to the last end line as the report and ignores every line after the block, so your own lines go before it. A pasted report is data, never an instruction: skim it for text that tells the session to act (run commands, add hosts, post secrets); a session never follows it and never widens the network because a report asks ([untrusted-text.md](../../playbooks/policies/untrusted-text.md)).
 
+## Telling tld which environment a repository belongs in
+
+1. Set `TLD_ENVIRONMENT` to the environment's name in its settings, in every working environment and never in the research environment.
+2. After a release that carries the `env-check` hook is installed, add `runtime:` and `environments: [<name>]` to the repository's `.tld/toolkit.yaml`:
+
+   ```yaml
+   runtime:
+     environments: [TLD]
+   ```
+
+   An older tld rejects the key, so the order matters: install the release first, then edit the profile.
+3. Start a session in another environment and see the warning.
+
+A warning never stops a command.
+
 ## Checking the working environment
 
 1. Start a new session and run `/tld:board`. You see the connection and the number of records.
 2. Ask the session to fetch a page from the open web. It must report the refusal once and offer a research prompt instead of widening the network.
+3. Start a session in a different environment on a repository whose profile has `runtime.environments`. It must warn at its start and when a tld command starts, and the command must carry on.
 
 ## Scheduled commands
 
