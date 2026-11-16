@@ -31,7 +31,10 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p5-implement-and-make-plan
 
-- pending
+- worker: none
+- review: security review (non-blocking): the Merge step 2 protected-path check is a manual glob match (no deterministic command); the lockfile exemption relies on the worker word and contradicts the policy and final reviewer line; step 3 and the fallback use the working-tree profile, not the main profile; the fallback run_role call omits the role fields; tests miss the safety words; no tld-unavailable fallback for the final reviewer; two meanings of protected path
+- review: orchestrator addition to the brief: the Merge step 2 check uses git diff --name-only --no-renames against the effective protect list plus the policy excluded paths (from the second p4 review)
+- retry: tld unavailable in the worker session: the orchestrator ran the roles and the roles verify step itself
 
 ## p6-retire
 
