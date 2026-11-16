@@ -24,6 +24,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 ## p4-protected-changes-policy
 
 - retry: send-back: the security review found 6 blocking gaps in the policy text (pinned base SHA, branch reuse and post-write check, excluded paths, exact-path check, mechanical feature-branch check, full-diff display); worker asked to fix inside the phase touches
+- retry: second send-back: the re-review found 2 blocking gaps (rename detection in the feature-branch check, excluded paths missing from it); worker asked to fix with the non-blocking hardening items
 
 ## p5-implement-and-make-plan
 
