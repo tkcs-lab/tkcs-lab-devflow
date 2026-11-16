@@ -60,6 +60,14 @@ def test_the_flow_pins_the_base_and_checks_the_write():
         assert needle in section(text, "## What is protected"), needle
 
 
-def test_the_skill_row_reads_the_blob_at_the_target_branch():
+def test_the_skill_row_passes_the_recorded_blob():
     row = [ln for ln in SKILL.read_text().splitlines() if ln.startswith("| `github.file_put")][0]
-    assert "`ref` = the target branch" in row
+    assert "recorded blob id" in row and "optimistic-concurrency" in row
+
+
+def test_the_flow_checks_the_whole_diff_and_the_excluded_set():
+    flow = section(POLICY.read_text(), "## The flow")
+    for needle in ("--no-renames", "excluded set", "never routed into this flow", "canonical", "`..` segment",
+                   "/dev/null", "more than one", "patch --dry-run -p1", "bidi", "longer than any backtick run",
+                   "head SHA", "a draft for a workflow path", "run the workflow at once"):
+        assert needle in flow, needle
