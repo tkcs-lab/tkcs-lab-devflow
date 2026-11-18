@@ -34,7 +34,7 @@ POINTS = ("make_plan", "implement_phase", "implement_final", "review", "dod")
 NO_DIFF_POINTS = ("make_plan", "review")
 DEFAULT_POSTURE = "standard"
 ROLES = ("architect", "code-reviewer", "security-reviewer", "test-architect", "ux-reviewer",
-         "dependency-auditor", "tech-writer", "website-maintainer", "debugger", "refactorer")
+         "dependency-auditor", "tech-writer", "website-maintainer", "debugger", "refactorer", "reflektor")
 EDIT_ROLES = ("tech-writer", "website-maintainer", "debugger", "refactorer")
 EDIT_POINTS = ("implement_phase",)
 

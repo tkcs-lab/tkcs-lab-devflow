@@ -4,7 +4,7 @@ import copy
 import pytest
 import yaml
 
-from conftest import TLD, FIXTURES
+from conftest import ROOT, TLD, FIXTURES
 from test_validate_profile import MINIMAL
 
 
@@ -108,3 +108,38 @@ def test_schema_has_no_defaults_for_the_new_keys():
     schema = json.loads((TLD / "schema" / "profile.schema.json").read_text())
     assert "default" not in json.dumps(schema["properties"]["roles"])
     assert "default" not in json.dumps(schema["properties"]["docs"]["properties"]["website"])
+
+
+# ---- reflektor ------------------------------------------------------------------------------------
+REFLEKTOR_ERROR = "'roles.required[0]': 'reflektor' runs only at 'dod'"
+
+
+def test_reflektor_at_dod_is_valid(vp):
+    assert errs(vp, with_agents({"required": [{"role": "reflektor", "at": ["dod"]}]})) == []
+
+
+@pytest.mark.parametrize("points", [["implement_final"], ["dod", "implement_final"]])
+def test_reflektor_only_runs_at_dod(vp, points):
+    assert errs(vp, with_agents({"required": [{"role": "reflektor", "at": points}]})) == [REFLEKTOR_ERROR]
+
+
+def test_reflektor_at_review_gets_both_errors(vp):
+    errors = errs(vp, with_agents({"required": [{"role": "reflektor", "at": ["review"]}]}))
+    assert REFLEKTOR_ERROR in errors
+    assert any("'reflektor' cannot run at 'review'" in e for e in errors), errors
+
+
+def test_reflektor_can_be_disabled(vp):
+    assert errs(vp, with_agents({"disable": ["reflektor"]})) == []
+
+
+def test_reflektor_is_listed_as_a_review_mode_role_at_dod(tmp_path):
+    import subprocess
+    import sys
+    profile = tmp_path / "toolkit.yaml"
+    p = with_agents({"required": [{"role": "reflektor", "at": ["dod"]}]})
+    profile.write_text(yaml.safe_dump(p))
+    r = subprocess.run([sys.executable, str(ROOT / "cli" / "tld"), "roles", "required",
+                        "--profile", str(profile), "--at", "dod"], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "reflektor" in r.stdout and "review" in r.stdout, r.stdout
