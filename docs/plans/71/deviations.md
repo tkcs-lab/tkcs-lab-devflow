@@ -11,7 +11,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-ops-spec-cli
 
-- pending
+- worker: none; the worker used system python in place of .venv/bin/python; smoke step ran against real OpenSpec 2.1.0: all flags accepted, nothing outside openspec/ written, tasks.md not required, an empty change fails validate unless it has a delta
+- review: security review, 7 non-blocking findings left open: non-ASCII digits pass the version pattern, partial npm install tree is trusted, node/npm resolved by bare name, raw id in stderr, YAML errors reported as a missing key, grandchild processes survive the timeout, transitive dependencies float (accepted in the plan)
 
 ## p3-manifest-spec-change
 
