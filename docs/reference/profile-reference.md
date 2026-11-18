@@ -73,6 +73,8 @@ Rules:
 | `upstream.tag_pattern` | **yes** (in `upstream`) | Regular expression a release tag must match; must compile |
 | `upstream.version_file` | **yes** (in `upstream`) | File in the fork that records the synced tag |
 | `land.max_prs` | no | Integer 1..50: most pull requests one `/land` run orders. `/land` works without the `land` section |
+| `spec` | no | Section for the spec commands and the spec change `/make-plan` writes. Absent means the repository does not use specs |
+| `spec.version` | **yes** (in `spec`) | Exact OpenSpec release as MAJOR.MINOR.PATCH; the wrapper installs @fission-ai/openspec@<version> and re-checks the format with a full match (the schema pattern alone would let a trailing newline through). Guide: docs/guides/spec.md (plain text, no Markdown link: the guide is added in p8) |
 | `admin.policy` | **yes** (in `admin`) | Path, relative to the repo root, of the policy file the repo-admin playbook audits and applies (see [admin.md](../guides/admin.md)). The file must exist. It needs the `admin` section and stops with a missing-key message when it is absent |
 | `git_ops.repo` | **yes** (in `git_ops`) | Owner/name of the central repository that holds the `tld-git-ops` workflow. The git-ops playbook needs the section and stops with a missing-key message when it is absent; see [git-ops.md](../guides/git-ops.md) |
 | `git_ops.workflow` | no | File name of the workflow in that repository. Default `tld-git-ops.yml` |
