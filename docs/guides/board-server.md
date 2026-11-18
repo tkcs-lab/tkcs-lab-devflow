@@ -122,6 +122,8 @@ cli/tld board client set example-project--run--demo record.json
 
 The answer is `{"id":"example-project--run--demo","version":1}`, and the run shows on the page.
 
+`cli/tld board client put-report <id> <file>` stores a checked report page beside a record: it sends the file (a regular file of at most 20 MiB, timeout 120 seconds) with `PUT /api/records/<id>/report` and prints `{"id", "size", "sha256"}`; exit 1 for a refused file or an error answer (a 422 prints its `reasons`), 3 when no board is configured.
+
 ## Configuration
 
 Environment variables:

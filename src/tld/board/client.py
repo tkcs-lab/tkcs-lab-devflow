@@ -2,6 +2,7 @@
 """Command-line client for the tld status board server.
 
     board_client.py health | list | get ID | set ID FILE|- [--if-version N] | delete ID [ID ...]
+                    | put-report ID FILE
 
 Reads TLD_BOARD_URL and TLD_BOARD_TOKEN (and TLD_BOARD_ALLOW_HTTP) from the environment.
 Prints one line of compact JSON on stdout (`health` prints `ok`). Exit codes: 0 success; 1 the server
@@ -15,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import sys
 import urllib.error
 import urllib.parse
@@ -26,6 +28,7 @@ from tld.net import opener as _opener
 
 LOOPBACK = ("localhost", "127.0.0.1", "::1")
 OPENER = _opener()
+MAX_REPORT_BYTES = 20 * 1024 * 1024
 
 
 class ConfigError(Exception):
@@ -86,6 +89,25 @@ def call(config: Config, method: str, path: str, body: object | None = None, tim
     return status, parsed
 
 
+def call_raw(config: Config, method: str, path: str, body: bytes, content_type: str,
+             timeout: float) -> tuple[int, object | None]:
+    """Like `call`, but sends `body` unchanged with the given Content-Type."""
+    req = urllib.request.Request(config.url + path, data=body, method=method)
+    req.add_header("Accept", "application/json")
+    req.add_header("Content-Type", content_type)
+    req.add_header("Authorization", f"Bearer {config.token}")
+    try:
+        with OPENER.open(req, timeout=timeout) as resp:
+            status, raw = resp.status, resp.read()
+    except urllib.error.HTTPError as err:
+        status, raw = err.code, err.read()
+    try:
+        parsed = json.loads(raw) if raw else None
+    except ValueError:
+        parsed = None
+    return status, parsed
+
+
 def _emit(payload: object) -> None:
     print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 
@@ -110,6 +132,9 @@ def build_parser() -> argparse.ArgumentParser:
     put.add_argument("--if-version", type=int, dest="if_version", help="the version last read")
     rm = sub.add_parser("delete", help="delete records")
     rm.add_argument("ids", nargs="+", metavar="ID")
+    rep = sub.add_parser("put-report", help="store the checked HTML report page of a record")
+    rep.add_argument("id")
+    rep.add_argument("file", help="the report page (a regular file of at most 20 MiB)")
     return parser
 
 
@@ -146,6 +171,22 @@ def run(args: argparse.Namespace, config: Config) -> int:
         status, payload = call(config, "GET", "/api/records")
     elif args.cmd == "get":
         status, payload = call(config, "GET", f"/api/records/{quote(args.id, safe='')}")
+    elif args.cmd == "put-report":
+        try:
+            info = os.stat(args.file)
+            if not stat.S_ISREG(info.st_mode):
+                raise ValueError("not a regular file")
+            if info.st_size > MAX_REPORT_BYTES:
+                raise ValueError(f"larger than {MAX_REPORT_BYTES} bytes")
+            with open(args.file, "rb") as handle:
+                data = handle.read(MAX_REPORT_BYTES + 1)
+            if len(data) > MAX_REPORT_BYTES:
+                raise ValueError(f"larger than {MAX_REPORT_BYTES} bytes")
+        except (OSError, ValueError) as exc:
+            print(f"board_client: cannot read the report ({exc})", file=sys.stderr)
+            return 1
+        status, payload = call_raw(config, "PUT", f"/api/records/{quote(args.id, safe='')}/report", data,
+                                   "text/html; charset=utf-8", 120.0)
     elif args.cmd == "set":
         try:
             text = sys.stdin.read() if args.file == "-" else open(args.file, encoding="utf-8").read()
