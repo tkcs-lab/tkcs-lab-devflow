@@ -24,6 +24,8 @@ visibly. How a session runs them is [playbooks/policies/roles.md](../../playbook
 | `refactorer` | standard | none | review, edit |
 | `reflektor` | standard | none (the pinned Reflektor release's schema and style guide) | review (only at `dod`) |
 
+`reflektor` runs only at `dod`, see [the reflektor guide](../guides/reflektor.md).
+
 The four edit roles change files only in `edit` mode, which `tld roles required` gives only at `implement_phase`
 (C2). No role card names a project that uses tld, a runtime tool or a model; a card may name the third-party tool it runs. The Claude adapter wraps each role as a subagent,
 `adapters/claude/agents/<role>.md`: front matter (tools, and the model the `tld:runtime` skill maps the default level
