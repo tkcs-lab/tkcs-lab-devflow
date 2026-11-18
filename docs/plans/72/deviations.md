@@ -11,7 +11,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-page
 
-- pending
+- review: security review found the secret scan bypassable (allow mark, line-splitting characters) and the page title rule bypassable with HTML entities; verify_html now refuses the allow mark and line-splitting characters in the raw data, decoded strings and keys, and the title refuses &, control/format/line-separator characters and more than 200 characters
+- retry: phase sent back once for the two blocking security findings
 
 ## p3-section
 
