@@ -16,7 +16,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-manifest-spec-change
 
-- pending
+- worker: none
+- review: security review, 3 non-blocking findings left open: a phase without touches is not fenced out of openspec/, touches entries with .. or absolute paths are not rejected, a non-mapping profile gives a traceback
 
 ## p4-spec-record
 
