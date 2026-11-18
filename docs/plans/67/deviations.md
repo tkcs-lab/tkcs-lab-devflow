@@ -15,7 +15,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-gate-adapter
 
-- pending
+- worker: worker reported blocked: the D4 matcher is an unanchored regex, so the two planned negative matcher rows (ScheduleWakeupX, mcp__github__add_issue_comment_x) cannot pass; the worker left those two rows out and kept the D4 matcher string exactly
+- review: orchestrator accepted the two dropped rows and the unanchored matcher as the plan words it; security-reviewer: 2 non-blocking findings (RecursionError in execute, timer and worker tool names accepted from any MCP server); left as is
 
 ## p4-playbooks
 
