@@ -19,7 +19,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p4-playbooks
 
-- pending
+- worker: step 8 sentence Add the item first placed before On requested changes, not after it, so it precedes the worker start; no tld in the worker, orchestrator ran the roles
+- review: security-reviewer: 5 non-blocking wording findings (the no-record clause also appears in make-plan step 3; timer sentence placement; next_check_at wording still says armed check-in; --add titles need quoting; gate sentence placement); left as the plan words them
 
 ## p5-retire
 
