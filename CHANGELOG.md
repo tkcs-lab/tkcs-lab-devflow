@@ -8,6 +8,7 @@ entry of the released version at the top of the GitHub release, above the list o
 ### Added
 
 - `tld plan record-items`: prints the run record's items from a plan (every phase and `final-review`), or checks that a record lists them all.
+- `/tld:spec` builds OpenSpec specs for existing code; with a spec profile block `/tld:make-plan` writes the spec change and `/tld:implement` archives it in the last phase (#71).
 
 ### Changed
 

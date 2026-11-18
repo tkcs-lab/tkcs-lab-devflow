@@ -69,6 +69,7 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | `/tld:usage` | unattended, every few hours: sends the account's 5-hour and weekly subscription use to the board's Usage page |
 | `/tld:questions` | weekly, unattended: reads the asks agents put to you since its last run, finds those a better playbook, profile key, role, skill, command or doc would have avoided, and writes a triaged review document for `/tld:review apply` and `/tld:make-plan` ([guide](docs/guides/questions.md)) |
 | `/tld:migrate` | moves a repository from claude-toolkit to tld: shows the plan, writes it on a branch after you confirm, one pull request |
+| `/tld:spec [check \| init]` | builds OpenSpec specs for existing code (one pull request, never merged) or validates them; with a `spec` profile block make-plan also writes the spec change and implement archives it ([guide](docs/guides/spec.md)) |
 
 No command merges, approves, tags or force-pushes. Four skills run on request:
 `tld:repo-admin` (audit and apply organisation and repository settings, rulesets, environments and workflows from
