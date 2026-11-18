@@ -10,9 +10,11 @@ network call. See docs/architecture/hooks.md.
 from __future__ import annotations
 
 import hashlib
+import contextlib
 import json
 import os
 import re
+import tempfile
 import time
 from pathlib import Path
 
@@ -96,15 +98,39 @@ def _save(path: Path, state: dict) -> None:
     """Write the state atomically and refresh `opened_at`, so the TTL counts from the last activity."""
     state["opened_at"] = time.time()
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(state))
-    os.replace(tmp, path)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(json.dumps(state))
+        os.replace(tmp_name, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
+
+
+@contextlib.contextmanager
+def _locked(path: Path):
+    """Serialise the load, change and save of one state file between parallel hooks; no lock where flock is missing."""
+    try:
+        import fcntl
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(path.with_name(path.name + ".lock"), "a")
+    except (ImportError, OSError):
+        yield
+        return
+    with handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        except OSError:
+            pass
+        yield
 
 
 def _is_record(text: str) -> bool:
     try:
         obj = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):
         return False
     return (isinstance(obj, dict) and isinstance(obj.get("id"), str)
             and isinstance(obj.get("version"), int) and not isinstance(obj.get("version"), bool))
@@ -189,6 +215,11 @@ def _evaluate(ctx: Ctx) -> str | None:
     if not a.session_id:
         return None
     path = state_file(ctx.project_dir, a.session_id)
+    with _locked(path):
+        return _evaluate_locked(ctx, a, path)
+
+
+def _evaluate_locked(ctx: Ctx, a: Action, path: Path) -> str | None:
     if a.kind == "prompt":
         if writes_record(a.invoked, a.prompt):
             state = _load(path)
@@ -201,10 +232,6 @@ def _evaluate(ctx: Ctx) -> str | None:
         if state is None:
             return None
         changed = False
-        if is_record_write(a):
-            state["written"] = True
-            state["write_seq"] = state["dirty_seq"]
-            changed = True
         if is_ask_post(a):
             state["ask_seq"] += 1
             state["dirty_seq"] += 1
@@ -214,6 +241,10 @@ def _evaluate(ctx: Ctx) -> str | None:
             changed = True
         if is_change(a):
             state["dirty_seq"] += 1
+            changed = True
+        if is_record_write(a):  # last: a command that changes things and then writes the record leaves nothing unwritten
+            state["written"] = True
+            state["write_seq"] = state["dirty_seq"]
             changed = True
         if changed:
             _save(path, state)

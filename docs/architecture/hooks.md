@@ -306,17 +306,17 @@ nudge, not a control.
   `tld board client set` command printed one) and clears the changes before it. A successful `board_ask`, a `tld board ask`
   command, or an issue comment or issue body that starts with `<!-- tld-ask -->` counts an ask. A timer tool
   (`ScheduleWakeup`, `CronCreate`, `send_later`, `create_trigger`) arms the timer. `create_session`, `archive_session`,
-  `create_pull_request` and `git push` count a change. A failed tool call (`isError`) counts nothing. It never denies.
+  `create_pull_request`, a `git push` command and a `gh pr create` command count a change. A failed MCP tool call (`isError` is boolean true) counts nothing; a Bash command counts by its text, whatever its exit status. A record write is applied after the other events of the same action, so a command that pushes and then writes the record leaves nothing unwritten. It never denies.
   `Stop`: in this order, the first rule that fires blocks **once** per sequence number: (1) an ask with no timer after it
   (needs no board); (2) with a configured board (`TLD_BOARD_URL` and `TLD_BOARD_TOKEN`), no record written yet, with a message
   that says how to write the record (the `board_set` tool, or `tld board client set <id> -` when the tool is missing or
   fails); (3) with a configured board and a record written, a change since the last record write.
 - **State.** `<git dir>/tld/board-gate/<hash>.json`, named by a hash of the session id (`command`, `opened_at`,
   `written`, `blocked`, `write_seq`, `dirty_seq`, `dirty_blocked_seq`, `ask_seq`, `timer_seq`, `timer_blocked_seq`);
-  `opened_at` is refreshed on every save, so it lapses after 24 hours without any save. No session id: nothing is written and nothing blocks.
+  `opened_at` is refreshed on every save, so it lapses after 24 hours without any save. Each save writes a uniquely named temporary file and replaces the state atomically, and the load, change and save of one hook event run under a file lock (no lock where `flock` is missing), so parallel tool calls do not lose updates. No session id: nothing is written and nothing blocks.
 - **Fails open.** No board configured, a malformed `hooks.board_gate`, an unreadable state file, any error: allow. The hook
   never calls the board. The timer rule needs no board; the first-record and change rules do. `stop_hook_active` no longer
-  lets a stop through, because every rule blocks once per sequence, so a chain of stops ends after at most three blocks. `enabled` is read from the working tree, `hooks.disable` from the trusted copy, and only on
+  lets a stop through, because every rule blocks once per sequence, so with no new ask or change in between, a chain of stops ends after at most two blocks (the timer rule, then the first-record or the change rule). `enabled` is read from the working tree, `hooks.disable` from the trusted copy, and only on
   `Stop`, so a malformed `hooks.disable` can never make it block.
 - **The block messages** (the guard runner puts `tld board-gate: ` in front; `{command}` comes from the state file):
   - `MESSAGE`: `this session was started by /tld:{command} and has not written its status record to the board. Write it now: use the board_set tool, or when that tool is missing or fails run "tld board client set <id> - " with the record on stdin (the id comes from "tld board record-id"). If the board cannot be reached, say so in your final reply and stop. If the playbook says to write no record yet, say so and stop. This check blocks only once.`

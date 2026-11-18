@@ -569,3 +569,49 @@ def test_a_timer_without_a_state_creates_none(board):
     timer(board)
     ask(board)
     assert not has_state(board)
+
+
+def test_a_command_that_changes_and_then_writes_the_record_leaves_nothing_dirty(board):
+    prompt(board, "docs")
+    result(board, RECORD, command="git push origin x && tld board client set id - < rec.json")
+    assert state(board)["write_seq"] == state(board)["dirty_seq"] == 1
+    assert stop(board).verdict == "allow"
+
+
+def test_deeply_nested_record_output_is_not_a_record_and_does_not_raise(board):
+    prompt(board, "docs")
+    assert result(board, "[" * 200000, op="board_set").verdict == "allow"
+    assert state(board)["written"] is False
+
+
+def test_save_uses_a_unique_tmp_file_and_leaves_none_behind(board, monkeypatch):
+    prompt(board, "docs")
+    path = board_gate.state_file(str(board), "s1")
+    names = []
+    real = board_gate.os.replace
+    monkeypatch.setattr(board_gate.os, "replace", lambda a, b: (names.append(str(a)), real(a, b))[1])
+    board_gate._save(path, board_gate._load(path))
+    board_gate._save(path, board_gate._load(path))
+    assert len(set(names)) == 2 and all(n != str(path) + ".tmp" for n in names)
+    assert not [p for p in path.parent.iterdir() if p.name.endswith(".tmp")]
+
+
+def test_a_failed_save_removes_its_tmp_file(board, monkeypatch):
+    prompt(board, "docs")
+    path = board_gate.state_file(str(board), "s1")
+    monkeypatch.setattr(board_gate.os, "replace", lambda a, b: (_ for _ in ()).throw(OSError("boom")))
+    with pytest.raises(OSError):
+        board_gate._save(path, board_gate._load(path))
+    assert not [p for p in path.parent.iterdir() if p.name.endswith(".tmp")]
+
+
+def test_parallel_updates_are_not_lost(board):
+    import threading
+    prompt(board, "docs")
+    write(board)
+    threads = [threading.Thread(target=lambda: result(board, "ok", op="worker_start")) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert state(board)["dirty_seq"] == 8

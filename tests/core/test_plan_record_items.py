@@ -140,3 +140,23 @@ def test_cli_registration_and_stdin(plan):
     rec = json.dumps({"phases": [{"id": i["id"]} for i in json.loads(out)]})
     done = subprocess.run(cmd + ["--check", "-"], input=rec, capture_output=True, text=True)
     assert (done.returncode, done.stdout) == (0, "items: ok (3 expected)\n")
+
+
+@pytest.mark.parametrize("deps", ["[{a: 1}]", "['../../x']", "[3]", "[nope]", "[p1-a, 'Bad_Id']"])
+def test_depends_on_entries_must_be_known_phase_ids(tmp_path, capsys, deps):
+    phases = f"  - {{id: p1-a, title: A, depends_on: []}}\n  - {{id: p2-b, title: B, depends_on: {deps}}}\n"
+    code, out, err = _run(capsys, _plan(tmp_path / "p.md", phases=phases))
+    assert (code, out) == (2, "")
+    assert err.startswith("tld plan record-items: ") and "depends_on" in err
+
+
+def test_error_messages_quote_ids_on_one_line(plan, capsys):
+    code, out, err = _run(capsys, plan, "--add", "a\nitems: ok")
+    assert code == 2 and len(err.strip().splitlines()) == 1
+
+
+def test_a_deeply_nested_record_exits_2(plan, tmp_path, capsys):
+    rec = tmp_path / "deep.json"
+    rec.write_text("[" * 200000)
+    code, out, err = _run(capsys, plan, "--check", str(rec))
+    assert code == 2 and "nested" in err

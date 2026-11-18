@@ -21,7 +21,7 @@ The board is part of the work, not a report written after it. A run that is not 
 
 1. **First record first.** Write the first record (`starting`) before any step that can take more than a minute. In make-plan and implement that is before the research, before the first worker and before the first ask, except the "already running?" check, which asks before any record exists (see "When to write"); never "after the plan is understood".
 2. **Every item up front.** The first record lists every item the run will have. In implement that is every phase of the manifest plus `final-review`, printed by `tld plan record-items <plan file>`; never a short list that grows later.
-3. **Extra items at once.** A revision (`<phase id>-rev<n>`), a fix (`fix-<n>`) and a second final review (`final-review-2`) become items in the same record write that starts them, before their worker exists. Before every record write of implement, save the record to a scratch file and run `tld plan record-items <plan file> --check <record file>` with one `--add <id>=<title>` for every extra item so far; it must exit 0.
+3. **Extra items at once.** A revision (`<phase id>-rev<n>`), a fix (`fix-<n>`) and a second final review (`final-review-2`) become items in the same record write that starts them, before their worker exists. Before every record write of implement, save the record to a scratch file and run `tld plan record-items <plan file> --check <record file>` with one `--add <id>=<title>` for every extra item so far, each value one quoted shell argument and the title a short label you write yourself, never text copied from a finding or an answer; it must exit 0.
 4. **Every change is a write.** Every state change, every check-in, every ask and every answer is a record write, also when only `updated_at` changes. A session that asks, starts or stops a worker, opens a pull request or pushes without writing the record afterwards has forgotten the board.
 5. **Every ask has a timer.** In the same turn that posts an ask: write the record with `needs_you` (no record during the "already running?" check), show the ask in the conversation (attended), start the watch (attended, with a board) and arm `schedule_wakeup` (60 minutes with the watch, else 10 minutes). Write the timer's time into `last_event` as `timer <ISO time>`: `next_check_at` must be null while the status is `waiting_user` and in every command record. Never end the turn of an ask without the timer. On every wake cancel the armed timer before arming the next one, and cancel it when the ask closes.
 
@@ -47,7 +47,7 @@ never a reason to skip the record.
 | `finished_at` | set for `done` and `failed`, may be set for `pr_open`, `null` otherwise |
 | `phases` | implement's phases; for the others the items the playbook names |
 | `needs_you`, `needs_you_reason`, `needs_you_since` | true exactly while the owner is asked something or the run stopped on something only they can fix; the reason is one line starting with the verb the owner must do |
-| `next_check_at` | the armed check-in time, or `null` |
+| `next_check_at` | the armed check-in time, or `null`; always `null` while the status is `waiting_user` and in every command record (the ask timer's time goes into `last_event`, Board upkeep, rule 5) |
 
 ## Keys and a record that already exists
 

@@ -15,6 +15,12 @@ entry of the released version at the top of the GitHub release, above the list o
 - The playbooks `make-plan` and `implement` carry a mandatory "Board upkeep" rule set (the status-board policy): first record first, every item up front, extra items at once, every change is a write, every ask has a timer.
 - `runtime.md` no longer tells command records to set `next_check_at`; the timer time goes into `last_event`.
 
+### Fixed
+
+- `board-gate`: a record write in the same command as a push no longer leaves a false "unwritten" block; parallel hooks no longer lose state updates (unique temporary file, file lock); deeply nested tool output and hook events no longer crash the hook; only a boolean `isError` marks a tool call failed.
+- `tld plan record-items` rejects a `depends_on` entry that is not a phase id, quotes ids in its errors and reports a too deeply nested record with exit 2.
+- Board upkeep wording: make-plan step 3 writes the record before its ask, the ask timer sentence of the already-running check sits in its ask branch, `next_check_at` is null while waiting, `--add` titles are quoted session-written labels, and the human-gate item is added only on requested changes. `hooks.md` describes `gh pr create`, the MCP-only `isError` rule and the stop chain bound as built.
+
 ## [1.4.0] - 2026-11-16
 
 ### Added

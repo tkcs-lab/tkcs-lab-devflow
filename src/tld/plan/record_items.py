@@ -55,6 +55,11 @@ def build_items(manifest, adds: list[str]) -> list[dict]:
             raise ValueError(f"phase '{id_}' has no 'depends_on' list")
         complexity = phase.get("complexity")
         items.append(_item(id_, title, list(deps), complexity if isinstance(complexity, str) else None))
+    known = {item["id"] for item in items}
+    for item in items:
+        for dep in item["depends_on"]:
+            if not isinstance(dep, str) or not re.fullmatch(ID_RE, dep) or dep not in known:
+                raise ValueError(f"phase {item['id']!r} has a depends_on entry that is not a phase id: {str(dep)[:80]!r}")
     items.append(_item(FINAL, "Final review", [p["id"] for p in items], None))
     for spec in adds:
         id_, sep, title = spec.partition("=")
@@ -63,9 +68,9 @@ def build_items(manifest, adds: list[str]) -> list[dict]:
     for item in items:
         id_ = item["id"]
         if not re.fullmatch(ID_RE, id_):
-            raise ValueError(f"invalid item id '{id_}'")
+            raise ValueError(f"invalid item id {id_[:80]!r}")
         if id_ in seen:
-            raise ValueError(f"duplicate item id '{id_}'")
+            raise ValueError(f"duplicate item id {id_[:80]!r}")
         seen.add(id_)
     return items
 
@@ -76,6 +81,8 @@ def _load_record(source: str) -> list[str]:
         record = json.loads(text)
     except (OSError, UnicodeDecodeError) as exc:
         raise InputError(f"cannot read record '{source}': {exc}")
+    except RecursionError:
+        raise InputError("record is nested too deeply")
     except ValueError as exc:
         raise InputError(f"record is not valid JSON: {exc}")
     if not isinstance(record, dict):
@@ -104,6 +111,8 @@ def main(argv: list[str] | None = None) -> int:
             raise InputError(f"no such file '{path}'")
         try:
             manifest = yaml.safe_load(extract_manifest(path.read_text()))
+        except RecursionError:
+            raise InputError("manifest is nested too deeply")
         except yaml.YAMLError as exc:
             raise InputError(f"manifest is not valid YAML: {exc}")
         except (ValueError, OSError) as exc:  # no heading, no block, unreadable or not UTF-8 text
