@@ -110,10 +110,10 @@ def test_a_second_stop_does_not_block(board):
     assert stop(board).verdict == "allow"
 
 
-def test_a_continuing_stop_does_not_block(board):
+def test_a_continuing_stop_evaluates_the_next_rule(board):
     prompt(board, "docs")
+    assert stop(board, continuing=True).verdict == "deny"
     assert stop(board, continuing=True).verdict == "allow"
-    assert stop(board).verdict == "deny"
 
 
 def test_a_reprompt_of_the_same_command_keeps_written(board):
@@ -284,3 +284,288 @@ def test_real_mcp_board_set_result_is_a_record_write(board, tmp_path):
     assert stale["isError"]
     result(board, stale["content"][0]["text"], op="board_set")
     assert state(board)["written"] is False
+
+
+# --- ask, timer and dirty rules ---------------------------------------------------------------------------------------
+
+TIMER = "tld board-gate: " + board_gate.TIMER_MESSAGE
+DIRTY = "tld board-gate: " + board_gate.DIRTY_MESSAGE.format(command="docs")
+FIRST = "tld board-gate: " + board_gate.MESSAGE.format(command="docs")
+ASK = '{"id":"a-1f","state":"open"}'
+
+
+def ask(repo, sid="s1"):
+    return result(repo, ASK, op="board_ask", sid=sid)
+
+
+def timer(repo):
+    return result(repo, "{}", op="timer")
+
+
+def write(repo):
+    return result(repo, RECORD, op="board_set")
+
+
+def reasons(repo, n, continuing=True):
+    return [stop(repo, continuing=continuing).reason or None for _ in range(n)]
+
+
+def test_an_ask_without_a_timer_blocks_once(board):
+    prompt(board, "docs")
+    write(board)
+    ask(board)
+    assert state(board)["ask_seq"] == 1
+    assert stop(board).reason == TIMER
+    assert stop(board).reason != TIMER
+
+
+def test_an_ask_blocks_with_the_timer_message_without_a_board(repo):
+    prompt(repo, "docs")
+    ask(repo)
+    assert stop(repo).reason == TIMER
+    assert stop(repo).verdict == "allow"
+
+
+def test_ask_timer_ask_blocks_again(board):
+    prompt(board, "docs")
+    ask(board)
+    timer(board)
+    ask(board)
+    assert state(board)["ask_seq"] == 2
+    assert stop(board).reason == TIMER
+
+
+def test_a_timer_after_the_ask_means_no_timer_message(board):
+    prompt(board, "docs")
+    ask(board)
+    timer(board)
+    assert stop(board).reason != TIMER
+
+
+def test_a_timer_before_the_ask_does_not_count(board):
+    prompt(board, "docs")
+    timer(board)
+    ask(board)
+    assert stop(board).reason == TIMER
+
+
+@pytest.mark.parametrize("command,output,counts", [
+    ("tld board ask f.json", "a-9c", True),
+    ("tld board ask f.json", "ok\n<!-- tld-ask -->\nx", True),
+    ("tld board ask-text f.json", "a-9c", False),
+    ("grep 'board ask' x", "x:board ask", False),
+    ("tld board ask f.json", "error: no board", False),
+    ("tld board ask f.json", "a-", False),
+    ("tld board ask f.json", "a-xyz", False),
+])
+def test_a_shell_ask_is_detected(repo, command, output, counts):
+    action = Action("tool_result", str(repo), str(repo), command=command, output=output, session_id="s1")
+    assert board_gate.is_ask_post(action) is counts
+
+
+@pytest.mark.parametrize("body,counts", [
+    ("<!-- tld-ask -->\nquestion", True),
+    ("text <!-- tld-ask -->", False),
+    (" <!-- tld-ask -->", False),
+    ("\n<!-- tld-ask -->", False),
+    (None, False),
+    (5, False),
+    (["<!-- tld-ask -->"], False),
+])
+def test_an_ask_comment_needs_the_marker_first(repo, body, counts):
+    action = Action("tool_result", str(repo), str(repo), op="ask_comment", args={"body": body}, output="{}", session_id="s1")
+    assert board_gate.is_ask_post(action) is counts
+
+
+@pytest.mark.parametrize("output", ["not json", "[1]", None, "error: bad", '{"id": 5}', '{"id": "x-1"}', '"a-1"', ""])
+def test_is_ask_post_rejects(repo, output):
+    action = Action("tool_result", str(repo), str(repo), op="board_ask", output=output, session_id="s1")
+    assert board_gate.is_ask_post(action) is False
+
+
+def test_is_ask_post_ignores_other_kinds(repo):
+    assert board_gate.is_ask_post(Action("stop", str(repo), str(repo), session_id="s1", op="board_ask", output=ASK)) is False
+
+
+def test_a_shell_ask_counts_in_the_state(board):
+    prompt(board, "docs")
+    result(board, "a-9c\n", command="tld board ask f.json")
+    assert state(board)["ask_seq"] == 1
+    result(board, "a-9d", command="tld board ask-text f.json")
+    result(board, "a-9d", command="ls")
+    assert state(board)["ask_seq"] == 1
+
+
+@pytest.mark.parametrize("op,command", [("worker_start", None), ("worker_stop", None), ("pr_create", None),
+                                         (None, "git push origin x"), (None, "gh pr create --fill")])
+def test_a_change_after_a_record_blocks_once(board, op, command):
+    prompt(board, "docs")
+    write(board)
+    result(board, "ok", op=op, command=command)
+    assert stop(board).reason == DIRTY
+    assert stop(board).verdict == "allow"
+
+
+def test_a_record_write_clears_the_dirty_rule(board):
+    prompt(board, "docs")
+    write(board)
+    result(board, "ok", op="worker_start")
+    write(board)
+    assert state(board)["write_seq"] == state(board)["dirty_seq"] == 1
+    assert stop(board).verdict == "allow"
+
+
+def test_a_change_after_the_record_write_blocks_again(board):
+    prompt(board, "docs")
+    write(board)
+    result(board, "ok", op="worker_start")
+    assert stop(board).reason == DIRTY
+    write(board)
+    result(board, "ok", op="pr_create")
+    assert stop(board).reason == DIRTY
+
+
+def test_a_change_a_first_write_another_change_and_a_second_write(board):
+    prompt(board, "docs")
+    result(board, "ok", op="worker_start")
+    write(board)
+    result(board, "ok", op="worker_stop")
+    write(board)
+    assert stop(board).verdict == "allow"
+
+
+def test_a_plain_stop_after_the_first_write_is_not_blocked(board):
+    prompt(board, "docs")
+    write(board)
+    assert stop(board).verdict == "allow"
+
+
+def test_the_ask_makes_the_record_dirty_too(board):
+    prompt(board, "docs")
+    write(board)
+    ask(board)
+    timer(board)
+    assert stop(board).reason == DIRTY
+    write(board)
+    assert stop(board).verdict == "allow"
+
+
+def test_ask_write_timer_stop_gives_no_block(board):
+    prompt(board, "docs")
+    ask(board)
+    write(board)
+    timer(board)
+    assert stop(board).verdict == "allow"
+
+
+def test_the_timer_rule_precedes_the_first_record_rule(board):
+    prompt(board, "docs")
+    ask(board)
+    assert reasons(board, 3, continuing=False) == [TIMER, FIRST, None]
+
+
+def test_without_a_record_the_dirty_rule_never_fires(board):
+    prompt(board, "docs")
+    ask(board)
+    assert reasons(board, 4) == [TIMER, FIRST, None, None]
+
+
+def test_stop_chain_ends(board):
+    prompt(board, "docs")
+    ask(board)
+    result(board, "ok", op="worker_start")
+    assert reasons(board, 3) == [TIMER, FIRST, None]
+
+
+def test_stop_chain_ends_after_a_record_write(board):
+    prompt(board, "docs")
+    write(board)
+    ask(board)
+    result(board, "ok", op="worker_start")
+    assert reasons(board, 4) == [TIMER, DIRTY, None, None]
+
+
+def test_equal_sequence_numbers_do_not_block(board):
+    prompt(board, "docs")
+    write(board)
+    ask(board)
+    timer(board)
+    s = state(board)
+    s["write_seq"] = s["dirty_seq"]
+    board_gate.state_file(str(board), "s1").write_text(json.dumps(s))
+    assert (s["ask_seq"], s["timer_seq"]) == (1, 1)
+    assert stop(board).verdict == "allow"
+
+
+def test_a_state_one_ahead_blocks(board):
+    prompt(board, "docs")
+    write(board)
+    s = state(board)
+    s["ask_seq"], s["timer_seq"], s["dirty_seq"], s["write_seq"] = 2, 1, 1, 1
+    board_gate.state_file(str(board), "s1").write_text(json.dumps(s))
+    assert stop(board).reason == TIMER
+
+
+def test_a_state_with_only_the_old_keys_loads_with_zeros(board):
+    prompt(board, "docs")
+    path = board_gate.state_file(str(board), "s1")
+    path.write_text(json.dumps({"command": "docs", "opened_at": board_gate.time.time(), "written": False, "blocked": False}))
+    loaded = board_gate._load(path)
+    assert all(loaded[k] == 0 for k in board_gate.COUNTERS) and len(loaded) == 10
+
+
+@pytest.mark.parametrize("bad", [True, -1, "x", 1.5, None])
+def test_bad_counter_types_load_as_zero(board, bad):
+    prompt(board, "docs")
+    path = board_gate.state_file(str(board), "s1")
+    s = state(board)
+    s.update({k: bad for k in board_gate.COUNTERS})
+    path.write_text(json.dumps(s))
+    assert all(board_gate._load(path)[k] == 0 for k in board_gate.COUNTERS)
+
+
+def test_save_round_trips_and_refreshes_opened_at(board, monkeypatch):
+    prompt(board, "docs")
+    path = board_gate.state_file(str(board), "s1")
+    full = {"command": "docs", "opened_at": 1.0, "written": True, "blocked": True,
+            **{k: i + 1 for i, k in enumerate(board_gate.COUNTERS)}}
+    monkeypatch.setattr(board_gate.time, "time", lambda: 12345.0)
+    board_gate._save(path, dict(full))
+    loaded = board_gate._load(path)
+    assert loaded == {**full, "opened_at": 12345.0} and len(loaded) == 10
+
+
+def test_a_truncated_state_file_loads_as_none_and_save_leaves_no_tmp(board):
+    prompt(board, "docs")
+    path = board_gate.state_file(str(board), "s1")
+    path.write_text('{"command": "docs", "opened_at": 1')
+    assert board_gate._load(path) is None
+    board_gate._save(path, {"command": "docs", "opened_at": 0, "written": False, "blocked": False})
+    assert not list(path.parent.glob("*.tmp")) and board_gate._load(path)["command"] == "docs"
+
+
+def test_a_second_prompt_keeps_the_counters(board):
+    prompt(board, "docs")
+    ask(board)
+    prompt(board, "docs")
+    assert state(board)["ask_seq"] == 1
+    prompt(board, "review")
+    assert state(board)["ask_seq"] == 0
+
+
+def test_the_ttl_counts_from_the_last_save(board, monkeypatch):
+    prompt(board, "docs")
+    now = board_gate.time.time()
+    monkeypatch.setattr(board_gate.time, "time", lambda: now + 24 * 3600 - 60)
+    ask(board)
+    monkeypatch.setattr(board_gate.time, "time", lambda: now + 2 * 24 * 3600 - 120)
+    assert state(board)["ask_seq"] == 1
+    assert stop(board).reason == TIMER
+    monkeypatch.setattr(board_gate.time, "time", lambda: now + 4 * 24 * 3600)
+    assert stop(board).verdict == "allow"
+
+
+def test_a_timer_without_a_state_creates_none(board):
+    timer(board)
+    ask(board)
+    assert not has_state(board)
