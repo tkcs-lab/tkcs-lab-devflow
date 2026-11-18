@@ -33,3 +33,10 @@ def test_spec_playbook_names_the_stop_message_of_its_eval(tmp_path, capsys):
     profile.write_text("tld:\n  version: '>=1.0'\n")
     assert _load("tld.ops.spec").main(["validate", "--profile", str(profile), "--root", str(tmp_path)]) == 2
     assert capsys.readouterr().err.strip() == message
+
+
+def test_init_stops_on_a_dirty_tree_before_it_branches():
+    text = PLAYBOOK.read_text()
+    msg = "The working tree has changes; commit or stash them first. Nothing was changed."
+    assert msg in " ".join(text.split())
+    assert text.index("git status --porcelain") < text.index("git checkout -b chore/spec-init-")
