@@ -5,7 +5,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p1-profile-spec-key
 
-- pending
+- worker: none; the worker ran python3 in place of .venv/bin/python because no venv existed there
+- review: schema block placed before admin instead of directly after land; no behaviour change
+- review: security review (non-blocking): schema pattern accepts a trailing newline and non-ASCII digits; the wrapper re-checks, see p2
 
 ## p2-ops-spec-cli
 
