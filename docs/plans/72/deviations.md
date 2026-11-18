@@ -5,7 +5,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p1-prepare
 
-- pending
+- review: security review found git run before the PATH check (plan 3.3 order); PATH check now runs first and git is resolved once; the worker fixed it in a second commit
+- retry: phase sent back once for the PATH-order finding
+- review: owner decision (ask a-b2414058b2c4bc6a): the docs-links test of plan.md stays red until p9 creates the guide it links to; every other test must pass
 
 ## p2-page
 
