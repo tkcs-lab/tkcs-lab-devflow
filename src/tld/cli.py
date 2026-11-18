@@ -34,6 +34,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("roles", "reflektor-prepare"): ("tld.roles.reflektor", ("prepare",), "download the pinned Reflektor release, check it and unpack it"),
     ("roles", "reflektor-check"): ("tld.roles.reflektor", ("check",), "check the paths of an agent-written Reflektor report"),
     ("roles", "reflektor-html"): ("tld.roles.reflektor", ("html",), "add a Content-Security-Policy to a Reflektor page and check it against the pinned viewer"),
+    ("roles", "section"): ("tld.roles.section", (), "print the cleaned change-report block of a role report"),
     ("dod", "exempt"): ("tld.dod.gate", ("--exempt",), "mark this checkout's session exempt from the DoD gate"),
     ("guard", "allow-profile"): ("tld.guard.protect_paths", ("--allow-profile",),
                                  "allow edits to the profile for the next 2 hours"),
