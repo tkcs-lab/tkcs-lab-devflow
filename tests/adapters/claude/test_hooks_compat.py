@@ -73,6 +73,10 @@ COMPAT = {
         ("git checkout -b chore/ci-pages-20260101 origin/main", "git checkout -b chore/ci-<workflow>-<yyyymmdd> origin/<main>"),
         ("git push -u origin chore/ci-pages-20260101", "git push -u origin chore/ci-<workflow>-<yyyymmdd>"),
     ],
+    "spec": [
+        ("git checkout -b chore/spec-init-20260101 origin/main", "git checkout -b chore/spec-init-<yyyymmdd> origin/<main>"),
+        ("git push -u origin chore/spec-init-20260101", "git push -u origin chore/spec-init-<yyyymmdd>"),
+    ],
     "docs": [
         ("git checkout -b chore/docs-init-20260101 origin/main", "git checkout -b chore/docs-init-<yyyymmdd> origin/<main>"),
         ("git push -u origin chore/docs-init-20260101", "git push -u origin chore/docs-init-<yyyymmdd>"),
@@ -213,7 +217,7 @@ def test_github_mcp_calls_the_commands_make_are_allowed(feature_repo, tool, phra
 
 def test_files_the_commands_write_are_allowed(feature_repo):
     for path in ("docs/foo-plan.md", "docs/foo-plan-manual-steps.html", "docs/foo-review.md", "docs/foo-review-decisions.html",
-                 "CHANGELOG.md"):
+                 "CHANGELOG.md", "openspec/changes/baseline-20260101/specs/x/spec.md", "openspec/specs/x/spec.md"):
         for hook in ("protect-paths", "secret-scan"):
             r = run(hook, event("Write", feature_repo, file_path=path, content="plain text\n"))
             assert r.code == 0, (path, hook, r.stderr)

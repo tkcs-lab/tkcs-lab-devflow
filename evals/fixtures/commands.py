@@ -3,6 +3,7 @@ judgement, so the task checks the command still reads the profile and stops wher
 
 `build(dest, command=...)`:
 - `land`: no `git.bot_login`, so land stops with the missing-key message.
+- `spec`: no `spec` block, so `spec init` stops with the missing-key message.
 - `deps`: no `deps` block, so deps stops with the missing-key message.
 - `upstream`: an `upstream` block, but no version file, so the sync stops and asks for the file.
 - `ci`: `ci.lookback_hours: 0`, out of range, so ci stops with the validation message.
@@ -53,6 +54,9 @@ def build(dest: Path, command: str = "land") -> dict:
     if command == "land":
         files[".tld/toolkit.yaml"] = _profile()
         expected["stop_message"] = "toolkit.yaml: missing required key 'git.bot_login'"
+    elif command == "spec":
+        files[".tld/toolkit.yaml"] = _profile()
+        expected["stop_message"] = "toolkit.yaml: missing required key 'spec.version' (add a spec block; see docs/guides/spec.md)"
     elif command == "deps":
         files[".tld/toolkit.yaml"] = _profile()
         expected["stop_message"] = "missing required key 'deps.cooldown_days'"
