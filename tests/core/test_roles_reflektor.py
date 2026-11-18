@@ -483,3 +483,21 @@ def test_cli_refuses_hooks_without_network(tmp_path):
                           capture_output=True, text=True, cwd=tmp_path)
     assert done.returncode == 3, done.stderr
     assert done.stderr.startswith("tld roles: reflektor: ")
+
+
+def test_git_stub_in_cwd_never_runs_with_empty_path_entry(env, monkeypatch):
+    cwd = env["tmp"] / "cwd"
+    cwd.mkdir()
+    marker = cwd / "marker"
+    stub = cwd / "git"
+    stub.write_text(f"#!/bin/sh\ntouch {marker}\n")
+    stub.chmod(0o755)
+    monkeypatch.chdir(cwd)
+    monkeypatch.setenv("PATH", f"{env['node'].parent}{os.pathsep}/usr/bin{os.pathsep}")
+    assert code_of(env) == 3
+    assert not marker.exists()
+
+
+def test_git_missing_refused(env, monkeypatch):
+    monkeypatch.setattr(reflektor.shutil, "which", lambda name: None)
+    assert code_of(env) == 3

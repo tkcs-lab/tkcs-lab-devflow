@@ -10,6 +10,7 @@ the pin, validates every archive member before writing any, writes the files its
 and writes `report-guide.md` (the report rules of SKILL.md). It prints the absolute path of `DIR/reflektor`, then the
 absolute path of `node`.
 
+The PATH check comes first, so no program is looked up in the working directory; git is resolved once.
 Exit 0 on success; exit 3 when the repository, the branch, Node or the network is not fit (the role then ends `n/a`);
 exit 1 when the download or the archive is not the pinned release. A message is `tld roles: reflektor: <reason>`
 on stderr. The pin proves the bytes, not the intent of the release. Python 3.11+, standard library.
@@ -172,10 +173,19 @@ def check_repo(repo) -> None:
         raise PrepareError(3, ".reflektor.json has more than 50 globs")
 
 
-def check_base(repo, base) -> None:
+def _git(git=None) -> str:
+    """The absolute path of git, resolved through a PATH that _check_path_env accepted."""
+    found = git or shutil.which("git")
+    if not found:
+        raise PrepareError(3, "git was not found on PATH")
+    return found
+
+
+def check_base(repo, base, git=None) -> None:
     """The branch under review must not change .reflektor.json."""
+    git = _git(git)
     try:
-        done = subprocess.run(["git", "-C", str(repo), "diff", "--quiet", str(base), "HEAD", "--", ".reflektor.json"],
+        done = subprocess.run([git, "-C", str(repo), "diff", "--quiet", str(base), "HEAD", "--", ".reflektor.json"],
                               capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise PrepareError(3, f"git failed: {type(exc).__name__}") from exc
@@ -208,9 +218,10 @@ def prepare(dest, repo, base, pin=None, fetch=None, node_major=None) -> Path:
     pin = PIN if pin is None else pin
     fetch = _fetch if fetch is None else fetch
     node_major = _node_major if node_major is None else node_major
-    check_repo(repo)
-    check_base(repo, base)
     _check_path_env()
+    git = _git()
+    check_repo(repo)
+    check_base(repo, base, git)
     node = shutil.which("node")
     if node is None:
         raise PrepareError(3, "node was not found on PATH")
