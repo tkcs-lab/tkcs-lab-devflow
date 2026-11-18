@@ -20,7 +20,7 @@ specs. `tld ops spec` stops with `toolkit.yaml: missing required key 'spec.versi
 
 - Node.js 22.20 or newer and `npm` on `PATH` wherever a spec command runs.
 - Access to the public npm registry (`https://registry.npmjs.org/`) on the first run of a version. The package
-  is installed once per version into `$TLD_CACHE_DIR`, else `~/.cache/tld/openspec/<version>`. A blocked registry
+  is installed once per version into `$TLD_CACHE_DIR/openspec/<version>`, default `~/.cache/tld/openspec/<version>`. A blocked registry
   fails with exit 2 and npm's message; ask for an allowed host, there is no fallback.
 
 ## The commands
@@ -28,7 +28,7 @@ specs. `tld ops spec` stops with `toolkit.yaml: missing required key 'spec.versi
 - `/tld:spec check` (the default) runs the validator over all specs and changes, lists the capabilities and reports
   findings. It changes nothing and writes no record.
 - `/tld:spec init` is for a repository that has no specs yet. It stops on a dirty working tree before it
-  branches, then surveys the code and asks you once for the capability list (reply `ok` or give the corrected
+  branches, then surveys the code and asks you once (a second time if the reply does not fit: names must be lower-case words joined by hyphens, at most 12) for the capability list (reply `ok` or give the corrected
   list). It writes one change that describes today's behaviour, validates it, archives it so OpenSpec itself produces
   the main specs, and opens one pull request on `chore/spec-init-<yyyymmdd>`. You merge it; the command never merges,
   approves or enables auto-merge. Gaps and behaviour no test covers are listed in the pull request.
@@ -55,10 +55,13 @@ sends back a merge that touches `openspec/` in any other phase.
 The wrapper `tld ops spec` runs an npm package, so it is narrow:
 
 - The version is an exact top-level pin in the protected profile.
-- It installs outside the repository, with scripts off (`--ignore-scripts`) and the public registry.
+- It installs outside the repository (keep `TLD_CACHE_DIR` outside the repository), with scripts off (`--ignore-scripts`) and the public registry. `--ignore-scripts` only stops install hooks.
 - Only five fixed subcommands exist: `init`, `new-change`, `list`, `validate`, `archive`. No free-form OpenSpec
   arguments pass through.
-- It runs with a reduced environment (an allowlist: no tokens), no stdin, a 600 second timeout and telemetry off.
+- It runs with an allowlisted environment (no tokens from environment variables), no stdin, a 600 second timeout and
+  telemetry off. `HOME` and the proxy variables pass through, so `~/.npmrc` is read. The package runs with your file
+  permissions and is not sandboxed. Run it where no credential reachable by that user is one you would not hand to
+  an npm package.
 - Transitive dependencies are not pinned: the package ships no shrinkwrap, so they float. The pin protects against
   a changed top-level release only.
 
