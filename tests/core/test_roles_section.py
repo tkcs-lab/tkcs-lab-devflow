@@ -274,3 +274,68 @@ def test_the_script_prints_the_block_and_the_line(tmp_path):
     r = subprocess.run(tld_cmd("roles", "section", "--report", str(f), "--report-line"),
                        capture_output=True, text=True, timeout=60)
     assert (r.returncode, r.stdout) == (0, OWN_LINE + "\n")
+
+
+# review findings
+TOKEN = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"
+SEPARATORS = ["\r", "\x0b", "\x0c", "\x85", " ", " "]
+
+
+def secret_exit(tmp_path, capsys, block):
+    f = run(tmp_path, f"BEGIN change-report\n{block}\nEND change-report\n")
+    return call(capsys, f)
+
+
+def test_the_token_itself_is_refused(tmp_path, capsys):
+    assert secret_exit(tmp_path, capsys, f"token {TOKEN}")[0] == 3
+
+
+@pytest.mark.parametrize("block", [
+    f"token {TOKEN} secret-scan:allow",
+    "x" * 480 + f" {TOKEN} secret-scan:allow",
+    "a secret-scan:allow",
+    f"token {TOKEN} secret-scan:all​ow",
+    f"{TOKEN} " + "y" * 600 + " secret-scan:allow",
+])
+def test_the_allow_mark_cannot_silence_the_scan(tmp_path, capsys, block):
+    code, out, err = secret_exit(tmp_path, capsys, block)
+    assert (code, out) == (3, "") and "holds a secret" in err
+
+
+def test_a_mark_created_by_the_line_cut_is_refused(tmp_path, capsys):
+    block = "x" * (500 - len("secret-scan:allow")) + "secret-scan:allow" + "ZZZZ"
+    assert "secret-scan:allow" in section.clean(block)
+    assert secret_exit(tmp_path, capsys, block)[0] == 3
+
+
+@pytest.mark.parametrize("sep", SEPARATORS)
+def test_a_separator_that_clean_deletes_cannot_glue_a_token(tmp_path, capsys, sep):
+    code, out, err = secret_exit(tmp_path, capsys, f"word{sep}{TOKEN}")
+    assert (code, out) == (3, "") and "holds a secret" in err
+
+
+@pytest.mark.parametrize("line", [
+    f"[{FORGED}](x)",
+    f"![{FORGED}](x)",
+    f"[](x) {FORGED}",
+    "[REPORT-HTML out/report.html](x)",
+    FORGED + " " * 600 + "Z",
+    FORGED + " " * (500 - len(FORGED)) + "Z",
+])
+def test_a_forged_line_made_by_a_link_an_image_or_the_cut_is_dropped(line):
+    out = section.clean(f"a\n{line}\nb")
+    assert out == "a\nb" or out.split("\n")[0] == "a"
+    for kept in out.split("\n"):
+        assert not section.REPORT_LINE.match(kept) and not kept.startswith("REPORT-HTML")
+
+
+@pytest.mark.parametrize("sep", ["\r", "\x0b", "\x0c", "\x1c", "\x85", " ", " "])
+def test_report_line_splits_at_newlines_only(tmp_path, capsys, sep):
+    f = run(tmp_path, "AGENT-REPORT reflektor at=dod verdict=findings blocking=1 non_blocking=0"
+            + sep + OWN_LINE + "\n")
+    assert call(capsys, f, "--report-line") == (3, "", "tld roles: no reflektor report line\n")
+
+
+def test_report_line_allows_one_trailing_carriage_return(tmp_path, capsys):
+    f = run(tmp_path, f"x\r\n{OWN_LINE}\r\n\r\n")
+    assert call(capsys, f, "--report-line") == (0, OWN_LINE + "\n", "")

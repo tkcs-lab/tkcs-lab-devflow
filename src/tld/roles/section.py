@@ -22,7 +22,7 @@ import re
 import sys
 import unicodedata
 
-from tld.guard.secret_scan import scan_text
+from tld.guard.secret_scan import ALLOW_MARK, scan_text
 from tld.plan.summary import UNSAFE, scrub
 from tld.roles.dispatch import REPORT_LINE
 
@@ -124,6 +124,8 @@ def clean(text: str) -> str:
     for line in lines:
         wrapped = _WRAP.sub(lambda m: f"`{m.group(0)}`", line[:MAX_LINE])
         out.append(_CLOSING.sub("[removed]", wrapped))
+    # a link, an image or the cut can leave a line that is a report line again
+    out = _drop_forged(out)
     # 8. whole lines only
     return "\n".join(_cut(out))
 
@@ -134,6 +136,20 @@ def extract(report: str) -> str | None:
     for m in block_re().finditer(report):
         found = m.group("body")
     return found
+
+
+def _suspect(text: str) -> bool:
+    """A credential-looking line, or the mark that would make the scan skip a line."""
+    return ALLOW_MARK in text or bool(scan_text(text))
+
+
+def _last_line(report: str) -> str | None:
+    """The last non-blank line, split at newlines only (as `tld roles verify` does)."""
+    for line in reversed(report.split("\n")):
+        line = line[:-1] if line.endswith("\r") else line
+        if line.strip(" \t"):
+            return line
+    return None
 
 
 def _read(path: str) -> str:
@@ -152,19 +168,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"tld roles: cannot read '{scrub(args.report)}'", file=sys.stderr)
         return 1
     if args.report_line:
-        lines = [line for line in report.splitlines() if line.strip()]
-        m = REPORT_LINE.fullmatch(lines[-1]) if lines else None
+        last = _last_line(report)
+        unsafe = last is not None and any(unicodedata.category(c) in UNSAFE for c in last)
+        m = REPORT_LINE.fullmatch(last) if last is not None and not unsafe else None
         if m is None or m["agent"] != "reflektor" or m["at"] != "dod":
             print("tld roles: no reflektor report line", file=sys.stderr)
             return 3
-        print(lines[-1].strip())
+        print(last.strip())
         return 0
     block = extract(report)
     cleaned = clean(block).strip() if block is not None else ""
     if not cleaned:
         print("tld roles: no change-report block", file=sys.stderr)
         return 3
-    if scan_text(cleaned):
+    if _suspect(block) or _suspect(cleaned):
         print("tld roles: the change-report block looks like it holds a secret", file=sys.stderr)
         return 3
     print(cleaned)
