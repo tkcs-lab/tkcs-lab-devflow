@@ -136,6 +136,7 @@ None before implementation and none after. The one human action outside the plan
 - **Unattended runs.** An unattended run that asks gets one TIMER block, and the message tells it to say so and stop.
 - **Changes after the final record.** A `review`, `land` or `setup` session that pushes, or an implement session that archives its workers after its last record, gets one DIRTY block per change; the message lets it write the record or say why not and stop.
 - **Lost updates.** The state file is replaced atomically, but two hooks that run at the same moment can still lose one update; the cost is one missed or one extra block.
+- **Error shape unverified.** The `isError` / `is_error` key of a failed tool response is an assumption checked only by hand-built test payloads, not against a live failed call; the second defence is that `PostToolUseFailure` is not registered.
 - **Runtime tool names.** If the runtime renames a timer, ask or worker tool, only the table and matcher in D4 change.
 - **No mutants.** `tests/mutation/mutants.yaml` is not extended; the unit tests of D3 and D2 carry the state machine and the verdict.
 - **Plugin update.** The hook behaviour reaches sessions only after the plugin is released and updated; until then the playbook rules apply alone.
