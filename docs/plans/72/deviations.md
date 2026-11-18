@@ -34,7 +34,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p7-board-client-page
 
-- pending
+- None.
 
 ## p8-playbooks
 
