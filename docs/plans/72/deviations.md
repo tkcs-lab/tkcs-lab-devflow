@@ -44,7 +44,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p9-retire
 
-- pending
+- review: security review found the guide claimed nothing leaves the machine but the download (the page embeds the full contents of the changed files and is stored on the board), and the pin refresh lacked the re-derivation of the link-target keys and the policies; the guide now says what is stored where and the refresh has the step
+- review: the allowed-domains row of cloud-environments.md now says that github.com opens git and HTTPS traffic to all of GitHub for every session of that environment and recommends a dedicated environment; the guide corrects several claims (card rules versus enforced controls, three build rounds, scratch copies, DELETE of a stored page)
+- retry: phase sent back twice for blocking doc findings
 
 ## Final review
 
