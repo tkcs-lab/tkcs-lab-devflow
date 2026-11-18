@@ -2,6 +2,8 @@
 """Download, check and unpack the pinned Reflektor release for the `reflektor` role.
 
     tld roles reflektor-prepare --dest DIR --repo CLONE --base BASE
+    tld roles reflektor-check --report FILE --root CLONE
+    tld roles reflektor-html (--file FILE | --send --answer FILE --dest DIR)
 
 `prepare` refuses a clone whose `.reflektor.json` is not plain (only the keys `base`, `targets` and `generated`,
 checked values, no hooks), a branch that changed that file, a missing or old Node and a PATH with an empty or
@@ -14,6 +16,11 @@ The PATH check comes first, so no program is looked up in the working directory;
 Exit 0 on success; exit 3 when the repository, the branch, Node or the network is not fit (the role then ends `n/a`);
 exit 1 when the download or the archive is not the pinned release. A message is `tld roles: reflektor: <reason>`
 on stderr. The pin proves the bytes, not the intent of the release. Python 3.11+, standard library.
+
+`reflektor-check` refuses a report whose `path` values leave the clone. `reflektor-html --file` adds the
+Content-Security-Policy to build's page and checks it against the pinned viewer; `--send` is the only way the
+orchestrator sends a page: it reads the role's saved answer, takes the path of its last `REPORT-HTML` line, opens
+it without following links, checks the bytes and writes the same text to `DIR/report.html`. Exit 1 on any refusal.
 """
 from __future__ import annotations
 
@@ -25,6 +32,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -34,6 +42,8 @@ import urllib.error
 from pathlib import Path
 
 from tld import net
+from tld.board import report_check
+from tld.guard import secret_scan
 
 PIN = {
     "version": "0.9.1",
@@ -51,6 +61,8 @@ CONFIG_MAX = 100000
 ALLOWED_KEYS = ("base", "targets", "generated")
 TARGET_NAMES = ("backend", "frontend", "database", "infrastructure", "cicd", "misc")
 GLOB_RE = re.compile(r"^[A-Za-z0-9._/*?{}-]+$")
+MAX_HTML = 64 * 1024 * 1024
+REPORT_HTML_RE = re.compile(r"/[A-Za-z0-9._/-]+/out/report\.html")
 REQUIRED_FILES = ("scripts/collect.mjs", "scripts/build.mjs", "assets/viewer.html", "SKILL.md")
 
 
@@ -283,6 +295,184 @@ def prepare(dest, repo, base, pin=None, fetch=None, node_major=None) -> Path:
     return out
 
 
+def _walk(value):
+    """Every (parent key, key, child) of a parsed JSON value, iteratively."""
+    stack = [(None, None, value, 0)]
+    while stack:
+        parent, key, item, depth = stack.pop()
+        if depth > report_check.MAX_DEPTH:
+            raise ValueError("nested too deeply")
+        yield parent, key, item
+        if isinstance(item, dict):
+            for k, child in item.items():
+                stack.append((key, k, child, depth + 1))
+        elif isinstance(item, list):
+            for child in item:
+                stack.append((parent, key, child, depth + 1))
+
+
+def _bad_path(raw, root_real: str) -> str | None:
+    """The reason a report `path` value is not acceptable, or None."""
+    if not isinstance(raw, str):
+        return "a path is not a string"
+    shown = raw[:60]
+    if (not raw or raw.startswith("/") or raw.startswith("~") or "\\" in raw or "\x00" in raw
+            or any(seg in ("", ".", "..") for seg in raw.split("/"))):
+        return f"path {shown!r} is not a plain relative path"
+    real = os.path.realpath(os.path.join(root_real, raw))
+    if real != root_real and not real.startswith(root_real.rstrip(os.sep) + os.sep):
+        return f"path {shown!r} leaves the clone"
+    return None
+
+
+def check_report(report_text, root) -> list[str]:
+    """The reasons an agent-written report.json is not acceptable (empty when it is)."""
+    if not isinstance(report_text, str):
+        return ["the report is not text"]
+    body = report_text[:-1] if report_text.endswith("\n") else report_text
+    if "\n" in body or "\r" in body:
+        return ["the report is not one line of JSON"]
+    try:
+        value = json.loads(body)
+    except (ValueError, RecursionError):
+        return ["the report is not valid JSON"]
+    if not isinstance(value, dict):
+        return ["the report is not a JSON object"]
+    root_real = os.path.realpath(str(root))
+    reasons: list[str] = []
+    try:
+        for _parent, key, child in _walk(value):
+            if key == "path":
+                why = _bad_path(child, root_real)
+                if why and why not in reasons:
+                    reasons.append(why)
+    except ValueError:
+        reasons.append("the report is nested too deeply")
+    return reasons
+
+
+ALLOW_MARK = "secret-scan:allow"
+_SPLITTERS = frozenset("\x0b\x0c\x1c\x1d\x1e\x1f\x85")
+
+
+def _splits_lines(s: str) -> bool:
+    """A character the secret scan's line splitting treats as a line break (or a category Zl or Zp)."""
+    return any(c in _SPLITTERS or unicodedata.category(c) in ("Zl", "Zp") for c in s)
+
+
+def verify_html(text) -> list[str]:
+    """`report_check.check` plus the secret scan of the raw text and of every decoded string and key of the data.
+
+    The scan skips a line that ends in its allow mark and splits on more characters than a newline, so a page
+    that carries the mark, or a line-splitting character in its data, is refused instead of scanned."""
+    reasons = report_check.check(text)
+    if reasons:
+        return reasons
+    if ALLOW_MARK in text:
+        return ["the page carries a secret-scan allow mark"]
+    got = report_check.split(text)
+    if _splits_lines(got[1]):
+        return ["the data holds a line-splitting character"]
+    value = report_check.parse_payload(got[1])
+    strings = []
+    for _parent, key, child in _walk(value):
+        for s in (key, child):
+            if isinstance(s, str):
+                strings.append(s)
+    for s in strings:
+        if ALLOW_MARK in s:
+            return ["the page carries a secret-scan allow mark"]
+        if _splits_lines(s):
+            return ["the data holds a line-splitting character"]
+    hits = secret_scan.scan_text(text)
+    for s in strings:
+        if not hits:
+            hits = secret_scan.scan_text(s)
+    if hits:
+        names = sorted({name for _n, name, _d in hits})
+        return [f"the page holds something that looks like a credential ({', '.join(names)})"]
+    return []
+
+
+def _read_regular(path, what: str) -> str:
+    """Read a regular file (never through a symlink) of at most MAX_HTML bytes as UTF-8, or PrepareError(1)."""
+    try:
+        fd = os.open(str(path), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    except OSError as exc:
+        raise PrepareError(1, f"cannot open {what}: {type(exc).__name__}") from exc
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise PrepareError(1, f"{what} is not a regular file")
+        if st.st_size > MAX_HTML:
+            raise PrepareError(1, f"{what} is larger than {MAX_HTML} bytes")
+        with os.fdopen(fd, "rb", closefd=False) as fh:
+            data = fh.read(MAX_HTML + 1)
+    except OSError as exc:
+        raise PrepareError(1, f"cannot read {what}: {type(exc).__name__}") from exc
+    finally:
+        os.close(fd)
+    if len(data) > MAX_HTML:
+        raise PrepareError(1, f"{what} is larger than {MAX_HTML} bytes")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PrepareError(1, f"{what} is not UTF-8") from exc
+
+
+def _refuse(reasons: list[str]) -> PrepareError:
+    return PrepareError(1, "\n".join(reasons))
+
+
+def harden_html(file) -> Path:
+    """Add CSP_META directly after the single <head> of build's page, check the result, write it only when clean."""
+    text = _read_regular(file, "the page")
+    if report_check.CSP_META in text:
+        raise PrepareError(1, "already hardened")
+    if text.count("<head>") != 1:
+        raise PrepareError(1, "the page must have exactly one <head>")
+    at = text.index("<head>") + len("<head>")
+    hardened = text[:at] + report_check.CSP_META + text[at:]
+    reasons = verify_html(hardened)
+    if reasons:
+        raise _refuse(reasons)
+    path = Path(file)
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(hardened, encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError as exc:
+        raise PrepareError(1, f"cannot write the page: {type(exc).__name__}") from exc
+    return path
+
+
+def send_copy(answer_file, dest) -> Path:
+    """Copy the page named by the last REPORT-HTML line of a saved answer to DEST/report.html after checking it."""
+    answer = _read_regular(answer_file, "the answer")
+    rest = None
+    for line in answer.split("\n"):
+        if line.startswith("REPORT-HTML "):
+            rest = line[len("REPORT-HTML "):].rstrip("\r")
+    if rest is None:
+        raise PrepareError(1, "the answer has no REPORT-HTML line")
+    if not REPORT_HTML_RE.fullmatch(rest) or ".." in rest.split("/"):
+        raise PrepareError(1, "the REPORT-HTML path is not an out/report.html path")
+    text = _read_regular(rest, "the page")
+    reasons = verify_html(text)
+    if reasons:
+        raise _refuse(reasons)
+    out = Path(dest)
+    try:
+        out.mkdir(parents=True, exist_ok=True)
+        target = out / "report.html"
+        fd = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(text.encode("utf-8"))
+    except OSError as exc:
+        raise PrepareError(1, f"cannot write the page: {type(exc).__name__}") from exc
+    return target
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -290,11 +480,36 @@ def main(argv: list[str] | None = None) -> int:
     pp.add_argument("--dest", required=True)
     pp.add_argument("--repo", required=True)
     pp.add_argument("--base", required=True)
+    ck = sub.add_parser("check", help="check the paths of an agent-written report")
+    ck.add_argument("--report", required=True)
+    ck.add_argument("--root", required=True)
+    hp = sub.add_parser("html", help="harden build's page, or check and copy a saved answer's page")
+    mode = hp.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--file")
+    mode.add_argument("--send", action="store_true")
+    hp.add_argument("--answer")
+    hp.add_argument("--dest")
     args = ap.parse_args(argv)
+    if args.cmd == "html" and args.send and not (args.answer and args.dest):
+        ap.error("--send needs --answer and --dest")
+    if args.cmd == "html" and not args.send and (args.answer or args.dest):
+        ap.error("--answer and --dest go with --send")
     try:
+        if args.cmd == "check":
+            text = _read_regular(args.report, "the report")
+            reasons = check_report(text, args.root)
+            for r in reasons:
+                print(f"tld roles: reflektor: {r}", file=sys.stderr)
+            return 1 if reasons else 0
+        if args.cmd == "html":
+            out = send_copy(args.answer, args.dest) if args.send else harden_html(args.file)
+            if args.send:
+                print(out)
+            return 0
         out = prepare(Path(args.dest), Path(args.repo), args.base)
     except PrepareError as exc:
-        print(f"tld roles: reflektor: {exc.message}", file=sys.stderr)
+        for line in exc.message.split("\n"):
+            print(f"tld roles: reflektor: {line}", file=sys.stderr)
         return exc.code
     print(out)
     print(os.path.abspath(shutil.which("node")))
