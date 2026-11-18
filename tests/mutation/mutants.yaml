@@ -51,6 +51,8 @@ tests:
   src/tld/ops/release_prepare.py:
   - tests/core/test_release_prepare.py
   - tests/core/test_guard_corpus.py
+  src/tld/ops/spec.py:
+  - tests/core/test_ops_spec.py
   src/tld/guard/integrity.py:
   - tests/core/test_guard_corpus.py
   - tests/core/test_guard_trust.py
@@ -627,3 +629,18 @@ mutants:
   why: the files are not compared after writing, so a file that did not move goes unnoticed
   old: '    if not _agree(prepared["profile"], root, prepared["next"]):'
   new: '    if False:'
+- id: SP1
+  file: src/tld/ops/spec.py
+  why: the npm install runs package scripts of OpenSpec and its dependencies
+  old: '        argv = ["npm", "install", "--ignore-scripts", "--no-save", "--no-audit", "--no-fund",'
+  new: '        argv = ["npm", "install", "--no-save", "--no-audit", "--no-fund",'
+- id: SP2
+  file: src/tld/ops/spec.py
+  why: an id with a trailing newline or a double hyphen is accepted
+  old: '        if ident is not None and not re.fullmatch(ID_RE, ident):'
+  new: '        if ident is not None and not re.match(ID_RE, ident):'
+- id: SP3
+  file: src/tld/ops/spec.py
+  why: the whole environment, tokens included, reaches npm and node
+  old: '    env = {k: os.environ[k] for k in ENV_NAMES if k in os.environ}'
+  new: '    env = dict(os.environ)'
