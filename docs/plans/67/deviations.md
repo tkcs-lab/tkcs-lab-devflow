@@ -12,6 +12,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - worker: the brief negative test for grep board ask with an id-like output line was not written: the mandated ASK_COMMAND regex matches that command, so it counts as an ask; worker had no tld, orchestrator ran the roles
 - review: security-reviewer: 3 non-blocking findings (RecursionError in _is_record, fixed tmp file name in _save, record write applied before a change in one command gives a spurious dirty block); left as is
+- final: test_stop_chain_ends and test_the_timer_rule_precedes_the_first_record_rule assert timer, first-record, then no block (not the brief sequence timer, first-record, dirty), because plan D3 lets the dirty rule fire only after a record write
+- final: test_a_continuing_stop_does_not_block was replaced by test_a_continuing_stop_evaluates_the_next_rule, since a continuing stop no longer lets a stop through
 
 ## p3-gate-adapter
 
@@ -30,7 +32,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: blocking: p2-gate-core test changes missing from the deviations file; added by the orchestrator, no code change
 
 ## Finishing
 
