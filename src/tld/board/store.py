@@ -3,18 +3,19 @@
 
     from tld.board.store import Store, Conflict, Invalid
 
-Five tables. `records(id, version, data)`: `Store.set` validates a status record (tld.board.record) and
+Six tables. `records(id, version, data)`: `Store.set` validates a status record (tld.board.record) and
 enforces optimistic concurrency with `if_version`. `asks(id, state, created_at, data)`: `Store.create_ask`
 validates an ask (tld.board.ask) and assigns its id; `answer_ask` and `cancel_ask` move an open ask to its
 final state. `revoked_sessions(nonce, expires)` keeps the owner sessions a logout ended, so a logout survives a
 restart of the server. `dismissals(doc_id, version, dismissed_at)` keeps the owner's dismissal of a record
 next to it (never inside it); it counts only while the record is still at that version. `usage_samples(kind, resets_at, observed_at,
 utilization, plan, factor, source)` keeps the raw subscription readings (`add_usage`, `list_usage`; limits in
-tld.board.usage); the plan and the factor are applied when they are read, not when they are stored. The schema version is SQLite's `user_version`; opening an older database adds what is missing
+tld.board.usage); the plan and the factor are applied when they are read, not when they are stored. `reports(doc_id, size, sha256, created_at, body)` keeps one HTML report page per record beside it (`put_report`, `get_report`, `report_meta`, `delete_report`; deleting the record deletes it). The schema version is SQLite's `user_version`; opening an older database adds what is missing
 and keeps every record. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import secrets
@@ -28,8 +29,10 @@ from tld.board import usage as usage_model
 
 MAX_RECORD = 262144
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 MAX_OPEN_ASKS = 200
+MAX_REPORT = 20 * 1024 * 1024
+MAX_REPORTS_TOTAL = 500 * 1024 * 1024
 
 
 class Conflict(Exception):
@@ -50,6 +53,14 @@ class Invalid(Exception):
 
 class NotFound(Exception):
     pass
+
+
+class ReportError(Exception):
+    """A report is not acceptable. `code`: invalid_id, no_record (404), bad_body (400), too_large (413), store_full (507)."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
 
 
 def utc_now() -> str:
@@ -92,6 +103,11 @@ class Store:
             "kind TEXT NOT NULL, resets_at INTEGER NOT NULL, observed_at INTEGER NOT NULL, "
             "utilization REAL NOT NULL, plan TEXT NOT NULL, factor REAL NOT NULL, source TEXT NOT NULL, "
             "PRIMARY KEY (kind, resets_at, observed_at))")
+        # 6: one checked HTML report page per record, beside the record (never in it).
+        self._db.execute(
+            "CREATE TABLE IF NOT EXISTS reports("
+            "doc_id TEXT PRIMARY KEY, size INTEGER NOT NULL, sha256 TEXT NOT NULL, created_at TEXT NOT NULL, "
+            "body BLOB NOT NULL)")
         self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self._db.commit()
 
@@ -149,6 +165,65 @@ class Store:
         with self._lock:
             cur = self._db.execute("DELETE FROM records WHERE id = ?", (doc_id,))
             self._db.execute("DELETE FROM dismissals WHERE doc_id = ?", (doc_id,))
+            self._db.execute("DELETE FROM reports WHERE doc_id = ?", (doc_id,))
+            self._db.commit()
+            return cur.rowcount > 0
+
+    # -- reports --------------------------------------------------------------------------------
+
+    @staticmethod
+    def _reports_total(conn: sqlite3.Connection, doc_id: str) -> int:
+        """The total size of the reports of the records other than `doc_id` (the caller holds the lock)."""
+        return conn.execute("SELECT COALESCE(SUM(size), 0) FROM reports WHERE doc_id != ?", (doc_id,)).fetchone()[0]
+
+    def put_report(self, doc_id: str, body: bytes) -> dict:
+        """Store (or replace) the report of a record. The page rule is the caller's (tld.board.report_check).
+        Raises ReportError."""
+        if not isinstance(doc_id, str) or not ID_RE.match(doc_id):
+            raise ReportError("invalid_id")
+        if not isinstance(body, (bytes, bytearray)) or len(body) < 1 or b"\0" in body:
+            raise ReportError("bad_body")
+        if len(body) > MAX_REPORT:
+            raise ReportError("too_large")
+        try:
+            bytes(body).decode("utf-8")
+        except UnicodeDecodeError:
+            raise ReportError("bad_body") from None
+        digest = hashlib.sha256(body).hexdigest()
+        with self._lock:
+            if self._get(doc_id) is None:
+                raise ReportError("no_record")
+            if self._reports_total(self._db, doc_id) + len(body) > MAX_REPORTS_TOTAL:
+                raise ReportError("store_full")
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            self._db.execute(
+                "INSERT OR REPLACE INTO reports(doc_id, size, sha256, created_at, body) VALUES (?, ?, ?, ?, ?)",
+                (doc_id, len(body), digest, stamp, bytes(body)))
+            self._db.commit()
+        return {"id": doc_id, "size": len(body), "sha256": digest}
+
+    def get_report(self, doc_id: str) -> tuple[bytes, dict] | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT size, sha256, created_at, body FROM reports WHERE doc_id = ?", (doc_id,)).fetchone()
+        if row is None:
+            return None
+        return bytes(row[3]), {"size": row[0], "sha256": row[1], "created_at": row[2]}
+
+    def report_meta(self, doc_ids: list[str]) -> dict[str, dict]:
+        """{doc_id: {size, sha256, created_at}} of the given records that have a report; never reads a body."""
+        ids = list(doc_ids)
+        if not ids:
+            return {}
+        marks = ",".join("?" for _ in ids)
+        with self._lock:
+            rows = self._db.execute(
+                f"SELECT doc_id, size, sha256, created_at FROM reports WHERE doc_id IN ({marks})", ids).fetchall()
+        return {r[0]: {"size": r[1], "sha256": r[2], "created_at": r[3]} for r in rows}
+
+    def delete_report(self, doc_id: str) -> bool:
+        with self._lock:
+            cur = self._db.execute("DELETE FROM reports WHERE doc_id = ?", (doc_id,))
             self._db.commit()
             return cur.rowcount > 0
 

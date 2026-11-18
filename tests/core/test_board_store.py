@@ -8,6 +8,7 @@ import pytest
 from board_helpers import ask_doc
 from conftest import FIXTURES
 
+from tld.board import store as store_mod
 from tld.board.store import MAX_RECORD, Conflict, Invalid, NotFound, Store
 
 
@@ -137,7 +138,7 @@ def test_an_old_database_is_migrated_and_keeps_its_records(tmp_path):
     db.commit()
     db.close()
     store = Store(str(path))
-    assert store.schema_version() == 5
+    assert store.schema_version() == store_mod.SCHEMA_VERSION
     assert store.get("f-running-ok--run--plan-f-running-ok") == {"id": "f-running-ok--run--plan-f-running-ok", "version": 7, "dismissed_at": None, "data": record()}
     ask = store.create_ask(ask_doc())
     reopened = Store(str(path))  # idempotent on a migrated database
@@ -154,7 +155,7 @@ def test_a_version_2_database_gains_the_revoked_sessions_table(tmp_path):
     db.commit()
     db.close()
     store = Store(str(path))
-    assert store.schema_version() == 5 and not store.session_revoked("a" * 32)
+    assert store.schema_version() == store_mod.SCHEMA_VERSION and not store.session_revoked("a" * 32)
     store.revoke_session("a" * 32, 2000, now=1000)
     store.revoke_session("b" * 32, 1500, now=1000)
     assert Store(str(path)).session_revoked("a" * 32)  # kept across a reopen (a server restart)
@@ -265,7 +266,7 @@ def test_a_version_3_database_opens_at_schema_5_and_keeps_its_data(tmp_path):
     db.commit()
     db.close()
     store = Store(str(path))
-    assert store.schema_version() == 5
+    assert store.schema_version() == store_mod.SCHEMA_VERSION
     assert store.get("f-running-ok--run--plan-f-running-ok") == {"id": "f-running-ok--run--plan-f-running-ok", "version": 2, "dismissed_at": None,
                                          "data": record()}
     ask = store.create_ask(ask_doc())

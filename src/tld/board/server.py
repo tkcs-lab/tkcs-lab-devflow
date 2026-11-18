@@ -45,9 +45,11 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from tld.board import build as build_board
 from tld.board import mcp as board_mcp
+from tld.board import report_check
+from tld.board import store as board_store
 from tld.board import usage
 from tld.board.record import TIMESTAMP
-from tld.board.store import Conflict, Invalid, NotFound, Store
+from tld.board.store import Conflict, Invalid, NotFound, ReportError, Store
 
 MAX_BODY = 1048576
 MAX_LOGIN_BODY = 4096
@@ -56,6 +58,8 @@ MIN_PASSPHRASE = 16
 MIN_SECRET = 32
 SOCKET_TIMEOUT = 15      # seconds a connection may sit idle (headers, body, keep-alive) before it is closed
 BODY_DEADLINE = 30       # seconds a request body may take in total, however slowly it trickles in
+REPORT_DEADLINE = 120    # seconds a report upload may take in total
+REPORT_SLOTS = threading.BoundedSemaphore(1)  # one report upload at a time (its body is held in memory)
 MAX_CONNECTIONS = 64     # connections served at once; one more is answered 503 and closed
 
 CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; "
@@ -71,6 +75,7 @@ ROUTES = (
     (re.compile(r"^/api/records/([^/]+)$"), "record", ("GET", "PUT", "DELETE")),
     (re.compile(r"^/api/records/([^/]+)/dismiss$"), "dismiss", ("POST",)),
     (re.compile(r"^/api/records/([^/]+)/restore$"), "restore", ("POST",)),
+    (re.compile(r"^/api/records/([^/]+)/report$"), "report", ("GET", "PUT", "DELETE")),
     (re.compile(r"^/api/asks$"), "asks", ("GET", "POST")),
     (re.compile(r"^/api/asks/([^/]+)$"), "ask", ("GET",)),
     (re.compile(r"^/api/asks/([^/]+)/answer$"), "answer", ("POST",)),
@@ -91,6 +96,9 @@ POLICY: dict[tuple[str, str], frozenset[str]] = {
     ("record", "DELETE"): frozenset({SESSION}),
     ("dismiss", "POST"): frozenset({OWNER}),
     ("restore", "POST"): frozenset({OWNER}),
+    ("report", "GET"): frozenset({OWNER}),
+    ("report", "PUT"): frozenset({SESSION}),
+    ("report", "DELETE"): frozenset({SESSION}),
     ("asks", "GET"): frozenset({SESSION, OWNER}),
     ("asks", "POST"): frozenset({SESSION}),
     ("ask", "GET"): frozenset({SESSION, OWNER}),
@@ -429,7 +437,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
         getattr(self, "_do_" + name)(method, item_id, principal)
 
-    def _read_body(self, limit: int = MAX_BODY) -> bytes | None:
+    def _read_body(self, limit: int = MAX_BODY, seconds: float | None = None) -> bytes | None:
         """The request body, or None after an error response has been sent."""
         header = self.headers.get("Content-Length")
         if header is None or not header.strip().isdigit():
@@ -442,7 +450,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(413, "payload_too_large")
             return None
         chunks, left = [], length
-        deadline = time.monotonic() + BODY_DEADLINE
+        deadline = time.monotonic() + (BODY_DEADLINE if seconds is None else seconds)
         try:
             while left > 0:
                 chunk = self.rfile.read1(min(left, 65536))
@@ -510,7 +518,10 @@ class Handler(BaseHTTPRequestHandler):
     # -- records --------------------------------------------------------------------------------
 
     def _do_records(self, method, item_id, principal) -> None:
-        self._json(200, {"records": self.server.store.list()})
+        store = self.server.store
+        records = store.list()
+        meta = store.report_meta([r["id"] for r in records])
+        self._json(200, {"records": [{**r, "report": meta.get(r["id"])} for r in records]})
 
     def _do_record(self, method, doc_id, principal) -> None:
         store = self.server.store
@@ -519,7 +530,8 @@ class Handler(BaseHTTPRequestHandler):
             if record is None:
                 self._error(404, "not_found")
             else:
-                self._json(200, record)
+                meta = store.report_meta([record["id"]])
+                self._json(200, {**record, "report": meta.get(record["id"])})
         elif method == "PUT":
             self._put(doc_id or "")
         elif store.delete(doc_id or ""):
@@ -547,6 +559,70 @@ class Handler(BaseHTTPRequestHandler):
             self._error(422, "invalid", errors=exc.errors)
         else:
             self._json(200, result)
+
+    # -- the report of a record -----------------------------------------------------------------
+
+    REPORT_HEADERS = {
+        "Content-Disposition": 'inline; filename="change-report.html"',
+        "X-Frame-Options": "DENY",
+        "Content-Security-Policy": (
+            "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval'; "
+            "style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; "
+            "base-uri 'none'; frame-ancestors 'none'"),
+    }
+
+    def _do_report(self, method, doc_id, principal) -> None:
+        store = self.server.store
+        doc_id = doc_id or ""
+        if method == "GET":
+            found = store.get_report(doc_id)
+            if found is None:
+                self._error(404, "not_found")
+            else:
+                self._send(200, found[0], "text/html; charset=utf-8", dict(self.REPORT_HEADERS))
+        elif method == "DELETE":
+            if store.delete_report(doc_id):
+                self._json(200, {"deleted": True})
+            else:
+                self._error(404, "not_found")
+        else:
+            self._put_report(doc_id)
+
+    def _put_report(self, doc_id: str) -> None:
+        slots = REPORT_SLOTS
+        if not slots.acquire(blocking=False):
+            self.close_connection = True
+            self._error(503, "busy", {"Retry-After": "1"})
+            return
+        try:
+            if self.server.store.get(doc_id) is None:
+                self._error(404, "not_found")
+                return
+            body = self._read_body(board_store.MAX_REPORT, seconds=REPORT_DEADLINE)
+            if body is None:
+                return
+            try:
+                text = body.decode("utf-8")
+            except UnicodeDecodeError:
+                text = ""
+            if not body or not text or "\0" in text:
+                self._error(400, "bad_request")
+                return
+            reasons = report_check.check(text)
+            if reasons:
+                self._error(422, "invalid_report", reasons=reasons)
+                return
+            try:
+                result = self.server.store.put_report(doc_id, body)
+            except ReportError as exc:
+                status, code = {"invalid_id": (404, "not_found"), "no_record": (404, "not_found"),
+                                "bad_body": (400, "bad_request"), "too_large": (413, "payload_too_large"),
+                                "store_full": (507, "store_full")}[exc.code]
+                self._error(status, code)
+            else:
+                self._json(200, result)
+        finally:
+            slots.release()
 
     def _do_dismiss(self, method, doc_id, principal) -> None:
         ok, payload = self._read_json()
