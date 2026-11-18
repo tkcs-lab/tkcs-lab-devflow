@@ -5,7 +5,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p1-items-cli
 
-- pending
+- worker: none; worker ran tests with system python3 (no .venv) and had no tld, so the orchestrator ran the roles
+- review: security-reviewer: 3 non-blocking findings (depends_on not validated, RecursionError exits 1, raw ids echoed in error text); left as is
 
 ## p2-gate-core
 
