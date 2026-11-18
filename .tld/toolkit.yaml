@@ -55,6 +55,8 @@ hooks:
     max_attempts: 3
   plan_gate:
     enabled: true
+  board_gate:
+    enabled: true
 
 ci:
   time_budget_minutes: 60
