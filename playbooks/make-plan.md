@@ -27,6 +27,8 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
      `docs.must_read`.
    - "ADR parts" (the ADRs section, the ADR step, the ADR `final_checks` item) apply only with `docs.adr_dir`;
      without it leave them out and never mention ADRs. "Changelog parts" apply only with `docs.changelog` whose `policy` is not `release-only`.
+   - "Spec parts" (the spec change, `spec_change`, the spec steps of the review) apply only with the profile's
+     `spec` block; without it leave them out and never mention specs.
    - "Index parts" apply only with `docs.index`; then follow the reading protocol of
      [policies/docs.md](policies/docs.md).
    - "The dispatch table" is `ci.dispatchable` ([policies/pr-steward.md](policies/pr-steward.md)).
@@ -86,7 +88,9 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
    change, and, with ADRs, the ADR index and only the ADRs whose decision touches the change. Without
    `docs.index`: the ADR index and every ADR (with ADRs), and every reference doc the change touches. Read
    every source module the change touches. Broad sweeps go to `run_helper(<question>, <level>)`: `fast` when the
-   sweep only locates or enumerates, `standard` when it explains behaviour; read the files that matter yourself. The plan's quality depends on this step: a worker executes what the plan says
+   sweep only locates or enumerates, `standard` when it explains behaviour; read the files that matter yourself. Spec parts:
+   read the existing capabilities from the files `openspec/specs/*/spec.md`; when `openspec/specs` does not
+   exist, stop and tell the owner to run the spec command's init first. The plan's quality depends on this step: a worker executes what the plan says
    and does not rediscover what it leaves out.
 3. If a decision is genuinely the human's (scope, product behaviour, a trade-off with no default in the code or
    the ADRs), `ask_human` it now, all such questions in one ask (`choice` with your recommendation first, or
@@ -129,6 +133,13 @@ the pull request in one go. In this order:
    change, and the docs the index routes to (index parts).
 4. **Design**: every decision already made (names, signatures, strings, schema), and what you rejected where it
    is not obvious.
+
+   Spec change (spec parts): when the change alters observable behaviour, the delta files in full as text (the
+   rules of "The spec change" apply), then the steps: `tld ops spec new-change --profile .tld/toolkit.yaml <slug>`,
+   write the files, `tld ops spec validate --profile .tld/toolkit.yaml --change <slug>`, implement,
+   `tld ops spec archive --profile .tld/toolkit.yaml <slug>`, commit. Acceptance holds two more items:
+   `tld ops spec validate --profile .tld/toolkit.yaml` exits 0, and `openspec/changes/<slug>` does not exist (it
+   moved to `openspec/changes/archive/`).
 5. **Steps**: numbered and prescriptive, naming files, symbols and the tests to extend, ending with docs, the
    changelog line (changelog parts), the docs-index rows (index parts), and an ADR if the change meets
    `docs.adr_bar` (ADR parts).
@@ -205,6 +216,26 @@ to review X", no hidden markup (an HTML comment or a details block).
    `status=blocked` instead of improvising).
 7. **Implementation manifest**: a fenced ` ```yaml ` block, below.
 
+### The spec change (spec parts)
+
+Part of the Design section, written when the Design is settled; its files are committed to the feature branch
+with the plan.
+
+1. Decide whether the change alters observable behaviour. When it does not (a refactor, tooling, docs), write no
+   change, set no `spec_change` and say so in the plan's Scope. When a revision of an existing plan drops its
+   behaviour change, delete the folder with `git rm -r openspec/changes/<plan slug>/`.
+2. When it does: unless the folder `openspec/changes/<plan slug>/` exists already (a revision), run
+   `tld ops spec new-change --profile .tld/toolkit.yaml <plan slug>`. Then write
+   `openspec/changes/<plan slug>/proposal.md` (Why, What Changes, Capabilities, Impact) and one
+   `specs/<capability>/spec.md` delta per capability: `## ADDED`, `## MODIFIED` (the whole existing requirement
+   block, copied from `openspec/specs/` and then edited) or `## REMOVED` (with Reason and Migration); a new
+   capability starts with `## Purpose`. Write no `design.md`: the Design section is that. A delta states
+   what is observable and never names a file or a function.
+3. Run `tld ops spec validate --profile .tld/toolkit.yaml --change <plan slug>`; it must exit 0 before the plan
+   is pushed.
+4. Name every `#### Scenario` of the change in an acceptance item of the phase that makes it true.
+5. Put `spec_change: <plan slug>` in the manifest; the retirement phase carries the archive rules below.
+
 ### The manifest
 
 The implement playbook parses this block and nothing else, so it is exact; a key that is not shown here is an
@@ -215,6 +246,7 @@ plan_slug: <slug>
 feature_branch: <type>/<slug>          # <branch pattern>; with git.branch_types, the type is one of them
 tracking_issue: <n>                     # optional; the issue created or named in the ask
 closes: [<n>]                           # optional; other issues named in the ask
+spec_change: <plan slug>   # optional; spec parts only; the OpenSpec change this plan carries
 max_parallel: 2                         # phases in one wave must have disjoint `touches`
 manual_before:                          # the human does these BEFORE any phase starts
   - id: mb1-<kebab>
@@ -233,6 +265,7 @@ final_checks:                           # checked before the PR opens
   - <each ADR from the ADRs section exists, is Accepted, and is in docs.adr_index>   # ADR parts only
   - <the changelog has entries under docs.changelog.section and no version heading>   # changelog parts only
   - <`tld ops docs-index check --profile .tld/toolkit.yaml` exits 0>   # index parts only
+  - <`tld ops spec validate --profile .tld/toolkit.yaml` exits 0 and `openspec/changes/<spec_change>` does not exist>   # spec parts only
 phases:
   - id: p1-<kebab>
     title: <one line>
@@ -251,6 +284,14 @@ Optional per phase, rarely: `human_gate: true` (section 3), `worker_level: fast`
 `worker_level_reason:` (below). A phase's `touches` never names the plan or its deviations file. The last phase
 is always the retirement phase: it writes the ADRs (ADR parts), updates the reference docs, adds the changelog entry if earlier phases
 did not (changelog parts), and does only the parts of that list that apply.
+
+Spec parts: with `spec_change` the retirement phase lists `openspec/**` in `touches`, no other phase touches
+`openspec/`, and its brief holds these rules in this order: (1) reconcile `openspec/changes/<spec_change>/` with the
+deviations file, so the deltas describe what was built; (2) `git diff --quiet $(git merge-base HEAD origin/<main>)
+origin/<main> -- openspec/specs` must exit 0, otherwise stop with `status=blocked` (main changed the specs, so a
+MODIFIED block may be stale); (3) `tld ops spec archive --profile .tld/toolkit.yaml <spec_change>`; (4)
+`tld ops spec validate --profile .tld/toolkit.yaml` must exit 0; (5) `grep -rn "TBD" openspec/specs` must print
+nothing; (6) commit the moved change and the updated specs.
 
 Index parts: the retirement phase also updates the docs index: one row per doc the plan added, moved or deleted
 (the plan document is never indexed), the ADR-index rows, and the entry-file lines a change made untrue; it runs
@@ -327,7 +368,8 @@ list with severities of anything that: fails Sizing; leaves a decision open in a
 wave share a path in `touches`; puts a manual step in the middle or calls something manual that the dispatch
 table can do; contradicts a must-read doc, an accepted ADR or the code; leaves the retirement phase without the
 index rows for the docs the plan adds, or a brief without a `Read first:` line (index parts); a `fast` phase that does not meet the fast bullet; or would fail
-`tld plan validate-manifest`. Fix what you agree with; say why for the rest in your final reply.
+`tld plan validate-manifest`; spec parts: a `#### Scenario` that no acceptance item names, a MODIFIED block that is not
+the whole existing block, or a delta that names a file or a function. Fix what you agree with; say why for the rest in your final reply.
 
 The same review also checks that the Summary matches the Design, that every user-visible change is in
 `**Use it:**` or `**Scope:**`, and that `**Review focus:**` names the riskiest decisions.
