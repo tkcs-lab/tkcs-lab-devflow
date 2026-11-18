@@ -48,8 +48,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: the first final review (no tld available to it) found the deviations file lacked the four p5 playbook decisions; the orchestrator recorded them under p5 and p2. The security and code roles then ran with no blocking finding
 
 ## Finishing
 
-- pending
+- final: scope check: p2 had no out-of-scope paths; for p1, p3, p4, p5, p6, p7 and p8 the check ran after the merge, so it was skipped, and every changed file was verified by hand to be in some phase touches
