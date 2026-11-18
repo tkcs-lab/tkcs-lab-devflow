@@ -259,6 +259,16 @@ mutants:
   why: when w/o diff point
   old: 'if "when" in entry and not any(pt in DIFF_POINTS for pt in points):'
   new: 'if False:'
+- id: VM14
+  file: src/tld/plan/manifest.py
+  why: the last phase is not excluded from the openspec fence, so the archive phase is flagged
+  old: '        for pid in ids[:-1]:'
+  new: '        for pid in ids:'
+- id: VM15
+  file: src/tld/plan/manifest.py
+  why: spec_change without the profile's spec block is accepted
+  old: '            if profile is not None and not isinstance(profile.get("spec"), dict):'
+  new: '            if False:'
 - id: VM1
   file: src/tld/plan/manifest.py
   why: max_parallel 0 ok

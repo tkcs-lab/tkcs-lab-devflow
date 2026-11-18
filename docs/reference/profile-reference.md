@@ -199,5 +199,6 @@ keys, unique phase ids, known `depends_on`, no cycles, `brief` and `acceptance` 
 `complexity` of `S` or `M`, a `worker_level` of `strong`, `standard` or `fast` and a `worker_level_reason` for
 `strong`, honest manual-step entries, `feature_branch` against `git.branch_types`, and that phases which can run
 at the same time share no path in `touches` (globs included). `tracking_issue` is optional everywhere.
+`spec_change` (optional) names the OpenSpec change the plan carries; the profile needs a `spec` block and only the last phase may touch `openspec/`.
 `/implement` also runs `tld plan check-url` (a plan only from `<main>` or a feature branch of the same repository, at `<plan_dir>/<n>/plan.md`),
 `tld plan branch-name` and `tld plan phase-status`.
