@@ -26,7 +26,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p5-real-run
 
-- pending
+- None.
 
 ## p6-board-store
 
