@@ -2,13 +2,15 @@
 // moves the record to Running with "answer received", Dismiss moves a "needs you" card (and a "PR open", Running or
 // Done card) to Hidden, Restore brings it back, a session rewrite after a dismissal brings it back too, and a 409
 // shows the notice and keeps the card.
-// Usage: node board_links_page_check.js BASE TOKEN PASSPHRASE
+// It also reads two seeded cards (never writes them): the first has a stored report and shows a "Change report" link
+// that opens the page in a sandboxed tab, the second has none; an entry with an id outside the record grammar gets no link.
+// Usage: node board_links_page_check.js BASE TOKEN PASSPHRASE REPORT_ID NO_REPORT_ID
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
 
-const [base, token, passphrase] = process.argv.slice(2);
+const [base, token, passphrase, reportId, plainId] = process.argv.slice(2);
 const FIXTURE = path.join(__dirname, "fixtures", "board-records.json");
 const now = () => new Date().toISOString().replace(/\.\d+Z$/, "Z");
 
@@ -165,6 +167,36 @@ function needsRecord(base_, id) {
     await page.waitForSelector(doneHidden, { state: "attached", timeout: 5000 });
     assert.ok((await page.textContent(doneHidden)).includes("dismissed"), "Done card: dismissed badge");
     assert.strictEqual(await page.locator('[data-section="done"] > [data-doc="links-done--run--plan-links-done"]').count(), 0, "gone from Done");
+
+    // The Change report link: present on the card with a report only, a sandboxed tab, and never for a bad id.
+    const withReport = '[data-doc="' + reportId + '"]';
+    const without = '[data-doc="' + plainId + '"]';
+    await page.waitForSelector(withReport, { timeout: 5000 });
+    for (const sel of [withReport, without]) {
+      if (!(await page.evaluate((s) => document.querySelector(s).open, sel))) await page.click(sel + " > summary .name");
+    }
+    const link = page.locator(withReport + ' .detail a:text-matches("^Change report [(]")');
+    assert.strictEqual(await link.count(), 1, "one Change report link");
+    assert.strictEqual(await link.getAttribute("href"), "api/records/" + reportId + "/report");
+    assert.strictEqual(await link.getAttribute("target"), "_blank");
+    assert.strictEqual(await link.getAttribute("rel"), "noopener noreferrer");
+    assert.strictEqual(await page.locator(without + ' .detail a:text-matches("^Change report")').count(), 0, "no link without a report");
+    const [tab] = await Promise.all([context.waitForEvent("page"), page.click('a:text-matches("^Change report")')]);
+    await tab.waitForLoadState();
+    assert.strictEqual(await tab.evaluate(() => window.origin), "null");
+    assert.strictEqual(await tab.evaluate(() => fetch("/api/records").then(() => "ok", () => "blocked")), "blocked");
+    assert.strictEqual((await tab.evaluate(() => document.body.innerText)).trim(), "report text");
+    await tab.close();
+
+    const real = await (await fetch(base + "/api/records", { headers: { Authorization: "Bearer " + token } })).json();
+    const donor = real.records.find((e) => e.id === reportId);
+    await page.route("**/api/records", (route) => route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ ...real, records: [{ ...donor, id: "Bad/../x", report: { size: 1, sha256: "x", created_at: "2026-01-01T00:00:00Z" } }] }),
+    }));
+    await page.waitForSelector('[data-doc="Bad/../x"]', { state: "attached", timeout: 8000 });
+    assert.strictEqual(await page.locator('[data-doc="Bad/../x"] a:text-matches("^Change report")').count(), 0, "no link for a bad id");
+    await page.unroute("**/api/records");
 
     assert.deepStrictEqual(errors, [], "console errors");
     await context.close();
