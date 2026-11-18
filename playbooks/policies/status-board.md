@@ -15,6 +15,16 @@ post, read and cancel asks; only the owner, logged in on the board's page, answe
 writes a record. When there is no board (see "The write path"), skip every record step silently and carry on;
 `ask_human` then uses its issue fallback and `notify_human` still goes out.
 
+## Board upkeep
+
+The board is part of the work, not a report written after it. A run that is not on the board does not exist for the owner. These five rules hold for every playbook that writes a record and are mandatory for make-plan and implement:
+
+1. **First record first.** Write the first record (`starting`) before any step that can take more than a minute. In make-plan and implement that is before the research, before the first worker and before the first ask, except the "already running?" check, which asks before any record exists (see "When to write"); never "after the plan is understood".
+2. **Every item up front.** The first record lists every item the run will have. In implement that is every phase of the manifest plus `final-review`, printed by `tld plan record-items <plan file>`; never a short list that grows later.
+3. **Extra items at once.** A revision (`<phase id>-rev<n>`), a fix (`fix-<n>`) and a second final review (`final-review-2`) become items in the same record write that starts them, before their worker exists. Before every record write of implement, save the record to a scratch file and run `tld plan record-items <plan file> --check <record file>` with one `--add <id>=<title>` for every extra item so far; it must exit 0.
+4. **Every change is a write.** Every state change, every check-in, every ask and every answer is a record write, also when only `updated_at` changes. A session that asks, starts or stops a worker, opens a pull request or pushes without writing the record afterwards has forgotten the board.
+5. **Every ask has a timer.** In the same turn that posts an ask: write the record with `needs_you` (no record during the "already running?" check), show the ask in the conversation (attended), start the watch (attended, with a board) and arm `schedule_wakeup` (60 minutes with the watch, else 10 minutes). Write the timer's time into `last_event` as `timer <ISO time>`: `next_check_at` must be null while the status is `waiting_user` and in every command record. Never end the turn of an ask without the timer. On every wake cancel the armed timer before arming the next one, and cancel it when the ask closes.
+
 ## The write path
 
 The session writes with the runtime's board tools when its tool list shows them; otherwise, or when one fails
@@ -73,7 +83,7 @@ very first write means a record of an earlier run exists: read it and write over
   that check is answered by saying that the playbook says to write no record yet, and ending the turn. The `stop`
   answer writes no record at all. Write the first record once the check lets the run go on.
 - The first record is written before the first ask, the first worker and any other work that can take more
-  than a minute; before `ask_human` the record is written with `needs_you`.
+  than a minute; before `ask_human` the record is written with `needs_you` (Board upkeep, rule 1).
 - Every state change, and every check-in even when nothing changed (set `updated_at`).
 - The final state.
 - After the final write of a run (`done`, `failed` or `pr_open`), call `read_usage()` ([runtime.md](../runtime.md))
