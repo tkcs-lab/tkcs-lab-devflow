@@ -40,7 +40,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p8-retire
 
-- pending
+- retry: sent back once: the first review found the guide overstated the reduced environment (HOME and proxy variables pass through, the package is not sandboxed); fixed in the guide
+- worker: none
+- review: security review, 2 non-blocking findings left open: the guide says the public registry although a scoped registry line in ~/.npmrc would override it, and says no tokens without naming credentials inside proxy URLs
 
 ## Final review
 
