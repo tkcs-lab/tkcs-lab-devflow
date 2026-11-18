@@ -17,6 +17,8 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
 [policies/status-board.md](policies/status-board.md), [policies/research.md](policies/research.md),
 [policies/protected-changes.md](policies/protected-changes.md). Runtime actions: [runtime.md](runtime.md).
 
+**Board upkeep is mandatory.** Follow "Board upkeep" in [policies/status-board.md](policies/status-board.md): the first record before any other work, every item in it, extra items added the moment they start, a record write after every change, and a timer armed in the same turn as every ask.
+
 ## Setup
 
 1. Load the profile as [policies/profile.md](policies/profile.md) says. On an error show the message verbatim
@@ -38,7 +40,7 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
    `failed`, and when you stop for any reason other than a `stop` answered at "Is it already being planned?",
    post `Planning stopped: <short cause>.` on the tracking issue (if there is one). While an ask is open:
    `waiting_user` with `needs_you`; when `needs_you` goes from false to true, post `Waiting for you:
-   <needs_you_reason>.` on the tracking issue (if there is one).
+   <needs_you_reason>.` on the tracking issue (if there is one). The five items are in the first write. Mark each running when its step starts and done when it ends, writing the record at each change. The record never lists the plan's phases.
 
 ## 0. Understand the ask
 
@@ -67,7 +69,7 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
    dead.`, options `stop` (recommended) and `take_over`. `stop`: write no status record, post nothing on the
    issue, and end with the reply `Stopped: plan #<n> is already being planned by another run.` `take_over`: go
    on. Any other exit code: go on (exit 1: show the message once). This check writes no record: the exception in `playbooks/policies/status-board.md` "When to write" applies. Then post `Planning started. Session: <id>.`
-   on the issue (`github.issue_comment`); `<id>` is this session's id, or `unknown` when it cannot be read.
+   on the issue (`github.issue_comment`); `<id>` is this session's id, or `unknown` when it cannot be read. Arm the ask timer in the same turn (Board upkeep, rule 5), except that this check writes no record.
 
    **A review document as the ask.** If the input is the URL of a document written by the review playbook (a
    file on a `review/` branch, with a `review_slug` header), read it with `git fetch origin <ref>` and
@@ -88,7 +90,7 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
    and does not rediscover what it leaves out.
 3. If a decision is genuinely the human's (scope, product behaviour, a trade-off with no default in the code or
    the ADRs), `ask_human` it now, all such questions in one ask (`choice` with your recommendation first, or
-   `text`), with `context_url` the tracking issue. Do not ask what you can settle by reading the code. Write
+   `text`), with `context_url` the tracking issue. Arm the ask timer in the same turn (Board upkeep, rule 5), except that this check writes no record. Do not ask what you can settle by reading the code. Write
    nothing until they answer. A fact that only the open web can settle is a research request, not a guess:
    [policies/research.md](policies/research.md).
 4. **Decide the scope.** It is **small** when the whole change fits one phase of "Sizing" (section 2):
