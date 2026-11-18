@@ -37,7 +37,7 @@ def decide(action):
 
 
 def prompt(repo, invoked, sid="s1", text=None):
-    text = text or f"/tld:{invoked} {'init ' if invoked == 'docs' else ''}x"  # docs writes a record only in init and tidy
+    text = text or f"/tld:{invoked} {'init ' if invoked in ('docs', 'spec') else ''}x"  # docs and spec write a record only in init (docs also in tidy)
     return decide(Action("prompt", str(repo), str(repo), prompt=text, invoked=invoked,
                          session_id=sid))
 
@@ -69,6 +69,21 @@ def test_a_command_prompt_opens_the_state(repo):
 def test_docs_without_a_record_mode_neither_opens_the_state_nor_blocks(board, text):
     assert prompt(board, "docs", text=text).verdict == "allow"
     assert not has_state(board)
+    assert stop(board).verdict == "allow"
+
+
+@pytest.mark.parametrize("text", ["/tld:spec", "/tld:spec check", "/spec check x", "/tld:spec bogus", "/tld:spec x init"])
+def test_spec_without_init_neither_opens_the_state_nor_blocks(board, text):
+    assert prompt(board, "spec", text=text).verdict == "allow"
+    assert not has_state(board)
+    assert stop(board).verdict == "allow"
+
+
+@pytest.mark.parametrize("text", ["/tld:spec init", "/spec init", "  /tld:spec init x"])
+def test_spec_init_opens_the_state_and_blocks_once_without_a_write(board, text):
+    prompt(board, "spec", text=text)
+    assert state(board)["command"] == "spec"
+    assert stop(board).verdict == "deny"
     assert stop(board).verdict == "allow"
 
 
