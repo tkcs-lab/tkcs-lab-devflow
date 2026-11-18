@@ -415,7 +415,7 @@ text>`; exit 1 counts as `changes`. Then:
    `manual_after` item as an unchecked box, with a link to the plan's Manual steps section), and
    `## Branches left on origin` with that ledger list and the sentence "The owner deletes them in the GitHub UI."
    When the dod report holds a `reflektor` answer, the last section of the body is `## Change report`, with the
-   output of `tld roles section --report <the reflektor subsection of the dod report, saved to a scratch file>` under it, pasted as is; exit 3 means leave the section out. Its text never goes into the Summary, which you still write yourself.
+   output of `tld roles section --report <the saved reflektor answer file of dod step 5>` under it, pasted as is; exit 3 means leave the section out. Its text never goes into the Summary, which you still write yourself.
    When pasting the deviations file, demote its `#` and `##` headings to `###` and `####`: the check reads a
    `## ` heading that contains the word summary (such as `## p1-summary-check`) as a near miss of the Summary heading. When the repository has a pull request
    template, its sections come after the Summary; if the template has its own `## Summary` heading, merge it

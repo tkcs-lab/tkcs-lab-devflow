@@ -83,7 +83,7 @@ anything the role would refuse to merge. Copy each report line unchanged; never 
 
 ## Gate
 
-Save the roles' full answers, report lines included, as one report file and run:
+Save the roles' full answers, report lines included, as one report file (for `reflektor`, only the line printed by `tld roles section --report-line` goes into the report file: `playbooks/dod.md` step 5) and run:
 
 ```
 tld roles verify --required <required JSON file> --report <report file>
