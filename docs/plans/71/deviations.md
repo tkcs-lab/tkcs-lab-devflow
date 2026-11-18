@@ -25,7 +25,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p5-spec-command
 
-- pending
+- retry: sent back once: the first review found init would destroy uncommitted work in a dirty tree; fixed by stopping before branching
+- worker: none
+- review: security review, open and non-blocking: plan_gate opens a write session for spec check as well as init; init marks the checkout exempt from the definition-of-done gate; the capability list is validated for the reply but not stated for the proposal when the reply is ok; the TBD stop wording says to list it in the pull request though no pull request opens
 
 ## p6-plan-playbooks
 
