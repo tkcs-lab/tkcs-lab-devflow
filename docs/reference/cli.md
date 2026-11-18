@@ -41,6 +41,8 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld roles required --profile P --at POINT [--changed F]` | `tld.roles.dispatch` | the roles required at a point, with their mode, as JSON |
 | `tld roles verify --required F --report F` | `tld.roles.dispatch` | check a report against `tld roles required` |
 | `tld roles reflektor-prepare --dest DIR --repo CLONE --base BASE` | `tld.roles.reflektor` | download the pinned Reflektor release (size and sha256 checked), refuse a repository whose .reflektor.json is not plain, unpack it; prints the path and the node path |
+| `tld roles reflektor-check --report FILE --root CLONE` | `tld.roles.reflektor` | refuse a Reflektor report whose paths leave the clone |
+| `tld roles reflektor-html (--file FILE \| --send --answer FILE --dest DIR)` | `tld.roles.reflektor` | add a Content-Security-Policy to a Reflektor page and check it against the pinned viewer; --send checks a saved answer's page and copies it |
 | `tld dod exempt` | `tld.dod.gate` | mark this checkout's session exempt from the dod-gate hook |
 | `tld guard allow-profile` | `tld.guard.protect_paths` | let the session edit the profile for the next 2 hours |
 | `tld guard allow-workflow-install FILE...` | `tld.guard.protect_paths` | let the session write `tld-land.yml` / `tld-release.yml` for the next 15 minutes |
