@@ -186,6 +186,8 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
         if "when" in entry and not any(pt in DIFF_POINTS for pt in points):
             errors.append(f"'{where}.when': needs a diff, but 'at' has no point with a diff "
                           "(only 'make_plan' and 'review' have none)")
+        if name == "reflektor" and points != ["dod"]:
+            errors.append(f"'{where}': 'reflektor' runs only at 'dod'")
         if "review" in points and name not in REVIEW_ROLES:
             errors.append(f"'{where}': '{name}' cannot run at 'review' (it has no review dimension; "
                           f"allowed: {', '.join(REVIEW_ROLES)})")
