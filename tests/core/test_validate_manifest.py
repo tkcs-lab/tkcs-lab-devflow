@@ -407,7 +407,108 @@ def test_unknown_keys_are_errors_with_a_hint(vm, path, value, message):
     assert any(message in e for e in errors(mutated(_set(path, value)), vm)), errors(mutated(_set(path, value)), vm)
 
 
+SPEC_PROFILE = {"spec": {"version": "2.1.0"}}
+ID_ERR = "spec_change must be lower-case words joined by hyphens"
+
+
+def _spec_manifest(**over):
+    """GOOD as a spec plan: spec_change equals the slug, the last phase archives and depends on every phase."""
+    m = copy.deepcopy(GOOD)
+    m["spec_change"] = "demo"
+    m["phases"][2]["depends_on"] = ["p1-core", "p2-api"]
+    m["phases"][2]["touches"] = ["docs/*.md", "openspec/**"]
+    m.update(over)
+    return m
+
+
 def test_every_documented_key_is_known(vm):
     m = mutated(lambda m: m.update(tracking_issue=3, closes=[4], screenshots_after_merge="make shots"))
     m["phases"][0].update(human_gate=True, worker_level="strong", worker_level_reason="r")
     assert errors(m, vm) == []
+    m = _spec_manifest(tracking_issue=3, closes=[4], screenshots_after_merge="make shots")
+    m["phases"][0].update(human_gate=True, worker_level="strong", worker_level_reason="r")
+    assert errors(m, vm, SPEC_PROFILE) == []
+
+
+# ---- spec_change (plan 3.6) -----------------------------------------------------------------------------------
+def test_spec_change_valid_with_a_spec_profile(vm):
+    assert vm.validate(_spec_manifest(), SPEC_PROFILE) == ([], [])
+
+
+@pytest.mark.parametrize("value", ["abc\n", "-x", "../x", "A", "a--b", "", "a_b", 7, ["x"]])
+def test_spec_change_id_is_checked(vm, value):
+    assert ID_ERR in errors(_spec_manifest(spec_change=value), vm, SPEC_PROFILE)
+
+
+def test_spec_change_needs_the_profile_spec_block(vm):
+    msg = "spec_change needs the profile's spec block"
+    assert msg in errors(_spec_manifest(), vm, {"git": {}})
+    assert msg not in errors(_spec_manifest(), vm, None)
+
+
+@pytest.mark.parametrize("entry", ["openspec/specs/auth/spec.md", "openspec/changes/x/specs/auth/spec.md",
+                                   "openspec/project.md", "openspec/changes/other/", "openspec/", "openspec/**",
+                                   "**/*.md"])
+@pytest.mark.parametrize("profile", [SPEC_PROFILE, None])
+def test_spec_change_fence_for_a_middle_phase(vm, entry, profile):
+    m = _spec_manifest()
+    m["phases"][1]["touches"] = [entry]
+    m["phases"][1]["depends_on"] = ["p1-core"]
+    msg = "phase 'p2-api': touches openspec/ but only the last phase may when spec_change is set"
+    assert msg in errors(m, vm, profile)
+
+
+@pytest.mark.parametrize("entry", ["docs/**", "src/**"])
+def test_spec_change_fence_ignores_other_paths(vm, entry):
+    m = _spec_manifest()
+    m["phases"][1]["touches"] = [entry]
+    assert not any("only the last phase may" in e for e in errors(m, vm, SPEC_PROFILE))
+
+
+def test_spec_change_last_phase_may_touch_openspec(vm):
+    assert not any("openspec" in e for e in errors(_spec_manifest(), vm, SPEC_PROFILE))
+
+
+def test_spec_change_last_phase_must_touch_openspec(vm):
+    m = _spec_manifest()
+    m["phases"][2]["touches"] = ["docs/*.md"]
+    assert "last phase 'p3-docs' must touch openspec/ when spec_change is set" in errors(m, vm, SPEC_PROFILE)
+
+
+def test_without_spec_change_a_middle_phase_may_touch_openspec(vm):
+    m = mutated(lambda m: m["phases"][1].update(touches=["openspec/"]))
+    assert not any("openspec" in e for e in errors(m, vm))
+
+
+def test_spec_change_last_phase_must_depend_on_all_phases(vm):
+    m = _spec_manifest()
+    m["phases"][2]["depends_on"] = ["p1-core"]
+    msg = "last phase 'p3-docs' must depend on every other phase when spec_change is set (missing: p2-api)"
+    assert msg in errors(m, vm, SPEC_PROFILE)
+    m["phases"][2]["depends_on"] = []
+    assert "(missing: p1-core, p2-api)" in " ".join(errors(m, vm))
+    m["phases"][2]["depends_on"] = ["p2-api"]  # p2 depends on p1: through another phase counts
+    assert not any("must depend on every other" in e for e in errors(m, vm))
+
+
+def test_spec_change_differing_from_the_slug_warns(vm):
+    assert "spec_change differs from plan_slug" in vm.validate(_spec_manifest(spec_change="other"), SPEC_PROFILE)[1]
+    assert "spec_change differs from plan_slug" not in vm.validate(_spec_manifest(), SPEC_PROFILE)[1]
+
+
+def test_cli_spec_change_with_a_spec_profile(tmp_path):
+    profile = tmp_path / "toolkit.yaml"
+    profile.write_text(yaml.safe_dump(SPEC_PROFILE))
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(_spec_manifest(spec_change="A")))
+    good = tmp_path / "good.yaml"
+    good.write_text(yaml.safe_dump(_spec_manifest()))
+    out = run_cli(str(good), "--profile", str(profile))
+    assert out.returncode == 0, out.stdout + out.stderr
+    out = run_cli(str(bad), "--profile", str(profile))
+    assert out.returncode != 0
+    assert ID_ERR in out.stdout + out.stderr
+    no_spec = tmp_path / "plain.yaml"
+    no_spec.write_text("git: {}\n")
+    out = run_cli(str(good), "--profile", str(no_spec))
+    assert "spec_change needs the profile's spec block" in out.stdout + out.stderr

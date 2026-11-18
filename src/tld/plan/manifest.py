@@ -23,7 +23,7 @@ from tld.guard._common import BUILTIN_PROTECT_ALLOW, DEFAULT_PROTECT_PATHS
 HEADING = "## Implementation manifest"
 LEVELS = ("strong", "standard", "fast")
 WILDCARDS = "*?["
-TOP_KEYS = ("plan_slug", "feature_branch", "tracking_issue", "closes", "max_parallel", "manual_before",
+TOP_KEYS = ("plan_slug", "feature_branch", "tracking_issue", "spec_change", "closes", "max_parallel", "manual_before",
             "manual_after", "manual", "verify_after_merge", "screenshots_after_merge", "final_checks", "phases")
 PHASE_KEYS = ("id", "title", "depends_on", "complexity", "touches", "brief", "acceptance", "human_gate",
               "worker_level", "worker_level_reason")
@@ -261,6 +261,17 @@ def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/pla
             errors.append("closes must be a list of positive integers")
         elif _pos_int(ti) and ti in cl:
             warnings.append("closes contains tracking_issue")
+    spec_change_ok = False
+    if "spec_change" in manifest:
+        sc = manifest["spec_change"]
+        if not (isinstance(sc, str) and re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", sc)):
+            errors.append("spec_change must be lower-case words joined by hyphens")
+        else:
+            spec_change_ok = True
+            if profile is not None and not isinstance(profile.get("spec"), dict):
+                errors.append("spec_change needs the profile's spec block")
+            if sc != manifest.get("plan_slug"):
+                warnings.append("spec_change differs from plan_slug")
     for key in ("verify_after_merge", "final_checks"):
         if key in manifest and not (isinstance(manifest[key], list) and all(isinstance(x, str) for x in manifest[key])):
             errors.append(f"'{key}' must be a list of strings")
@@ -352,6 +363,17 @@ def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/pla
         return errors, warnings
 
     reach = _reach(deps)
+    if spec_change_ok and ids:
+        last = ids[-1]
+        for pid in ids[:-1]:
+            if any(paths_overlap(e, "openspec/**") for e in touches.get(pid, [])):
+                errors.append(f"phase '{pid}': touches openspec/ but only the last phase may when spec_change is set")
+        if not any(paths_overlap(e, "openspec/**") for e in touches.get(last, [])):
+            errors.append(f"last phase '{last}' must touch openspec/ when spec_change is set")
+        missing = [x for x in ids[:-1] if x not in reach.get(last, set())]
+        if missing:
+            errors.append(f"last phase '{last}' must depend on every other phase when spec_change is set "
+                          f"(missing: {', '.join(missing)})")
     for i, a in enumerate(ids):
         for b in ids[i + 1:]:
             if b in reach.get(a, set()) or a in reach.get(b, set()):
