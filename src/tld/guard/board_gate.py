@@ -25,8 +25,8 @@ from tld.guard._common import Ctx, ProfileError
 from tld.guard.action import Action
 
 NAME = "board-gate"
-RECORD_COMMANDS = ("make-plan", "implement", "review", "setup", "migrate", "land", "deps", "upstream", "docs", "ci", "questions")
-RECORD_MODES = {"docs": ("init", "tidy")}  # commands that write a record only in some modes
+RECORD_COMMANDS = ("make-plan", "implement", "review", "setup", "migrate", "land", "deps", "upstream", "docs", "ci", "questions", "spec")
+RECORD_MODES = {"docs": ("init", "tidy"), "spec": ("init",)}  # commands that write a record only in some modes
 SESSION_TTL_SECONDS = 24 * 3600
 CLIENT_SET = re.compile(r"\bboard\s+client\s+set\b")
 ASK_COMMAND = re.compile(r"\bboard\s+ask(?![-\w])")

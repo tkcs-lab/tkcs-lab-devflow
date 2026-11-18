@@ -51,6 +51,8 @@ tests:
   src/tld/ops/release_prepare.py:
   - tests/core/test_release_prepare.py
   - tests/core/test_guard_corpus.py
+  src/tld/ops/spec.py:
+  - tests/core/test_ops_spec.py
   src/tld/guard/integrity.py:
   - tests/core/test_guard_corpus.py
   - tests/core/test_guard_trust.py
@@ -257,6 +259,16 @@ mutants:
   why: when w/o diff point
   old: 'if "when" in entry and not any(pt in DIFF_POINTS for pt in points):'
   new: 'if False:'
+- id: VM14
+  file: src/tld/plan/manifest.py
+  why: the last phase is not excluded from the openspec fence, so the archive phase is flagged
+  old: '        for pid in ids[:-1]:'
+  new: '        for pid in ids:'
+- id: VM15
+  file: src/tld/plan/manifest.py
+  why: spec_change without the profile's spec block is accepted
+  old: '            if profile is not None and not isinstance(profile.get("spec"), dict):'
+  new: '            if False:'
 - id: VM1
   file: src/tld/plan/manifest.py
   why: max_parallel 0 ok
@@ -627,3 +639,18 @@ mutants:
   why: the files are not compared after writing, so a file that did not move goes unnoticed
   old: '    if not _agree(prepared["profile"], root, prepared["next"]):'
   new: '    if False:'
+- id: SP1
+  file: src/tld/ops/spec.py
+  why: the npm install runs package scripts of OpenSpec and its dependencies
+  old: '        argv = ["npm", "install", "--ignore-scripts", "--no-save", "--no-audit", "--no-fund",'
+  new: '        argv = ["npm", "install", "--no-save", "--no-audit", "--no-fund",'
+- id: SP2
+  file: src/tld/ops/spec.py
+  why: an id with a trailing newline or a double hyphen is accepted
+  old: '        if ident is not None and not re.fullmatch(ID_RE, ident):'
+  new: '        if ident is not None and not re.match(ID_RE, ident):'
+- id: SP3
+  file: src/tld/ops/spec.py
+  why: the whole environment, tokens included, reaches npm and node
+  old: '    env = {k: os.environ[k] for k in ENV_NAMES if k in os.environ}'
+  new: '    env = dict(os.environ)'

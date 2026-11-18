@@ -471,6 +471,19 @@
         }
       }
     },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Exact OpenSpec release the spec commands run (npm @fission-ai/openspec). Present means the repository uses specs: /spec works and /make-plan writes a spec change."
+        }
+      },
+      "description": "Optional. Repository uses OpenSpec specs."
+    },
     "admin": {
       "type": "object",
       "additionalProperties": false,

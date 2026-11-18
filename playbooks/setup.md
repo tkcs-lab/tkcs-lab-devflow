@@ -49,7 +49,7 @@ Build one table `key | proposed value | evidence` from `survey.json` (`evidence`
 - `git.branch_pattern` is `<type>/<kebab-case>`. `git.branch_types` are the prefixes in
   `evidence.git.branch_prefixes` with at least three branches, else `[feature, fix, chore]`.
 - `tld.version` is `>=<major>.<minor>,<<major + 1>` of the running tld (`tld --version`).
-- `hooks`, `deps`, `upstream`, `admin`, `git_ops` and `land` are never written.
+- `hooks`, `deps`, `upstream`, `admin`, `git_ops`, `land` and `spec` are never written.
 
 ## 3. Ask
 
