@@ -31,6 +31,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("plan", "active-run"): ("tld.plan.active", (), "is another run of make-plan or implement already going"),
     ("roles", "required"): ("tld.roles.dispatch", ("required",), "the roles required at a point, as JSON"),
     ("roles", "verify"): ("tld.roles.dispatch", ("verify",), "check a report against `tld roles required`"),
+    ("roles", "reflektor-prepare"): ("tld.roles.reflektor", ("prepare",), "download the pinned Reflektor release, check it and unpack it"),
     ("dod", "exempt"): ("tld.dod.gate", ("--exempt",), "mark this checkout's session exempt from the DoD gate"),
     ("guard", "allow-profile"): ("tld.guard.protect_paths", ("--allow-profile",),
                                  "allow edits to the profile for the next 2 hours"),

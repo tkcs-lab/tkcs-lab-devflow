@@ -40,6 +40,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld plan active-run --kind make-plan\|implement --comments F --bot L [--record F --plan-slug S] [--self ID] [--now ISO] [--max-age-minutes N]` | `tld.plan.active` | is another run of the same plan or issue alive: `none`, `own`, `stale` (exit 0) or `active` (exit 4), from the tracking issue's comments and the board record |
 | `tld roles required --profile P --at POINT [--changed F]` | `tld.roles.dispatch` | the roles required at a point, with their mode, as JSON |
 | `tld roles verify --required F --report F` | `tld.roles.dispatch` | check a report against `tld roles required` |
+| `tld roles reflektor-prepare --dest DIR --repo CLONE --base BASE` | `tld.roles.reflektor` | download the pinned Reflektor release (size and sha256 checked), refuse a repository whose .reflektor.json is not plain, unpack it; prints the path and the node path |
 | `tld dod exempt` | `tld.dod.gate` | mark this checkout's session exempt from the dod-gate hook |
 | `tld guard allow-profile` | `tld.guard.protect_paths` | let the session edit the profile for the next 2 hours |
 | `tld guard allow-workflow-install FILE...` | `tld.guard.protect_paths` | let the session write `tld-land.yml` / `tld-release.yml` for the next 15 minutes |
