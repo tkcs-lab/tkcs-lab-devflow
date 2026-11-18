@@ -109,6 +109,7 @@ def test_runtime_puts_the_timer_in_last_event():
     assert "put its time in `next_check_at`" not in t
 
 
-def test_make_plan_timer_sentence_twice():
+def test_make_plan_timer_sentence_once_and_step_3_writes_the_record():
     t = _text(PLAYBOOKS / "make-plan.md")
-    assert t.count("except that this check writes no record") == 2
+    assert t.count("except that this check writes no record") == 1
+    assert "Write the record with `needs_you` and arm the ask timer in the same turn (Board upkeep, rule 5)." in t

@@ -325,7 +325,7 @@ On each check-in, for each `running` phase, `read_worker(<its worker>)`:
    empty commit on the feature branch (`git commit --allow-empty`) with the message `Approve <plan slug> <phase
    id>` and the trailer `Plan-Gate-Approved: <plan slug>/<phase id>`, pushed; `tld plan phase-status` reads it
    (only on commits made on the feature branch itself, and only when it is newer than the phase's latest merge).
-   Record it in the ledger too and continue. Add the item first (Board upkeep, rule 3). On requested changes start a worker on
+   Record it in the ledger too and continue. On requested changes add the `<phase id>-rev<n>` item first (Board upkeep, rule 3), then start a worker on
    `tld plan branch-name --manifest <plan file> --phase <phase id> --rev <n>` cut from the feature branch,
    whose brief is the human's text verbatim plus the phase's original brief. The brief starts with the phase brief's rule 0 (`tld guard allow-plan`). Merge it the same way and gate
    again.
@@ -451,7 +451,7 @@ step on the human's behalf.
 As [policies/status-board.md](policies/status-board.md) says, with `kind: run`, `command: null`, `attended: true`, document id from `tld board record-id --repo <owner>/<repo> --run --plan-slug <plan_slug>`, written at step 4a,
 `plan_slug`, `plan_url` and `feature_branch` from the plan, and `phases` the output of `tld plan record-items <plan file>` plus every extra item added so far, mirroring the ledger (states
 `pending`, `running`, `merged`, `failed`, `gate`). The first record (`starting`) is written at step 4a, before the start question and any worker; then at every ledger change and every check-in. Every record write is preceded by the `--check` of rule 3 (Board upkeep). `status` is `starting`, `running`, `waiting_user`,
-`reviewing`, `pr_open`, `done` or `failed`. `next_check_at` is the armed check-in, `pr` is filled once the pull
+`reviewing`, `pr_open`, `done` or `failed`. `next_check_at` is the armed check-in (null while the status is `waiting_user`: Board upkeep, rule 5), `pr` is filled once the pull
 request exists. Each phase gets the optional `scope` at its merge: `tld plan scope-check record --results
 <results> --label <phase id>` prints it (paste it as is; no field when it prints `null`), and again after
 Finishing step 1.

@@ -192,3 +192,15 @@ def test_failed_ask_is_not_counted_and_failed_timer_does_not_arm(repo):
     run_script("board-gate", post(ASK, repo, mcp('{"id":"a-2f"}'), file="g.json"))
     run_script("board-gate", post("ScheduleWakeup", repo, {**mcp("no"), "isError": True}, delaySeconds=600))
     blocked(repo, "armed no timer")
+
+
+@pytest.mark.parametrize("value", ["false", "no", 1, "true"])
+@pytest.mark.parametrize("tool", [MCP_SET] + [t[0] for t in NEW_TOOLS])
+def test_only_a_boolean_true_marks_a_response_failed(tmp_path, tool, value):
+    response = {"content": [{"type": "text", "text": "x"}], "isError": value}
+    assert claude_adapter.to_action(post(tool, tmp_path, response, x="y"), str(tmp_path)) is not None
+
+
+def test_a_deeply_nested_event_is_a_hook_problem_not_a_crash():
+    r = claude_adapter.execute("board-gate", "[" * 200000)
+    assert r.code in (0, 1)

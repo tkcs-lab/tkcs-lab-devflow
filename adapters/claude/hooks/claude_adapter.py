@@ -157,8 +157,8 @@ NEW_OPS = ((BOARD_ASK, "board_ask"), (TIMER, "timer"), (ASK_COMMENT, "ask_commen
 
 
 def _failed(response: object) -> bool:
-    """True when a tool response is a mapping that says the call failed."""
-    return isinstance(response, dict) and bool(response.get("isError") or response.get("is_error"))
+    """True when a tool response is a mapping that says the call failed (a boolean true, nothing else)."""
+    return isinstance(response, dict) and (response.get("isError") is True or response.get("is_error") is True)
 
 
 def _texts(items: object) -> str:
@@ -279,7 +279,7 @@ def execute(name: str, stdin_text: str) -> Result:
         payload = json.loads(stdin_text)
         if not isinstance(payload, dict):
             raise ValueError("the event is not a JSON object")
-    except ValueError as exc:
+    except (ValueError, RecursionError) as exc:
         return to_result(_common.problem(name, fail_closed, f"cannot read the hook event ({exc})."))
     prompt = payload.get("hook_event_name") in ("UserPromptSubmit", "SessionStart")
     try:

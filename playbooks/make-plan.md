@@ -66,10 +66,10 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
    (leave out `--self` when the session id cannot be read). Exit 4 means another run is going: `ask_human` one
    `choice` titled `Plan #<n> is already running`, context the tracking issue, text `Another make-plan started at
    <started_at> (last sign of life <age_minutes> minutes ago, session <session>). Take it over only if it is
-   dead.`, options `stop` (recommended) and `take_over`. `stop`: write no status record, post nothing on the
+   dead.`, options `stop` (recommended) and `take_over`; arm the ask timer in the same turn (Board upkeep, rule 5), except that this check writes no record. `stop`: write no status record, post nothing on the
    issue, and end with the reply `Stopped: plan #<n> is already being planned by another run.` `take_over`: go
    on. Any other exit code: go on (exit 1: show the message once). This check writes no record: the exception in `playbooks/policies/status-board.md` "When to write" applies. Then post `Planning started. Session: <id>.`
-   on the issue (`github.issue_comment`); `<id>` is this session's id, or `unknown` when it cannot be read. Arm the ask timer in the same turn (Board upkeep, rule 5), except that this check writes no record.
+   on the issue (`github.issue_comment`); `<id>` is this session's id, or `unknown` when it cannot be read.
 
    **A review document as the ask.** If the input is the URL of a document written by the review playbook (a
    file on a `review/` branch, with a `review_slug` header), read it with `git fetch origin <ref>` and
@@ -90,7 +90,7 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
    and does not rediscover what it leaves out.
 3. If a decision is genuinely the human's (scope, product behaviour, a trade-off with no default in the code or
    the ADRs), `ask_human` it now, all such questions in one ask (`choice` with your recommendation first, or
-   `text`), with `context_url` the tracking issue. Arm the ask timer in the same turn (Board upkeep, rule 5), except that this check writes no record. Do not ask what you can settle by reading the code. Write
+   `text`), with `context_url` the tracking issue. Write the record with `needs_you` and arm the ask timer in the same turn (Board upkeep, rule 5). Do not ask what you can settle by reading the code. Write
    nothing until they answer. A fact that only the open web can settle is a research request, not a guess:
    [policies/research.md](policies/research.md).
 4. **Decide the scope.** It is **small** when the whole change fits one phase of "Sizing" (section 2):
