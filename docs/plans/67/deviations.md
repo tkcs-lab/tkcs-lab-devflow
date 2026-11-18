@@ -10,7 +10,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-gate-core
 
-- pending
+- worker: the brief negative test for grep board ask with an id-like output line was not written: the mandated ASK_COMMAND regex matches that command, so it counts as an ask; worker had no tld, orchestrator ran the roles
+- review: security-reviewer: 3 non-blocking findings (RecursionError in _is_record, fixed tmp file name in _save, record write applied before a change in one command gives a spurious dirty block); left as is
 
 ## p3-gate-adapter
 
