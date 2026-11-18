@@ -38,7 +38,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p8-playbooks
 
-- pending
+- review: plan 3.7 had implement run tld roles section on the dod subsection, which holds cleaned text without the BEGIN/END markers, so the Change report section could never appear; implement now runs it on the saved reflektor answer file of dod step 5
+- review: added to the playbooks: what the dod subsection holds when section exits 3, a roles.md Gate exception for reflektor, and saving the answer with a file-writing tool instead of a shell command
+- retry: phase sent back once for the functional break and three wording gaps; the evals baseline hashes were refreshed again
 
 ## p9-retire
 
