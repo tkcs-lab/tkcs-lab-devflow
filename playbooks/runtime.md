@@ -116,7 +116,7 @@ on the record after the owner answers. Steps, in order:
      `ask <id> posted <ISO time>` in `last_event`, on the board (not the fallback) also `watch_command("tld board
      answers <id> --wait 3300 --interval 15", 60 minutes)` and append `; watch started <ISO time>` to the `last_event`
      text (the `ask <id> posted <ISO time>` part stays: the 24-hour rules below count from it); then `schedule_wakeup(60
-     minutes)` with a watch, else `schedule_wakeup(10 minutes)`, put its time in `next_check_at`, and end the turn; the
+     minutes)` with a watch, else `schedule_wakeup(10 minutes)`, write its time into `last_event` as `timer <ISO time>` (`next_check_at` is null while the status is `waiting_user` and in every command record), and end the turn; the
      owner answers here or on the board. With several open asks, show each; answer lines must use that ask's question
      ids, and a bare answer never counts.
    - On every wake do both duties: the worker check-in if workers run, and the ask read if an ask is open. Re-arm

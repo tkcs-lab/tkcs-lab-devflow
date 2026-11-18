@@ -79,3 +79,36 @@ def test_make_plan_prompt_finish_writes_a_run_record():
                    "policies/status-board.md", "`failed`", "`finished_at`", "`Fix dod: <failing row>`",
                    "`Answer: <question>`", "`kind: run`", "`next_check_at: null`"):
         assert needle in small, needle
+
+
+def test_status_board_has_board_upkeep_section_in_place():
+    t = _text(POLICY)
+    assert "## Board upkeep" in t
+    assert t.index("## Where the board is") < t.index("## Board upkeep") < t.index("## The write path")
+    for name in ("First record first.", "Every item up front.", "Extra items at once.",
+                 "Every change is a write.", "Every ask has a timer."):
+        assert f"**{name}**" in t, name
+    assert "(Board upkeep, rule 1)." in t
+
+
+def test_make_plan_and_implement_carry_the_upkeep_paragraph():
+    for name in ("make-plan", "implement"):
+        assert "**Board upkeep is mandatory.**" in _text(PLAYBOOKS / f"{name}.md"), name
+
+
+def test_implement_uses_record_items_and_the_first_record_step():
+    t = _text(PLAYBOOKS / "implement.md")
+    for needle in ("tld plan record-items", "4a.", "final-review-2", "--check"):
+        assert needle in t, needle
+
+
+def test_runtime_puts_the_timer_in_last_event():
+    t = _text(PLAYBOOKS / "runtime.md")
+    assert ("write its time into `last_event` as `timer <ISO time>` (`next_check_at` is null while the "
+            "status is `waiting_user` and in every command record)") in t
+    assert "put its time in `next_check_at`" not in t
+
+
+def test_make_plan_timer_sentence_twice():
+    t = _text(PLAYBOOKS / "make-plan.md")
+    assert t.count("except that this check writes no record") == 2
