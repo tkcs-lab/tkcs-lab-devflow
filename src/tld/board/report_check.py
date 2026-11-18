@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import unicodedata
 
 # (length in characters, sha256 of the UTF-8 text) of the four parts of the pinned assets/viewer.html around the
 # three fixed places: up to and including <head>; between <head> and <title>PR report</title>; between that
@@ -34,6 +35,7 @@ CSP_META = (
 
 TITLE_OPEN = "<title>"
 TITLE_CLOSE = "</title>"
+MAX_TITLE = 200
 
 # every value under one of these keys, at any depth, must be null: the viewer makes links or embeds from them
 NULL_KEYS = ("url", "ownerUrl", "href", "notesUrl", "web", "screenshots", "projectChecks", "coverage", "agent")
@@ -88,7 +90,8 @@ def split(text: str):
     if end < 0:
         return ["the title tag is not closed"]
     title = text[start:end]
-    if "<" in title or "\n" in title or "\r" in title:
+    if (len(title) > MAX_TITLE or "<" in title or "&" in title
+            or any(unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") for c in title)):
         return ["the title is not plain one-line text"]
     pos = end + len(TITLE_CLOSE)
     if not _same(text[pos:pos + n3], parts[2]):

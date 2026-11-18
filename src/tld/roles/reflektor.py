@@ -351,22 +351,43 @@ def check_report(report_text, root) -> list[str]:
     return reasons
 
 
+ALLOW_MARK = "secret-scan:allow"
+_SPLITTERS = frozenset("\x0b\x0c\x1c\x1d\x1e\x1f\x85")
+
+
+def _splits_lines(s: str) -> bool:
+    """A character the secret scan's line splitting treats as a line break (or a category Zl or Zp)."""
+    return any(c in _SPLITTERS or unicodedata.category(c) in ("Zl", "Zp") for c in s)
+
+
 def verify_html(text) -> list[str]:
-    """`report_check.check` plus the secret scan of the raw text and of every decoded string of the data."""
+    """`report_check.check` plus the secret scan of the raw text and of every decoded string and key of the data.
+
+    The scan skips a line that ends in its allow mark and splits on more characters than a newline, so a page
+    that carries the mark, or a line-splitting character in its data, is refused instead of scanned."""
     reasons = report_check.check(text)
     if reasons:
         return reasons
+    if ALLOW_MARK in text:
+        return ["the page carries a secret-scan allow mark"]
+    got = report_check.split(text)
+    if _splits_lines(got[1]):
+        return ["the data holds a line-splitting character"]
+    value = report_check.parse_payload(got[1])
+    strings = []
+    for _parent, key, child in _walk(value):
+        for s in (key, child):
+            if isinstance(s, str):
+                strings.append(s)
+    for s in strings:
+        if ALLOW_MARK in s:
+            return ["the page carries a secret-scan allow mark"]
+        if _splits_lines(s):
+            return ["the data holds a line-splitting character"]
     hits = secret_scan.scan_text(text)
-    if not hits:
-        got = report_check.split(text)
-        value = report_check.parse_payload(got[1])
-        for _parent, key, child in _walk(value):
-            for s in (key, child):
-                if isinstance(s, str) and secret_scan.scan_text(s):
-                    hits = secret_scan.scan_text(s)
-                    break
-            if hits:
-                break
+    for s in strings:
+        if not hits:
+            hits = secret_scan.scan_text(s)
     if hits:
         names = sorted({name for _n, name, _d in hits})
         return [f"the page holds something that looks like a credential ({', '.join(names)})"]

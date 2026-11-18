@@ -63,6 +63,16 @@ def test_title_with_angle_bracket():
     assert got == ["the title is not plain one-line text"]
 
 
+@pytest.mark.parametrize("title", ["a&amp;b", "&#103;hp_x", "&lt;img&gt;", "a\x07b", "a\u200bb", "a\u2028b", "a\x85b"])
+def test_title_must_be_plain(title):
+    assert reasons(page(title=title)) == ["the title is not plain one-line text"]
+
+
+def test_title_length_cap():
+    assert reasons(page(title="x" * 200)) == []
+    assert reasons(page(title="x" * 201)) == ["the title is not plain one-line text"]
+
+
 def test_title_with_newline():
     assert reasons(page(title="a\nb")) == ["the title is not plain one-line text"]
 
@@ -133,6 +143,44 @@ def test_secret_behind_json_escape_is_found_in_decoded_strings():
     assert KEY not in payload and reasons(page(payload)) == []
     got = reflektor.verify_html(page(payload))
     assert len(got) == 1 and "credential" in got[0]
+
+
+TOKEN = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"
+
+
+def test_token_alone_is_found():
+    assert "github-token" in reflektor.verify_html(page(json.dumps({"s": TOKEN})))[0]
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\u2029", "\u0085", "\x0b", "\x0c", "\x1c", "\x1e"])
+def test_allow_mark_with_line_splitter_is_refused(sep):
+    payload = json.dumps({"s": f"{TOKEN} secret-scan:allow{sep}x"}, ensure_ascii=False)
+    assert reasons(page(payload)) == []
+    got = reflektor.verify_html(page(payload))
+    assert got and ("line-splitting" in got[0] or "allow mark" in got[0])
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\u0085", "\x0b", "\x1f"])
+def test_line_splitter_alone_is_refused(sep):
+    payload = json.dumps({"s": f"a{sep}b"}, ensure_ascii=False)
+    assert reflektor.verify_html(page(payload)) == ["the data holds a line-splitting character"]
+
+
+def test_allow_mark_behind_newline_escape_is_refused():
+    payload = json.dumps({"s": f"{TOKEN} secret-scan:allow\nx"})
+    assert "\\n" in payload
+    assert reflektor.verify_html(page(payload)) == ["the page carries a secret-scan allow mark"]
+
+
+def test_allow_mark_in_a_key_and_plain_is_refused():
+    for payload in (json.dumps({f"{TOKEN} secret-scan:allow\nx": 1}), json.dumps({"s": "secret-scan:allow"}),
+                    '{"s":"secret-scan\\u003aallow"}'):
+        assert reflektor.verify_html(page(payload)) == ["the page carries a secret-scan allow mark"]
+
+
+def test_token_in_a_key_with_splitter_is_refused():
+    payload = json.dumps({f"{TOKEN} secret-scan:allow\u2028x": 1}, ensure_ascii=False)
+    assert reflektor.verify_html(page(payload))
 
 
 def test_secret_in_a_key_is_found():
