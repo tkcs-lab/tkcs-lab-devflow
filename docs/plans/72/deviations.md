@@ -16,7 +16,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-section
 
-- pending
+- review: security review found three bypasses in the cleaning: the secret scan could be silenced by the allow mark (also created by the 500-character cut), a token could be glued together by deleted separator characters, and forged report lines could be rebuilt by the link, image and cut steps; the command now refuses a block that carries the mark, scans the raw block as well as the cleaned text, and drops forged lines again after the last step
+- review: --report-line now splits at newlines only and refuses a last line holding control or separator characters, so the gate file line matches what tld roles verify sees
+- retry: phase sent back once for the three blocking security findings
 
 ## p4-role
 
