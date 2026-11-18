@@ -18,7 +18,7 @@ Every playbook assumes these settings.
 | Network access | Limited | sessions reach only what is listed below |
 | Allow package managers | on | installs for `verify.fast` |
 | Allow MCP servers | on | the GitHub tools and `tld-board` |
-| Allowed domains | the board host only (for example `board.example.org`); add `github.com` and `release-assets.githubusercontent.com` when a profile requires the `reflektor` role | the status board; nothing else; the reflektor role downloads one pinned file from them |
+| Allowed domains | the board host only (for example `board.example.org`); add `github.com` and `release-assets.githubusercontent.com` only in environments whose profiles require the `reflektor` role: they apply to every session of that environment, and the pin's sha256, not the allow-list, makes the download safe | the status board; plus, with reflektor, the two GitHub download hosts and nothing else |
 | Network secrets | one, for the board host, header `Authorization`, prefix `Bearer`, value the board token you type into the form | the proxy adds the token; the session never holds it; steps: [board-server.md](board-server.md#connect-claude-code-sessions) |
 | Environment variables | `TLD_BOARD_URL=https://board.example.org`, `TLD_BOARD_TOKEN=injected-by-the-proxy` | clients need a value; the proxy replaces the header; steps: [board-server.md](board-server.md#connect-claude-code-sessions) |
 | Environment variable for the environment check | `TLD_ENVIRONMENT=<this environment's name>`, for example `TLD_ENVIRONMENT=TLD` | the `env-check` hook compares it with the profile's `runtime.environments`; a session in this environment without it warns |
