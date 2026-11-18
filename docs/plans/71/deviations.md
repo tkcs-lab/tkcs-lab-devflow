@@ -20,7 +20,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p4-spec-record
 
-- pending
+- worker: none
 
 ## p5-spec-command
 
