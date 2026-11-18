@@ -36,7 +36,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p7-docs-lists
 
-- pending
+- worker: none
 
 ## p8-retire
 
