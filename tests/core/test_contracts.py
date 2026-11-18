@@ -395,3 +395,35 @@ def test_questions_playbook_names_the_stop_message_of_its_eval():
     m = re.search(r'command == "questions":.*?expected\["stop_message"\] = "([^"]+)"', text, re.S)
     assert m, "no questions stop_message in evals/fixtures/commands.py"
     assert m.group(1) in (PLAYBOOKS / "questions.md").read_text()
+
+
+def test_reflektor_card_markers_match_the_code():
+    from tld.roles import section
+
+    card = (ROOT / "roles" / "reflektor.md").read_text()
+    for token in (section.BEGIN, section.END, "REPORT-HTML <"):
+        assert token in card, token
+    dod = (PLAYBOOKS / "dod.md").read_text()
+    for token in ("REPORT-HTML <path>", "tld roles reflektor-html --send", "tld roles section --report-line",
+                  "tld board client put-report", "n/a (worker)"):
+        assert token in dod, token
+    implement = (PLAYBOOKS / "implement.md").read_text()
+    between(implement, "## Branches left on origin", "tld roles section --report")
+
+
+def test_change_report_section_needs_the_saved_answer_not_the_dod_subsection(tmp_path, capsys):
+    """clean() drops the BEGIN/END markers, so the dod subsection (cleaned output) has no block left:
+    implement must run `tld roles section --report` on the saved answer file of dod step 5."""
+    from tld.roles import section
+
+    answer = tmp_path / "answer.md"
+    answer.write_text(f"intro\n{section.BEGIN}\n## What changed\nOne line.\n{section.END}\n"
+                      "AGENT-REPORT reflektor at=dod blocking=0 non-blocking=0\n")
+    assert section.main(["--report", str(answer)]) == 0
+    out = capsys.readouterr().out
+    assert "One line." in out and section.BEGIN not in out
+    subsection = tmp_path / "subsection.md"
+    subsection.write_text(out + "AGENT-REPORT reflektor at=dod blocking=0 non-blocking=0\n")
+    assert section.main(["--report", str(subsection)]) == 3
+    implement = (PLAYBOOKS / "implement.md").read_text()
+    assert "the saved reflektor answer file of dod step 5" in implement
