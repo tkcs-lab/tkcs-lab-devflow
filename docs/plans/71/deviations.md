@@ -13,6 +13,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - worker: none; the worker used system python in place of .venv/bin/python; smoke step ran against real OpenSpec 2.1.0: all flags accepted, nothing outside openspec/ written, tasks.md not required, an empty change fails validate unless it has a delta
 - review: security review, 7 non-blocking findings left open: non-ASCII digits pass the version pattern, partial npm install tree is trusted, node/npm resolved by bare name, raw id in stderr, YAML errors reported as a missing key, grandchild processes survive the timeout, transitive dependencies float (accepted in the plan)
+- final: two small wrapper decisions the plan did not state: the node version probe has a 60 second timeout, and a node version with a pre-release or build suffix (such as 22.20.0-rc.1) is compared by its numeric part
 
 ## p3-manifest-spec-change
 
@@ -28,6 +29,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - retry: sent back once: the first review found init would destroy uncommitted work in a dirty tree; fixed by stopping before branching
 - worker: none
 - review: security review, open and non-blocking: plan_gate opens a write session for spec check as well as init; init marks the checkout exempt from the definition-of-done gate; the capability list is validated for the reply but not stated for the proposal when the reply is ok; the TBD stop wording says to list it in the pull request though no pull request opens
+- final: the spec playbook decides four things the plan did not: Deliver stages only openspec/ and stops when other paths are staged; no literal value (credential, key, hostname, URL, e-mail, account id) is copied into a spec or the pull request; a TBD hit after archive stops the run instead of a hand edit; the pull request subscription runs only when the runtime offers it
 
 ## p6-plan-playbooks
 
