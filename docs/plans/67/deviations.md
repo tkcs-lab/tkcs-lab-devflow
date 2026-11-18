@@ -25,7 +25,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p5-retire
 
-- pending
+- worker: none beyond the orchestrator note: hooks.md also states the unanchored matcher and any-MCP-server tool names as built; worker had no tld, orchestrator ran the roles
+- review: security-reviewer: 3 non-blocking doc findings (gh pr create not listed, isError claim true only for MCP calls, stop chain bound is two blocks not three); left for the final review
 
 ## Final review
 
