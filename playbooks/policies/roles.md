@@ -4,10 +4,12 @@ A **role** is a role card (`roles/<role>.md`) plus, for most roles, a checklist 
 review concept (D5): the profile's `roles` block says which roles are required at which point and whether a
 finding blocks; `run_role` runs one. A required role that did not run fails visibly.
 
-The points are `make_plan`, `implement_phase`, `implement_final`, `review` and `dod`. The ten roles are
+The points are `make_plan`, `implement_phase`, `implement_final`, `review` and `dod`. The eleven roles are
 architect, code-reviewer, security-reviewer, test-architect, ux-reviewer, dependency-auditor, tech-writer,
-website-maintainer, debugger and refactorer. The four **edit roles** are tech-writer, website-maintainer,
+website-maintainer, debugger, refactorer and reflektor. The four **edit roles** are tech-writer, website-maintainer,
 debugger and refactorer.
+
+`reflektor` runs only at `dod`: it builds a change report of the branch in a scratch clone; its block goes into the pull request through `tld roles section`.
 
 ## Resolve
 

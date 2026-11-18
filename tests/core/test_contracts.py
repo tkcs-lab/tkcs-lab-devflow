@@ -395,3 +395,17 @@ def test_questions_playbook_names_the_stop_message_of_its_eval():
     m = re.search(r'command == "questions":.*?expected\["stop_message"\] = "([^"]+)"', text, re.S)
     assert m, "no questions stop_message in evals/fixtures/commands.py"
     assert m.group(1) in (PLAYBOOKS / "questions.md").read_text()
+
+
+def test_reflektor_card_markers_match_the_code():
+    from tld.roles import section
+
+    card = (ROOT / "roles" / "reflektor.md").read_text()
+    for token in (section.BEGIN, section.END, "REPORT-HTML <"):
+        assert token in card, token
+    dod = (PLAYBOOKS / "dod.md").read_text()
+    for token in ("REPORT-HTML <path>", "tld roles reflektor-html --send", "tld roles section --report-line",
+                  "tld board client put-report", "n/a (worker)"):
+        assert token in dod, token
+    implement = (PLAYBOOKS / "implement.md").read_text()
+    between(implement, "## Branches left on origin", "tld roles section --report")
