@@ -5,6 +5,16 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+### Added
+
+- `tld plan record-items`: prints the run record's items from a plan (every phase and `final-review`), or checks that a record lists them all.
+
+### Changed
+
+- `board-gate` also blocks once per ask that got no timer, and once per change (an ask, a worker start or stop, a pull request, a push) that left the status record unwritten, for every record-writing command.
+- The playbooks `make-plan` and `implement` carry a mandatory "Board upkeep" rule set (the status-board policy): first record first, every item up front, extra items at once, every change is a write, every ask has a timer.
+- `runtime.md` no longer tells command records to set `next_check_at`; the timer time goes into `last_event`.
+
 ## [1.4.0] - 2026-11-16
 
 ### Added

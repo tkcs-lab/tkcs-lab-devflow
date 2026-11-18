@@ -40,7 +40,7 @@ shims; `CLAUDE_PROJECT_DIR` and `stop_hook_active` are read only here.
 | `secret-scan` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | content that looks like a credential | A secret in a file ends up in history | a GitHub token or a private key block; `API_KEY = os.environ["API_KEY"]` |
 | `protect-paths` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` | edits to paths the profile lists | Some files are changed by people or by tools, not by hand | `echo x > .env`; `echo x > .env.example` |
 | `plan-gate` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, the GitHub MCP content-write tools (`push_files`, `create_or_update_file`, `delete_file`); UserPromptSubmit (opt-in) | writes into the repository from a session no tld command started | A chat message must not start an implementation | `echo x > README.md`; `ls` |
-| `board-gate` | UserPromptSubmit, PostToolUse (`Bash`, the `board_set` tool of the board MCP server), Stop (opt-in) | ending a turn before the status record is written, once | A session that skips its record is not on the board | stop after `/tld:docs x` with no record write; stop after `board_set` succeeded |
+| `board-gate` | UserPromptSubmit, PostToolUse (`Bash`, the `board_set`, `board_ask`, timer, worker, pull-request and issue-comment tools), Stop (opt-in) | ending a turn before the status record is written, or after an ask, a worker change, a pull request or a push left it unwritten, or an ask before its timer is armed, once each | A session that skips its record is not on the board | stop after `/tld:docs x` with no record write; stop after `board_set` succeeded |
 | `model-check` | SessionStart, UserPromptSubmit | nothing (a `systemMessage` warning only) | The most expensive level is easy to forget | strong session + `/tld:implement x` warns; strong session + `/tld:make-plan x` does not |
 | `env-check` | SessionStart, UserPromptSubmit | nothing (a `systemMessage` warning only) | A session started in the wrong environment works with the wrong network, variables and credentials | a cloud session whose `TLD_ENVIRONMENT` is `Default` with a profile that lists `TLD` warns; with `TLD` it is silent |
 | `dod-gate` | Stop | stopping while `verify.dod` is red (opt-in) | Work is not done until the definition of done passes | stop with a failing test; stop after `/dod` is green |
@@ -295,26 +295,43 @@ the working tree, `disable` from the trusted copy.
 Opt-in, off by default: set `hooks.board_gate.enabled` to `true`. The gate covers the commands that always write a status
 record (`make-plan`, `implement`, `review`, `setup`, `migrate`, `land`, `deps`, `upstream`, `ci`, `questions`), and `docs` only in its
 `init` and `tidy` modes (`/tld:docs` and `/tld:docs check` write none, so they neither open the state nor block). A
-session that one of them started must write its status record to the board once before it ends a turn. It is a nudge,
-not a control.
+session that one of them started must write its status record to the board once before it ends a turn. The gate also
+blocks once per ask that got no timer, and once per change (an ask, a worker start or stop, a pull request, a push) that
+left the record unwritten; this holds for every record-writing command, not only `make-plan` and `implement`. It is a
+nudge, not a control.
 
 - **Three events.** `UserPromptSubmit`: a prompt that starts with one of those commands (for `docs`: with `init` or `tidy`) opens a record of the session
-  (`written` false). `PostToolUse` (matcher `Bash|mcp__.*tld-board.*__board_set`): a successful record write sets
-  `written`: the `board_set` tool returned an object with an `id` and a `version`, or a `tld board client set` command
-  printed one. It never denies. `Stop`: if the session has not written and a board is configured (`TLD_BOARD_URL` and
-  `TLD_BOARD_TOKEN`), the turn end is blocked **once** with a message that says how to write the record (the `board_set`
-  tool, or `tld board client set <id> -` when the tool is missing or fails); the next stop is allowed.
+  (`written` false). `PostToolUse` (matcher `Bash|mcp__.*tld-board.*__(board_set|board_ask)|ScheduleWakeup|CronCreate|mcp__.*__(send_later|create_trigger|add_issue_comment|issue_write|create_session|archive_session|create_pull_request)`):
+  a successful record write sets `written` (the `board_set` tool returned an object with an `id` and a `version`, or a
+  `tld board client set` command printed one) and clears the changes before it. A successful `board_ask`, a `tld board ask`
+  command, or an issue comment or issue body that starts with `<!-- tld-ask -->` counts an ask. A timer tool
+  (`ScheduleWakeup`, `CronCreate`, `send_later`, `create_trigger`) arms the timer. `create_session`, `archive_session`,
+  `create_pull_request` and `git push` count a change. A failed tool call (`isError`) counts nothing. It never denies.
+  `Stop`: in this order, the first rule that fires blocks **once** per sequence number: (1) an ask with no timer after it
+  (needs no board); (2) with a configured board (`TLD_BOARD_URL` and `TLD_BOARD_TOKEN`), no record written yet, with a message
+  that says how to write the record (the `board_set` tool, or `tld board client set <id> -` when the tool is missing or
+  fails); (3) with a configured board and a record written, a change since the last record write.
 - **State.** `<git dir>/tld/board-gate/<hash>.json`, named by a hash of the session id (`command`, `opened_at`,
-  `written`, `blocked`); it lapses after 24 hours. No session id: nothing is written and nothing blocks.
+  `written`, `blocked`, `write_seq`, `dirty_seq`, `dirty_blocked_seq`, `ask_seq`, `timer_seq`, `timer_blocked_seq`);
+  `opened_at` is refreshed on every save, so it lapses after 24 hours without any save. No session id: nothing is written and nothing blocks.
 - **Fails open.** No board configured, a malformed `hooks.board_gate`, an unreadable state file, any error: allow. The hook
-  never calls the board. `enabled` is read from the working tree, `hooks.disable` from the trusted copy, and only on
+  never calls the board. The timer rule needs no board; the first-record and change rules do. `stop_hook_active` no longer
+  lets a stop through, because every rule blocks once per sequence, so a chain of stops ends after at most three blocks. `enabled` is read from the working tree, `hooks.disable` from the trusted copy, and only on
   `Stop`, so a malformed `hooks.disable` can never make it block.
-- **The block message** (the guard runner puts `tld board-gate: ` in front; `<command>` comes from the state file):
-  `this session was started by /tld:<command> and has not written its status record to the board. Write it now: use the board_set tool, or when that tool is missing or fails run "tld board client set <id> - " with the record on stdin (the id comes from "tld board record-id"). If the board cannot be reached, say so in your final reply and stop. If the playbook says to write no record yet, say so and stop. This check blocks only once.`
+- **The block messages** (the guard runner puts `tld board-gate: ` in front; `{command}` comes from the state file):
+  - `MESSAGE`: `this session was started by /tld:{command} and has not written its status record to the board. Write it now: use the board_set tool, or when that tool is missing or fails run "tld board client set <id> - " with the record on stdin (the id comes from "tld board record-id"). If the board cannot be reached, say so in your final reply and stop. If the playbook says to write no record yet, say so and stop. This check blocks only once.`
+  - `DIRTY_MESSAGE`: `this session was started by /tld:{command} and has changed things since its last status record: it asked a question, started or stopped a worker, opened a pull request or pushed. Write the record now: use the board_set tool, or when that tool is missing or fails run "tld board client set <id> - " with the record on stdin. Set updated_at, the state of every item that changed, and every extra item (a fix, a revision, a second review) that started. If the board cannot be reached, say so in your final reply and stop. If the playbook says to write no record yet, say so and stop. This check blocks only once per change.`
+  - `TIMER_MESSAGE`: `this session posted an ask and armed no timer after it. Arm it now with schedule_wakeup (60 minutes when the answer watch runs, else 10 minutes), write its time into last_event as "timer <ISO time>" and write the record, unless the playbook says to write no record yet. If this run is unattended (no person started it), a timer is not needed: say so and stop. This check blocks only once per ask.`
 - **Rejected alternatives.** (1) The board client and the MCP bridge writing the marker: the bridge may not inherit the
   session id, outlives `/clear` and has to pair replies to requests. (2) The hook asking the board: it would need the
   network and a token inside a hook, and a record cannot be tied to a hook session id, because `orchestrator_session`
-  is the cloud id and the hook sees a different one.
+  is the cloud id and the hook sees a different one. (3) A per-turn "wrote no record this turn" rule: it blocks plain chat
+  turns. (4) Closing the gate on a final status: the hook cannot read the record that `tld board client set -` takes on
+  stdin. (5) A staleness timer: it misses "asked, then no write".
+- **Matcher and tool names, as built.** The `PostToolUse` matcher is an unanchored regex, so it also matches names such as
+  `ScheduleWakeupX`; the adapter maps only exact tool names and returns no action for the others, so they count nothing. The
+  timer and worker tool names are accepted from any MCP server (`mcp__.*__send_later`, `mcp__.*__create_session`), not
+  only the ones this runtime ships.
 
 ## How the dod-gate recognises a session
 
