@@ -13,6 +13,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - review: security review found the secret scan bypassable (allow mark, line-splitting characters) and the page title rule bypassable with HTML entities; verify_html now refuses the allow mark and line-splitting characters in the raw data, decoded strings and keys, and the title refuses &, control/format/line-separator characters and more than 200 characters
 - retry: phase sent back once for the two blocking security findings
+- final: the page check also refuses duplicate JSON keys in the payload (fails closed, tested); the plan had no such rule
+- final: a nesting limit of 200 was added to the page check and to reflektor-check (the plan asked for an iterative walk without a limit); deeper data is refused
 
 ## p3-section
 
@@ -30,7 +32,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p6-board-store
 
-- None.
+- final: the 503 busy answer of the report upload carries a Retry-After: 1 header; the plan does not specify it
 
 ## p7-board-client-page
 
@@ -50,7 +52,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: final review (changes): p2-page duplicate JSON keys rule and nesting limit of 200, and p6-board-store Retry-After on 503, were not recorded in this file; recorded above by the orchestrator
 
 ## Finishing
 
