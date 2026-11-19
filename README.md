@@ -12,7 +12,7 @@ levels. The procedures contain no project facts and stop with a message naming a
 
 - **The core** is neutral about the agent runtime: a Python package with one command line, `tld`
   (`src/tld/`: profile, plan, roles, dod, guard, board, ops), and the content the agents follow: **playbooks**
-  (one procedure per command, `playbooks/`), ten **roles** (a role card in `roles/` plus a checklist in
+  (one procedure per command, `playbooks/`), eleven **roles** (a role card in `roles/` plus a checklist in
   `checklists/`), **stack guides** (`stacks/`: python, go, swift, ipados) and shared **policies**.
 - **The Claude Code adapter** (`adapters/claude/`) is the plugin `tld`: each command is a few lines that say
   "follow `playbooks/<cmd>.md`", the `tld:runtime` skill maps the playbooks' runtime actions (start a worker, wait,

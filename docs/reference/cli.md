@@ -40,6 +40,10 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld plan active-run --kind make-plan\|implement --comments F --bot L [--record F --plan-slug S] [--self ID] [--now ISO] [--max-age-minutes N]` | `tld.plan.active` | is another run of the same plan or issue alive: `none`, `own`, `stale` (exit 0) or `active` (exit 4), from the tracking issue's comments and the board record |
 | `tld roles required --profile P --at POINT [--changed F]` | `tld.roles.dispatch` | the roles required at a point, with their mode, as JSON |
 | `tld roles verify --required F --report F` | `tld.roles.dispatch` | check a report against `tld roles required` |
+| `tld roles reflektor-prepare --dest DIR --repo CLONE --base BASE` | `tld.roles.reflektor` | download the pinned Reflektor release (size and sha256 checked), refuse a repository whose .reflektor.json is not plain, unpack it; prints the path and the node path |
+| `tld roles reflektor-check --report FILE --root CLONE` | `tld.roles.reflektor` | refuse a Reflektor report whose paths leave the clone |
+| `tld roles reflektor-html (--file FILE \| --send --answer FILE --dest DIR)` | `tld.roles.reflektor` | add a Content-Security-Policy to a Reflektor page and check it against the pinned viewer; --send checks a saved answer's page and copies it |
+| `tld roles section --report FILE` | `tld.roles.section` | print the role report's change-report block, cleaned for a pull request body; exit 3 when there is none |
 | `tld dod exempt` | `tld.dod.gate` | mark this checkout's session exempt from the dod-gate hook |
 | `tld guard allow-profile` | `tld.guard.protect_paths` | let the session edit the profile for the next 2 hours |
 | `tld guard allow-workflow-install FILE...` | `tld.guard.protect_paths` | let the session write `tld-land.yml` / `tld-release.yml` for the next 15 minutes |
@@ -48,7 +52,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld guard allow-plan` | `tld.guard.protect_paths` | let every session in this checkout edit files for 8 hours (a plan-gate marker for /implement workers) |
 | `tld guard end-allow` | `tld.guard.protect_paths` | end the profile, workflow-install, git-ops and release markers; it does not end the plan marker |
 | `tld board server [--host H] [--port N] [--db F] [--insecure-cookie] [--api-port N] ...` | `tld.board.server` | serve the board: status records, asks, the owner's page ([board-server.md](../guides/board-server.md)) |
-| `tld board client health\|list\|get\|set\|delete ...` | `tld.board.client` | status records on the board server |
+| `tld board client health\|list\|get\|set\|delete\|put-report ...` | `tld.board.client` | status records on the board server |
 | `tld board usage FILE\|- [--source final\|scheduled]` | `tld.board.usage_client` | send the newest rate-limit reading to the board's Usage page; exit 3 no board, 1 refused or not understood |
 | `tld board ask-digest --repo OWNER/NAME [--since ISO] [--file FILE\|-] [--vocab FILE] [--now ISO]` | `tld.board.ask_digest` | digest the asks of one repository into clusters of similar questions (counts only for other projects); exit 3 no board, 1 the board, the file or the vocabulary cannot be read |
 | `tld board ask FILE\|- [--fallback-issue O/R[#N]] [--mention LOGIN] [--profile P]` | `tld.board.inbox` | post an ask and print its id; exit 3 no board, 5 the fallback comment body is on stdout |

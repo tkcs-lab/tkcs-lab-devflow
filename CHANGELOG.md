@@ -8,6 +8,8 @@ entry of the released version at the top of the GitHub release, above the list o
 ### Added
 
 - `tld plan record-items`: prints the run record's items from a plan (every phase and `final-review`), or checks that a record lists them all.
+- A new `reflektor` role (Reflektor v0.9.1, pinned, `dod` only) that adds a last `## Change report` section to the pull request and sends an HTML report; new commands `tld roles reflektor-prepare`, `tld roles reflektor-check`, `tld roles reflektor-html` and `tld roles section` ([guide](docs/guides/reflektor.md)).
+- The board stores one checked HTML report per record (`PUT`, `GET` and `DELETE /api/records/<id>/report`, `tld board client put-report`, a "Change report" link on the card); database schema version 6: back up before upgrading, an older image refuses the database.
 
 ### Changed
 
