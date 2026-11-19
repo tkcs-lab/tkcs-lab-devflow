@@ -144,7 +144,7 @@ jobs:
           done
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           # The action's default for this version is docker.io/tonistiigi/binfmt:latest, run privileged. Pinned by
           # digest (the tag :latest on 2026-11-12) so a moved tag cannot change what runs; refresh it by hand.
