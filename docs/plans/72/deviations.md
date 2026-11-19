@@ -56,4 +56,5 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Finishing
 
-- pending
+- final: scope: no phase had files outside its touches (nine phases, 0 out of scope, 0 collisions), so there was no drift to accept or revert
+- final: dod: all rows pass except tests/core/test_docs_links.py for docs/plans/72/plan.md, which fails on a link inside the plan text itself (../guides/reflektor.md in the p9 brief resolves to docs/plans/guides/reflektor.md); the owner was asked how to handle it (ask a-698d1c97c176a7f8)
