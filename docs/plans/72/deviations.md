@@ -49,6 +49,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - review: security review found the guide claimed nothing leaves the machine but the download (the page embeds the full contents of the changed files and is stored on the board), and the pin refresh lacked the re-derivation of the link-target keys and the policies; the guide now says what is stored where and the refresh has the step
 - review: the allowed-domains row of cloud-environments.md now says that github.com opens git and HTTPS traffic to all of GitHub for every session of that environment and recommends a dedicated environment; the guide corrects several claims (card rules versus enforced controls, three build rounds, scratch copies, DELETE of a stored page)
 - retry: phase sent back twice for blocking doc findings
+- final: owner decision (ask a-698d1c97c176a7f8, answer fix): the plan text itself was changed in one place, the markdown link to ../guides/reflektor.md in the p9 brief became plain text, because it resolved to docs/plans/guides/reflektor.md and kept the docs-links test red; the plan blob therefore differs from the one pinned by the Plan-Started commit
 
 ## Final review
 
@@ -57,4 +58,4 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 ## Finishing
 
 - final: scope: no phase had files outside its touches (nine phases, 0 out of scope, 0 collisions), so there was no drift to accept or revert
-- final: dod: all rows pass except tests/core/test_docs_links.py for docs/plans/72/plan.md, which fails on a link inside the plan text itself (../guides/reflektor.md in the p9 brief resolves to docs/plans/guides/reflektor.md); the owner was asked how to handle it (ask a-698d1c97c176a7f8)
+- final: dod: all rows passed except tests/core/test_docs_links.py for docs/plans/72/plan.md, which failed on a link inside the plan text itself; fixed on the owner's answer (see p9-retire), after which the whole suite passes
