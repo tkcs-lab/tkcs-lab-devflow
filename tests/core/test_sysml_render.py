@@ -94,8 +94,9 @@ def test_golden_files() -> None:
     lay = layout(_fixture("connect.sysml"))
     model = _fixture("connect.sysml")
     golden = FIXTURES / "golden"
-    assert to_svg(lay) == (golden / "connect.svg").read_text(encoding="utf-8")
-    assert to_markdown(model, lay) == (golden / "connect.md").read_text(encoding="utf-8")
+    # The markdown links to architecture.svg, so the golden pair lives in one directory under those names.
+    assert to_svg(lay) == (golden / "connect" / "architecture.svg").read_text(encoding="utf-8")
+    assert to_markdown(model, lay) == (golden / "connect" / "architecture.md").read_text(encoding="utf-8")
 
 
 def test_golden_changes_with_layout_constant(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -105,7 +106,7 @@ def test_golden_changes_with_layout_constant(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_golden_svg_matches_hand_derived_layout() -> None:
-    root = ET.fromstring((FIXTURES / "golden" / "connect.svg").read_text(encoding="utf-8").split("\n", 1)[1])
+    root = ET.fromstring((FIXTURES / "golden" / "connect" / "architecture.svg").read_text(encoding="utf-8").split("\n", 1)[1])
     rects = [(int(r.get("x")), int(r.get("y")), int(r.get("width")), int(r.get("height")))
              for r in root.iter(f"{SVG_NS}rect")]
     assert rects == [
@@ -138,7 +139,7 @@ def _doc_md(doc: str) -> str:
 def test_doc_with_link_syntax_is_rendered_inert() -> None:
     for doc, want in (
         ("javascript:alert(1)", "javascript:alert\\(1\\)"),
-        ("user@example.com", "user@example.com"),
+        ("user@example.com", "user&#64;example.com"),
         ("[a](b)", "\\[a\\]\\(b\\)"),
     ):
         row = [ln for ln in _doc_md(doc).splitlines() if ln.startswith("| `A`")][0]
@@ -232,3 +233,27 @@ def test_empty_model_renders() -> None:
     _check_allowlists(to_svg(lay))
     md = to_markdown(model, lay)
     assert "0 part defs in 0 packages" in md and "## Relations" in md
+
+
+def test_md_escape_neutralises_email_math_and_leading_markers() -> None:
+    assert md_escape("mail me@example.com") == "mail me&#64;example.com"
+    assert md_escape("costs $5 and $6") == "costs \\$5 and \\$6"
+    for doc, want in (("- item", "\\- item"), ("+ item", "\\+ item"), ("--- x", "\\--- x"), ("=== x", "\\=== x"),
+                      ("1. one", "1\\. one"), ("12. one", "12\\. one"), ("a - b", "a - b"), ("1 apple", "1 apple")):
+        assert md_escape(doc) == want
+
+
+def test_package_doc_cannot_change_page_structure() -> None:
+    for doc, line in (("- a list", "\\- a list"), ("--- rule", "\\--- rule"), ("1. numbered", "1\\. numbered"),
+                      ("$x$ math", "\\$x\\$ math")):
+        model = _model(f"package P {{ doc /* {doc} */ part def A {{ doc /* d */ }} }}")
+        lines = to_markdown(model, layout(model)).splitlines()
+        assert line in lines
+        assert not any(ln.startswith(("- ", "---", "1. ")) for ln in lines)
+
+
+def test_xml_invalid_code_points_raise_model_error() -> None:
+    for bad in ("\x00", "\x0b", "\ufffe", "\ud800"):
+        with pytest.raises(ModelError):
+            esc("a" + bad)
+    assert esc("a\tb\n\U0001f600") == "a\tb\n\U0001f600"
