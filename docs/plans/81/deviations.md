@@ -56,7 +56,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p8-manifest-sysml-change
 
-- pending
+- worker: existing mutants VM14 and VM15 were edited because the refactor moved the code their match strings pointed at; one CHANGELOG.md line outside touches
+- review: worker had no tld; orchestrator ran security-reviewer: 0 blocking, 4 non-blocking left open (a profile whose sysml key is null or not a mapping turns the no-change-no-touch rule off silently; a phase with missing or empty touches is never fenced, as already for spec_change; VM14 and VM15 now mutate both fences so they no longer pin the spec control alone; phase ids are echoed unescaped in manifest messages)
 
 ## p9-sysml-record
 
