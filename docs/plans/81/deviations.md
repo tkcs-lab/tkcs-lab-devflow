@@ -51,6 +51,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - retry: security-reviewer found 1 blocking: when an archive write fails and the rollback also fails, the rollback errors were swallowed and the model was left half applied with only the first error shown; p7 sent back to report the paths left changed and tell the user to restore from git, to roll back on any exception, and to add mutants for the archive gates
 - retry: second send-back: the 400-character bound on the archive failure line could cut off the part that says whether the undo worked, so a half-applied model could be reported without that status; p7 told to put the status first, bound each part separately, make the restore attempt even when the comparison read fails, and attempt every undo step
+- worker: none; the archive rollback now reports the undo status first and a non-interrupt exception in an undo step is listed as left changed (exit 2, no traceback), accepted by the review
+- review: third review: 0 blocking, 3 non-blocking left open (an interrupt between the directory move and its undo entry can report the model as restored while the change folder stays in archive; an interrupt cause prints empty and an undo error type is dropped; an interrupt inside the handler outside the per-step try can stop the undo without a status line); the removed base-hash mutant stays out of scope
 
 ## p8-manifest-sysml-change
 
