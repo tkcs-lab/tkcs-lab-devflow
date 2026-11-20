@@ -5,8 +5,9 @@ model file, or a new file) and `base.json` (the sha256 of every model file the c
 later archive cannot silently revert a merged edit of another plan. Everything here reads and writes through
 `tld.sysml.files` (bounded reads, symbolic links refused); `check_change` and `archive_plan` write nothing, only
 `new_change` does, and it checks every path before it writes the first. The subset is intended to parse in SysML
-v2 tools; tld does not check it against one. Model and change text is untrusted: only ModelError and Finding
-leave this module, every name echoed in a message is escaped. Python 3.11+, stdlib only.
+v2 tools; tld does not check it against one. Model and change text is untrusted: every name echoed in a message
+is escaped, and apart from an OSError of the real file system (a full disk, a permission error), which the
+wrapper maps to exit 2, only ModelError and Finding leave this module. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
 
@@ -147,8 +148,16 @@ def new_change(root: Path, id: str, files: list[str], removes: list[str]) -> str
     copies: dict[str, str] = {}
     for rel in files:
         dest = f"{c}/model/{rel}"
-        if read_text(root, dest) is None:  # an existing copy is kept (it may hold an edit); a link is refused
+        existing = read_text(root, dest)  # a link or a non-file is refused here
+        if existing is None:
             copies[dest] = base_files[rel]
+        elif rel not in state["files"] and existing != base_files[rel]:
+            # A copy nobody recorded a base for: its base is unknown, so recording the hash of the current
+            # model file would hide another plan's merged edit from the later archive.
+            raise ModelError(
+                f"{_show(dest)} exists but is not recorded in base.json; move it aside, run new-change "
+                f"--file {rel} and apply your edit again")
+        # otherwise the existing copy is kept: it may hold an edit, and its base is recorded or identical
         state["files"].setdefault(rel, sha256_text(base_files[rel]))
     for rel in removes:
         state["removed"].setdefault(rel, sha256_text(base_files[rel]))
@@ -231,7 +240,8 @@ def check_change(root: Path, id: str, base_files: dict[str, str]) -> tuple[dict[
             problems.append(f"{rel} cannot be both replaced and removed")
     for rel in sorted(cf.overlay):
         if rel not in replaced and rel in base_files:
-            problems.append(f"{rel} is in the change but exists in the model; list it with new-change --file")
+            problems.append(f"{rel} is in the change but exists in the model; move {c}/model/{rel} aside, run new-change "
+                f"--file {rel} and apply your edit again")
     for rel in sorted(replaced):
         if rel not in cf.overlay:
             problems.append(f"{rel} is listed in base.json but missing from the change")

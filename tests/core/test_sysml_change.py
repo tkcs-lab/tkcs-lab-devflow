@@ -241,7 +241,8 @@ def test_overlay_file_that_exists_must_be_listed(repo):
     _, _, findings = check(repo)
     assert findings == [Finding(
         f"{C}/base.json", 1,
-        "core/api.sysml is in the change but exists in the model; list it with new-change --file")]
+        f"core/api.sysml is in the change but exists in the model; move {C}/model/core/api.sysml aside, run "
+        "new-change --file core/api.sysml and apply your edit again")]
 
 
 def test_new_overlay_file_needs_no_base_entry(repo):
@@ -567,3 +568,48 @@ def test_archive_plan_writes_nothing(repo):
     composed, _, _ = ch.check_change(repo, "x", base)
     ch.archive_plan(repo, "x", TODAY, composed, base)
     assert snapshot(repo) == before
+
+
+# --- an existing copy without a recorded base ------------------------------------------------------------
+
+
+def test_new_change_refuses_unrecorded_copy_that_differs_from_the_model(repo):
+    # (a) the change added c.sysml, another plan then merged its own c.sysml
+    write(repo, "sysml/changes/x/model/c.sysml", NEW)
+    write(repo, "sysml/model/c.sysml", NEW.replace("a cache", "merged edit of another plan"))
+    before = snapshot(repo)
+    with pytest.raises(ModelError, match="^sysml/changes/x/model/c.sysml exists but is not recorded in base.json; "
+                                         "move it aside, run new-change --file c.sysml and apply your edit again$"):
+        ch.new_change(repo, "x", ["c.sysml"], [])
+    assert snapshot(repo) == before
+
+
+def test_new_change_refuses_copy_whose_base_entry_was_deleted(repo):
+    # (b) only the base.json entry was deleted, the stale copy stays
+    ch.new_change(repo, "x", ["core/api.sysml"], [])
+    write(repo, "sysml/model/core/api.sysml", API2)  # another plan merged an edit
+    data = json.loads((repo / C / "base.json").read_text())
+    data["files"] = {}
+    (repo / C / "base.json").write_text(json.dumps(data))
+    before = snapshot(repo)
+    with pytest.raises(ModelError, match="exists but is not recorded in base.json"):
+        ch.new_change(repo, "x", ["core/api.sysml"], [])
+    assert snapshot(repo) == before
+
+
+def test_new_change_accepts_unrecorded_copy_equal_to_the_model(repo):
+    # a first call that failed after writing the copy but before base.json
+    write(repo, "sysml/changes/x/model/core/api.sysml", API)
+    assert ch.new_change(repo, "x", ["core/api.sysml"], []) == "created"
+    files = json.loads((repo / C / "base.json").read_text())["files"]
+    assert files == {"core/api.sysml": sha256_text(API)}
+
+
+def test_new_change_keeps_a_recorded_edited_copy(repo):
+    ch.new_change(repo, "x", ["core/api.sysml"], [])
+    (repo / C / "model/core/api.sysml").write_text(API2)
+    write(repo, "sysml/model/core/api.sysml", "package Core {\n  part def Api { doc /* merged */ }\n}\n")
+    ch.new_change(repo, "x", ["core/api.sysml"], [])
+    assert (repo / C / "model/core/api.sysml").read_text() == API2
+    files = json.loads((repo / C / "base.json").read_text())["files"]
+    assert files == {"core/api.sysml": sha256_text(API)}
