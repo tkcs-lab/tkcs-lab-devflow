@@ -17,6 +17,8 @@ from tld.sysml.types import ModelError
 __all__ = ["STAMP", "layout_number", "md_escape", "to_markdown"]
 
 _SPECIAL = frozenset("\\`*_[]()<>#!|~&")
+_EXTRA = {"$": "\\$", "@": "&#64;"}  # beyond the 15: math spans, and e-mail autolinks
+_LEAD = re.compile(r"^(?:[-+=]|[0-9]+(?=[.]))")
 _CODE_OK = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*")
 _SUMMARY = "{n} part defs in {m} packages, {k} dependencies and {c} connections, generated from sysml/model/. " \
           "Change it with a plan, never by hand."
@@ -24,9 +26,15 @@ _PACKAGE_VIEW_NOTE = "The diagram shows packages only; the tables list every par
 
 
 def md_escape(text: str) -> str:
-    """Collapse whitespace runs to one space, trim, and put a backslash before each of `\\ ` * _ [ ] ( ) < > # ! | ~ &`."""
+    """Collapse whitespace runs to one space, trim, and put a backslash before each of the 15 characters
+    `\\ ` * _ [ ] ( ) < > # ! | ~ &`. Also escaped: `$` (math), `@` (written `&#64;`, so no e-mail autolink),
+    and a leading `-`, `+`, `=` or `<digits>.` (a list item, rule or ordered list)."""
     collapsed = " ".join(text.split())
-    return "".join("\\" + c if c in _SPECIAL else c for c in collapsed)
+    out = "".join("\\" + c if c in _SPECIAL else _EXTRA.get(c, c) for c in collapsed)
+    m = _LEAD.match(out)
+    if m:
+        out = out[: m.end()] + "\\" + out[m.end():] if out[0].isdigit() else "\\" + out
+    return out
 
 
 def _code(text: str) -> str:
