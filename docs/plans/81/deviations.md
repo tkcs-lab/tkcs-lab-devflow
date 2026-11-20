@@ -31,6 +31,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - retry: security-reviewer found 1 blocking: new_change kept an existing change copy but recorded the current model hash as its base, so a later archive could overwrite or revert another plan merged edit; p4 sent back to refuse a copy not recorded in base.json unless it equals the model file
 - review: design change vs plan 3.6 new-change row: an existing change copy that is not recorded in base.json is refused unless identical to the model file (plan text said copy unless it exists and record the hash unless recorded); archive_plan trusts its caller, so p7 must run check_change with zero findings and check_writable on every target before the first write
+- worker: change ids capped at 100 characters; change.py imports the private files._check_components (read-only existence checks, judged safe by the re-review)
+- review: re-review after the send-back: pass, 0 findings
 
 ## p5-sysml-layout
 
