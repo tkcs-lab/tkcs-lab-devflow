@@ -39,7 +39,7 @@ CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 PR_FIELDS = ("number", "url", "state", "ci", "awaiting")
 
 KINDS = ("run", "command")
-COMMANDS = ("deps", "upstream", "ci", "land", "setup", "docs", "review", "make-plan", "migrate", "questions", "spec")
+COMMANDS = ("deps", "upstream", "ci", "land", "setup", "docs", "review", "make-plan", "migrate", "questions", "spec", "sysml")
 FINAL = ("done", "failed", "pr_open")
 STATUSES = ("starting", "running", "waiting_user", "reviewing", "pr_open", "done", "failed")
 ITEM_STATES = {
