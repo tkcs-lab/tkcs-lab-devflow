@@ -5,7 +5,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p1-profile-sysml-key
 
-- pending
+- worker: none; one CHANGELOG.md line outside touches, as the rules require
+- review: worker had no tld; orchestrator ran the security-reviewer role (pass), diff in scope
 
 ## p2-sysml-files
 
