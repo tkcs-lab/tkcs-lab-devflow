@@ -337,3 +337,26 @@ def test_parse_never_raises_on_odd_input():
     for text in ["{", "}", "::", ":::", "package", "package P { doc", "\\", "\r", "\n\n\n", "a" * 100000]:
         elements, findings = parse_file(text, F)
         assert (elements, bool(findings)) in (([], True),) or findings == []
+
+
+@pytest.mark.parametrize(
+    "text,line",
+    [
+        ("package P {\r }", 1),
+        ("package P { }\r", 1),
+        ("// a\rb\npackage P { }", 1),
+        ("\n\npackage P { doc /* a\rb */ }", 3),
+        ("package P { }\r\n\r", 2),
+    ],
+)
+def test_lone_carriage_return_is_refused_everywhere(text, line):
+    assert one(text) == err(line, "unexpected character 'U+000D'")
+
+
+def test_crlf_in_comments_and_docs_is_fine():
+    els = ok("// a\r\npackage P { doc /* a\r\n b */ }\r\n")
+    assert els[0].doc == "a b"
+
+
+def test_stray_comment_then_bidi_reports_the_character_finding():
+    assert one("/* x */\npackage P { }\n\u202e") == err(3, "unexpected character 'U+202E'")

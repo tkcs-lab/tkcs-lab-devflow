@@ -62,6 +62,24 @@ def _scan_region(text: str, start: int, end: int, line: int) -> None:
             raise _Stop(line, f"unexpected character '{_char_label(c)}'")
 
 
+def _prescan(text: str) -> None:
+    """One pass over the whole text, comments and docs included: refused characters win over syntax findings.
+
+    A carriage return is only allowed directly before a line feed (CRLF); a lone one would let a terminal
+    overwrite the line and show a different text than the parser reads.
+    """
+    line = 1
+    n = len(text)
+    for k, c in enumerate(text):
+        if c == "\n":
+            line += 1
+        elif c == "\r":
+            if k + 1 >= n or text[k + 1] != "\n":
+                raise _Stop(line, "unexpected character 'U+000D'")
+        elif _refused(c):
+            raise _Stop(line, f"unexpected character '{_char_label(c)}'")
+
+
 def _lex(text: str) -> list[_Tok]:
     tokens: list[_Tok] = []
     i = 0
@@ -341,8 +359,11 @@ class _Parser:
 
 
 def parse_file(text: str, file: str) -> tuple[list[Element], list[Finding]]:
-    """Parse one model file. Stops at the first finding and then returns just that one, with no elements."""
+    """Parse one model file. Callers must read the text through files.load_tree or files.read_text (size limits).
+
+    Stops at the first finding and then returns just that one, with no elements."""
     try:
+        _prescan(text)
         parser = _Parser(_lex(text), file)
         parser.top()
     except _Stop as stop:
