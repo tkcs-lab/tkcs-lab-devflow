@@ -77,7 +77,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p12-docs-lists
 
-- pending
+- worker: none
+- review: worker had no tld; orchestrator ran security-reviewer: pass, 0 findings; no touched path is protected
 
 ## p13-retire
 
