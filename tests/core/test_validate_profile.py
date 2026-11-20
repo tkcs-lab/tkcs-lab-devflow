@@ -497,3 +497,46 @@ def test_starter_template_spec_block_validates_when_uncommented(vp):
     profile.update(yaml.safe_load("\n".join(block)))
     assert profile["spec"]["version"] == "2.1.0"
     assert vp.validate(profile)[0] == []
+
+
+def _with_sysml(block):
+    p = copy.deepcopy(MINIMAL)
+    p["sysml"] = block
+    return p
+
+
+def test_sysml_block_is_optional_and_stays_absent(vp):
+    assert errs(vp, MINIMAL) == []
+    assert "sysml" not in vp.validate(MINIMAL)[2]
+
+
+def test_sysml_subset_validates(vp):
+    assert errs(vp, _with_sysml({"subset": 1})) == []
+    assert vp.validate(_with_sysml({"subset": 1}))[2]["sysml"] == {"subset": 1}
+
+
+@pytest.mark.parametrize("block,message", [
+    ({}, "missing required key 'sysml.subset'"),
+    ({"subset": 2}, "sysml.subset"),
+    ({"subset": "1"}, "sysml.subset"),
+    ({"subset": 1.0}, "sysml.subset"),
+    ({"subset": True}, "sysml.subset"),
+    ({"subset": 1, "dir": "sysml"}, "sysml.dir"),
+])
+def test_sysml_keys_are_checked(vp, block, message):
+    assert any(message in e for e in errs(vp, _with_sysml(block)))
+
+
+def test_starter_template_sysml_block_validates_when_uncommented(vp):
+    text = (TLD / "templates" / "toolkit.yaml").read_text()
+    assert "# sysml:" in text
+    lines = text[text.index("# sysml:"):].splitlines()
+    block = []
+    for line in lines:
+        if block and not line.startswith("#   "):
+            break
+        block.append(line[2:])
+    profile = yaml.safe_load(text)
+    profile.update(yaml.safe_load("\n".join(block)))
+    assert profile["sysml"]["subset"] == 1
+    assert vp.validate(profile)[0] == []
