@@ -12,6 +12,7 @@ entry of the released version at the top of the GitHub release, above the list o
 - Optional profile block `sysml: {subset: 1}`: marks a repository that uses a SysML architecture model (the commands that use it follow in later changes of #81).
 - `sysml` is a status-record command: `tld board record-id --command sysml` and the status-record schema accept it.
 - `tld ops sysml new-change|check|render|archive`: checks the architecture model, writes and checks an architecture change, draws `docs/architecture.svg` and `docs/architecture.md`, and archives a change into the model (pure Python; the subset is a documented subset of the SysML v2 notation that tld does not check against a SysML tool).
+- Manifest key `sysml_change`: with a profile `sysml` block only the last phase may touch `sysml/`, `docs/architecture.md` and `docs/architecture.svg`, and without it no phase may (`tld plan validate-manifest`).
 
 ### Changed
 
