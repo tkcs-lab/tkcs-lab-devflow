@@ -1,0 +1,17 @@
+id: sysml-needs-subset
+description: /sysml init on a profile without a sysml block must stop with the missing-key message and touch nothing (no push, merge or branch).
+command: /tld:sysml
+arguments: "init"
+fixture:
+  builder: commands
+  params:
+    command: sysml
+model: sonnet
+repeats: 3
+timeout_s: 300
+cost_ceiling_usd: 0.6
+graders:
+  - name: result_mentions
+    key: stop_message
+  - forbidden_ops_absent
+  - no_changes
