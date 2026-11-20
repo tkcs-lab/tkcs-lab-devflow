@@ -33,6 +33,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - review: design change vs plan 3.6 new-change row: an existing change copy that is not recorded in base.json is refused unless identical to the model file (plan text said copy unless it exists and record the hash unless recorded); archive_plan trusts its caller, so p7 must run check_change with zero findings and check_writable on every target before the first write
 - worker: change ids capped at 100 characters; change.py imports the private files._check_components (read-only existence checks, judged safe by the re-review)
 - review: re-review after the send-back: pass, 0 findings
+- final: the check --change finding for a file that is in the change and exists in the model now says to move the copy aside, run new-change --file and apply the edit again (plan 3.4 says list it with new-change --file); the plan remedy would now be refused by the recorded-copy rule added in the send-back
+- review: new-change on a change whose base.json is invalid stops with a message to delete or fix it (exit 2); the plan does not define this case
 
 ## p5-sysml-layout
 
@@ -46,6 +48,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - retry: merge was pushed with one red test (tests/core/test_docs_links.py: the golden markdown fixture links to architecture.svg, which does not exist next to it); the merge was reverted and p6 sent back to fix the link check
 - worker: golden fixtures moved to tests/fixtures/sysml/golden/connect/ so the markdown image link resolves; the three open review findings were fixed by the worker
 - review: re-review after the fixes: pass, 0 findings; re-merged after reverting the revert, full suite green (5802)
+- review: markdown output differs from plan 3.5 in two places: a package with no doc that owns nothing gets no section, and self relations are dropped from the relations table
 
 ## p7-ops-sysml-cli
 
@@ -53,6 +56,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - retry: second send-back: the 400-character bound on the archive failure line could cut off the part that says whether the undo worked, so a half-applied model could be reported without that status; p7 told to put the status first, bound each part separately, make the restore attempt even when the comparison read fails, and attempt every undo step
 - worker: none; the archive rollback now reports the undo status first and a non-interrupt exception in an undo step is listed as left changed (exit 2, no traceback), accepted by the review
 - review: third review: 0 blocking, 3 non-blocking left open (an interrupt between the directory move and its undo entry can report the model as restored while the change folder stays in archive; an interrupt cause prints empty and an undo error type is dropped; an interrupt inside the handler outside the per-step try can stop the undo without a status line); the removed base-hash mutant stays out of scope
+- review: the plan coverage command cannot pass as written because the repository coverage config measures all of tld (9.67 percent); restricted to the sysml modules the measured coverage is 98.4 percent
 
 ## p8-manifest-sysml-change
 
@@ -87,7 +91,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: final reviewer blocking: the check --change message wording is a plan deviation that was not recorded; recorded under p4-sysml-change
+- final: code reviewer blocking: the p1 changelog line says the commands that use the sysml key follow in later changes, which is not true when this release ships; fixed in fix-1
 
 ## Finishing
 
