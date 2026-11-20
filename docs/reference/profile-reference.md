@@ -73,6 +73,10 @@ Rules:
 | `upstream.tag_pattern` | **yes** (in `upstream`) | Regular expression a release tag must match; must compile |
 | `upstream.version_file` | **yes** (in `upstream`) | File in the fork that records the synced tag |
 | `land.max_prs` | no | Integer 1..50: most pull requests one `/land` run orders. `/land` works without the `land` section |
+| `spec` | no | Section for the spec commands and the spec change `/make-plan` writes. Absent means the repository does not use specs |
+| `spec.version` | **yes** (in `spec`) | Exact OpenSpec release as MAJOR.MINOR.PATCH; the wrapper installs @fission-ai/openspec@<version> and re-checks the format with a full match (the schema pattern alone would let a trailing newline through). Guide: [docs/guides/spec.md](../guides/spec.md) |
+| `sysml` | no | Section for the architecture commands and the architecture change /make-plan writes. Absent means the repository has no architecture model |
+| `sysml.subset` | **yes** (in `sysml`) | Integer, only 1 today: the version of the tld SysML subset (see [docs/guides/sysml.md](../guides/sysml.md)). A new grammar is a new number |
 | `admin.policy` | **yes** (in `admin`) | Path, relative to the repo root, of the policy file the repo-admin playbook audits and applies (see [admin.md](../guides/admin.md)). The file must exist. It needs the `admin` section and stops with a missing-key message when it is absent |
 | `git_ops.repo` | **yes** (in `git_ops`) | Owner/name of the central repository that holds the `tld-git-ops` workflow. The git-ops playbook needs the section and stops with a missing-key message when it is absent; see [git-ops.md](../guides/git-ops.md) |
 | `git_ops.workflow` | no | File name of the workflow in that repository. Default `tld-git-ops.yml` |
@@ -197,5 +201,7 @@ keys, unique phase ids, known `depends_on`, no cycles, `brief` and `acceptance` 
 `complexity` of `S` or `M`, a `worker_level` of `strong`, `standard` or `fast` and a `worker_level_reason` for
 `strong`, honest manual-step entries, `feature_branch` against `git.branch_types`, and that phases which can run
 at the same time share no path in `touches` (globs included). `tracking_issue` is optional everywhere.
+`spec_change` (optional) names the OpenSpec change the plan carries; the profile needs a `spec` block and only the last phase may touch `openspec/`.
+`sysml_change` (optional) names the architecture change the plan carries; the profile needs a `sysml` block and only the last phase may touch `sysml/`, `docs/architecture.md` and `docs/architecture.svg`; with a `sysml` block and no `sysml_change` no phase may touch them.
 `/implement` also runs `tld plan check-url` (a plan only from `<main>` or a feature branch of the same repository, at `<plan_dir>/<n>/plan.md`),
 `tld plan branch-name` and `tld plan phase-status`.

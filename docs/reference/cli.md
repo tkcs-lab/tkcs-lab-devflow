@@ -73,6 +73,8 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld ops upstream-sync plan\|prepare ...` | `tld.ops.upstream_sync` | sync a fork to an upstream release |
 | `tld ops repo-admin validate-policy\|whoami\|audit\|apply ...` | `tld.ops.repo_admin` | audit and update organisation and repository settings |
 | `tld ops docs-index check\|inventory\|move ...` | `tld.ops.docs_index` | the docs index rules and doc moves (`move` also rewrites the profile's paths; a dry run unless `--apply`) |
+| `tld ops spec init\|new-change\|list\|validate\|archive [--profile FILE] [--root DIR]` | `tld.ops.spec` | the pinned OpenSpec CLI (installed once per `spec.version` into the cache, run with an allowlisted environment) |
+| `tld ops sysml new-change\|check\|render\|archive [--profile FILE] [--root DIR]` | `tld.ops.sysml` | the architecture model in a documented subset of the SysML v2 notation: create and check a change, draw `docs/architecture.svg` and `docs/architecture.md`, archive a change into the model (pure Python; exit 1 findings or drift, 2 cannot run) |
 | `tld migrate [ROOT] [--write]` | `tld.ops.migrate` | move a claude-toolkit (devflow) repository to tld: prints the plan, `--write` applies and stages it, then validates the profile and prints the owner's checklist; it never follows a symbolic link ([migrating-from-claude-toolkit.md](../guides/migrating-from-claude-toolkit.md)) |
 | `tld version show`, `tld --version` | `tld.cli` | print the running tld version |
 
