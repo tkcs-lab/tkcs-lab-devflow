@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import stat
+import types
 from pathlib import Path
 
 import pytest
@@ -147,7 +149,7 @@ def test_fifo_is_refused(root: Path) -> None:
 def test_invalid_relpaths(rel: str) -> None:
     with pytest.raises(ModelError) as exc:
         files.check_relpath(rel)
-    assert str(exc.value) == f"invalid file '{rel}': use a path like core/api.sysml"
+    assert str(exc.value) == f"invalid file '{rel.encode('unicode_escape').decode()}': use a path like core/api.sysml"
 
 
 def test_valid_relpath() -> None:
@@ -271,3 +273,200 @@ def test_bad_paths_are_refused(root: Path, rel: str) -> None:
 def test_o_nofollow_expression_once() -> None:
     src = Path(files.__file__).read_text()
     assert src.count("os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW") == 1
+
+
+# --- bounded reads -----------------------------------------------------------------------------------------
+
+
+def test_load_tree_refuses_sparse_file_by_size_before_reading(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    p = _mk(root, "sysml/model/a.sysml", "")
+    with open(p, "r+b") as fh:
+        fh.truncate(10**9)
+    reads: list[int] = []
+    real_fdopen = os.fdopen
+
+    def spy(fd: int, *a: object, **k: object):  # type: ignore[no-untyped-def]
+        fh = real_fdopen(fd, *a, **k)  # type: ignore[call-overload]
+        real_read = fh.read
+        fh.read = lambda n=-1: reads.append(n) or real_read(n)  # type: ignore[method-assign]
+        return fh
+
+    monkeypatch.setattr(files.os, "fdopen", spy)
+    with pytest.raises(ModelError, match=r"^sysml/model/a.sysml is longer than 100000 bytes$"):
+        files.load_tree(root)
+    assert reads == []  # the size was checked first; nothing was read
+
+
+def test_read_text_refuses_oversized_file_and_honours_max_bytes(root: Path) -> None:
+    _mk(root, "docs/a.md", "x" * 101)
+    assert files.read_text(root, "docs/a.md") == "x" * 101
+    with pytest.raises(ModelError, match=r"^docs/a.md is longer than 100 bytes$"):
+        files.read_text(root, "docs/a.md", max_bytes=100)
+    p = _mk(root, "docs/big.md", "")
+    with open(p, "r+b") as fh:
+        fh.truncate(10**9)
+    with pytest.raises(ModelError, match=r"^docs/big.md is longer than 100000 bytes$"):
+        files.read_text(root, "docs/big.md")
+
+
+def test_read_bytes_reads_at_most_limit_plus_one_when_the_file_grew(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mk(root, "docs/a.md", "x" * 500)
+    fake = types.SimpleNamespace(st_mode=stat.S_IFREG | 0o644, st_size=1)
+    monkeypatch.setattr(files.os, "fstat", lambda fd: fake)
+    with pytest.raises(ModelError, match=r"^docs/a.md is longer than 100 bytes$"):
+        files.read_text(root, "docs/a.md", max_bytes=100)
+
+
+def test_read_text_refuses_fifo_and_directory(root: Path) -> None:
+    (root / "docs").mkdir()
+    os.mkfifo(root / "docs/p.md")
+    (root / "docs/d.md").mkdir()
+    for name in ("p.md", "d.md"):
+        with pytest.raises(ModelError, match=f"path 'docs/{name}' is not a regular file or directory"):
+            files.read_text(root, f"docs/{name}")
+
+
+def test_read_bytes_open_refuses_symlink_even_if_component_check_is_skipped(
+    tmp_path: Path, root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = _outside(tmp_path)
+    (root / "docs").mkdir()
+    (root / "docs/a.md").symlink_to(out / "f.sysml")
+    monkeypatch.setattr(files, "_check_components", lambda *a, **k: object())
+    with pytest.raises(ModelError, match="path 'docs/a.md' is a symbolic link"):
+        files.read_text(root, "docs/a.md")
+
+
+# --- walk bounds -------------------------------------------------------------------------------------------
+
+
+def test_load_tree_stops_early_when_more_than_the_file_limit_is_found(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for i in range(51):
+        _mk(root, f"sysml/model/a/f{i:02}.sysml", "x")
+    for i in range(30):
+        (root / f"sysml/model/b{i:02}").mkdir()
+    calls: list[object] = []
+    real = os.scandir
+    monkeypatch.setattr(files.os, "scandir", lambda p: calls.append(p) or real(p))
+    with pytest.raises(ModelError, match=r"^more than 50 model files$"):
+        files.load_tree(root)
+    assert len(calls) == 2  # the base and directory a; b00..b29 were never listed
+
+
+def test_load_tree_caps_directory_depth(root: Path) -> None:
+    ok = "/".join(["d"] * files.MAX_WALK_DEPTH)
+    _mk(root, f"sysml/model/{ok}/x.sysml", "x")
+    assert list(files.load_tree(root)) == [f"{ok}/x.sysml"]
+    (root / "sysml/model" / "/".join(["e"] * (files.MAX_WALK_DEPTH + 1))).mkdir(parents=True)
+    with pytest.raises(ModelError, match=f"nested deeper than {files.MAX_WALK_DEPTH} directories"):
+        files.load_tree(root)
+
+
+def test_load_tree_deep_nesting_is_a_modelerror_not_recursionerror(root: Path) -> None:
+    fd_root = os.open(root, os.O_RDONLY)
+    try:
+        os.makedirs(root / "sysml/model")
+        fd = os.open(root / "sysml/model", os.O_RDONLY)
+        for _ in range(300):  # relative mkdir keeps every call under PATH_MAX
+            os.mkdir("e", dir_fd=fd)
+            nxt = os.open("e", os.O_RDONLY, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+        os.close(fd)
+    finally:
+        os.close(fd_root)
+    with pytest.raises(ModelError, match="nested deeper than"):
+        files.load_tree(root)
+
+
+# --- messages, NUL, vanished parents -----------------------------------------------------------------------
+
+
+def test_file_names_are_escaped_in_messages(root: Path) -> None:
+    _mk(root, "sysml/model/a\x1b[31m.sysml")
+    with pytest.raises(ModelError) as exc:
+        files.load_tree(root)
+    assert "\x1b" not in str(exc.value)
+    assert "a\\x1b[31m.sysml" in str(exc.value)
+    (root / "docs").symlink_to(root / "sysml")
+    with pytest.raises(ModelError) as exc2:
+        files.write_text(root, "docs/\x1b[0m.svg", "x")
+    assert "\x1b" not in str(exc2.value)
+    assert "path 'docs' is a symbolic link" in str(exc2.value)
+    (root / "docs").unlink()
+    _mk(root, "docs/\x1b.md", "x" * 101)
+    with pytest.raises(ModelError) as exc4:
+        files.read_text(root, "docs/\x1b.md", max_bytes=100)
+    assert str(exc4.value) == "docs/\\x1b.md is longer than 100 bytes"
+
+
+def test_nul_in_path_is_refused(root: Path) -> None:
+    for fn in (
+        lambda: files.write_text(root, "docs/a\0b.svg", "x"),
+        lambda: files.check_writable(root, "docs/a\0b.svg"),
+        lambda: files.read_text(root, "a\0b"),
+        lambda: files.remove_file(root, "a\0b"),
+    ):
+        with pytest.raises(ModelError, match="invalid path"):
+            fn()
+
+
+def test_make_parents_reports_a_vanished_parent(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    real_mkdir = os.mkdir
+
+    def vanish(path: object, *a: object, **k: object) -> None:
+        real_mkdir(path, *a, **k)  # type: ignore[arg-type]
+        os.rmdir(path)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(files.os, "mkdir", vanish)
+    with pytest.raises(ModelError, match="path 'docs' does not exist"):
+        files.write_text(root, "docs/a.svg", "x")
+
+
+def test_make_parents_reports_a_missing_grandparent(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def gone(path: object, *a: object, **k: object) -> None:
+        raise FileNotFoundError
+
+    monkeypatch.setattr(files.os, "mkdir", gone)
+    with pytest.raises(ModelError, match="path 'docs' does not exist"):
+        files.write_text(root, "docs/a.svg", "x")
+
+
+# --- remaining gaps ----------------------------------------------------------------------------------------
+
+
+def test_load_tree_with_symlinked_non_default_base(tmp_path: Path, root: Path) -> None:
+    out = _outside(tmp_path)
+    (root / "sysml/changes/x").mkdir(parents=True)
+    (root / "sysml/changes/x/model").symlink_to(out)
+    with pytest.raises(ModelError, match="path 'sysml/changes/x/model' is a symbolic link"):
+        files.load_tree(root, "sysml/changes/x/model")
+    (root / "sysml/changes/x/model").unlink()
+    _mk(root, "sysml/changes/x/model/a.sysml", "a")
+    assert files.load_tree(root, "sysml/changes/x/model") == {"a.sysml": "a"}
+
+
+def test_load_tree_refuses_dangling_symlink_inside_tree(root: Path) -> None:
+    (root / "sysml/model").mkdir(parents=True)
+    (root / "sysml/model/a.sysml").symlink_to(root / "nowhere")
+    with pytest.raises(ModelError, match="path 'sysml/model/a.sysml' is a symbolic link"):
+        files.load_tree(root)
+
+
+def test_move_dir_refuses_symlink_source_and_dangling_symlink_destination(tmp_path: Path, root: Path) -> None:
+    out = _outside(tmp_path)
+    (root / "sysml/changes/archive").mkdir(parents=True)
+    (root / "sysml/changes/x").symlink_to(out)
+    with pytest.raises(ModelError, match="path 'sysml/changes/x' is a symbolic link"):
+        files.move_dir(root, "sysml/changes/x", "sysml/changes/archive/d")
+    (root / "sysml/changes/x").unlink()
+    _mk(root, "sysml/changes/x/proposal.md", "p")
+    (root / "sysml/changes/archive/d").symlink_to(root / "nowhere")
+    with pytest.raises(ModelError, match="path 'sysml/changes/archive/d' already exists"):
+        files.move_dir(root, "sysml/changes/x", "sysml/changes/archive/d")
+    assert (root / "sysml/changes/x/proposal.md").exists()
+    assert not (root / "nowhere").exists()

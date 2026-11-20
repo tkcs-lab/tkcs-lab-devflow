@@ -17,13 +17,21 @@ from pathlib import Path
 from tld.sysml.types import MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES, ModelError
 
 MODEL_DIR = "sysml/model"
+# Directories `load_tree` descends below its base. A model path like core/api.sysml is two levels; 8 is far more
+# than a real model needs and far below the interpreter's recursion limit, so a deep tree is a clean error.
+MAX_WALK_DEPTH = 8
 RELPATH_RE = re.compile(r"[a-z0-9_-]+(/[a-z0-9_-]+)*\.sysml")
+
+
+def _q(text: str) -> str:
+    """`text` for an error message: every non-printable character (ESC, newline, lone surrogate) escaped."""
+    return "".join(c if c.isprintable() else c.encode("unicode_escape").decode("ascii") for c in text)
 
 
 def check_relpath(rel: str) -> str:
     """Return `rel` when it is a model relpath (below sysml/model/), else raise ModelError."""
     if not RELPATH_RE.fullmatch(rel):
-        raise ModelError(f"invalid file '{rel}': use a path like core/api.sysml")
+        raise ModelError(f"invalid file '{_q(rel)}': use a path like core/api.sysml")
     return rel
 
 
@@ -33,8 +41,8 @@ def sha256_text(text: str) -> str:
 
 def _parts(rel_path: str) -> list[str]:
     parts = rel_path.split("/")
-    if not rel_path or rel_path.startswith("/") or any(p in ("", ".", "..") for p in parts):
-        raise ModelError(f"invalid path '{rel_path}'")
+    if not rel_path or "\0" in rel_path or any(p in ("", ".", "..") for p in parts):
+        raise ModelError(f"invalid path '{_q(rel_path)}'")
     return parts
 
 
@@ -50,7 +58,7 @@ def _check_components(root: Path, rel_path: str, final: str = "any") -> os.stat_
     st: os.stat_result | None = None
     for i, part in enumerate(parts):
         current = current / part
-        sofar = "/".join(parts[: i + 1])
+        sofar = _q("/".join(parts[: i + 1]))
         last = i == len(parts) - 1
         try:
             st = os.lstat(current)
@@ -79,24 +87,39 @@ def _check_components(root: Path, rel_path: str, final: str = "any") -> os.stat_
     return st
 
 
-def _read_bytes(root: Path, rel_path: str) -> bytes:
-    fd = os.open(root / rel_path, os.O_RDONLY | os.O_NOFOLLOW)
+def _read_bytes(root: Path, rel_path: str, limit: int) -> bytes:
+    """Read a regular file of at most `limit` bytes; the size is checked before anything is read."""
+    shown = _q(rel_path)
+    try:
+        fd = os.open(root / rel_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise ModelError(f"path '{shown}' is a symbolic link") from None
+        raise
     with os.fdopen(fd, "rb") as fh:
-        return fh.read()
+        st = os.fstat(fh.fileno())
+        if not stat.S_ISREG(st.st_mode):
+            raise ModelError(f"path '{shown}' is not a regular file or directory")
+        if st.st_size > limit:
+            raise ModelError(f"{shown} is longer than {limit} bytes")
+        data = fh.read(limit + 1)
+    if len(data) > limit:
+        raise ModelError(f"{shown} is longer than {limit} bytes")
+    return data
 
 
 def _decode(rel_path: str, data: bytes) -> str:
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError:
-        raise ModelError(f"{rel_path} is not valid UTF-8") from None
+        raise ModelError(f"{_q(rel_path)} is not valid UTF-8") from None
 
 
-def read_text(root: Path, rel_path: str) -> str | None:
-    """The UTF-8 text of a regular file, or None when it does not exist."""
+def read_text(root: Path, rel_path: str, max_bytes: int = MAX_FILE_BYTES) -> str | None:
+    """The UTF-8 text of a regular file of at most `max_bytes` bytes, or None when it does not exist."""
     if _check_components(root, rel_path, "file") is None:
         return None
-    return _decode(rel_path, _read_bytes(root, rel_path))
+    return _decode(rel_path, _read_bytes(root, rel_path, max_bytes))
 
 
 def load_tree(root: Path, base: str = MODEL_DIR) -> dict[str, str]:
@@ -105,34 +128,34 @@ def load_tree(root: Path, base: str = MODEL_DIR) -> dict[str, str]:
         return {}
     found: list[str] = []
 
-    def walk(prefix: str) -> None:
+    def walk(prefix: str, depth: int) -> None:
         directory = root / base / prefix if prefix else root / base
         with os.scandir(directory) as it:
             entries = sorted(it, key=lambda e: e.name)
         for entry in entries:
             rel = f"{prefix}/{entry.name}" if prefix else entry.name
-            shown = f"{base}/{rel}"
+            shown = _q(f"{base}/{rel}")
             st = entry.stat(follow_symlinks=False)
             if stat.S_ISLNK(st.st_mode):
                 raise ModelError(f"path '{shown}' is a symbolic link")
             if stat.S_ISDIR(st.st_mode):
-                walk(rel)
+                if depth >= MAX_WALK_DEPTH:
+                    raise ModelError(f"path '{shown}' is nested deeper than {MAX_WALK_DEPTH} directories")
+                walk(rel, depth + 1)
             elif stat.S_ISREG(st.st_mode):
                 found.append(check_relpath(rel))
+                if len(found) > MAX_FILES:
+                    raise ModelError(f"more than {MAX_FILES} model files")
             else:
                 raise ModelError(f"path '{shown}' is not a regular file or directory")
 
-    walk("")
+    walk("", 0)
     found.sort()
-    if len(found) > MAX_FILES:
-        raise ModelError(f"more than {MAX_FILES} model files")
     tree: dict[str, str] = {}
     total = 0
     for rel in found:
         shown = f"{base}/{rel}"
-        data = _read_bytes(root, shown)
-        if len(data) > MAX_FILE_BYTES:
-            raise ModelError(f"{shown} is longer than {MAX_FILE_BYTES} bytes")
+        data = _read_bytes(root, shown, MAX_FILE_BYTES)
         total += len(data)
         if total > MAX_TOTAL_BYTES:
             raise ModelError(f"the model is larger than {MAX_TOTAL_BYTES} bytes")
@@ -148,11 +171,20 @@ def check_writable(root: Path, rel_path: str) -> None:
 def _make_parents(root: Path, rel_path: str) -> None:
     parts = _parts(rel_path)
     for i in range(1, len(parts)):
+        sofar = "/".join(parts[:i])
         directory = root.joinpath(*parts[:i])
-        if not directory.exists() and not os.path.islink(directory):
+        try:
             os.mkdir(directory)
-        # a link or a file that appeared (or was already there) is refused here
-        _check_components(root, "/".join(parts[:i]), "dir")
+        except FileExistsError:
+            pass
+        except FileNotFoundError:
+            raise ModelError(f"path '{_q(sofar)}' does not exist") from None
+        try:
+            os.lstat(directory)
+        except FileNotFoundError:
+            raise ModelError(f"path '{_q(sofar)}' does not exist") from None
+        # a link or a file that was already there (or appeared meanwhile) is refused here
+        _check_components(root, sofar, "dir")
 
 
 def write_text(root: Path, rel_path: str, text: str) -> None:
@@ -164,7 +196,7 @@ def write_text(root: Path, rel_path: str, text: str) -> None:
         fd = os.open(root / rel_path, flags, 0o644)
     except OSError as exc:
         if exc.errno == errno.ELOOP:
-            raise ModelError(f"path '{rel_path}' is a symbolic link") from None
+            raise ModelError(f"path '{_q(rel_path)}' is a symbolic link") from None
         raise
     with os.fdopen(fd, "wb") as fh:
         fh.write(text.encode("utf-8"))
@@ -173,20 +205,21 @@ def write_text(root: Path, rel_path: str, text: str) -> None:
 def remove_file(root: Path, rel_path: str) -> None:
     """Delete a regular file below `root`."""
     if _check_components(root, rel_path, "file") is None:
-        raise ModelError(f"path '{rel_path}' does not exist")
+        raise ModelError(f"path '{_q(rel_path)}' does not exist")
     os.unlink(root / rel_path)
 
 
 def move_dir(root: Path, src: str, dst: str) -> None:
     """Move the directory `src` to `dst`, which must not exist; every component of both is checked."""
     if _check_components(root, src, "dir") is None:
-        raise ModelError(f"path '{src}' does not exist")
+        raise ModelError(f"path '{_q(src)}' does not exist")
     _check_components(root, dst, "new")
     _make_parents(root, dst)
     os.rename(root / src, root / dst)
 
 
 __all__ = [
+    "MAX_WALK_DEPTH",
     "MODEL_DIR",
     "RELPATH_RE",
     "check_relpath",
