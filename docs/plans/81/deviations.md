@@ -97,6 +97,16 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - scope: fix-1 touched files that earlier phases own (src/tld/ops/sysml.py, src/tld/sysml/files.py, src/tld/sysml/parse.py, src/tld/plan/manifest.py, the playbooks, the profile reference, their tests and the eval baseline); a fix worker is expected to; the scope check lists them as collisions and they are accepted
 - review: open after fix-1, accepted: the escape-to-one-line helper exists three times and some modules import private names of others (code reviewer note); the stamp check accepts any file with the stamp line, so a file that already carries the stamp is replaced by design
 - review: second pass (security and code reviewers): 0 blocking; open and accepted: secret patterns start with a word boundary so a token right after a word character passes and names are not scanned; a CRLF checkout of a generated markdown fails the stamp match and is refused; render --check on an unstamped file says run render, which then refuses; make-plan.md and the guide still show the space form --file <relpath>; the guide does not mention the unstamped refusal; the over-long sysml_change id message
+- scope: scope: docs/reference/profile-reference.md
+- scope: scope: evals/baselines/default.json
+- scope: scope: playbooks/make-plan.md
+- scope: scope: playbooks/sysml.md
+- scope: scope: tests/core/test_ops_sysml.py
+- scope: scope: tests/core/test_sysml_calls.py
+- scope: scope: tests/core/test_sysml_files.py
+- scope: scope: tests/core/test_sysml_parse.py
+- scope: scope: tests/core/test_sysml_playbook.py
+- scope: scope: tests/core/test_validate_manifest.py
 
 ## Finishing
 
