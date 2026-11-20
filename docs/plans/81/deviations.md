@@ -43,7 +43,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p9-sysml-record
 
-- pending
+- worker: none; one CHANGELOG.md line outside touches, as the rules require
+- review: worker had no tld; orchestrator ran security-reviewer (pass); board_gate and plan_gate lists are p10 work
 
 ## p10-sysml-command
 
