@@ -67,6 +67,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 ## p10-sysml-command
 
 - retry: security-reviewer found 2 blocking in the sysml playbook: no refusal path after the component-list confirmation (a no could still lead to a branch and pull request), and the no-literal-values rule did not cover the pull request body or the ask text; p10 sent back to add a stop path with a test, extend the rule to the ask and the pull request, validate the proposal, and forbid pushes to main or other branches
+- worker: none beyond the send-back fixes; eval baseline hash refreshed
+- review: re-review: 0 blocking, 6 non-blocking left open (the commit message is not covered by the no-literal rule; the list of literal kinds in the rule reads as complete; the pre-ask check does not say what to do with an entry that fails; a refusal on the second ask does not repeat the cleanup and the branch is checked out when it is deleted; the new tests miss the 4/12 limit and an order check; plan_gate opens the write session for sysml check as well as init, as it does for spec)
 
 ## p11-plan-playbooks
 
