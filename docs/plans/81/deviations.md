@@ -93,6 +93,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - final: final reviewer blocking: the check --change message wording is a plan deviation that was not recorded; recorded under p4-sysml-change
 - final: code reviewer blocking: the p1 changelog line says the commands that use the sysml key follow in later changes, which is not true when this release ships; fixed in fix-1
+- final: fix-1 merged: the changelog now has one line for the feature; render and archive refuse to overwrite a docs/architecture.md or .svg without the tld stamp (exit 2, before any write); doc-text secret patterns cover more token prefixes; model path components must start with a letter or digit; the sysml and make-plan playbooks stop when sysml, docs or the change folders are symlinks; two reference links and two guide sentences corrected; a sysml_change id over 100 characters is refused by validate-m
+- scope: fix-1 touched files that earlier phases own (src/tld/ops/sysml.py, src/tld/sysml/files.py, src/tld/sysml/parse.py, src/tld/plan/manifest.py, the playbooks, the profile reference, their tests and the eval baseline); a fix worker is expected to; the scope check lists them as collisions and they are accepted
+- review: open after fix-1, accepted: the escape-to-one-line helper exists three times and some modules import private names of others (code reviewer note); the stamp check accepts any file with the stamp line, so a file that already carries the stamp is replaced by design
 
 ## Finishing
 
