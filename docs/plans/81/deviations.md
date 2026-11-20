@@ -65,7 +65,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p10-sysml-command
 
-- pending
+- retry: security-reviewer found 2 blocking in the sysml playbook: no refusal path after the component-list confirmation (a no could still lead to a branch and pull request), and the no-literal-values rule did not cover the pull request body or the ask text; p10 sent back to add a stop path with a test, extend the rule to the ask and the pull request, validate the proposal, and forbid pushes to main or other branches
 
 ## p11-plan-playbooks
 
