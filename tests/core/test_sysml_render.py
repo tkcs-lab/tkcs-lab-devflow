@@ -152,7 +152,10 @@ def test_hostile_doc_cannot_break_table_or_inject_html() -> None:
     row = [ln for ln in md.splitlines() if ln.startswith("| `A`")][0]
     assert row.count("|") == len(re.findall(r"\\\|", row)) + 4
     assert "<script>" not in md and "`c`" not in md
-    assert "\n- item" not in md and "\n![" not in md
+    assert not [ln for ln in md.splitlines() if ln.startswith(("- ", "#", "!["))
+                and ln not in ("![Architecture](architecture.svg)",) and not ln.startswith("## ")
+                and ln != "# Architecture"]
+    assert "!\\[i\\]" in row
     assert len([ln for ln in md.splitlines() if ln.startswith("| `A`")]) == 1
 
 
