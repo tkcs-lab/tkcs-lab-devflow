@@ -53,6 +53,13 @@ tests:
   - tests/core/test_guard_corpus.py
   src/tld/ops/spec.py:
   - tests/core/test_ops_spec.py
+  src/tld/ops/sysml.py:
+  - tests/core/test_ops_sysml.py
+  src/tld/sysml/files.py:
+  - tests/core/test_sysml_files.py
+  src/tld/sysml/change.py:
+  - tests/core/test_sysml_change.py
+  - tests/core/test_ops_sysml.py
   src/tld/guard/integrity.py:
   - tests/core/test_guard_corpus.py
   - tests/core/test_guard_trust.py
@@ -654,3 +661,23 @@ mutants:
   why: the whole environment, tokens included, reaches npm and node
   old: '    env = {k: os.environ[k] for k in ENV_NAMES if k in os.environ}'
   new: '    env = dict(os.environ)'
+- id: sysml-no-nofollow
+  file: src/tld/sysml/files.py
+  why: the write opens a final symbolic link instead of refusing it
+  old: '    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW'
+  new: '    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC'
+- id: sysml-archive-id-not-reserved
+  file: src/tld/sysml/change.py
+  why: the id archive is accepted, so a change can collide with the archive folder
+  old: '    if id == "archive":'
+  new: '    if False:'
+- id: sysml-base-hash-not-checked
+  file: src/tld/sysml/change.py
+  why: a replaced file is not compared with its base hash, so an archive silently reverts another plan's edit
+  old: '        if rel not in base_files or sha256_text(base_files[rel]) != replaced[rel]:'
+  new: '        if False:'
+- id: sysml-render-check-compares-nothing
+  file: src/tld/ops/sysml.py
+  why: render --check does not compare an existing output with what render would write
+  old: '        elif text != expected[path]:'
+  new: '        elif False:'
