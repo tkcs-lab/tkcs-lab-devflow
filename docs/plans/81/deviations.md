@@ -43,6 +43,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - worker: none
 - review: worker had no tld; orchestrator ran security-reviewer: 0 blocking, 3 non-blocking left open (an email address or mailto: in a model doc is not neutralised in docs/architecture.md and GitHub can autolink it; a package doc that starts with a list or thematic-break marker changes the page structure; the SVG writer does not reject code points that are invalid in XML 1.0, unreachable through the parser)
+- retry: merge was pushed with one red test (tests/core/test_docs_links.py: the golden markdown fixture links to architecture.svg, which does not exist next to it); the merge was reverted and p6 sent back to fix the link check
 
 ## p7-ops-sysml-cli
 
