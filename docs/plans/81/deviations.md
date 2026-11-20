@@ -49,7 +49,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p7-ops-sysml-cli
 
-- pending
+- retry: security-reviewer found 1 blocking: when an archive write fails and the rollback also fails, the rollback errors were swallowed and the model was left half applied with only the first error shown; p7 sent back to report the paths left changed and tell the user to restore from git, to roll back on any exception, and to add mutants for the archive gates
 
 ## p8-manifest-sysml-change
 
