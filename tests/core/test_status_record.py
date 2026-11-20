@@ -86,7 +86,7 @@ def test_attended_replaces_the_scheduled_literal():
     assert "'attended' is required" in run("-", stdin=json.dumps(missing)).stdout
 
 
-@pytest.mark.parametrize("command", ["review", "make-plan", "spec"])
+@pytest.mark.parametrize("command", ["review", "make-plan", "spec", "sysml"])
 def test_review_and_make_plan_write_records(command):
     # setup_record's session id is "session_01abc": its tail is "ion01abc"
     result = setup_record("--doc-id", f"tkcs-lab-devflow--{command}--ion01abc", command=command)
@@ -487,6 +487,12 @@ def test_record_id_for_spec():
     ok = record_id("--repo", "o/r", "--command", "spec", "--session", "session_01abc")
     assert (ok.returncode, ok.stdout) == (0, "r--spec--ion01abc\n")
     assert REC.parse_doc_id("r--spec--ion01abc") == ("r", "command", "spec")
+
+
+def test_record_id_for_sysml():
+    ok = record_id("--repo", "o/r", "--command", "sysml", "--session", "session_01abc")
+    assert (ok.returncode, ok.stdout) == (0, "r--sysml--ion01abc\n")
+    assert REC.parse_doc_id("r--sysml--ion01abc") == ("r", "command", "sysml")
 
 
 def test_record_id_cli():
