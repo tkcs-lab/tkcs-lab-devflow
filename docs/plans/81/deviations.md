@@ -33,7 +33,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p5-sysml-layout
 
-- pending
+- worker: none
+- review: worker had no tld; orchestrator ran security-reviewer: 0 blocking, 1 non-blocking left open (layout does not itself reject a model over the element and relation limits, so a caller must lay out only a model that built without findings; p7 must enforce this)
 
 ## p6-sysml-svg-markdown
 
