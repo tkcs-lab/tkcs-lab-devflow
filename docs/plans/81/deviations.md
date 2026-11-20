@@ -100,4 +100,5 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Finishing
 
-- pending
+- review: dod gate green (suite 6048 passed, profile and policy validation, manifest fixtures, docs index 0 errors); tech-writer 0 blocking, 5 non-blocking left open (guide omits new-change --remove and check --json, the removed-file remedy of the changed-since finding, says a letter instead of an ASCII letter, says one ask where a second is possible, and mixes --file forms)
+- scope: scope disposition: every phase merged with no out-of-scope path except fix-1, which touched 14 files owned by earlier phases (accepted); p6 was not scope-checked because it was re-merged after a revert
