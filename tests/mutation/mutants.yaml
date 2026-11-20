@@ -269,13 +269,28 @@ mutants:
 - id: VM14
   file: src/tld/plan/manifest.py
   why: the last phase is not excluded from the openspec fence, so the archive phase is flagged
-  old: '        for pid in ids[:-1]:'
-  new: '        for pid in ids:'
+  old: '            for pid in ids[:-1]:'
+  new: '            for pid in ids:'
 - id: VM15
   file: src/tld/plan/manifest.py
   why: spec_change without the profile's spec block is accepted
-  old: '            if profile is not None and not isinstance(profile.get("spec"), dict):'
-  new: '            if False:'
+  old: '        if profile is not None and not isinstance(profile.get(fence["block"]), dict):'
+  new: '        if False:'
+- id: sysml-fence-last-phase-not-excluded
+  file: src/tld/plan/manifest.py
+  why: the sysml fence loop also flags the last phase, so the archive phase is refused
+  old: '            for pid in ids[:-1]:'
+  new: '            for pid in (ids if key == "sysml_change" else ids[:-1]):'
+- id: sysml-fence-block-check-skipped
+  file: src/tld/plan/manifest.py
+  why: the sysml fence asks the profile for a spec block, so a sysml profile is refused
+  old: '"block": "sysml"'
+  new: '"block": "spec"'
+- id: sysml-no-change-no-touch-dropped
+  file: src/tld/plan/manifest.py
+  why: with a sysml block and no sysml_change a phase may touch sysml/ and the architecture docs
+  old: '        if (fence["no_change"] and key not in manifest and profile is not None'
+  new: '        if (False and key not in manifest and profile is not None'
 - id: VM1
   file: src/tld/plan/manifest.py
   why: max_parallel 0 ok

@@ -512,3 +512,153 @@ def test_cli_spec_change_with_a_spec_profile(tmp_path):
     no_spec.write_text("git: {}\n")
     out = run_cli(str(good), "--profile", str(no_spec))
     assert "spec_change needs the profile's spec block" in out.stdout + out.stderr
+
+
+# ---- sysml_change (plan 3.7) ----------------------------------------------------------------------------------
+SYSML_PROFILE = {"sysml": {"subset": 1}}
+SYSML_ID_ERR = "sysml_change must be lower-case words joined by hyphens"
+SYSML_BLOCK_ERR = "sysml_change needs the profile's sysml block"
+SYSML_MIDDLE = "phase 'p2-api': touches sysml/ or the architecture docs but only the last phase may when sysml_change is set"
+SYSML_FENCE = ["sysml/model/core.sysml", "sysml/changes/x/model/a.sysml", "sysml/", "sysml/**", "docs/architecture.md",
+               "docs/architecture.svg", "docs/**", "**/*.md"]
+
+
+def _sysml_manifest(**over):
+    """GOOD as a sysml plan: sysml_change equals the slug, the last phase archives and depends on every phase."""
+    m = copy.deepcopy(GOOD)
+    m["sysml_change"] = "demo"
+    m["phases"][2]["depends_on"] = ["p1-core", "p2-api"]
+    m["phases"][2]["touches"] = ["docs/*.md", "sysml/**"]
+    m.update(over)
+    return m
+
+
+def test_sysml_change_valid_with_a_sysml_profile(vm):
+    assert vm.validate(_sysml_manifest(), SYSML_PROFILE) == ([], [])
+
+
+def test_sysml_change_with_only_a_spec_profile_needs_the_sysml_block(vm):
+    assert SYSML_BLOCK_ERR in errors(_sysml_manifest(), vm, {"spec": {"version": "2.1.0"}})
+
+
+@pytest.mark.parametrize("profile", [{"git": {}}, {"sysml": None}])
+def test_sysml_change_needs_the_profile_sysml_block(vm, profile):
+    assert SYSML_BLOCK_ERR in errors(_sysml_manifest(), vm, profile)
+    assert SYSML_BLOCK_ERR not in errors(_sysml_manifest(), vm, None)
+
+
+@pytest.mark.parametrize("value", ["abc\n", "-x", "../x", "A", "a--b", "", "archive", 7, ["x"], None, True])
+def test_sysml_change_id_is_checked(vm, value):
+    assert SYSML_ID_ERR in errors(_sysml_manifest(sysml_change=value), vm, SYSML_PROFILE)
+    assert SYSML_ID_ERR in errors(_sysml_manifest(sysml_change=value), vm, None)
+
+
+def test_spec_change_archive_is_still_accepted(vm):
+    assert vm.validate(_spec_manifest(spec_change="archive"), SPEC_PROFILE) == ([], ["spec_change differs from plan_slug"])
+
+
+@pytest.mark.parametrize("entry", SYSML_FENCE)
+@pytest.mark.parametrize("profile", [SYSML_PROFILE, None])
+def test_sysml_change_fence_for_a_middle_phase(vm, entry, profile):
+    m = _sysml_manifest()
+    m["phases"][1]["touches"] = [entry]
+    m["phases"][1]["depends_on"] = ["p1-core"]
+    assert SYSML_MIDDLE in errors(m, vm, profile)
+    assert SYSML_BLOCK_ERR not in errors(m, vm, None)
+
+
+@pytest.mark.parametrize("entry", ["src/**", "docs/README.md"])
+def test_sysml_change_fence_ignores_other_paths(vm, entry):
+    m = _sysml_manifest()
+    m["phases"][1]["touches"] = [entry]
+    assert not any("only the last phase may" in e for e in errors(m, vm, SYSML_PROFILE))
+
+
+def test_sysml_change_fence_is_independent_of_the_openspec_fence(vm):
+    m = _sysml_manifest()
+    m["phases"][1]["touches"] = ["openspec/specs/a.md"]
+    assert not any("only the last phase may" in e for e in errors(m, vm, SYSML_PROFILE))
+
+
+@pytest.mark.parametrize("entry", ["sysml/model/core.sysml", "docs/architecture.md", "docs/architecture.svg"])
+def test_sysml_change_last_phase_touching_one_path_passes(vm, entry):
+    m = _sysml_manifest()
+    m["phases"][2]["touches"] = [entry]
+    assert vm.validate(m, SYSML_PROFILE) == ([], [])
+
+
+def test_sysml_change_last_phase_must_touch_the_fence(vm):
+    m = _sysml_manifest()
+    m["phases"][2]["touches"] = ["docs/README.md"]
+    assert "last phase 'p3-docs' must touch sysml/ when sysml_change is set" in errors(m, vm, SYSML_PROFILE)
+
+
+def test_sysml_change_last_phase_must_depend_on_all_phases(vm):
+    m = _sysml_manifest()
+    m["phases"][2]["depends_on"] = ["p1-core"]
+    msg = "last phase 'p3-docs' must depend on every other phase when sysml_change is set (missing: p2-api)"
+    assert msg in errors(m, vm, SYSML_PROFILE)
+    m["phases"][2]["depends_on"] = ["p2-api"]
+    assert not any("must depend on every other" in e for e in errors(m, vm, SYSML_PROFILE))
+
+
+def test_sysml_change_differing_from_the_slug_warns(vm):
+    assert "sysml_change differs from plan_slug" in vm.validate(_sysml_manifest(sysml_change="other"), SYSML_PROFILE)[1]
+    assert "sysml_change differs from plan_slug" not in vm.validate(_sysml_manifest(), SYSML_PROFILE)[1]
+
+
+@pytest.mark.parametrize("entry", SYSML_FENCE)
+@pytest.mark.parametrize("pid_index", [0, 2])
+def test_no_change_no_touch(vm, entry, pid_index):
+    m = copy.deepcopy(GOOD)
+    ph = m["phases"][pid_index]
+    ph["touches"] = [entry]
+    msg = (f"phase '{ph['id']}': touches sysml/ or the architecture docs but the manifest has no sysml_change; "
+           "narrow the touches or set sysml_change")
+    assert msg in errors(m, vm, SYSML_PROFILE)
+    assert not any("no sysml_change" in e for e in errors(m, vm, None))
+    assert not any("no sysml_change" in e for e in errors(m, vm, {"git": {}}))
+    assert not any("no sysml_change" in e for e in errors(m, vm, {"sysml": None}))
+
+
+def test_no_change_no_touch_leaves_other_paths_alone(vm):
+    m = copy.deepcopy(GOOD)
+    m["phases"][2]["touches"] = ["lib/**", "docs/README.md"]
+    assert vm.validate(m, SYSML_PROFILE) == ([], [])
+
+
+def test_spec_profile_without_spec_change_lets_a_middle_phase_touch_openspec(vm):
+    m = mutated(lambda m: m["phases"][1].update(touches=["openspec/"]))
+    assert not any("openspec" in e for e in errors(m, vm, SPEC_PROFILE))
+
+
+def test_both_changes_with_a_last_phase_touching_both_fences_pass(vm):
+    m = _sysml_manifest(spec_change="demo")
+    m["phases"][2]["touches"] = ["openspec/**", "sysml/**"]
+    assert vm.validate(m, {**SPEC_PROFILE, **SYSML_PROFILE}) == ([], [])
+    m["phases"][2]["touches"] = ["sysml/**"]
+    assert "last phase 'p3-docs' must touch openspec/ when spec_change is set" in errors(m, vm, {**SPEC_PROFILE, **SYSML_PROFILE})
+
+
+def test_sysml_change_is_a_known_key(vm):
+    m = mutated(lambda m: m.update(sysml_change="demo"))
+    m["phases"][2]["depends_on"] = ["p1-core", "p2-api"]
+    m["phases"][2]["touches"] = ["sysml/**"]
+    assert errors(m, vm) == []
+
+
+def test_cli_sysml_change_with_a_sysml_profile(tmp_path):
+    profile = tmp_path / "toolkit.yaml"
+    profile.write_text(yaml.safe_dump(SYSML_PROFILE))
+    good = tmp_path / "good.yaml"
+    good.write_text(yaml.safe_dump(_sysml_manifest()))
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(_sysml_manifest(sysml_change="archive")))
+    out = run_cli(str(good), "--profile", str(profile))
+    assert out.returncode == 0, out.stdout + out.stderr
+    out = run_cli(str(bad), "--profile", str(profile))
+    assert out.returncode != 0 and SYSML_ID_ERR in out.stdout + out.stderr
+    plain = tmp_path / "plain.yaml"
+    plain.write_text("git: {}\n")
+    out = run_cli(str(good), "--profile", str(plain))
+    assert SYSML_BLOCK_ERR in out.stdout + out.stderr
