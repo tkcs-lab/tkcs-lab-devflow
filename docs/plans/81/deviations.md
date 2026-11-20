@@ -72,7 +72,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p11-plan-playbooks
 
-- pending
+- worker: none
+- review: worker had no tld; orchestrator ran security-reviewer: 0 blocking, 2 non-blocking left open (implement.md says a conflict in docs/architecture.* is resolved by tld ops sysml render but does not add that it is never done by hand, which make-plan.md does say; make-plan.md says a plan phase touching docs/** must narrow its touches or carry sysml_change, which mixes up phase and plan, the implement send-back rule still catches the real diff)
 
 ## p12-docs-lists
 
