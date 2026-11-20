@@ -82,7 +82,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p13-retire
 
-- pending
+- worker: none
+- review: worker had no tld; orchestrator ran security-reviewer: 0 blocking, 2 non-blocking left open in the guide (the no-change-no-touch sentence lacks the qualifier that it applies only in a repository with a sysml block; the line on escaped names says stderr but stdout lines are escaped too)
 
 ## Final review
 
