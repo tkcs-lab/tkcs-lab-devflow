@@ -681,3 +681,13 @@ mutants:
   why: render --check does not compare an existing output with what render would write
   old: '        elif text != expected[path]:'
   new: '        elif False:'
+- id: sysml-archive-findings-gate
+  file: src/tld/ops/sysml.py
+  why: archive goes on with findings, so a change that does not check is written
+  old: '    if findings or model is None:'
+  new: '    if False:'
+- id: sysml-archive-targets-not-prechecked
+  file: src/tld/ops/sysml.py
+  why: the targets are not checked before the first write, so an unsafe target is found after the model was changed
+  old: '    for path in (*model_paths.values(), *OUTPUTS, plan.dest):'
+  new: '    for path in ():'

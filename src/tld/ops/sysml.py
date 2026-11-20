@@ -174,6 +174,8 @@ def _cmd_render(ns: argparse.Namespace, root: Path) -> int:
 
 def _restore(root: Path, path: str, old: str | None) -> None:
     """Put a file back as it was (`old` None: it did not exist)."""
+    if files.read_text(root, path, OUTPUT_READ_MAX) == old:
+        return  # the failed step changed nothing here
     if old is None:
         files.remove_file(root, path)
     else:
@@ -193,26 +195,32 @@ def _cmd_archive(ns: argparse.Namespace, root: Path) -> int:
     for path in (*model_paths.values(), *OUTPUTS, plan.dest):
         files.check_writable(root, path)
 
-    undo = []  # what to run, newest first, when a step fails: the model is never left half applied
+    undo = []  # (label, function, arguments), run newest first when a step fails: no half applied model
     try:
         for rel in plan.write:
-            undo.append((_restore, root, model_paths[rel], base_files.get(rel)))
+            undo.append((model_paths[rel], _restore, root, model_paths[rel], base_files.get(rel)))
             files.write_text(root, model_paths[rel], plan.composed[rel])
         for rel in plan.delete:
-            undo.append((_restore, root, model_paths[rel], base_files[rel]))
+            undo.append((model_paths[rel], _restore, root, model_paths[rel], base_files[rel]))
             files.remove_file(root, model_paths[rel])
         files.move_dir(root, source, plan.dest)
-        undo.append((files.move_dir, root, plan.dest, source))
+        undo.append((source, files.move_dir, root, plan.dest, source))
         for path in OUTPUTS:
-            undo.append((_restore, root, path, before[path]))
+            undo.append((path, _restore, root, path, before[path]))
             files.write_text(root, path, outputs[path])
-    except (ModelError, OSError):
-        for fn, *args in reversed(undo):
+    except BaseException as exc:  # undo also on an interrupt, then re-raise it
+        left = []
+        for label, fn, *args in reversed(undo):
             try:
                 fn(*args)
             except (ModelError, OSError):
-                pass
-        raise
+                left.append(label)
+        if not isinstance(exc, (ModelError, OSError)):
+            raise
+        if left:
+            raise ModelError(f"archive failed ({_line(str(exc))}) and could not be undone: "
+                             f"{', '.join(left)} left changed; restore them from git") from None
+        raise ModelError(f"archive failed ({_line(str(exc))}); the model was restored") from None
     print(f"archived {source} to {plan.dest}")
     return 0
 

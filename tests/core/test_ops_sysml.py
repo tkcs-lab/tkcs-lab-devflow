@@ -513,7 +513,8 @@ def test_archive_oserror_on_output_exits_2_and_rolls_back(repo, capsys, monkeypa
     monkeypatch.setattr(sysml.files, "write_text", boom)
     code, out, err = run(repo, "archive", "x", capsys=capsys)
     assert (code, out) == (2, "")
-    assert err == f"{MSG}[Errno 13] Permission denied: 'docs/architecture.svg'\n"
+    assert err == (f"{MSG}archive failed ([Errno 13] Permission denied: 'docs/architecture.svg'); "
+                   "the model was restored\n")
     after = snapshot(repo)
     # the model and the change folder are exactly as before; only directories made on the way may remain
     assert {k: v for k, v in after.items() if v is not None} == {k: v for k, v in before.items() if v is not None}
@@ -527,7 +528,39 @@ def test_archive_failing_move_rolls_the_model_back(repo, capsys, monkeypatch):
         raise OSError(28, "No space left on device")
     monkeypatch.setattr(sysml.files, "move_dir", boom)
     code, _, err = run(repo, "archive", "x", capsys=capsys)
-    assert code == 2 and err == f"{MSG}[Errno 28] No space left on device\n"
+    assert code == 2 and err == f"{MSG}archive failed ([Errno 28] No space left on device); the model was restored\n"
+    assert snapshot(repo) == before
+
+
+def test_archive_failed_rollback_names_the_files_left_changed(repo, capsys, monkeypatch):
+    start_change(repo, capsys)
+    write(repo, "sysml/changes/x/model/extra.sysml", NEW)
+    assert run(repo, "new-change", "x", "--file", "core/db.sysml", capsys=capsys)[0] == 0
+    write(repo, "sysml/changes/x/model/core/db.sysml", DB.replace("database", "store"))
+    real = files.write_text
+    state = {"calls": 0}
+
+    def boom(root, rel, text):
+        state["calls"] += 1
+        if rel == "sysml/model/core/db.sysml" or (rel == "sysml/model/core/api.sysml" and state["calls"] > 2):
+            raise OSError(28, "No space left on device")
+        return real(root, rel, text)
+    monkeypatch.setattr(sysml.files, "write_text", boom)
+    code, out, err = run(repo, "archive", "x", capsys=capsys)
+    assert (code, out) == (2, "")
+    assert err == (f"{MSG}archive failed ([Errno 28] No space left on device) and could not be undone: "
+                   "sysml/model/core/api.sysml left changed; restore them from git\n")
+
+
+def test_archive_interrupt_undoes_and_reraises(repo, capsys, monkeypatch):
+    start_change(repo, capsys)
+    before = snapshot(repo)
+
+    def boom(root, src, dst):
+        raise KeyboardInterrupt
+    monkeypatch.setattr(sysml.files, "move_dir", boom)
+    with pytest.raises(KeyboardInterrupt):
+        sysml.main(["archive", "x", "--root", str(repo)])
     assert snapshot(repo) == before
 
 
