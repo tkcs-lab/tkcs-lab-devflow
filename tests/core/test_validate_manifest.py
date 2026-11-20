@@ -533,6 +533,11 @@ def _sysml_manifest(**over):
     return m
 
 
+def test_sysml_change_id_of_100_characters_is_valid_and_101_is_refused(vm):
+    assert vm.validate(_sysml_manifest(sysml_change="a" * 100), SYSML_PROFILE)[0] == []
+    assert SYSML_ID_ERR in errors(_sysml_manifest(sysml_change="a" * 101), vm, SYSML_PROFILE)
+
+
 def test_sysml_change_valid_with_a_sysml_profile(vm):
     assert vm.validate(_sysml_manifest(), SYSML_PROFILE) == ([], [])
 

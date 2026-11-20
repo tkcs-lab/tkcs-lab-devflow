@@ -9,11 +9,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 - `tld plan record-items`: prints the run record's items from a plan (every phase and `final-review`), or checks that a record lists them all.
 - `/tld:spec` builds OpenSpec specs for existing code; with a spec profile block `/tld:make-plan` writes the spec change and `/tld:implement` archives it in the last phase (#71).
-- Optional profile block `sysml: {subset: 1}`: marks a repository that uses a SysML architecture model (the commands that use it follow in later changes of #81).
-- `sysml` is a status-record command: `tld board record-id --command sysml` and the status-record schema accept it.
-- `tld ops sysml new-change|check|render|archive`: checks the architecture model, writes and checks an architecture change, draws `docs/architecture.svg` and `docs/architecture.md`, and archives a change into the model (pure Python; the subset is a documented subset of the SysML v2 notation that tld does not check against a SysML tool).
-- Manifest key `sysml_change`: with a profile `sysml` block only the last phase may touch `sysml/`, `docs/architecture.md` and `docs/architecture.svg`, and without it no phase may (`tld plan validate-manifest`).
-- `/tld:sysml` builds an architecture model in tld's SysML v2 subset for existing code and draws it as docs/architecture.svg on docs/architecture.md; with a sysml profile block /tld:make-plan writes the architecture change and /tld:implement archives it in the last phase; tld ops sysml check and render --check guard it in CI (#81).
+- `/tld:sysml` builds an architecture model in tld's SysML v2 subset (a documented subset, not checked against a SysML tool) for existing code and draws it as docs/architecture.svg on docs/architecture.md; with the optional profile block `sysml: {subset: 1}` /tld:make-plan writes the architecture change (manifest key `sysml_change`: only the last phase may touch `sysml/` and the architecture docs) and /tld:implement archives it in the last phase; `tld ops sysml new-change|check|render|archive` does the work and guards it in CI (`check`, `render --check`); `sysml` is a status-record command (`tld board record-id --command sysml`) (#81).
 
 ### Changed
 

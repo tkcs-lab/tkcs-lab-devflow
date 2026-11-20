@@ -63,7 +63,7 @@ def test_every_tld_ops_sysml_span_runs_through_the_wrapper(name, tmp_path):
     for i, span in enumerate(spans):
         argv = span.split()[3:]
         assert argv[0] in SUBCOMMANDS, span
-        assert {a for a in argv if a.startswith("--")} <= FLAGS, span
+        assert {a.split("=")[0] for a in argv if a.startswith("--")} <= FLAGS, span
         assert argv[argv.index("--profile") + 1] == ".tld/toolkit.yaml", span
         root = tmp_path / f"repo{i}"
         make_repo(root, with_change=argv[0] == "archive" or "--change" in argv)

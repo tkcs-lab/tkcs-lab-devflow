@@ -80,3 +80,27 @@ def test_proposal_is_checked_before_the_ask_and_never_covers_other_branches():
     assert "every `from -> to` endpoint to name a part def of the list" in text
     assert "Push to `<main>` or to any branch other than `chore/sysml-init-<yyyymmdd>`, or force-push" in text
     assert "[policies/pr-steward.md](policies/pr-steward.md)" in text
+
+
+LINK_STOP = "A path of the architecture model is a symbolic link or not a directory. Nothing was changed."
+
+
+def test_init_and_make_plan_refuse_symlinked_or_non_directory_paths_before_writing():
+    init = " ".join(PLAYBOOK.read_text().split())
+    plan = " ".join((PLAYBOOK.parent / "make-plan.md").read_text().split())
+    for text in (init, plan):
+        assert "`sysml`, `sysml/model`, `sysml/changes` or `docs` is a symbolic link (`test -L`) or exists and is not a directory (`test -d`)" in text
+        assert LINK_STOP in text
+    assert init.index(LINK_STOP) < init.index("The architecture model already exists")
+    assert plan.index(LINK_STOP) < plan.index("--file=<relpath>")
+
+
+def test_init_derives_file_names_that_never_start_with_a_hyphen_or_underscore():
+    text = " ".join(PLAYBOOK.read_text().split())
+    assert "strip every leading `_` and `-`" in text
+
+
+def test_guide_scopes_the_fence_and_the_escaping_sentence():
+    text = " ".join((ROOT / "docs" / "guides" / "sysml.md").read_text().split())
+    assert "Without `sysml_change`, in a repository with a `sysml` block, no phase may touch the fence" in text
+    assert "names in every output line (stdout and stderr) are escaped" in text

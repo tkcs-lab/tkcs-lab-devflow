@@ -21,7 +21,7 @@ MODEL_DIR = "sysml/model"
 # Directories `load_tree` descends below its base. A model path like core/api.sysml is two levels; 8 is far more
 # than a real model needs and far below the interpreter's recursion limit, so a deep tree is a clean error.
 MAX_WALK_DEPTH = 8
-RELPATH_RE = re.compile(r"[a-z0-9_-]+(/[a-z0-9_-]+)*\.sysml")
+RELPATH_RE = re.compile(r"[a-z0-9][a-z0-9_-]*(/[a-z0-9][a-z0-9_-]*)*\.sysml")
 
 
 def _q(text: str) -> str:

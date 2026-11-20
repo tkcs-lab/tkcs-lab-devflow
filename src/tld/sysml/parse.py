@@ -21,6 +21,12 @@ _SECRET_PATTERNS = (
     re.compile(r"(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]"),
     re.compile(r"-----BEGIN"),
     re.compile(r"\b(AKIA|ghp_|gho_|ghs_|sk-)[A-Za-z0-9_-]{8,}"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{8,}"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}"),
+    re.compile(r"\bxox[abposr]-"),
+    re.compile(r"\bAIza[0-9A-Za-z_-]{20,}"),
 )
 
 
