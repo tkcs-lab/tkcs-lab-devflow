@@ -3,7 +3,8 @@
 The only module that touches the filesystem for the model; every path is repository-relative with `/`
 separators. Each component from the root down is checked with `os.lstat`: a symbolic link anywhere is
 refused, and so is anything that is not a directory (or, at the end, a regular file). Nothing here uses
-`Path.resolve` or `os.path.realpath`. Python 3.11+, stdlib only.
+`Path.resolve` or `os.path.realpath`. Reads do not refuse a hard-linked file (only writes do); a link needs local
+write access to create. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
 
@@ -190,6 +191,10 @@ def _make_parents(root: Path, rel_path: str) -> None:
 def write_text(root: Path, rel_path: str, text: str) -> None:
     """Write `text` to a regular file below `root`, creating directories one level at a time."""
     check_writable(root, rel_path)
+    try:
+        data = text.encode("utf-8")  # before the open: O_TRUNC must not empty a file we then fail to fill
+    except UnicodeEncodeError:
+        raise ModelError(f"text for '{_q(rel_path)}' is not valid UTF-8") from None
     _make_parents(root, rel_path)
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
     try:
@@ -199,7 +204,7 @@ def write_text(root: Path, rel_path: str, text: str) -> None:
             raise ModelError(f"path '{_q(rel_path)}' is a symbolic link") from None
         raise
     with os.fdopen(fd, "wb") as fh:
-        fh.write(text.encode("utf-8"))
+        fh.write(data)
 
 
 def remove_file(root: Path, rel_path: str) -> None:

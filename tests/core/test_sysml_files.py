@@ -470,3 +470,10 @@ def test_move_dir_refuses_symlink_source_and_dangling_symlink_destination(tmp_pa
         files.move_dir(root, "sysml/changes/x", "sysml/changes/archive/d")
     assert (root / "sysml/changes/x/proposal.md").exists()
     assert not (root / "nowhere").exists()
+
+
+def test_write_text_with_unencodable_text_keeps_the_existing_file(root: Path) -> None:
+    files.write_text(root, "docs/a.svg", "old")
+    with pytest.raises(ModelError, match="is not valid UTF-8"):
+        files.write_text(root, "docs/a.svg", "bad \udc80")
+    assert files.read_text(root, "docs/a.svg") == "old"
