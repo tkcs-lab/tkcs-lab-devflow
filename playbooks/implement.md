@@ -257,7 +257,7 @@ On each check-in, for each `running` phase, `read_worker(<its worker>)`:
    protect list plus the paths `playbooks/policies/protected-changes.md` excludes from the flow) is sent back. `BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of `GUARDED_WORKFLOWS`, `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow pattern matches them. Check
    it with `git diff --name-only --no-renames <base>...origin/<phase branch>` (a deleted protected path counts). A hit in the
    excluded set is never routed into the flow. A lockfile in a phase diff is sent back whoever produced it; lockfile changes are made outside implement (the deps playbook or by the owner). Each `protected-change:` line of the report is handled with
-   the protected-changes policy (the merge is not held back). Anything wrong goes back to the worker as above. With `spec_change` in the manifest, a diff that touches `openspec/` in any phase but the last is sent back, except a revision or fix worker whose findings belong to the last phase.
+   the protected-changes policy (the merge is not held back). Anything wrong goes back to the worker as above. With `spec_change` in the manifest, a diff that touches `openspec/` in any phase but the last is sent back, except a revision or fix worker whose findings belong to the last phase. With `sysml_change` in the manifest, a diff that touches `sysml/`, `docs/architecture.md` or `docs/architecture.svg` in any phase but the last is sent back, with the same revision and fix exception; with the profile's `sysml` block and no `sysml_change`, any diff that touches them is sent back.
 3. **Required roles.** Unless the report has the line `tld: unavailable` (see below), save `git diff --name-only <base>...origin/<phase branch>` to a file, run
    `tld roles required --profile .tld/toolkit.yaml --at implement_phase --changed <file>` (save the JSON) and
    `tld roles verify --required <json> --report <the PHASE-REPORT text>`. Exit 1 goes back to the worker like
@@ -333,6 +333,8 @@ On each check-in, for each `running` phase, `read_worker(<its worker>)`:
 
 ## 5. Final review
 
+With `sysml_change`, after the merge of `origin/<main>` below run `tld ops sysml check --profile .tld/toolkit.yaml` and `tld ops sysml render --check --profile .tld/toolkit.yaml`; a conflict in `docs/architecture.md` or `docs/architecture.svg` is resolved by `tld ops sysml render --profile .tld/toolkit.yaml`, a conflict in a file under `sysml/` or a failing check stops the run with a blocking finding.
+
 When every phase is `merged`, merge `origin/<main>` into the feature branch once more, push, and
 `start_worker(brief, <the reviewer level>, <feature>, none, "<plan slug> final review")` with this brief:
 
@@ -354,7 +356,11 @@ When every phase is `merged`, merge `origin/<main>` into the feature branch once
 > manifest: the files under `openspec/changes/<spec_change>/` were authored by the plan and are not deviations;
 > run `tld ops spec validate --profile .tld/toolkit.yaml`; `openspec/changes/<spec_change>` must be gone; every
 > scenario of the archived change under `openspec/changes/archive/` must be covered by a test or an acceptance
-> item; failing any of these is a blocking finding.
+> item; failing any of these is a blocking finding. With `sysml_change` in the manifest: the files under
+> `sysml/changes/<sysml_change>/` were authored by the plan and are not deviations; run `tld ops sysml check
+> --profile .tld/toolkit.yaml` and `tld ops sysml render --check --profile .tld/toolkit.yaml`;
+> `sysml/changes/<sysml_change>` must be gone; every part def and port of the archived change under
+> `sysml/changes/archive/` must be named by an acceptance item or a test; failing any of these is a blocking finding.
 >
 > Run `tld roles required --profile .tld/toolkit.yaml --at implement_final --changed <a file with git diff
 > --name-only origin/<main>...HEAD>` and run every role it lists in review mode as
