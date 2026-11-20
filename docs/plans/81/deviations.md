@@ -19,6 +19,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - retry: security-reviewer found 1 blocking: a lone carriage return was accepted in code and comments, which lets a terminal show a comment where code is parsed (and the reverse); p2b sent back to refuse a CR not followed by LF, run the character pass over the whole file first, and document the parse_file size precondition
 - review: design change vs plan 3.2: a carriage return is allowed only as part of CRLF (stricter than the plan text, which does not mention CR); long names and words are still echoed in full in two messages as the plan words them (non-blocking, left open)
+- worker: lone CR refused everywhere (stricter than plan 3.2); whole-text character pre-pass added
+- review: re-review: 0 blocking; 1 non-blocking left open: default-ignorable invisible characters (variation selectors, Hangul fillers, U+034F) are accepted in doc text and can hide a link or secret trigger word from the heuristic checks
 
 ## p3-sysml-model-check
 
