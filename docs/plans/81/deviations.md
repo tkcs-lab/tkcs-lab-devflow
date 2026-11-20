@@ -24,7 +24,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-sysml-model-check
 
-- pending
+- worker: none
+- review: worker had no tld; orchestrator ran security-reviewer: 0 blocking, 1 non-blocking left open (names label in Finding.file is not escaped; no caller passes names yet, so p7 must pass only checked relpaths)
 
 ## p4-sysml-change
 
