@@ -34,12 +34,20 @@ OUTPUTS = ("docs/architecture.svg", "docs/architecture.md")
 COUNTED = frozenset({"package", "part def", "port def", "part", "port"})
 # Existing outputs are read for comparison and for undoing an archive; this is far above any real output.
 OUTPUT_READ_MAX = 4_000_000
-MESSAGE_MAX = 400
+MSG_PREFIX = "tld ops sysml: "
+MESSAGE_MAX = 600
+CAUSE_MAX = 120
+PATH_MAX = 60
+PATHS_SHOWN = 3
 
 
 def _safe(text: str) -> str:
     """`text` on one line: every non-printable character (ESC, newline, lone surrogate) escaped."""
     return "".join(c if c.isprintable() else c.encode("unicode_escape").decode("ascii") for c in text)
+
+
+def _cut(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
 def _line(text: str) -> str:
@@ -174,8 +182,11 @@ def _cmd_render(ns: argparse.Namespace, root: Path) -> int:
 
 def _restore(root: Path, path: str, old: str | None) -> None:
     """Put a file back as it was (`old` None: it did not exist)."""
-    if files.read_text(root, path, OUTPUT_READ_MAX) == old:
-        return  # the failed step changed nothing here
+    try:
+        if files.read_text(root, path, OUTPUT_READ_MAX) == old:
+            return  # the failed step changed nothing here
+    except (ModelError, OSError):
+        pass  # unreadable (for example a write cut inside a character): treat it as changed
     if old is None:
         files.remove_file(root, path)
     else:
@@ -210,17 +221,26 @@ def _cmd_archive(ns: argparse.Namespace, root: Path) -> int:
             files.write_text(root, path, outputs[path])
     except BaseException as exc:  # undo also on an interrupt, then re-raise it
         left = []
-        for label, fn, *args in reversed(undo):
+        pending = None if isinstance(exc, (ModelError, OSError)) else exc
+        for label, fn, *args in reversed(undo):  # every step is tried, whatever the one before did
             try:
                 fn(*args)
-            except (ModelError, OSError):
+            except BaseException as again:
                 left.append(label)
-        if not isinstance(exc, (ModelError, OSError)):
-            raise
+                if not isinstance(again, Exception) and pending is None:  # a second interrupt
+                    pending = again
+        cause = _cut(_safe(str(exc)), CAUSE_MAX)
         if left:
-            raise ModelError(f"archive failed ({_line(str(exc))}) and could not be undone: "
-                             f"{', '.join(left)} left changed; restore them from git") from None
-        raise ModelError(f"archive failed ({_line(str(exc))}); the model was restored") from None
+            shown = ", ".join(_cut(_safe(x), PATH_MAX) for x in left[:PATHS_SHOWN])
+            more = f", and {len(left) - PATHS_SHOWN} more" if len(left) > PATHS_SHOWN else ""
+            text = (f"archive failed and could not be undone: {shown}{more} left changed; restore them from git "
+                    f"(cause: {cause})")
+        else:
+            text = f"archive failed; the model was restored (cause: {cause})"
+        if pending is not None:
+            print(f"{MSG_PREFIX}{text}", file=sys.stderr)
+            raise pending
+        raise ModelError(text) from None
     print(f"archived {source} to {plan.dest}")
     return 0
 

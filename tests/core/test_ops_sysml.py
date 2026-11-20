@@ -122,7 +122,7 @@ def test_subset_must_be_the_integer_1(tmp_path, capsys, value, shown):
 def test_subset_value_is_escaped_and_bounded(tmp_path, capsys):
     root = make_repo(tmp_path / "r", profile='sysml:\n  subset: "\\e[31m' + "x" * 900 + '"\n')
     code, _, err = run(root, "check", capsys=capsys)
-    assert code == 2 and "\x1b" not in err and err.count("\n") == 1 and len(err) < 500
+    assert code == 2 and "\x1b" not in err and err.count("\n") == 1 and len(err) < 700
 
 
 @pytest.mark.parametrize("sub", [["check"], ["render"], ["new-change", "x"], ["archive", "x"], ["render", "--check"]])
@@ -358,7 +358,7 @@ def test_oserror_message_is_escaped_and_one_line(repo, capsys, monkeypatch):
         raise OSError("bad\nname \x1b[31m" + "y" * 900)
     monkeypatch.setattr(files.os, "scandir", boom)
     code, _, err = run(repo, "check", capsys=capsys)
-    assert code == 2 and err.count("\n") == 1 and "\x1b" not in err and len(err) < 500
+    assert code == 2 and err.count("\n") == 1 and "\x1b" not in err and len(err) < 700
 
 
 def test_oserror_in_render_write_exits_2(repo, capsys, monkeypatch):
@@ -513,8 +513,8 @@ def test_archive_oserror_on_output_exits_2_and_rolls_back(repo, capsys, monkeypa
     monkeypatch.setattr(sysml.files, "write_text", boom)
     code, out, err = run(repo, "archive", "x", capsys=capsys)
     assert (code, out) == (2, "")
-    assert err == (f"{MSG}archive failed ([Errno 13] Permission denied: 'docs/architecture.svg'); "
-                   "the model was restored\n")
+    assert err == (f"{MSG}archive failed; the model was restored "
+                   "(cause: [Errno 13] Permission denied: 'docs/architecture.svg')\n")
     after = snapshot(repo)
     # the model and the change folder are exactly as before; only directories made on the way may remain
     assert {k: v for k, v in after.items() if v is not None} == {k: v for k, v in before.items() if v is not None}
@@ -528,7 +528,7 @@ def test_archive_failing_move_rolls_the_model_back(repo, capsys, monkeypatch):
         raise OSError(28, "No space left on device")
     monkeypatch.setattr(sysml.files, "move_dir", boom)
     code, _, err = run(repo, "archive", "x", capsys=capsys)
-    assert code == 2 and err == f"{MSG}archive failed ([Errno 28] No space left on device); the model was restored\n"
+    assert code == 2 and err == f"{MSG}archive failed; the model was restored (cause: [Errno 28] No space left on device)\n"
     assert snapshot(repo) == before
 
 
@@ -548,8 +548,8 @@ def test_archive_failed_rollback_names_the_files_left_changed(repo, capsys, monk
     monkeypatch.setattr(sysml.files, "write_text", boom)
     code, out, err = run(repo, "archive", "x", capsys=capsys)
     assert (code, out) == (2, "")
-    assert err == (f"{MSG}archive failed ([Errno 28] No space left on device) and could not be undone: "
-                   "sysml/model/core/api.sysml left changed; restore them from git\n")
+    assert err == (f"{MSG}archive failed and could not be undone: sysml/model/core/api.sysml left changed; "
+                   "restore them from git (cause: [Errno 28] No space left on device)\n")
 
 
 def test_archive_interrupt_undoes_and_reraises(repo, capsys, monkeypatch):
@@ -666,3 +666,73 @@ def test_help_lists_the_four_subcommands_and_the_honesty_sentence():
 def test_module_docstring_has_the_honesty_sentence():
     assert "a documented subset of the SysML v2 textual notation, intended to parse in SysML v2 tools; " \
            "tld does not check it against one" in " ".join(sysml.__doc__.split())
+
+
+def test_archive_status_survives_long_paths_and_many_failures(tmp_path, capsys, monkeypatch):
+    names = {f"{'a' * 40}{i}/{'b' * 40}.sysml": f"package P{i} {{\n  part def D {{ doc /* d */ }}\n}}\n"
+             for i in range(6)}
+    root = make_repo(tmp_path / "r", models=names)
+    assert run(root, "new-change", "x", *[a for r in names for a in ("--file", r)], capsys=capsys)[0] == 0
+    for r in names:
+        write(root, f"sysml/changes/x/model/{r}", names[r].replace("/* d */", "/* e */"))
+    write(root, "sysml/changes/x/proposal.md", PROPOSAL)
+    real = files.write_text
+    long_name = "n" * 500
+
+    calls = []
+
+    def flaky(root_, rel, text):
+        calls.append(rel)
+        if len(calls) > 6:
+            raise OSError(28, "No space left on device", long_name)
+        return real(root_, rel, text)
+    monkeypatch.setattr(sysml.files, "write_text", flaky)
+    code, _, err = run(root, "archive", "x", capsys=capsys)
+    assert code == 2 and err.count("\n") == 1
+    assert err.startswith(f"{MSG}archive failed and could not be undone: ")
+    assert ", and 3 more left changed; restore them from git (cause: " in err
+    assert long_name not in err and len(err) < 700
+
+
+def test_archive_restore_of_an_unreadable_file_is_still_attempted(repo, capsys, monkeypatch):
+    start_change(repo, capsys)
+    real_read = files.read_text
+    real_write = files.write_text
+    state = {"n": 0}
+
+    def write_cut(root, rel, text):
+        state["n"] += 1
+        if state["n"] == 2:  # the second write: the new file is cut inside a character
+            real_write(root, rel, "é")
+            (root / rel).write_bytes("é".encode()[:1])
+            raise OSError(28, "No space left on device")
+        return real_write(root, rel, text)
+
+    write(repo, "sysml/changes/x/model/extra.sysml", NEW)
+    monkeypatch.setattr(sysml.files, "write_text", write_cut)
+    code, _, err = run(repo, "archive", "x", capsys=capsys)
+    assert code == 2 and "the model was restored" in err
+    assert (repo / "sysml/model/core/api.sysml").read_text() == API
+    assert not (repo / "sysml/model/extra.sysml").exists()
+    assert real_read(repo, "sysml/model/core/db.sysml") == DB
+
+
+def test_archive_undo_tries_every_step_when_one_raises_something_else(repo, capsys, monkeypatch):
+    start_change(repo, capsys)
+    write(repo, "sysml/changes/x/model/extra.sysml", NEW)
+    real_write = files.write_text
+    state = {"n": 0}
+
+    def fail_third(root, rel, text):
+        state["n"] += 1
+        if state["n"] == 3:
+            raise OSError(28, "No space left on device")
+        return real_write(root, rel, text)
+
+    def remove_boom(root, rel):
+        raise RuntimeError("odd")
+    monkeypatch.setattr(sysml.files, "write_text", fail_third)
+    monkeypatch.setattr(sysml.files, "remove_file", remove_boom)
+    code, _, err = run(repo, "archive", "x", capsys=capsys)
+    assert code == 2 and "could not be undone: sysml/model/extra.sysml left changed" in err
+    assert (repo / "sysml/model/core/api.sysml").read_text() == API  # restored although a later step blew up
