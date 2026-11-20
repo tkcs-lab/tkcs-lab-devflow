@@ -316,6 +316,9 @@ def test_doc_length_is_measured_after_normalisation():
         "http://x", "HTTP://x", "www.x", "WWW.x", "password: x", "passwd=x", "secret : x", "token=x",
         "API-KEY: x", "api_key=x", "-----BEGIN", "ghp_abcdefgh1", "gho_abcdefgh", "ghs_abcdefgh",
         "AKIA12345678", "sk-abcdefgh",
+        "github_pat_" + "a1_" * 8, "ghu_abcdefgh1", "ghr_abcdefgh1", "ghp_abcdefgh1",
+        "sk-" + "a-" * 12, "AKIA" + "A1" * 8, "xoxb-1", "xoxa-1", "xoxp-1", "xoxo-1", "xoxs-1", "xoxr-1",
+        "AIza" + "a_-" * 8,
     ],
 )
 def test_doc_secret_or_link_rejected(bad):

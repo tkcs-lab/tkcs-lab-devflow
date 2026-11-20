@@ -256,8 +256,11 @@ with the plan.
 1. Decide whether the change alters components, ports, composition or dependencies. When it does not, write no
    change, set no `sysml_change` and say so in the plan's Scope. When a revision of an existing plan drops its
    change, delete the folder with `git rm -r sysml/changes/<plan slug>/`.
-2. When it does: run `tld ops sysml new-change --profile .tld/toolkit.yaml <plan slug> --file <relpath>` with one
-   `--file` for every model file the plan changes, and one `--remove <relpath>` for every model file it deletes.
+2. When it does: first, when any of `sysml`, `sysml/model`, `sysml/changes` or `docs` is a symbolic link (`test -L`) or
+   exists and is not a directory (`test -d`), stop with `A path of the architecture model is a symbolic link or not a
+   directory. Nothing was changed.` Then run `tld ops sysml new-change --profile .tld/toolkit.yaml <plan slug> --file=<relpath>`
+   with one `--file=<relpath>` for every model file the plan changes, and one `--remove=<relpath>` for every model file
+   it deletes.
 3. Edit the copied files under `sysml/changes/<plan slug>/model/` so that each is the whole new file, never a
    fragment. Add each new file under `sysml/changes/<plan slug>/model/`. Fill `sysml/changes/<plan slug>/proposal.md`.
 4. Run `tld ops sysml check --profile .tld/toolkit.yaml --change <plan slug>`; it must exit 0 before the plan is

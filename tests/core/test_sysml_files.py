@@ -145,7 +145,7 @@ def test_fifo_is_refused(root: Path) -> None:
         files.load_tree(root)
 
 
-@pytest.mark.parametrize("rel", ["A.sysml", "a/../b.sysml", "/a.sysml", "a.txt", "a\n.sysml", "a b.sysml"])
+@pytest.mark.parametrize("rel", ["A.sysml", "a/../b.sysml", "/a.sysml", "a.txt", "a\n.sysml", "a b.sysml", "-a.sysml", "a/-b.sysml", "_a.sysml", "a/_b.sysml", "--root.sysml"])
 def test_invalid_relpaths(rel: str) -> None:
     with pytest.raises(ModelError) as exc:
         files.check_relpath(rel)
@@ -477,3 +477,7 @@ def test_write_text_with_unencodable_text_keeps_the_existing_file(root: Path) ->
     with pytest.raises(ModelError, match="is not valid UTF-8"):
         files.write_text(root, "docs/a.svg", "bad \udc80")
     assert files.read_text(root, "docs/a.svg") == "old"
+
+
+def test_valid_relpath_with_inner_hyphens_and_underscores() -> None:
+    assert files.check_relpath("a-b/c_d-1.sysml") == "a-b/c_d-1.sysml"

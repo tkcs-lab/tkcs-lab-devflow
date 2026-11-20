@@ -41,7 +41,7 @@ FENCES = {
     },
     "sysml_change": {
         "block": "sysml", "paths": ("sysml/**", "docs/architecture.md", "docs/architecture.svg"),
-        "reserved": ("archive",),
+        "reserved": ("archive",), "max_len": 100,
         "id_error": "sysml_change must be lower-case words joined by hyphens",
         "block_error": "sysml_change needs the profile's sysml block",
         "slug_warning": "sysml_change differs from plan_slug",
@@ -294,7 +294,8 @@ def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/pla
         if key not in manifest:
             continue
         val = manifest[key]
-        if not (isinstance(val, str) and re.fullmatch(ID_RE, val)) or val in fence["reserved"]:
+        if not (isinstance(val, str) and re.fullmatch(ID_RE, val)) or val in fence["reserved"] \
+                or len(val) > fence.get("max_len", len(val)):
             errors.append(fence["id_error"])
             continue
         fences_on.append(key)

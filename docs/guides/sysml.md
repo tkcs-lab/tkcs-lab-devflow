@@ -71,8 +71,8 @@ rest; the failure line reads `archive failed; the model was restored (cause: ...
 `archive failed and could not be undone: <paths> left changed; restore them from git (cause: ...)`.
 
 **The fence.** With `sysml_change` set only the last phase may touch `sysml/`, `docs/architecture.md` and
-`docs/architecture.svg`, it must, and it depends on every other phase. Without `sysml_change` no phase may
-(no change, no touch). A phase of a repository with a `sysml` block that touches `docs/**` or `**/*.md` must narrow
+`docs/architecture.svg`, it must, and it depends on every other phase. Without `sysml_change`, in a repository with a
+`sysml` block, no phase may touch the fence (no change, no touch). A phase of a repository with a `sysml` block that touches `docs/**` or `**/*.md` must narrow
 its `touches` or carry `sysml_change`.
 
 A finding `<file> changed since the change was written; ...` at archive means another plan changed that model file:
@@ -96,7 +96,7 @@ the code does.
 ## Safety notes
 
 - A symbolic link anywhere on a model path is refused; a write to a hard-linked file is refused.
-- The SVG shows names only, never doc text. Model text is untrusted: names on stderr are escaped.
+- The SVG shows names only, never doc text. Model text is untrusted: names in every output line (stdout and stderr) are escaped.
 - Doc text holds no link and no secret-like text; put no credential, hostname, URL or e-mail address in a doc or name.
 
 ## Open points
