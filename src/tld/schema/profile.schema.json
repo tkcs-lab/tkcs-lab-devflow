@@ -484,6 +484,19 @@
       },
       "description": "Optional. Repository uses OpenSpec specs."
     },
+    "sysml": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subset"],
+      "properties": {
+        "subset": {
+          "type": "integer",
+          "enum": [1],
+          "description": "The tld SysML subset the architecture model is written in. Present means the repository uses an architecture model: /sysml works and /make-plan writes an architecture change."
+        }
+      },
+      "description": "Optional. Repository uses a SysML architecture model."
+    },
     "admin": {
       "type": "object",
       "additionalProperties": false,

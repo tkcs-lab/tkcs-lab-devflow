@@ -112,6 +112,9 @@ stacks: []               # REQUIRED (may be []). Stack guides to load (stacks/<n
 # spec:                  # optional: absent = the repository does not use specs
 #   version: "2.1.0"      # exact OpenSpec release; present = the repository uses specs
 
+# sysml:                 # optional: absent = the repository has no architecture model
+#   subset: 1             # the tld SysML subset; present = the repository uses an architecture model
+
 # roles:                 # optional. Which roles are mandatory and how they run (docs/reference/profile-reference.md).
 #                        # Without this section every role is available and none is mandatory.
 #   posture:
