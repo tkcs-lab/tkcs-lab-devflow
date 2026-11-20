@@ -74,6 +74,14 @@ def test_prompt_then_board_set_then_stop_allows(repo):
     assert (r.returncode, r.stderr) == (0, "")
 
 
+def test_sysml_init_prompt_then_board_set_then_stop_allows(repo):
+    assert run_script("board-gate", prompt(repo, "/tld:sysml init x")).returncode == 0
+    r = run_script("board-gate", post(MCP_SET, repo, {"content": [{"type": "text", "text": '{"id":"p--sysml","version":1}'}]}))
+    assert r.returncode == 0
+    r = run_script("board-gate", stop(repo))
+    assert (r.returncode, r.stderr) == (0, "")
+
+
 def test_spec_init_prompt_then_board_set_then_stop_allows(repo):
     assert run_script("board-gate", prompt(repo, "/tld:spec init x")).returncode == 0
     r = run_script("board-gate", post(MCP_SET, repo, {"content": [{"type": "text", "text": '{"id":"p--spec","version":1}'}]}))

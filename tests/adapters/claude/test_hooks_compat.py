@@ -73,6 +73,10 @@ COMPAT = {
         ("git checkout -b chore/ci-pages-20260101 origin/main", "git checkout -b chore/ci-<workflow>-<yyyymmdd> origin/<main>"),
         ("git push -u origin chore/ci-pages-20260101", "git push -u origin chore/ci-<workflow>-<yyyymmdd>"),
     ],
+    "sysml": [
+        ("git checkout -b chore/sysml-init-20260101 origin/main", "git checkout -b chore/sysml-init-<yyyymmdd> origin/<main>"),
+        ("git push -u origin chore/sysml-init-20260101", "git push -u origin chore/sysml-init-<yyyymmdd>"),
+    ],
     "spec": [
         ("git checkout -b chore/spec-init-20260101 origin/main", "git checkout -b chore/spec-init-<yyyymmdd> origin/<main>"),
         ("git push -u origin chore/spec-init-20260101", "git push -u origin chore/spec-init-<yyyymmdd>"),
@@ -167,7 +171,7 @@ PLACEHOLDERS = {
     "<branch>": "feature/demo", "<phase branch>": "feature/demo--p1", "<base>": "abc1234", "<feature>": "feature/demo",
     "<new-with-hyphens>": "v1-2-3", "<new>": "v1.2.3", "<ecosystem>": "npm", "<plan file>": "/tmp/plan.md", "<version_file>": "UPSTREAM", "<upstream.tag_pattern>": "^v[0-9.]+$",
     "<plan path>": "docs/14/plan.md", "<yyyymmdd-hhmm>": "20260101-0101", "<yyyymmdd>": "20260101", "<workflow>": "pages", "<owner>/<repo>": "o/r",
-    "<plan slug>": "foo", "<id>": "foo", "<spec_change>": "foo",
+    "<plan slug>": "foo", "<id>": "foo", "<spec_change>": "foo", "<sysml_change>": "foo",
 }
 SPAN = re.compile(r"`((?:git|gh) [^`]+)`")
 
@@ -218,7 +222,8 @@ def test_github_mcp_calls_the_commands_make_are_allowed(feature_repo, tool, phra
 
 def test_files_the_commands_write_are_allowed(feature_repo):
     for path in ("docs/foo-plan.md", "docs/foo-plan-manual-steps.html", "docs/foo-review.md", "docs/foo-review-decisions.html",
-                 "CHANGELOG.md", "openspec/changes/baseline-20260101/specs/x/spec.md", "openspec/specs/x/spec.md"):
+                 "CHANGELOG.md", "openspec/changes/baseline-20260101/specs/x/spec.md", "openspec/specs/x/spec.md",
+                 "sysml/model/core.sysml", "docs/architecture.md", "docs/architecture.svg"):
         for hook in ("protect-paths", "secret-scan"):
             r = run(hook, event("Write", feature_repo, file_path=path, content="plain text\n"))
             assert r.code == 0, (path, hook, r.stderr)
