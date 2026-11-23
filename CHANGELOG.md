@@ -5,6 +5,8 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-23
+
 ### Added
 
 - `tld plan record-items`: prints the run record's items from a plan (every phase and `final-review`), or checks that a record lists them all.
