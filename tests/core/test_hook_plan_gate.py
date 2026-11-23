@@ -113,6 +113,18 @@ def test_prompt_with_opening_command_opens_the_session(repo):
     assert write(repo, repo / "a.txt", sid="other").verdict == "deny"
 
 
+def test_prompt_with_sysml_init_opens_the_session(repo):
+    assert prompt(repo, "/tld:sysml init", "sysml").context is None
+    assert write(repo, repo / "a.txt").verdict == "allow"
+    assert write(repo, repo / "a.txt", sid="other").verdict == "deny"
+
+
+def test_prompt_with_spec_init_opens_the_session(repo):
+    assert prompt(repo, "/tld:spec init", "spec").context is None
+    assert write(repo, repo / "a.txt").verdict == "allow"
+    assert write(repo, repo / "a.txt", sid="other").verdict == "deny"
+
+
 def test_prompt_with_questions_opens_the_session(repo):
     assert prompt(repo, "/tld:questions", "questions").context is None
     assert write(repo, repo / "a.txt").verdict == "allow"
