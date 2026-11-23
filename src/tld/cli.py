@@ -72,6 +72,8 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("ops", "upstream-sync"): ("tld.ops.upstream_sync", (), "plan | prepare: sync a fork to an upstream release"),
     ("ops", "repo-admin"): ("tld.ops.repo_admin", (), "validate-policy | whoami | audit | apply"),
     ("ops", "docs-index"): ("tld.ops.docs_index", (), "check | inventory | move: the docs index"),
+    ("ops", "spec"): ("tld.ops.spec", (), "init | new-change | list | validate | archive: the pinned OpenSpec CLI"),
+    ("ops", "sysml"): ("tld.ops.sysml", (), "new-change | check | render | archive: the architecture model"),
     ("version", "show"): ("tld.cli", ("--version",), "print the running tld version"),
 }
 

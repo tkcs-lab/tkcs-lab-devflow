@@ -78,7 +78,7 @@ def test_fixtures_hold_no_real_names_or_secrets():
                 assert not bad.search(line), f"{f.relative_to(ROOT)}:{n}"
 
 
-@pytest.mark.parametrize("command", ["land", "deps", "upstream", "docs", "board", "implement", "questions"])
+@pytest.mark.parametrize("command", ["land", "deps", "upstream", "docs", "board", "implement", "questions", "spec", "sysml"])
 def test_command_fixture_profiles_are_valid(tmp_path, vp, command):
     import yaml
     builder("commands").build(tmp_path / "r", command=command)
@@ -86,6 +86,10 @@ def test_command_fixture_profiles_are_valid(tmp_path, vp, command):
     assert vp.validate(profile, tmp_path / "r")[0] == []
     if command == "land":
         assert "bot_login" not in profile["git"]
+    if command == "spec":
+        assert "spec" not in profile
+    if command == "sysml":
+        assert "sysml" not in profile
     if command == "deps":
         assert "deps" not in profile
     if command == "upstream":

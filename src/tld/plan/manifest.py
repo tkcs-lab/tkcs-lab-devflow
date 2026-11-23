@@ -23,8 +23,36 @@ from tld.guard._common import BUILTIN_PROTECT_ALLOW, DEFAULT_PROTECT_PATHS
 HEADING = "## Implementation manifest"
 LEVELS = ("strong", "standard", "fast")
 WILDCARDS = "*?["
-TOP_KEYS = ("plan_slug", "feature_branch", "tracking_issue", "closes", "max_parallel", "manual_before",
+TOP_KEYS = ("plan_slug", "feature_branch", "tracking_issue", "spec_change", "sysml_change", "closes", "max_parallel", "manual_before",
             "manual_after", "manual", "verify_after_merge", "screenshots_after_merge", "final_checks", "phases")
+ID_RE = r"[a-z0-9]+(-[a-z0-9]+)*"
+# One entry per fenced manifest key: only the last phase may touch the fenced paths. The messages are the
+# contract (tests quote them); `reserved` ids are refused with the same id error.
+FENCES = {
+    "spec_change": {
+        "block": "spec", "paths": ("openspec/**",), "reserved": (),
+        "id_error": "spec_change must be lower-case words joined by hyphens",
+        "block_error": "spec_change needs the profile's spec block",
+        "slug_warning": "spec_change differs from plan_slug",
+        "middle": "phase '{pid}': touches openspec/ but only the last phase may when spec_change is set",
+        "last": "last phase '{last}' must touch openspec/ when spec_change is set",
+        "depend": "last phase '{last}' must depend on every other phase when spec_change is set (missing: {missing})",
+        "no_change": None,
+    },
+    "sysml_change": {
+        "block": "sysml", "paths": ("sysml/**", "docs/architecture.md", "docs/architecture.svg"),
+        "reserved": ("archive",), "max_len": 100,
+        "id_error": "sysml_change must be lower-case words joined by hyphens",
+        "block_error": "sysml_change needs the profile's sysml block",
+        "slug_warning": "sysml_change differs from plan_slug",
+        "middle": ("phase '{pid}': touches sysml/ or the architecture docs but only the last phase may "
+                   "when sysml_change is set"),
+        "last": "last phase '{last}' must touch sysml/ when sysml_change is set",
+        "depend": "last phase '{last}' must depend on every other phase when sysml_change is set (missing: {missing})",
+        "no_change": ("phase '{pid}': touches sysml/ or the architecture docs but the manifest has no "
+                      "sysml_change; narrow the touches or set sysml_change"),
+    },
+}
 PHASE_KEYS = ("id", "title", "depends_on", "complexity", "touches", "brief", "acceptance", "human_gate",
               "worker_level", "worker_level_reason")
 HINTS = {  # legacy keys (claude-toolkit) and what replaced them
@@ -261,6 +289,20 @@ def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/pla
             errors.append("closes must be a list of positive integers")
         elif _pos_int(ti) and ti in cl:
             warnings.append("closes contains tracking_issue")
+    fences_on: list[str] = []
+    for key, fence in FENCES.items():
+        if key not in manifest:
+            continue
+        val = manifest[key]
+        if not (isinstance(val, str) and re.fullmatch(ID_RE, val)) or val in fence["reserved"] \
+                or len(val) > fence.get("max_len", len(val)):
+            errors.append(fence["id_error"])
+            continue
+        fences_on.append(key)
+        if profile is not None and not isinstance(profile.get(fence["block"]), dict):
+            errors.append(fence["block_error"])
+        if val != manifest.get("plan_slug"):
+            warnings.append(fence["slug_warning"])
     for key in ("verify_after_merge", "final_checks"):
         if key in manifest and not (isinstance(manifest[key], list) and all(isinstance(x, str) for x in manifest[key])):
             errors.append(f"'{key}' must be a list of strings")
@@ -352,6 +394,27 @@ def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/pla
         return errors, warnings
 
     reach = _reach(deps)
+    def _fenced(pid: str, fence: dict) -> bool:
+        return any(paths_overlap(e, p) for e in touches.get(pid, []) for p in fence["paths"])
+
+    if ids:
+        last = ids[-1]
+        for key in fences_on:
+            fence = FENCES[key]
+            for pid in ids[:-1]:
+                if _fenced(pid, fence):
+                    errors.append(fence["middle"].format(pid=pid))
+            if not _fenced(last, fence):
+                errors.append(fence["last"].format(last=last))
+            missing = [x for x in ids[:-1] if x not in reach.get(last, set())]
+            if missing:
+                errors.append(fence["depend"].format(last=last, missing=", ".join(missing)))
+    for key, fence in FENCES.items():
+        if (fence["no_change"] and key not in manifest and profile is not None
+                and isinstance(profile.get(fence["block"]), dict)):
+            for pid in ids:
+                if _fenced(pid, fence):
+                    errors.append(fence["no_change"].format(pid=pid))
     for i, a in enumerate(ids):
         for b in ids[i + 1:]:
             if b in reach.get(a, set()) or a in reach.get(b, set()):
