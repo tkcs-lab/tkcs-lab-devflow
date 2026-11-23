@@ -64,7 +64,16 @@ def test_cards_are_per_document_and_tagged_with_the_session_tail(tmp_path):
 def test_links_dismiss_and_restore_in_a_browser(tmp_path):
     need_browser()
     with running(tmp_path) as srv:
-        result = subprocess.run(["node", str(ROOT / "tests" / "board_links_page_check.js"), base(srv), WRITE, PASSPHRASE],
+        docs = json.loads((FIXTURES / "board-records.json").read_text())
+        ids = []
+        for slug in ("report-one", "report-two"):
+            rec = copy.deepcopy(next(d["data"] for d in docs if d["data"]["project"] == "f-running-ok"))
+            rec.update(project=slug, repo=f"example-org/{slug}", plan_slug=f"plan-{slug}", needs_you=False,
+                       next_check_at=None, updated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+            ids.append(f"{slug}--run--plan-{slug}")
+            srv.store.set(ids[-1], rec, None)
+        srv.store.put_report(ids[0], b"<!doctype html><p>report text</p>")
+        result = subprocess.run(["node", str(ROOT / "tests" / "board_links_page_check.js"), base(srv), WRITE, PASSPHRASE, *ids],
                                 capture_output=True, text=True, timeout=120)
         assert result.returncode == 0, result.stdout + result.stderr
         assert result.stdout.strip() == "OK"

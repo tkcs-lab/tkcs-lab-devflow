@@ -145,6 +145,20 @@ def _sid(payload: dict) -> str | None:
 
 
 BOARD_SET = re.compile(r"^mcp__.*tld-board.*__board_set$")
+BOARD_ASK = re.compile(r"^mcp__.*tld-board.*__board_ask$")
+TIMER = re.compile(r"^(?:ScheduleWakeup|CronCreate)$|^mcp__.*__(?:send_later|create_trigger)$")
+ASK_COMMENT = re.compile(r"^mcp__.*__(?:add_issue_comment|issue_write)$")
+WORKER_START = re.compile(r"^mcp__.*__create_session$")
+WORKER_STOP = re.compile(r"^mcp__.*__archive_session$")
+PR_CREATE = re.compile(r"^mcp__.*__create_pull_request$")
+# tool name pattern -> the op the core board-gate sees; the runtime tool names stay in this adapter
+NEW_OPS = ((BOARD_ASK, "board_ask"), (TIMER, "timer"), (ASK_COMMENT, "ask_comment"),
+           (WORKER_START, "worker_start"), (WORKER_STOP, "worker_stop"), (PR_CREATE, "pr_create"))
+
+
+def _failed(response: object) -> bool:
+    """True when a tool response is a mapping that says the call failed (a boolean true, nothing else)."""
+    return isinstance(response, dict) and (response.get("isError") is True or response.get("is_error") is True)
 
 
 def _texts(items: object) -> str:
@@ -190,8 +204,16 @@ def to_action(payload: dict, project_dir: str | None = None) -> Action | None:
             return Action("tool_result", project, cwd, command=command, output=output, session_id=_sid(payload)) \
                 if isinstance(command, str) else None
         if BOARD_SET.match(tool):
+            if _failed(payload.get("tool_response")):
+                return None  # a failed write is not a record write
             return Action("tool_result", project, cwd, op="board_set", args=dict(ti), output=output,
                           session_id=_sid(payload))
+        for pattern, op in NEW_OPS:
+            if pattern.match(tool):
+                if _failed(payload.get("tool_response")):
+                    return None
+                return Action("tool_result", project, cwd, op=op, args=dict(ti), output=output,
+                              session_id=_sid(payload))
         return None
     if payload.get("hook_event_name") == "UserPromptSubmit":
         text = payload.get("prompt")
@@ -257,7 +279,7 @@ def execute(name: str, stdin_text: str) -> Result:
         payload = json.loads(stdin_text)
         if not isinstance(payload, dict):
             raise ValueError("the event is not a JSON object")
-    except ValueError as exc:
+    except (ValueError, RecursionError) as exc:
         return to_result(_common.problem(name, fail_closed, f"cannot read the hook event ({exc})."))
     prompt = payload.get("hook_event_name") in ("UserPromptSubmit", "SessionStart")
     try:

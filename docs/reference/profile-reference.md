@@ -73,6 +73,10 @@ Rules:
 | `upstream.tag_pattern` | **yes** (in `upstream`) | Regular expression a release tag must match; must compile |
 | `upstream.version_file` | **yes** (in `upstream`) | File in the fork that records the synced tag |
 | `land.max_prs` | no | Integer 1..50: most pull requests one `/land` run orders. `/land` works without the `land` section |
+| `spec` | no | Section for the spec commands and the spec change `/make-plan` writes. Absent means the repository does not use specs |
+| `spec.version` | **yes** (in `spec`) | Exact OpenSpec release as MAJOR.MINOR.PATCH; the wrapper installs @fission-ai/openspec@<version> and re-checks the format with a full match (the schema pattern alone would let a trailing newline through). Guide: [docs/guides/spec.md](../guides/spec.md) |
+| `sysml` | no | Section for the architecture commands and the architecture change /make-plan writes. Absent means the repository has no architecture model |
+| `sysml.subset` | **yes** (in `sysml`) | Integer, only 1 today: the version of the tld SysML subset (see [docs/guides/sysml.md](../guides/sysml.md)). A new grammar is a new number |
 | `admin.policy` | **yes** (in `admin`) | Path, relative to the repo root, of the policy file the repo-admin playbook audits and applies (see [admin.md](../guides/admin.md)). The file must exist. It needs the `admin` section and stops with a missing-key message when it is absent |
 | `git_ops.repo` | **yes** (in `git_ops`) | Owner/name of the central repository that holds the `tld-git-ops` workflow. The git-ops playbook needs the section and stops with a missing-key message when it is absent; see [git-ops.md](../guides/git-ops.md) |
 | `git_ops.workflow` | no | File name of the workflow in that repository. Default `tld-git-ops.yml` |
@@ -85,7 +89,7 @@ Rules:
 | `hooks.dod_gate.enabled` | no (default `false`) | Opt in to the `dod-gate` Stop hook: the session cannot stop while `verify.dod` fails. Not applied to sessions that marked themselves exempt, such as the `/implement` orchestrator |
 | `hooks.dod_gate.max_attempts` | no (default `3`) | Integer 1..10: failed attempts after which the gate lets the session stop and tells the user why |
 | `hooks.plan_gate.enabled` | no (default `false`) | Opt in to the `plan-gate` hook: a session that no tld command started cannot write into the repository; it is told to answer and to propose `/make-plan`. See [hooks.md](../architecture/hooks.md) |
-| `hooks.board_gate.enabled` | no (default `false`) | Opt in to the `board-gate` Stop hook: a session that a record-writing tld command started cannot end its turn before it has written its status record to the board once. See [hooks.md](../architecture/hooks.md) |
+| `hooks.board_gate.enabled` | no (default `false`) | Opt in to the `board-gate` Stop hook: a session that a record-writing tld command started cannot end its turn before it has written its status record once, after an ask, a worker start or stop, a pull request or a push left the record unwritten, or after an ask without an armed timer; each rule blocks once per event. See [hooks.md](../architecture/hooks.md) |
 | `runtime` | no | Facts about where this repository's sessions run |
 | `runtime.environments` | no | Non-empty list of environment names (1 to 100 characters, no control or format characters) this repository's sessions are meant to run in. The `env-check` hook warns in a cloud session whose `TLD_ENVIRONMENT` is missing or not in the list, and every command's profile loading warns when the runtime reports another name; names are compared after trimming, ignoring case. Warnings only, nothing stops. An older tld rejects this key. See [hooks.md](../architecture/hooks.md) |
 | `scope.ignore` | no | List of globs. `/implement` checks at each merge which files the phase changed outside its `touches` and reports them (see [scope-drift.md](../architecture/scope-drift.md)); paths matching these globs are not counted. Default: none. The changelog file (`docs.changelog.file`) is always ignored when the profile has `docs.changelog`. Same glob semantics as `touches` (`*` and `**` match across `/`; an entry ending in `/` is a directory). The check never blocks a merge |
@@ -99,8 +103,8 @@ Rules:
 
 ### roles
 
-The ten roles are `architect`, `code-reviewer`, `security-reviewer`, `test-architect`, `ux-reviewer`,
-`dependency-auditor`, `tech-writer`, `website-maintainer`, `debugger` and `refactorer` (role cards in `roles/`,
+The eleven roles are `architect`, `code-reviewer`, `security-reviewer`, `test-architect`, `ux-reviewer`,
+`dependency-auditor`, `tech-writer`, `website-maintainer`, `debugger`, `refactorer` and `reflektor` (role cards in `roles/`,
 see [roles.md](../architecture/roles.md)). A profile without `roles` means all of them are available and none is
 mandatory. The key was `agents` (with `agent` in each entry) before tld 1.0; nothing reads the old name.
 
@@ -116,7 +120,7 @@ mandatory. The key was `agents` (with `agent` in each entry) before tld 1.0; not
 - **Modes**: `tld roles required` gives each item a `mode`; only an edit role at `implement_phase` gets `edit`.
 - **Checked by the validator**: a role is not both disabled and required; `website-maintainer` needs
   `docs.website`; `when` needs an `at` point with a diff; only `security-reviewer`, `dependency-auditor`,
-  `test-architect`, `tech-writer` and `website-maintainer` can run at `review`.
+  `test-architect`, `tech-writer` and `website-maintainer` can run at `review`; `reflektor` can only run at `dod`.
 
 ### Command entries
 
@@ -197,5 +201,7 @@ keys, unique phase ids, known `depends_on`, no cycles, `brief` and `acceptance` 
 `complexity` of `S` or `M`, a `worker_level` of `strong`, `standard` or `fast` and a `worker_level_reason` for
 `strong`, honest manual-step entries, `feature_branch` against `git.branch_types`, and that phases which can run
 at the same time share no path in `touches` (globs included). `tracking_issue` is optional everywhere.
+`spec_change` (optional) names the OpenSpec change the plan carries; the profile needs a `spec` block and only the last phase may touch `openspec/`.
+`sysml_change` (optional) names the architecture change the plan carries; the profile needs a `sysml` block and only the last phase may touch `sysml/`, `docs/architecture.md` and `docs/architecture.svg`; with a `sysml` block and no `sysml_change` no phase may touch them.
 `/implement` also runs `tld plan check-url` (a plan only from `<main>` or a feature branch of the same repository, at `<plan_dir>/<n>/plan.md`),
 `tld plan branch-name` and `tld plan phase-status`.

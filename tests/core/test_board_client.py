@@ -151,3 +151,126 @@ def test_cli_delete_reports_missing(server):
     res = cli("delete", "f-running-ok--run--plan-f-running-ok", "nope", env=env)
     assert res.returncode == 0
     assert json.loads(res.stdout) == {"deleted": ["f-running-ok--run--plan-f-running-ok"], "missing": ["nope"]}
+
+
+# --- put-report ---------------------------------------------------------------------------------------------
+
+import hashlib  # noqa: E402
+
+from tld.board import report_check  # noqa: E402
+from tld.guard import board_gate  # noqa: E402
+
+REPORT_ID = "report-one--run--plan-report-one"
+PA = "<!doctype html><head>"
+PB = "</head><body>"
+PC = '<script>x</script></body><script id="d" type="application/json">'
+PD = "</script>"
+
+
+def _sha(text):
+    return hashlib.sha256(text.encode("utf8")).hexdigest()
+
+
+@pytest.fixture
+def fake_viewer(monkeypatch):
+    monkeypatch.setattr(report_check, "VIEWER_PARTS", tuple((len(p), _sha(p)) for p in (PA, PB, PC, PD)))
+
+
+def fake_page(payload='{"repo":{"web":null},"n":1}'):
+    return PA + report_check.CSP_META + PB + "<title>t</title>" + PC + payload + PD
+
+
+def seeded(server):
+    rec = record()
+    rec.update(project="report-one", repo="example-org/report-one", plan_slug="plan-report-one")
+    server.store.set(REPORT_ID, rec, None)
+
+
+def put_env(monkeypatch, server):
+    for key, value in env_for(server).items():
+        if key.startswith("TLD_BOARD_"):
+            monkeypatch.setenv(key, value)
+
+
+def no_request(*a, **k):
+    pytest.fail("request sent")
+
+
+def test_put_report_refuses_missing_directory_and_large_files_before_sending(server, tmp_path, monkeypatch, capsys):
+    put_env(monkeypatch, server)
+    monkeypatch.setattr(board_client, "call_raw", no_request)
+    big = tmp_path / "big.html"
+    big.write_bytes(b"x" * 11)
+    monkeypatch.setattr(board_client, "MAX_REPORT_BYTES", 10)
+    for target in (tmp_path / "missing.html", tmp_path, big):
+        assert board_client.main(["put-report", REPORT_ID, str(target)]) == 1
+        assert "cannot read the report" in capsys.readouterr().err
+
+
+def test_put_report_stores_a_valid_page(server, tmp_path, monkeypatch, fake_viewer, capsys):
+    put_env(monkeypatch, server)
+    seeded(server)
+    page = fake_page()
+    path = tmp_path / "r.html"
+    path.write_text(page, encoding="utf-8")
+    assert board_client.main(["put-report", REPORT_ID, str(path)]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["id"] == REPORT_ID and out["size"] == len(page.encode()) and out["sha256"] == _sha(page)
+    assert server.store.get_report(REPORT_ID)[0] == page.encode()
+
+
+def test_put_report_prints_the_reasons_of_a_refused_page(server, tmp_path, monkeypatch, fake_viewer, capsys):
+    put_env(monkeypatch, server)
+    seeded(server)
+    path = tmp_path / "r.html"
+    path.write_text("<p>x</p>", encoding="utf-8")
+    assert board_client.main(["put-report", REPORT_ID, str(path)]) == 1
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["error"] == "invalid_report"
+    assert json.loads(captured.out)["reasons"]
+    assert "HTTP 422" in captured.err
+    assert server.store.get_report(REPORT_ID) is None
+
+
+def test_put_report_for_an_unknown_record_fails(server, tmp_path, monkeypatch, fake_viewer, capsys):
+    put_env(monkeypatch, server)
+    path = tmp_path / "r.html"
+    path.write_text(fake_page(), encoding="utf-8")
+    assert board_client.main(["put-report", "nope--run--plan-nope", str(path)]) == 1
+    assert "HTTP 404" in capsys.readouterr().err
+
+
+def test_put_report_is_not_a_record_write_for_the_board_gate():
+    assert not board_gate.CLIENT_SET.search("tld board client put-report id file.html")
+    assert board_gate.CLIENT_SET.search("tld board client set id file.json")
+
+
+def test_put_report_through_the_cli(server, tmp_path, monkeypatch):
+    # The subprocess has the real pinned viewer parts, so a page of the fake template is refused with 422:
+    # the exit code and the reasons on stdout show the whole path (CLI, request, server check).
+    seeded(server)
+    path = tmp_path / "r.html"
+    path.write_text("<p>x</p>", encoding="utf-8")
+    result = cli("put-report", REPORT_ID, str(path), env=env_for(server))
+    assert result.returncode == 1
+    assert json.loads(result.stdout)["error"] == "invalid_report"
+    assert "HTTP 422" in result.stderr
+
+
+def test_put_report_through_the_cli_stores_a_page_when_the_server_accepts_it(server, tmp_path, monkeypatch):
+    seeded(server)
+    path = tmp_path / "r.html"
+    path.write_text("<p>x</p>", encoding="utf-8")
+    monkeypatch.setattr(report_check, "check", lambda text: [])
+    # in-process server thread shares the patched module, the CLI subprocess talks to it over HTTP
+    result = cli("put-report", REPORT_ID, str(path), env=env_for(server))
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["size"] == len(b"<p>x</p>")
+
+
+def test_put_report_without_a_board_exits_3(tmp_path):
+    path = tmp_path / "r.html"
+    path.write_text("<p>x</p>", encoding="utf-8")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("TLD_BOARD_")}
+    result = cli("put-report", REPORT_ID, str(path), env=env)
+    assert result.returncode == 3

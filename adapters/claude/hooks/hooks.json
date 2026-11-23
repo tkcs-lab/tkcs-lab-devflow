@@ -41,7 +41,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|mcp__.*tld-board.*__board_set",
+        "matcher": "Bash|mcp__.*tld-board.*__(board_set|board_ask)|ScheduleWakeup|CronCreate|mcp__.*__(send_later|create_trigger|add_issue_comment|issue_write|create_session|archive_session|create_pull_request)",
         "hooks": [
           {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/adapters/claude/hooks/board_gate.py\"", "timeout": 10}
         ]

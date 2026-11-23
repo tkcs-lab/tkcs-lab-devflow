@@ -36,9 +36,14 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld plan check-commands PLAN --profile P` | `tld.plan.phases` | which `verify_after_merge` commands the profile trusts (a verify entry, a `verify.after_merge_allow` prefix, a `ci.dispatchable` dispatch); prints `{"trusted", "unknown"}` (S14) |
 | `tld plan branch-name --plan-slug S \| --review-slug S \| --manifest PLAN [--phase ID [--rev N] \| --fix N]` | `tld.plan.phases` | the branch names of the playbooks (C12) |
 | `tld plan phase-status PLAN [--ref R] [--running ID]... [--approved ID]... [--repo DIR]` | `tld.plan.phases` | done (by `Plan-Phase` trailers on the branch's own, unreverted commits), approved (`Plan-Gate-Approved` trailers or `--approved`), gated, ready, waiting phases and the ones to start, as JSON |
+| `tld plan record-items PLAN [--add ID[=TITLE]]... [--check RECORD]` | `tld.plan.record_items` | prints the run record's items as one JSON list (every manifest phase, `final-review`, then each `--add`), or with `--check` (a record file, `-` for stdin) prints `items: missing <id>` per absent item (exit 1) or `items: ok (<n> expected)` (exit 0); exit 2 on bad input or an invalid or duplicate id |
 | `tld plan active-run --kind make-plan\|implement --comments F --bot L [--record F --plan-slug S] [--self ID] [--now ISO] [--max-age-minutes N]` | `tld.plan.active` | is another run of the same plan or issue alive: `none`, `own`, `stale` (exit 0) or `active` (exit 4), from the tracking issue's comments and the board record |
 | `tld roles required --profile P --at POINT [--changed F]` | `tld.roles.dispatch` | the roles required at a point, with their mode, as JSON |
 | `tld roles verify --required F --report F` | `tld.roles.dispatch` | check a report against `tld roles required` |
+| `tld roles reflektor-prepare --dest DIR --repo CLONE --base BASE` | `tld.roles.reflektor` | download the pinned Reflektor release (size and sha256 checked), refuse a repository whose .reflektor.json is not plain, unpack it; prints the path and the node path |
+| `tld roles reflektor-check --report FILE --root CLONE` | `tld.roles.reflektor` | refuse a Reflektor report whose paths leave the clone |
+| `tld roles reflektor-html (--file FILE \| --send --answer FILE --dest DIR)` | `tld.roles.reflektor` | add a Content-Security-Policy to a Reflektor page and check it against the pinned viewer; --send checks a saved answer's page and copies it |
+| `tld roles section --report FILE` | `tld.roles.section` | print the role report's change-report block, cleaned for a pull request body; exit 3 when there is none |
 | `tld dod exempt` | `tld.dod.gate` | mark this checkout's session exempt from the dod-gate hook |
 | `tld guard allow-profile` | `tld.guard.protect_paths` | let the session edit the profile for the next 2 hours |
 | `tld guard allow-workflow-install FILE...` | `tld.guard.protect_paths` | let the session write `tld-land.yml` / `tld-release.yml` for the next 15 minutes |
@@ -47,7 +52,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld guard allow-plan` | `tld.guard.protect_paths` | let every session in this checkout edit files for 8 hours (a plan-gate marker for /implement workers) |
 | `tld guard end-allow` | `tld.guard.protect_paths` | end the profile, workflow-install, git-ops and release markers; it does not end the plan marker |
 | `tld board server [--host H] [--port N] [--db F] [--insecure-cookie] [--api-port N] ...` | `tld.board.server` | serve the board: status records, asks, the owner's page ([board-server.md](../guides/board-server.md)) |
-| `tld board client health\|list\|get\|set\|delete ...` | `tld.board.client` | status records on the board server |
+| `tld board client health\|list\|get\|set\|delete\|put-report ...` | `tld.board.client` | status records on the board server |
 | `tld board usage FILE\|- [--source final\|scheduled]` | `tld.board.usage_client` | send the newest rate-limit reading to the board's Usage page; exit 3 no board, 1 refused or not understood |
 | `tld board ask-digest --repo OWNER/NAME [--since ISO] [--file FILE\|-] [--vocab FILE] [--now ISO]` | `tld.board.ask_digest` | digest the asks of one repository into clusters of similar questions (counts only for other projects); exit 3 no board, 1 the board, the file or the vocabulary cannot be read |
 | `tld board ask FILE\|- [--fallback-issue O/R[#N]] [--mention LOGIN] [--profile P]` | `tld.board.inbox` | post an ask and print its id; exit 3 no board, 5 the fallback comment body is on stdout |
@@ -72,6 +77,8 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld ops upstream-sync plan\|prepare ...` | `tld.ops.upstream_sync` | sync a fork to an upstream release |
 | `tld ops repo-admin validate-policy\|whoami\|audit\|apply ...` | `tld.ops.repo_admin` | audit and update organisation and repository settings |
 | `tld ops docs-index check\|inventory\|move ...` | `tld.ops.docs_index` | the docs index rules and doc moves (`move` also rewrites the profile's paths; a dry run unless `--apply`) |
+| `tld ops spec init\|new-change\|list\|validate\|archive [--profile FILE] [--root DIR]` | `tld.ops.spec` | the pinned OpenSpec CLI (installed once per `spec.version` into the cache, run with an allowlisted environment) |
+| `tld ops sysml new-change\|check\|render\|archive [--profile FILE] [--root DIR]` | `tld.ops.sysml` | the architecture model in a documented subset of the SysML v2 notation: create and check a change, draw `docs/architecture.svg` and `docs/architecture.md`, archive a change into the model (pure Python; exit 1 findings or drift, 2 cannot run) |
 | `tld migrate [ROOT] [--write]` | `tld.ops.migrate` | move a claude-toolkit (devflow) repository to tld: prints the plan, `--write` applies and stages it, then validates the profile and prints the owner's checklist; it never follows a symbolic link ([migrating-from-claude-toolkit.md](../guides/migrating-from-claude-toolkit.md)) |
 | `tld version show`, `tld --version` | `tld.cli` | print the running tld version |
 

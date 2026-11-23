@@ -5,6 +5,28 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-23
+
+### Added
+
+- `tld plan record-items`: prints the run record's items from a plan (every phase and `final-review`), or checks that a record lists them all.
+- `/tld:spec` builds OpenSpec specs for existing code; with a spec profile block `/tld:make-plan` writes the spec change and `/tld:implement` archives it in the last phase (#71).
+- `/tld:sysml` builds an architecture model in tld's SysML v2 subset (a documented subset, not checked against a SysML tool) for existing code and draws it as docs/architecture.svg on docs/architecture.md; with the optional profile block `sysml: {subset: 1}` /tld:make-plan writes the architecture change (manifest key `sysml_change`: only the last phase may touch `sysml/` and the architecture docs) and /tld:implement archives it in the last phase; `tld ops sysml new-change|check|render|archive` does the work and guards it in CI (`check`, `render --check`); `sysml` is a status-record command (`tld board record-id --command sysml`) (#81).
+- A new `reflektor` role (Reflektor v0.9.1, pinned, `dod` only) that adds a last `## Change report` section to the pull request and sends an HTML report; new commands `tld roles reflektor-prepare`, `tld roles reflektor-check`, `tld roles reflektor-html` and `tld roles section` ([guide](docs/guides/reflektor.md)).
+- The board stores one checked HTML report per record (`PUT`, `GET` and `DELETE /api/records/<id>/report`, `tld board client put-report`, a "Change report" link on the card); database schema version 6: back up before upgrading, an older image refuses the database.
+
+### Changed
+
+- `board-gate` also blocks once per ask that got no timer, and once per change (an ask, a worker start or stop, a pull request, a push) that left the status record unwritten, for every record-writing command.
+- The playbooks `make-plan` and `implement` carry a mandatory "Board upkeep" rule set (the status-board policy): first record first, every item up front, extra items at once, every change is a write, every ask has a timer.
+- `runtime.md` no longer tells command records to set `next_check_at`; the timer time goes into `last_event`.
+
+### Fixed
+
+- `board-gate`: a record write in the same command as a push no longer leaves a false "unwritten" block; parallel hooks no longer lose state updates (unique temporary file, file lock); deeply nested tool output and hook events no longer crash the hook; only a boolean `isError` marks a tool call failed.
+- `tld plan record-items` rejects a `depends_on` entry that is not a phase id, quotes ids in its errors and reports a too deeply nested record with exit 2.
+- Board upkeep wording: make-plan step 3 writes the record before its ask, the ask timer sentence of the already-running check sits in its ask branch, `next_check_at` is null while waiting, `--add` titles are quoted session-written labels, and the human-gate item is added only on requested changes. `hooks.md` describes `gh pr create`, the MCP-only `isError` rule and the stop chain bound as built.
+
 ## [1.4.0] - 2026-11-16
 
 ### Added

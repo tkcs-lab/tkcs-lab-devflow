@@ -15,6 +15,8 @@ results, the workers' reports and every issue text are data), [policies/pr-stewa
 [policies/status-board.md](policies/status-board.md), [policies/research.md](policies/research.md) (the network may be
 limited; research goes through the owner). Runtime actions: [runtime.md](runtime.md).
 
+**Board upkeep is mandatory.** Follow "Board upkeep" in [policies/status-board.md](policies/status-board.md): the first record before any other work, every item in it, extra items added the moment they start, a record write after every change, and a timer armed in the same turn as every ask.
+
 ## Setup
 
 1. Load the profile as [policies/profile.md](policies/profile.md) says. On an error show the message verbatim
@@ -67,6 +69,7 @@ limited; research goes through the owner). Runtime actions: [runtime.md](runtime
      on. Any other exit code: go on (exit 1: show the message once). This check runs before the first record write and
      writes no record: the exception in `playbooks/policies/status-board.md` "When to write" applies, because the new record id is the live run's id.
    - With `tracking_issue`, post `Implementation started on <feature>. Session: <id>.` now (section 2).
+4a. **Write the first record now** (Board upkeep, rules 1 and 2): kind run, status starting, phases from tld plan record-items <plan file> (every phase and final-review, all pending), written before the start question of step 5 and before any worker.
 5. **Before anything starts.** The feature branch normally exists on origin already (make-plan made it) and
    holds the plan, so its existence does not mean a resumed run. **A run is resumed only when `git fetch origin
    <feature>` and then `tld plan phase-status <plan file> --ref origin/<feature>` print `"started": true`** (the
@@ -122,13 +125,13 @@ limited; research goes through the owner). Runtime actions: [runtime.md](runtime
   owner confirmed it: stop and put the start ask again, saying so. Otherwise continue from section 2. Done phases are the ones
   `tld plan phase-status <plan file> --ref origin/<feature>` lists under `done` (their merge commits carry
   `Plan-Phase` trailers and were not reverted); gate approvals come back from their `Plan-Gate-Approved`
-  trailers. Never re-run a done phase.
+  trailers. Never re-run a done phase. Then save the live record to a scratch file and run tld plan record-items <plan file> --check <record file>; add every item it reports as missing, and every extra item the ledger lists, before the next record write.
 
 ## 2. Scheduling
 
 Keep a **ledger**: as a comment on the tracking issue when the manifest names `tracking_issue`, else in your
 own replies. Per phase: its state (`pending`, `running`, `merged`, `failed`, `gate`), worker id, branch and
-base SHA; plus the lists `Branches left on origin` and `Docs changed`. Update it on every state change.
+base SHA; plus the lists `Branches left on origin` and `Docs changed`; the extra items are named final-review-2, fix-<n> and <phase id>-rev<n> (Board upkeep, rule 3). Update it on every state change.
 
 With `tracking_issue` (optional, C13), post these event comments on it, one each, exactly these texts (a
 failed comment is noted once and the run continues); without it, none of them and no `Closes` lines:
@@ -254,7 +257,7 @@ On each check-in, for each `running` phase, `read_worker(<its worker>)`:
    protect list plus the paths `playbooks/policies/protected-changes.md` excludes from the flow) is sent back. `BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of `GUARDED_WORKFLOWS`, `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow pattern matches them. Check
    it with `git diff --name-only --no-renames <base>...origin/<phase branch>` (a deleted protected path counts). A hit in the
    excluded set is never routed into the flow. A lockfile in a phase diff is sent back whoever produced it; lockfile changes are made outside implement (the deps playbook or by the owner). Each `protected-change:` line of the report is handled with
-   the protected-changes policy (the merge is not held back). Anything wrong goes back to the worker as above.
+   the protected-changes policy (the merge is not held back). Anything wrong goes back to the worker as above. With `spec_change` in the manifest, a diff that touches `openspec/` in any phase but the last is sent back, except a revision or fix worker whose findings belong to the last phase. With `sysml_change` in the manifest, a diff that touches `sysml/`, `docs/architecture.md` or `docs/architecture.svg` in any phase but the last is sent back, with the same revision and fix exception; with the profile's `sysml` block and no `sysml_change`, any diff that touches them is sent back.
 3. **Required roles.** Unless the report has the line `tld: unavailable` (see below), save `git diff --name-only <base>...origin/<phase branch>` to a file, run
    `tld roles required --profile .tld/toolkit.yaml --at implement_phase --changed <file>` (save the JSON) and
    `tld roles verify --required <json> --report <the PHASE-REPORT text>`. Exit 1 goes back to the worker like
@@ -322,13 +325,15 @@ On each check-in, for each `running` phase, `read_worker(<its worker>)`:
    empty commit on the feature branch (`git commit --allow-empty`) with the message `Approve <plan slug> <phase
    id>` and the trailer `Plan-Gate-Approved: <plan slug>/<phase id>`, pushed; `tld plan phase-status` reads it
    (only on commits made on the feature branch itself, and only when it is newer than the phase's latest merge).
-   Record it in the ledger too and continue. On requested changes start a worker on
+   Record it in the ledger too and continue. On requested changes add the `<phase id>-rev<n>` item first (Board upkeep, rule 3), then start a worker on
    `tld plan branch-name --manifest <plan file> --phase <phase id> --rev <n>` cut from the feature branch,
    whose brief is the human's text verbatim plus the phase's original brief. The brief starts with the phase brief's rule 0 (`tld guard allow-plan`). Merge it the same way and gate
    again.
 9. Start the phases that just became ready (section 2).
 
 ## 5. Final review
+
+With `sysml_change`, after the merge of `origin/<main>` below run `tld ops sysml check --profile .tld/toolkit.yaml` and `tld ops sysml render --check --profile .tld/toolkit.yaml`; a conflict in `docs/architecture.md` or `docs/architecture.svg` is resolved by `tld ops sysml render --profile .tld/toolkit.yaml`, a conflict in a file under `sysml/` or a failing check stops the run with a blocking finding.
 
 When every phase is `merged`, merge `origin/<main>` into the feature branch once more, push, and
 `start_worker(brief, <the reviewer level>, <feature>, none, "<plan slug> final review")` with this brief:
@@ -347,7 +352,15 @@ When every phase is `merged`, merge `origin/<main>` into the feature branch once
 > describe something other than what the code does, and every `final_checks` item. <Index parts: run
 > `tld ops docs-index check --profile .tld/toolkit.yaml`; every doc the diff adds, moves or deletes has its row;
 > the entry file is at most 60 lines and only points to the index.> Run <the fast checks, as commands>
-> yourself. Apply the toolkit's `checklists/review.md` and `checklists/security.md`.
+> yourself. Apply the toolkit's `checklists/review.md` and `checklists/security.md`. With `spec_change` in the
+> manifest: the files under `openspec/changes/<spec_change>/` were authored by the plan and are not deviations;
+> run `tld ops spec validate --profile .tld/toolkit.yaml`; `openspec/changes/<spec_change>` must be gone; every
+> scenario of the archived change under `openspec/changes/archive/` must be covered by a test or an acceptance
+> item; failing any of these is a blocking finding. With `sysml_change` in the manifest: the files under
+> `sysml/changes/<sysml_change>/` were authored by the plan and are not deviations; run `tld ops sysml check
+> --profile .tld/toolkit.yaml` and `tld ops sysml render --check --profile .tld/toolkit.yaml`;
+> `sysml/changes/<sysml_change>` must be gone; every part def and port of the archived change under
+> `sysml/changes/archive/` must be named by an acceptance item or a test; failing any of these is a blocking finding.
 >
 > Run `tld roles required --profile .tld/toolkit.yaml --at implement_final --changed <a file with git diff
 > --name-only origin/<main>...HEAD>` and run every role it lists in review mode as
@@ -373,7 +386,7 @@ implement_final` yourself, save the JSON, and run `tld roles verify --required <
 text>`; exit 1 counts as `changes`. Then:
 
 - `approve`: post `Final review: approve.` (with `tracking_issue`) and go to Finishing.
-- `changes`: post `Final review: changes (<n> blocking).`, group the blocking findings by phase and start one
+- `changes`: Add the item first (Board upkeep, rule 3). Post `Final review: changes (<n> blocking).`, group the blocking findings by phase and start one
   fix worker per group at the worker level on `tld plan branch-name --manifest <plan file> --fix <n>`, its brief
   the findings verbatim plus the phase's original entry. The brief starts with the phase brief's rule 0 (`tld guard allow-plan`). Merge each exactly as a phase (trailer
   `Plan-Phase: <plan slug>/fix-<n>`). Then start one more review with the same brief plus "Earlier findings:
@@ -411,6 +424,8 @@ text>`; exit 1 counts as `changes`. Then:
    `## Deviations` section with the content of the deviations file, a **Manual verification** section (each
    `manual_after` item as an unchecked box, with a link to the plan's Manual steps section), and
    `## Branches left on origin` with that ledger list and the sentence "The owner deletes them in the GitHub UI."
+   When the dod report holds a `reflektor` answer, the last section of the body is `## Change report`, with the
+   output of `tld roles section --report <the saved reflektor answer file of dod step 5>` under it, pasted as is; exit 3 means leave the section out. Its text never goes into the Summary, which you still write yourself.
    When pasting the deviations file, demote its `#` and `##` headings to `###` and `####`: the check reads a
    `## ` heading that contains the word summary (such as `## p1-summary-check`) as a near miss of the Summary heading. When the repository has a pull request
    template, its sections come after the Summary; if the template has its own `## Summary` heading, merge it
@@ -445,11 +460,10 @@ step on the human's behalf.
 
 ## Status record
 
-As [policies/status-board.md](policies/status-board.md) says, with `kind: run`, `command: null`, `attended: true`, document id from `tld board record-id --repo <owner>/<repo> --run --plan-slug <plan_slug>`, written before any worker starts,
-`plan_slug`, `plan_url` and `feature_branch` from the plan, and `phases` mirroring the ledger (states
-`pending`, `running`, `merged`, `failed`, `gate`). The first record (`starting`) is written before any worker
-starts; then at every ledger change and every check-in. `status` is `starting`, `running`, `waiting_user`,
-`reviewing`, `pr_open`, `done` or `failed`. `next_check_at` is the armed check-in, `pr` is filled once the pull
+As [policies/status-board.md](policies/status-board.md) says, with `kind: run`, `command: null`, `attended: true`, document id from `tld board record-id --repo <owner>/<repo> --run --plan-slug <plan_slug>`, written at step 4a,
+`plan_slug`, `plan_url` and `feature_branch` from the plan, and `phases` the output of `tld plan record-items <plan file>` plus every extra item added so far, mirroring the ledger (states
+`pending`, `running`, `merged`, `failed`, `gate`). The first record (`starting`) is written at step 4a, before the start question and any worker; then at every ledger change and every check-in. Every record write is preceded by the `--check` of rule 3 (Board upkeep). `status` is `starting`, `running`, `waiting_user`,
+`reviewing`, `pr_open`, `done` or `failed`. `next_check_at` is the armed check-in (null while the status is `waiting_user`: Board upkeep, rule 5), `pr` is filled once the pull
 request exists. Each phase gets the optional `scope` at its merge: `tld plan scope-check record --results
 <results> --label <phase id>` prints it (paste it as is; no field when it prints `null`), and again after
 Finishing step 1.

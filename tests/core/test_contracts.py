@@ -22,7 +22,7 @@ RUNTIME = PLAYBOOKS / "runtime.md"
 CORE_DIRS = [ROOT / d for d in ("playbooks", "roles", "checklists", "stacks")]
 CORE_FILES = sorted(p for d in CORE_DIRS for p in d.rglob("*.md"))
 ADAPTER_FILES = sorted(CLAUDE.rglob("*.md"))
-COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "ci", "upstream", "docs", "board", "migrate", "usage", "questions")
+COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "ci", "upstream", "docs", "board", "migrate", "usage", "questions", "spec", "sysml")
 
 cli = _load("tld.cli")
 dispatch = _load("tld.roles.dispatch")
@@ -276,7 +276,7 @@ def test_every_command_playbook_writes_a_status_record_or_says_why_not(name):
 
 def test_record_commands_cover_the_playbooks():
     record = _load("tld.board.record")
-    expected = {"setup", "review", "make-plan", "deps", "ci", "upstream", "land", "docs", "migrate", "questions"}
+    expected = {"setup", "review", "make-plan", "deps", "ci", "upstream", "land", "docs", "migrate", "questions", "spec", "sysml"}
     assert set(record.COMMANDS) == expected
 
 
@@ -310,7 +310,7 @@ def test_model_ids_live_in_one_file():
 
 
 # ---- research policy (plan 33) --------------------------------------------------------------
-RESEARCH_PLAYBOOKS = ("implement", "make-plan", "review", "ask", "deps", "ci", "upstream", "docs", "questions")
+RESEARCH_PLAYBOOKS = ("implement", "make-plan", "review", "ask", "deps", "ci", "upstream", "docs", "questions", "spec", "sysml")
 
 
 @pytest.mark.parametrize("name", RESEARCH_PLAYBOOKS)
@@ -395,3 +395,35 @@ def test_questions_playbook_names_the_stop_message_of_its_eval():
     m = re.search(r'command == "questions":.*?expected\["stop_message"\] = "([^"]+)"', text, re.S)
     assert m, "no questions stop_message in evals/fixtures/commands.py"
     assert m.group(1) in (PLAYBOOKS / "questions.md").read_text()
+
+
+def test_reflektor_card_markers_match_the_code():
+    from tld.roles import section
+
+    card = (ROOT / "roles" / "reflektor.md").read_text()
+    for token in (section.BEGIN, section.END, "REPORT-HTML <"):
+        assert token in card, token
+    dod = (PLAYBOOKS / "dod.md").read_text()
+    for token in ("REPORT-HTML <path>", "tld roles reflektor-html --send", "tld roles section --report-line",
+                  "tld board client put-report", "n/a (worker)"):
+        assert token in dod, token
+    implement = (PLAYBOOKS / "implement.md").read_text()
+    between(implement, "## Branches left on origin", "tld roles section --report")
+
+
+def test_change_report_section_needs_the_saved_answer_not_the_dod_subsection(tmp_path, capsys):
+    """clean() drops the BEGIN/END markers, so the dod subsection (cleaned output) has no block left:
+    implement must run `tld roles section --report` on the saved answer file of dod step 5."""
+    from tld.roles import section
+
+    answer = tmp_path / "answer.md"
+    answer.write_text(f"intro\n{section.BEGIN}\n## What changed\nOne line.\n{section.END}\n"
+                      "AGENT-REPORT reflektor at=dod blocking=0 non-blocking=0\n")
+    assert section.main(["--report", str(answer)]) == 0
+    out = capsys.readouterr().out
+    assert "One line." in out and section.BEGIN not in out
+    subsection = tmp_path / "subsection.md"
+    subsection.write_text(out + "AGENT-REPORT reflektor at=dod blocking=0 non-blocking=0\n")
+    assert section.main(["--report", str(subsection)]) == 3
+    implement = (PLAYBOOKS / "implement.md").read_text()
+    assert "the saved reflektor answer file of dod step 5" in implement

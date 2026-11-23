@@ -471,6 +471,32 @@
         }
       }
     },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Exact OpenSpec release the spec commands run (npm @fission-ai/openspec). Present means the repository uses specs: /spec works and /make-plan writes a spec change."
+        }
+      },
+      "description": "Optional. Repository uses OpenSpec specs."
+    },
+    "sysml": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subset"],
+      "properties": {
+        "subset": {
+          "type": "integer",
+          "enum": [1],
+          "description": "The tld SysML subset the architecture model is written in. Present means the repository uses an architecture model: /sysml works and /make-plan writes an architecture change."
+        }
+      },
+      "description": "Optional. Repository uses a SysML architecture model."
+    },
     "admin": {
       "type": "object",
       "additionalProperties": false,
@@ -671,7 +697,8 @@
               "tech-writer",
               "website-maintainer",
               "debugger",
-              "refactorer"
+              "refactorer",
+              "reflektor"
             ]
           },
           "description": "Roles that are never run. Missing means none."
@@ -697,7 +724,8 @@
                   "tech-writer",
                   "website-maintainer",
                   "debugger",
-                  "refactorer"
+                  "refactorer",
+                  "reflektor"
                 ]
               },
               "at": {

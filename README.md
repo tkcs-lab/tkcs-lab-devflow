@@ -12,7 +12,7 @@ levels. The procedures contain no project facts and stop with a message naming a
 
 - **The core** is neutral about the agent runtime: a Python package with one command line, `tld`
   (`src/tld/`: profile, plan, roles, dod, guard, board, ops), and the content the agents follow: **playbooks**
-  (one procedure per command, `playbooks/`), ten **roles** (a role card in `roles/` plus a checklist in
+  (one procedure per command, `playbooks/`), eleven **roles** (a role card in `roles/` plus a checklist in
   `checklists/`), **stack guides** (`stacks/`: python, go, swift, ipados) and shared **policies**.
 - **The Claude Code adapter** (`adapters/claude/`) is the plugin `tld`: each command is a few lines that say
   "follow `playbooks/<cmd>.md`", the `tld:runtime` skill maps the playbooks' runtime actions (start a worker, wait,
@@ -69,6 +69,8 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | `/tld:usage` | unattended, every few hours: sends the account's 5-hour and weekly subscription use to the board's Usage page |
 | `/tld:questions` | weekly, unattended: reads the asks agents put to you since its last run, finds those a better playbook, profile key, role, skill, command or doc would have avoided, and writes a triaged review document for `/tld:review apply` and `/tld:make-plan` ([guide](docs/guides/questions.md)) |
 | `/tld:migrate` | moves a repository from claude-toolkit to tld: shows the plan, writes it on a branch after you confirm, one pull request |
+| `/tld:spec [check \| init]` | builds OpenSpec specs for existing code (one pull request, never merged) or validates them; with a `spec` profile block make-plan also writes the spec change and implement archives it ([guide](docs/guides/spec.md)) |
+| `/tld:sysml [check \| init]` | builds a SysML architecture model for existing code (one pull request, never merged) and draws it on docs/architecture.md, or validates it; with a `sysml` profile block make-plan also writes the architecture change and implement archives it ([guide](docs/guides/sysml.md)) |
 
 No command merges, approves, tags or force-pushes. Four skills run on request:
 `tld:repo-admin` (audit and apply organisation and repository settings, rulesets, environments and workflows from

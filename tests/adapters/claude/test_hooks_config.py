@@ -64,11 +64,24 @@ def test_hooks_json_is_valid_and_every_script_exists():
     ("board_gate.py", "mcp__plugin_tld_tld-board__board_set", True), ("board_gate.py", "Bash", True),
     ("board_gate.py", "mcp__plugin_tld_tld-board__board_get", False), ("board_gate.py", "Read", False),
     ("board_gate.py", "mcp__github__push_files", False),
+    ("board_gate.py", "mcp__plugin_tld_tld-board__board_ask", True), ("board_gate.py", "ScheduleWakeup", True),
+    ("board_gate.py", "CronCreate", True), ("board_gate.py", "mcp__claude-code-remote__send_later", True),
+    ("board_gate.py", "mcp__claude-code-remote__create_trigger", True), ("board_gate.py", "mcp__github__add_issue_comment", True),
+    ("board_gate.py", "mcp__github__issue_write", True), ("board_gate.py", "mcp__claude-code-remote__create_session", True),
+    ("board_gate.py", "mcp__claude-code-remote__archive_session", True), ("board_gate.py", "mcp__github__create_pull_request", True),
+    ("board_gate.py", "CronDelete", False),
+    ("board_gate.py", "mcp__plugin_tld_tld-board__board_answers", False), ("board_gate.py", "mcp__github__create_issue", False),
 ])
 def test_matchers(script, tool, listens):
     for event_name, matcher, hook in entries():
         if event_name in ("PreToolUse", "PostToolUse") and hook["command"].endswith(f'/hooks/{script}"'):
             assert matcher_matches(matcher, tool) is listens, (script, matcher, tool)
+
+
+def test_board_gate_post_tool_use_matcher_is_the_planned_string():
+    matchers = [m for e, m, h in entries() if e == "PostToolUse" and h["command"].endswith('/hooks/board_gate.py"')]
+    assert matchers == ["Bash|mcp__.*tld-board.*__(board_set|board_ask)|ScheduleWakeup|CronCreate|mcp__.*__(send_later|"
+                        "create_trigger|add_issue_comment|issue_write|create_session|archive_session|create_pull_request)"]
 
 
 @pytest.mark.parametrize("matcher, tool, expected", [
@@ -195,7 +208,7 @@ EXEMPT_LINE = "`tld dod exempt`"
 
 
 @pytest.mark.parametrize("name, exempt", [("implement", True), ("make-plan", True), ("review", True), ("land", True),
-                                          ("setup", True), ("deps", False), ("ci", False), ("docs", False), ("upstream", False), ("questions", True),
+                                          ("setup", True), ("deps", False), ("ci", False), ("docs", False), ("upstream", False), ("questions", True), ("spec", True), ("sysml", True),
                                           ("dod", False), ("board", False)])
 def test_which_playbooks_mark_the_session_exempt(name, exempt):
     assert (EXEMPT_LINE in " ".join((ROOT / "playbooks" / f"{name}.md").read_text().split())) is exempt

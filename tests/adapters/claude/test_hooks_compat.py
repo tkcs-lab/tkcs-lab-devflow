@@ -73,6 +73,14 @@ COMPAT = {
         ("git checkout -b chore/ci-pages-20260101 origin/main", "git checkout -b chore/ci-<workflow>-<yyyymmdd> origin/<main>"),
         ("git push -u origin chore/ci-pages-20260101", "git push -u origin chore/ci-<workflow>-<yyyymmdd>"),
     ],
+    "sysml": [
+        ("git checkout -b chore/sysml-init-20260101 origin/main", "git checkout -b chore/sysml-init-<yyyymmdd> origin/<main>"),
+        ("git push -u origin chore/sysml-init-20260101", "git push -u origin chore/sysml-init-<yyyymmdd>"),
+    ],
+    "spec": [
+        ("git checkout -b chore/spec-init-20260101 origin/main", "git checkout -b chore/spec-init-<yyyymmdd> origin/<main>"),
+        ("git push -u origin chore/spec-init-20260101", "git push -u origin chore/spec-init-<yyyymmdd>"),
+    ],
     "docs": [
         ("git checkout -b chore/docs-init-20260101 origin/main", "git checkout -b chore/docs-init-<yyyymmdd> origin/<main>"),
         ("git push -u origin chore/docs-init-20260101", "git push -u origin chore/docs-init-<yyyymmdd>"),
@@ -152,7 +160,7 @@ def test_the_known_allowed_set(feature_repo):
     """The set the task names explicitly."""
     for op in ("git checkout -b feature/new-thing", "git push -u origin feature/new-thing", "git push origin feature/new-thing",
                "git push -u origin plan/x", "git push -u origin review/x", "git push -u origin chore/x",
-               "git merge origin/main", "git merge --no-ff origin/feature/demo--p1", "git revert -m 1 HEAD", "git merge --abort"):
+               "git rm -r openspec/changes/foo/", "git merge origin/main", "git merge --no-ff origin/feature/demo--p1", "git revert -m 1 HEAD", "git merge --abort"):
         for hook in BASH_GUARDS:
             assert run(hook, bash(op, feature_repo)).code == 0, (op, hook)
 
@@ -163,6 +171,7 @@ PLACEHOLDERS = {
     "<branch>": "feature/demo", "<phase branch>": "feature/demo--p1", "<base>": "abc1234", "<feature>": "feature/demo",
     "<new-with-hyphens>": "v1-2-3", "<new>": "v1.2.3", "<ecosystem>": "npm", "<plan file>": "/tmp/plan.md", "<version_file>": "UPSTREAM", "<upstream.tag_pattern>": "^v[0-9.]+$",
     "<plan path>": "docs/14/plan.md", "<yyyymmdd-hhmm>": "20260101-0101", "<yyyymmdd>": "20260101", "<workflow>": "pages", "<owner>/<repo>": "o/r",
+    "<plan slug>": "foo", "<id>": "foo", "<spec_change>": "foo", "<sysml_change>": "foo",
 }
 SPAN = re.compile(r"`((?:git|gh) [^`]+)`")
 
@@ -213,7 +222,8 @@ def test_github_mcp_calls_the_commands_make_are_allowed(feature_repo, tool, phra
 
 def test_files_the_commands_write_are_allowed(feature_repo):
     for path in ("docs/foo-plan.md", "docs/foo-plan-manual-steps.html", "docs/foo-review.md", "docs/foo-review-decisions.html",
-                 "CHANGELOG.md"):
+                 "CHANGELOG.md", "openspec/changes/baseline-20260101/specs/x/spec.md", "openspec/specs/x/spec.md",
+                 "sysml/model/core.sysml", "docs/architecture.md", "docs/architecture.svg"):
         for hook in ("protect-paths", "secret-scan"):
             r = run(hook, event("Write", feature_repo, file_path=path, content="plain text\n"))
             assert r.code == 0, (path, hook, r.stderr)
@@ -235,3 +245,26 @@ def test_the_land_install_step_writes_its_workflow_only_with_the_marker(fresh_re
     assert run("protect-paths", event("Write", fresh_repo, file_path=".github/workflows/tld-release.yml", content="x\n")).code == 2
     subprocess.run([sys.executable, str(BIN), "guard", "end-allow"], cwd=fresh_repo, check=True, capture_output=True)
     assert run("protect-paths", event("Write", fresh_repo, file_path=path, content="x\n")).code == 2
+
+
+# ---- the reflektor card -----------------------------------------------------------------------------
+def test_reflektor_card_commands_pass_the_guards(feature_repo, tmp_path):
+    """Every shell command of roles/reflektor.md (with its placeholders filled) passes the Bash guards."""
+    text = (ROOT / "roles" / "reflektor.md").read_text()
+    spans = [" ".join(s.split()) for s in re.findall(r"`([^`]+)`", text)]
+    starts = ("git ", "GIT_LFS_SKIP_SMUDGE=1 git ", "env -i ", "cat > ")
+    commands = []
+    for span in spans:
+        if not span.startswith(starts):
+            continue
+        for nodedir in ("/usr/bin",):
+            filled = (span.replace("$S", str(tmp_path)).replace("$BASE", "0" * 40).replace("$NODEDIR", nodedir)
+                      .replace("$NODE", "/usr/bin/node").replace("<suffix>", "abc").replace("<main>", "main"))
+            assert "<" not in filled.replace("<<'", "").replace("$BASE...", ""), f"unfilled placeholder: {filled!r}"
+            commands.append(filled)
+    for needle in ("clone --local", "rev-parse", "collect.mjs", "build.mjs", "cat >"):
+        assert any(needle in c for c in commands), f"no command with {needle!r} found in roles/reflektor.md"
+    for command in commands:
+        for hook in BASH_GUARDS:
+            r = run(hook, bash(command, feature_repo))
+            assert r.code == 0, f"`{command}` is blocked by {hook}: {r.stderr}"

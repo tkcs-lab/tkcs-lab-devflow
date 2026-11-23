@@ -54,6 +54,7 @@ def pair(tmp_path):
 def seed(page, slug="seed"):
     rec = _rec_id(slug)
     page.store.set(rec, _matrix_record(slug), None)
+    page.store.put_report(rec, b"<p>r</p>")
     return rec, page.store.create_ask(ask_doc())["id"]
 
 
@@ -177,6 +178,9 @@ MATRIX = [
     ("POST", "/api/asks/{ask}/cancel", None, (401, 200, 200)),
     ("POST", "/api/records/{rec}/dismiss", "dismiss", (401, 403, 200)),
     ("POST", "/api/records/{rec}/restore", None, (401, 403, 200)),
+    ("GET", "/api/records/{rec}/report", None, (401, 403, 200)),
+    ("PUT", "/api/records/{rec}/report", "report", (401, 422, 403)),
+    ("DELETE", "/api/records/{rec}/report", None, (401, 200, 403)),
     ("POST", "/mcp", "rpc", (401, 200, 403)),
     ("GET", "/api/usage", None, (401, 403, 200)),
     ("POST", "/api/usage", "usage", (401, 200, 403)),
@@ -195,7 +199,7 @@ def _route_name(path):
 def _body(kind, slug):
     return {"record": {"data": _matrix_record(slug), "if_version": 1}, "ask": ask_doc(),
             "dismiss": {"version": 1}, "answers": {"answers": {"SEC-1": "plan", "go": True}},
-            "rpc": PING, "usage": USAGE, None: None}[kind]
+            "rpc": PING, "usage": USAGE, "report": "<p>x</p>", None: None}[kind]
 
 
 @pytest.fixture(scope="module")
@@ -274,10 +278,11 @@ def test_served_by_matches_the_documented_split():
     api = {(n, m) for n, m in pairs if board_server.served_by("api", n, m)}
     assert page == {("page", "GET"), ("login", "POST"), ("logout", "POST"), ("session", "GET"),
                     ("records", "GET"), ("record", "GET"), ("dismiss", "POST"), ("restore", "POST"),
+                    ("report", "GET"),
                     ("asks", "GET"), ("ask", "GET"), ("answer", "POST"), ("cancel", "POST"), ("usage", "GET")}
     assert api == {("records", "GET"), ("record", "GET"), ("record", "PUT"), ("record", "DELETE"),
                    ("asks", "GET"), ("asks", "POST"), ("ask", "GET"), ("cancel", "POST"),
-                   ("mcp", "POST"), ("usage", "POST")}
+                   ("mcp", "POST"), ("usage", "POST"), ("report", "PUT"), ("report", "DELETE")}
 
 
 # ---- the process ----------------------------------------------------------------------------------

@@ -51,6 +51,15 @@ tests:
   src/tld/ops/release_prepare.py:
   - tests/core/test_release_prepare.py
   - tests/core/test_guard_corpus.py
+  src/tld/ops/spec.py:
+  - tests/core/test_ops_spec.py
+  src/tld/ops/sysml.py:
+  - tests/core/test_ops_sysml.py
+  src/tld/sysml/files.py:
+  - tests/core/test_sysml_files.py
+  src/tld/sysml/change.py:
+  - tests/core/test_sysml_change.py
+  - tests/core/test_ops_sysml.py
   src/tld/guard/integrity.py:
   - tests/core/test_guard_corpus.py
   - tests/core/test_guard_trust.py
@@ -257,6 +266,31 @@ mutants:
   why: when w/o diff point
   old: 'if "when" in entry and not any(pt in DIFF_POINTS for pt in points):'
   new: 'if False:'
+- id: VM14
+  file: src/tld/plan/manifest.py
+  why: the last phase is not excluded from the openspec fence, so the archive phase is flagged
+  old: '            for pid in ids[:-1]:'
+  new: '            for pid in ids:'
+- id: VM15
+  file: src/tld/plan/manifest.py
+  why: spec_change without the profile's spec block is accepted
+  old: '        if profile is not None and not isinstance(profile.get(fence["block"]), dict):'
+  new: '        if False:'
+- id: sysml-fence-last-phase-not-excluded
+  file: src/tld/plan/manifest.py
+  why: the sysml fence loop also flags the last phase, so the archive phase is refused
+  old: '            for pid in ids[:-1]:'
+  new: '            for pid in (ids if key == "sysml_change" else ids[:-1]):'
+- id: sysml-fence-block-check-skipped
+  file: src/tld/plan/manifest.py
+  why: the sysml fence asks the profile for a spec block, so a sysml profile is refused
+  old: '"block": "sysml"'
+  new: '"block": "spec"'
+- id: sysml-no-change-no-touch-dropped
+  file: src/tld/plan/manifest.py
+  why: with a sysml block and no sysml_change a phase may touch sysml/ and the architecture docs
+  old: '        if (fence["no_change"] and key not in manifest and profile is not None'
+  new: '        if (False and key not in manifest and profile is not None'
 - id: VM1
   file: src/tld/plan/manifest.py
   why: max_parallel 0 ok
@@ -567,6 +601,11 @@ mutants:
   why: release match count ok
   old: 'if count != 1:'
   new: 'if count == 1:'
+- id: VP17
+  file: src/tld/profile/validate.py
+  why: reflektor allowed at points other than dod
+  old: 'name == "reflektor" and points != ["dod"]'
+  new: 'False'
 - id: GT10
   file: src/tld/guard/_release_dispatch.py
   why: a release dispatch with skip_checks true allowed
@@ -627,3 +666,48 @@ mutants:
   why: the files are not compared after writing, so a file that did not move goes unnoticed
   old: '    if not _agree(prepared["profile"], root, prepared["next"]):'
   new: '    if False:'
+- id: SP1
+  file: src/tld/ops/spec.py
+  why: the npm install runs package scripts of OpenSpec and its dependencies
+  old: '        argv = ["npm", "install", "--ignore-scripts", "--no-save", "--no-audit", "--no-fund",'
+  new: '        argv = ["npm", "install", "--no-save", "--no-audit", "--no-fund",'
+- id: SP2
+  file: src/tld/ops/spec.py
+  why: an id with a trailing newline or a double hyphen is accepted
+  old: '        if ident is not None and not re.fullmatch(ID_RE, ident):'
+  new: '        if ident is not None and not re.match(ID_RE, ident):'
+- id: SP3
+  file: src/tld/ops/spec.py
+  why: the whole environment, tokens included, reaches npm and node
+  old: '    env = {k: os.environ[k] for k in ENV_NAMES if k in os.environ}'
+  new: '    env = dict(os.environ)'
+- id: sysml-no-nofollow
+  file: src/tld/sysml/files.py
+  why: the write opens a final symbolic link instead of refusing it
+  old: '    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW'
+  new: '    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC'
+- id: sysml-archive-id-not-reserved
+  file: src/tld/sysml/change.py
+  why: the id archive is accepted, so a change can collide with the archive folder
+  old: '    if id == "archive":'
+  new: '    if False:'
+- id: sysml-base-hash-not-checked
+  file: src/tld/sysml/change.py
+  why: a replaced file is not compared with its base hash, so an archive silently reverts another plan's edit
+  old: '        if rel not in base_files or sha256_text(base_files[rel]) != replaced[rel]:'
+  new: '        if False:'
+- id: sysml-render-check-compares-nothing
+  file: src/tld/ops/sysml.py
+  why: render --check does not compare an existing output with what render would write
+  old: '        elif text != expected[path]:'
+  new: '        elif False:'
+- id: sysml-archive-findings-gate
+  file: src/tld/ops/sysml.py
+  why: archive goes on with findings, so a change that does not check is written
+  old: '    if findings or model is None:'
+  new: '    if False:'
+- id: sysml-archive-targets-not-prechecked
+  file: src/tld/ops/sysml.py
+  why: the targets are not checked before the first write, so an unsafe target is found after the model was changed
+  old: '    for path in (*model_paths.values(), *OUTPUTS, plan.dest):'
+  new: '    for path in ():'

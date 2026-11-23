@@ -27,9 +27,14 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("plan", "check-commands"): ("tld.plan.phases", ("check-commands",), "which verify_after_merge commands the profile trusts"),
     ("plan", "branch-name"): ("tld.plan.phases", ("branch-name",), "print a plan, review, feature, phase or fix branch"),
     ("plan", "phase-status"): ("tld.plan.phases", ("phase-status",), "done, gated, ready and waiting phases, as JSON"),
+    ("plan", "record-items"): ("tld.plan.record_items", (), "print the run record's items from a plan, or check a record lists them all"),
     ("plan", "active-run"): ("tld.plan.active", (), "is another run of make-plan or implement already going"),
     ("roles", "required"): ("tld.roles.dispatch", ("required",), "the roles required at a point, as JSON"),
     ("roles", "verify"): ("tld.roles.dispatch", ("verify",), "check a report against `tld roles required`"),
+    ("roles", "reflektor-prepare"): ("tld.roles.reflektor", ("prepare",), "download the pinned Reflektor release, check it and unpack it"),
+    ("roles", "reflektor-check"): ("tld.roles.reflektor", ("check",), "check the paths of an agent-written Reflektor report"),
+    ("roles", "reflektor-html"): ("tld.roles.reflektor", ("html",), "add a Content-Security-Policy to a Reflektor page and check it against the pinned viewer"),
+    ("roles", "section"): ("tld.roles.section", (), "print the cleaned change-report block of a role report"),
     ("dod", "exempt"): ("tld.dod.gate", ("--exempt",), "mark this checkout's session exempt from the DoD gate"),
     ("guard", "allow-profile"): ("tld.guard.protect_paths", ("--allow-profile",),
                                  "allow edits to the profile for the next 2 hours"),
@@ -67,6 +72,8 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("ops", "upstream-sync"): ("tld.ops.upstream_sync", (), "plan | prepare: sync a fork to an upstream release"),
     ("ops", "repo-admin"): ("tld.ops.repo_admin", (), "validate-policy | whoami | audit | apply"),
     ("ops", "docs-index"): ("tld.ops.docs_index", (), "check | inventory | move: the docs index"),
+    ("ops", "spec"): ("tld.ops.spec", (), "init | new-change | list | validate | archive: the pinned OpenSpec CLI"),
+    ("ops", "sysml"): ("tld.ops.sysml", (), "new-change | check | render | archive: the architecture model"),
     ("version", "show"): ("tld.cli", ("--version",), "print the running tld version"),
 }
 
