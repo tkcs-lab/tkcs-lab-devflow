@@ -122,6 +122,8 @@ cli/tld board client set example-project--run--demo record.json
 
 The answer is `{"id":"example-project--run--demo","version":1}`, and the run shows on the page.
 
+`cli/tld board client put-report <id> <file>` stores a checked report page beside a record: it sends the file (a regular file of at most 20 MiB, timeout 120 seconds) with `PUT /api/records/<id>/report` and prints `{"id", "size", "sha256"}`; exit 1 for a refused file or an error answer (a 422 prints its `reasons`), 3 when no board is configured.
+
 ## Configuration
 
 Environment variables:
@@ -214,7 +216,15 @@ the `Host` header and appends the client to `X-Forwarded-For`):
 
 ```
 board.example.org {
-    request_body {
+    @report {
+        method PUT
+        path_regexp ^/api/records/[^/]+/report$
+    }
+    @other not path_regexp ^/api/records/[^/]+/report$
+    request_body @report {
+        max_size 20MB
+    }
+    request_body @other {
         max_size 1MB
     }
     header Strict-Transport-Security "max-age=31536000"
@@ -222,9 +232,14 @@ board.example.org {
 }
 ```
 
+The report upload needs the 20 MB limit for `PUT /api/records/*/report` only; keep 1 MB everywhere else. In Caddy
+the smaller `request_body` limit wins, so the site-wide `max_size 1MB` must exclude that path, as above.
+
 nginx needs the same: TLS on the server block, `proxy_pass http://127.0.0.1:8787;`, `proxy_set_header Host $host;`,
-`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` and `client_max_body_size 1m;`. Do not publish
-port 8787 itself.
+`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` and `client_max_body_size 1m;`, plus a
+`location ~ ^/api/records/[^/]+/report$ { client_max_body_size 20m; ... }` that repeats `proxy_pass` and the
+`proxy_set_header` lines. Without `--api-port` the API host is the page host. With Cloudflare in front, check your
+plan's request body limit. Do not publish port 8787 itself.
 
 ## Deploy it
 
@@ -287,12 +302,15 @@ board's own `Origin` and the `X-CSRF-Token` header the login returned; the login
 | `POST /login` | - | - | 200 `{"owner": true, "csrf"}` and the cookie; body `{"passphrase"}` | 401 `wrong_passphrase`, 429 `too_many_attempts` (`Retry-After`), 403 `origin_not_allowed` |
 | `GET /api/session` | - | - | 200 `{"owner": bool, "csrf"}` | |
 | `POST /logout` | 403 | yes | 200, the cookie cleared and its session ended | |
-| `GET /api/records` | yes | yes | 200 `{"records": [{"id", "version", "dismissed_at", "data"}, ...]}` | |
-| `GET /api/records/<id>` | yes | yes | 200 `{"id", "version", "dismissed_at", "data"}` | 404 `not_found` |
+| `GET /api/records` | yes | yes | 200 `{"records": [{"id", "version", "dismissed_at", "data", "report"}, ...]}`; `report` is `{"size", "sha256", "created_at"}` or `null` | |
+| `GET /api/records/<id>` | yes | yes | 200 `{"id", "version", "dismissed_at", "data", "report"}` | 404 `not_found` |
 | `PUT /api/records/<id>` | yes | 403 | 200 `{"id", "version"}`; body `{"data": {...}, "if_version": 3}` | 400 `bad_request`, 409 `version_conflict` (`current`), 422 `invalid` (`errors`) |
 | `DELETE /api/records/<id>` | yes | 403 | 200 `{"deleted": true}` | 404 `not_found` |
 | `POST /api/records/<id>/dismiss` | 403 | yes | 200 `{"id", "version", "dismissed_at"}`; body `{"version": n}` | 400 `bad_request`, 404 `not_found`, 409 `version_conflict` (`current`), 403 `csrf` |
 | `POST /api/records/<id>/restore` | 403 | yes | 200 `{"id", "dismissed_at": null}`; empty body | 404 `not_found` |
+| `GET /api/records/<id>/report` | 403 | yes | 200, the stored HTML page of the record (served sandboxed, see Security notes) | 404 `not_found` (no record or no report) |
+| `PUT /api/records/<id>/report` | yes | 403 | 200 `{"id": "...", "size": 1234, "sha256": "<hex>"}`; body the raw HTML page (`Content-Length` required, at most 20 MiB) | 400 `bad_request` (empty, not UTF-8, a NUL byte), 404 `not_found` (checked before the body is read), 408, 413 `payload_too_large`, 422 `invalid_report` (`reasons`), 503 `busy` (one upload at a time), 507 `store_full` |
+| `DELETE /api/records/<id>/report` | yes | 403 | 200 `{"deleted": true}` | 404 `not_found` |
 | `GET /api/asks[?state=open&since=<ISO>&limit=<n>&order=asc]` | yes | yes | 200 `{"asks": [...]}`; `since` keeps asks created after it, `limit` is 1 to 1000 (default 200), `order=asc` lists the oldest first (the default lists open asks first, then the newest first) | 400 for an unknown state, a bad since, limit or order |
 | `POST /api/asks` | yes | 403 | 201, the stored ask with its `id`; body the ask | 422 `invalid` (`errors`) |
 | `GET /api/asks/<id>` | yes | yes | 200, the ask | 404 `not_found` |
@@ -367,6 +385,9 @@ variables in a remote server's headers are not expanded in a plugin's `.mcp.json
 | `board_answers` | `id` (string) | `{"id", "state", "answers", "answered_at"}` |
 | `board_cancel` | `id` (string) | `{"id", "state"}`; error `{"error": "not_open"}` for an answered ask |
 
+MCP entries and the 409 `current` carry no `report` (only `GET /api/records` and `GET /api/records/<id>` add it). There is
+no tool for uploading a report either: a file cannot be a tool argument, use `tld board client put-report`.
+
 Errors come back as a tool result with `isError` true. There is no delete tool: `/tld:board prune` deletes and
 clears records after you confirmed ([Cards that wait](maintenance.md#cards-that-wait)).
 
@@ -427,6 +448,25 @@ unchanged.
   no text of a record or an ask is ever read as HTML.
 * The client and the bridge refuse a plain `http://` URL unless the host is loopback (or `TLD_BOARD_ALLOW_HTTP=1`),
   and drop the token on a redirect to another scheme, host or port.
+* **Reports.** The board keeps one checked HTML report page per record (the `reports` table, schema version 6),
+  beside the record and never inside it, so a record write cannot drop it. `GET /api/records/<id>/report`
+  serves it to the logged-in owner only, with `Content-Security-Policy: sandbox allow-scripts; default-src 'none';
+  script-src 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data:; font-src data:;
+  connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`, `X-Frame-Options: DENY` and
+  `Content-Disposition: inline`. The page then has an opaque origin: it cannot read the login cookie or call the
+  API, and a `fetch` to the board from inside it is blocked. The sandbox does not stop navigation of the tab by
+  script or `<meta http-equiv=refresh>`, WebRTC traffic or DNS prefetch. That is why the server accepts only the
+  pinned Reflektor viewer plus data (`src/tld/board/report_check.py`: the four parts of the viewer by length and
+  sha256, the exact meta Content-Security-Policy, a plain title, a one-line JSON payload without `<` and with no
+  link target): a token holder who uploads any other page, with `curl` or otherwise, gets 422 `invalid_report`
+  and nothing is stored. This second control matters if a proxy or an engine ever drops the `sandbox` header (a
+  proxy rule that strips response headers would): the pinned viewer has no call that would reach the board page.
+  Only Chromium was checked; other engines' handling of `sandbox` in a header was not. The secret scan stays on
+  the client (`tld roles reflektor-html`): the board image has no `tld.guard`.
+  The limits are constants, not flags: 20 MiB per report and 500 MiB in all (507 `store_full` past that); one
+  upload at a time (503 `busy`), held in memory, so give the container about 512 MB of free memory; a body must
+  arrive within 120 s. A pin refresh needs a new board image: a board with the old viewer parts answers the new
+  page with 422 and the dod then sends the file instead.
 * Records and asks must not contain secrets. The SQLite file and the secret file are not encrypted: protect the
   volume.
 
@@ -445,7 +485,10 @@ docker exec tld-board python -c "import sqlite3; sqlite3.connect('/data/board.sq
 docker cp tld-board:/data/copy.sqlite3 ./board-backup.sqlite3
 ```
 
-A database at schema 5 is refused by an older image, so keep the backup from before the upgrade to roll back.
+A database at schema 6 is refused by an older image, so keep the backup from before the upgrade to roll back. The
+database now also holds the reports (up to 500 MiB), and the in-container backup writes its copy into the same
+`/data` volume, so the volume needs about twice the database size; delete the copy after `docker cp`
+(`docker exec tld-board rm /data/copy.sqlite3`).
 
 To restore, stop the server, put the copy at the path given by `--db` (in the container `/data/board.sqlite3`),
 and start it again. Records are short-lived and rewritten by the next run; open asks are the part worth

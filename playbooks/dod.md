@@ -44,6 +44,16 @@ and its row is `n/a (partial run)`.
    `PASS` with no findings; `FAIL` when its item is blocking and it has blocking findings, or when it did not run
    (`required role did not run`); `needs attention (<blocking> + <non-blocking>)` otherwise. After the table, one
    subsection per role with its full report verbatim, ending in its `AGENT-REPORT` line.
+   When the `reflektor` role runs, save its whole answer to a scratch file (write it with the runtime's file-writing tool, never through a shell command: no heredoc, echo or printf); it never goes raw into the report or
+   the gate file.
+   The gate file gets only the line printed by `tld roles section --report-line --report <that file>`, and the
+   report subsection of `reflektor` holds the output of `tld roles section --report <that file>` followed by that line. On exit 3 of `tld roles section --report` the subsection holds only the stderr line of section and the report line; the saved answer is never pasted.
+   When the saved answer has a line `REPORT-HTML <path>`,
+   run `tld roles reflektor-html --send --answer <that file> --dest <a new scratch directory>`; on exit 0, when this run has a status record (the implement orchestrator's run record) and `tld board client health` exits 0,
+   run `tld board client put-report <the run record's document id> <the printed path>`, otherwise, or when that fails,
+   `show_human(<the printed path>, "change report")`; a non-zero exit of any of these is noted in the report, never a failure.
+   When this playbook runs inside a phase worker or a final reviewer (a session started from implement's phase or
+   final-review brief), the `reflektor` role is not run: remove it from `required` and report its row as `n/a (worker)`.
 
 ## Report
 

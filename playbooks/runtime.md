@@ -185,7 +185,7 @@ look). The runtime map says what an alert is there.
 ### show_human(files, caption)
 
 Send the owner files to look at now (screenshots of a merged phase), with a one-line caption, through the
-runtime's own file channel. Files never go into an ask or a status record.
+runtime's own file channel. Files never go into an ask or a status record; a checked report page is stored beside a record with `tld board client put-report`.
 
 ### secrets_help()
 

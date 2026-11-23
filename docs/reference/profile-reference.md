@@ -103,8 +103,8 @@ Rules:
 
 ### roles
 
-The ten roles are `architect`, `code-reviewer`, `security-reviewer`, `test-architect`, `ux-reviewer`,
-`dependency-auditor`, `tech-writer`, `website-maintainer`, `debugger` and `refactorer` (role cards in `roles/`,
+The eleven roles are `architect`, `code-reviewer`, `security-reviewer`, `test-architect`, `ux-reviewer`,
+`dependency-auditor`, `tech-writer`, `website-maintainer`, `debugger`, `refactorer` and `reflektor` (role cards in `roles/`,
 see [roles.md](../architecture/roles.md)). A profile without `roles` means all of them are available and none is
 mandatory. The key was `agents` (with `agent` in each entry) before tld 1.0; nothing reads the old name.
 
@@ -120,7 +120,7 @@ mandatory. The key was `agents` (with `agent` in each entry) before tld 1.0; not
 - **Modes**: `tld roles required` gives each item a `mode`; only an edit role at `implement_phase` gets `edit`.
 - **Checked by the validator**: a role is not both disabled and required; `website-maintainer` needs
   `docs.website`; `when` needs an `at` point with a diff; only `security-reviewer`, `dependency-auditor`,
-  `test-architect`, `tech-writer` and `website-maintainer` can run at `review`.
+  `test-architect`, `tech-writer` and `website-maintainer` can run at `review`; `reflektor` can only run at `dod`.
 
 ### Command entries
 

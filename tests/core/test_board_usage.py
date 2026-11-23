@@ -8,6 +8,7 @@ from board_helpers import WRITE, call, login, running
 from conftest import FIXTURES
 
 from tld.board import server as board_server
+from tld.board import store as store_mod
 from tld.board import usage
 from tld.board.store import Store
 
@@ -272,11 +273,11 @@ def test_a_schema_4_database_migrates_to_5_and_keeps_its_rows(tmp_path):
     path = tmp_path / "v4.sqlite3"
     make_schema_4(path)
     store = Store(str(path))
-    assert store.schema_version() == 5 and store.session_revoked("a" * 32)
+    assert store.schema_version() == store_mod.SCHEMA_VERSION and store.session_revoked("a" * 32)
     assert store.list_usage() == []
     store.add_usage([sample()], "final", "max", 5.0, NOW)
     again = Store(str(path))  # a second open changes nothing
-    assert again.schema_version() == 5 and again.session_revoked("a" * 32)
+    assert again.schema_version() == store_mod.SCHEMA_VERSION and again.session_revoked("a" * 32)
     assert len(again.list_usage()) == 1
     db = sqlite3.connect(path)
     assert db.execute("SELECT name FROM sqlite_master WHERE name = 'usage_samples'").fetchone() is not None

@@ -57,6 +57,9 @@ MATRIX = [
     ("POST", "/api/asks/{ask}/cancel", None, (401, 200, 200)),
     ("POST", "/api/records/{rec}/dismiss", "dismiss", (401, 403, 200)),
     ("POST", "/api/records/{rec}/restore", None, (401, 403, 200)),
+    ("GET", "/api/records/{rec}/report", None, (401, 403, 200)),
+    ("PUT", "/api/records/{rec}/report", "report", (401, 422, 403)),
+    ("DELETE", "/api/records/{rec}/report", None, (401, 200, 403)),
     ("POST", "/mcp", "rpc", (401, 200, 403)),
     ("GET", "/api/usage", None, (401, 403, 200)),
     ("POST", "/api/usage", "usage", (401, 200, 403)),
@@ -78,7 +81,7 @@ def _matrix_record(slug):
 def _body(kind, server, slug="f-running-ok"):
     return {"record": {"data": _matrix_record(slug), "if_version": 1}, "ask": ask_doc(),
             "dismiss": {"version": 1}, "answers": {"answers": {"SEC-1": "plan", "go": True}},
-            "rpc": {"jsonrpc": "2.0", "id": 1, "method": "ping"},
+            "rpc": {"jsonrpc": "2.0", "id": 1, "method": "ping"}, "report": "<p>x</p>",
             "usage": {"five_hour": {"utilization": 0.3, "resets_at": int(time.time()) + 3600}, "source": "final"},
             None: None}[kind]
 
@@ -101,6 +104,7 @@ def test_auth_matrix(matrix_server, who, method, path, body, expected):
     slug = f"matrix-{next(_MATRIX_IDS)}"
     rec = _matrix_id(slug)
     srv.store.set(rec, _matrix_record(slug), None)
+    srv.store.put_report(rec, b"<p>r</p>")
     ask = srv.store.create_ask(ask_doc())
     cookie, csrf = login(srv)
     url = path.format(rec=rec, ask=ask["id"])

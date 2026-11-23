@@ -8,7 +8,7 @@ Plans (`<n>/plan.md`) and `deviations.md` are kept history, transient and not li
 - [architecture/design.md](architecture/design.md) - the design: core and adapter, the concepts (profile, playbooks, runtime actions, roles, stacks, plans, guard, ops, board), rejected alternatives, history; read before changing the architecture.
 - [architecture/hooks.md](architecture/hooks.md) - the guardrail hooks, their configuration and the commands' compatibility; read when changing a hook.
 - [architecture/hooks-parsing.md](architecture/hooks-parsing.md) - how the guards parse a shell command and the playbook commands they must allow; read when changing the parser or a playbook's git or gh commands.
-- [architecture/roles.md](architecture/roles.md) - the ten roles, the profile's roles block, the points and modes they run at; read when changing a role or the roles block.
+- [architecture/roles.md](architecture/roles.md) - the eleven roles, the profile's roles block, the points and modes they run at; read when changing a role or the roles block.
 - [architecture/scope-drift.md](architecture/scope-drift.md) - scope-drift monitoring at each /implement merge; read when changing tld plan scope-check.
 - [architecture/evals.md](architecture/evals.md) - the eval harness in evals/ (neutral core, Claude adapter), tasks per command, stub mode, graders, baselines and their staleness; read when measuring a change to a command, playbook or hook.
 - [architecture/evals-implement.md](architecture/evals-implement.md) - the design of the stubbed-children /implement eval (not built) and its cost; read before building it.
@@ -31,6 +31,7 @@ Plans (`<n>/plan.md`) and `deviations.md` are kept history, transient and not li
 - [guides/board-server.md](guides/board-server.md) - deploying and running the board server (the owner's inbox: status records, asks, login); read when deploying or changing the board.
 - [guides/board-cloudflare.md](guides/board-cloudflare.md) - the board as a page host behind Cloudflare Access and an API host limited to Claude's IP ranges (--api-port); read when exposing the board through Cloudflare or changing --api-port.
 - [guides/cloud-environments.md](guides/cloud-environments.md) - what to enable and deny in the working claude.ai environment and the research environment, and how to run a research request; read when setting up or changing an environment.
+- [guides/reflektor.md](guides/reflektor.md) - the reflektor role: the change report in the pull request and the HTML file, how to turn it on, its safety rules and how to refresh the pin; read when using or changing the reflektor role.
 - [guides/admin.md](guides/admin.md) - repo-admin: auditing organisation and repository settings, the rulesets and the agent account; read when changing it.
 - [guides/git-ops.md](guides/git-ops.md) - the central git-ops workflow for branch deletion; read when changing it.
 - [guides/release.md](guides/release.md) - cutting a release with /tld:release: the profile's release section, the flow and the one approval in GitHub; read when releasing or changing the release skill.

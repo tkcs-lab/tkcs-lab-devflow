@@ -245,3 +245,26 @@ def test_the_land_install_step_writes_its_workflow_only_with_the_marker(fresh_re
     assert run("protect-paths", event("Write", fresh_repo, file_path=".github/workflows/tld-release.yml", content="x\n")).code == 2
     subprocess.run([sys.executable, str(BIN), "guard", "end-allow"], cwd=fresh_repo, check=True, capture_output=True)
     assert run("protect-paths", event("Write", fresh_repo, file_path=path, content="x\n")).code == 2
+
+
+# ---- the reflektor card -----------------------------------------------------------------------------
+def test_reflektor_card_commands_pass_the_guards(feature_repo, tmp_path):
+    """Every shell command of roles/reflektor.md (with its placeholders filled) passes the Bash guards."""
+    text = (ROOT / "roles" / "reflektor.md").read_text()
+    spans = [" ".join(s.split()) for s in re.findall(r"`([^`]+)`", text)]
+    starts = ("git ", "GIT_LFS_SKIP_SMUDGE=1 git ", "env -i ", "cat > ")
+    commands = []
+    for span in spans:
+        if not span.startswith(starts):
+            continue
+        for nodedir in ("/usr/bin",):
+            filled = (span.replace("$S", str(tmp_path)).replace("$BASE", "0" * 40).replace("$NODEDIR", nodedir)
+                      .replace("$NODE", "/usr/bin/node").replace("<suffix>", "abc").replace("<main>", "main"))
+            assert "<" not in filled.replace("<<'", "").replace("$BASE...", ""), f"unfilled placeholder: {filled!r}"
+            commands.append(filled)
+    for needle in ("clone --local", "rev-parse", "collect.mjs", "build.mjs", "cat >"):
+        assert any(needle in c for c in commands), f"no command with {needle!r} found in roles/reflektor.md"
+    for command in commands:
+        for hook in BASH_GUARDS:
+            r = run(hook, bash(command, feature_repo))
+            assert r.code == 0, f"`{command}` is blocked by {hook}: {r.stderr}"

@@ -10,6 +10,8 @@ entry of the released version at the top of the GitHub release, above the list o
 - `tld plan record-items`: prints the run record's items from a plan (every phase and `final-review`), or checks that a record lists them all.
 - `/tld:spec` builds OpenSpec specs for existing code; with a spec profile block `/tld:make-plan` writes the spec change and `/tld:implement` archives it in the last phase (#71).
 - `/tld:sysml` builds an architecture model in tld's SysML v2 subset (a documented subset, not checked against a SysML tool) for existing code and draws it as docs/architecture.svg on docs/architecture.md; with the optional profile block `sysml: {subset: 1}` /tld:make-plan writes the architecture change (manifest key `sysml_change`: only the last phase may touch `sysml/` and the architecture docs) and /tld:implement archives it in the last phase; `tld ops sysml new-change|check|render|archive` does the work and guards it in CI (`check`, `render --check`); `sysml` is a status-record command (`tld board record-id --command sysml`) (#81).
+- A new `reflektor` role (Reflektor v0.9.1, pinned, `dod` only) that adds a last `## Change report` section to the pull request and sends an HTML report; new commands `tld roles reflektor-prepare`, `tld roles reflektor-check`, `tld roles reflektor-html` and `tld roles section` ([guide](docs/guides/reflektor.md)).
+- The board stores one checked HTML report per record (`PUT`, `GET` and `DELETE /api/records/<id>/report`, `tld board client put-report`, a "Change report" link on the card); database schema version 6: back up before upgrading, an older image refuses the database.
 
 ### Changed
 

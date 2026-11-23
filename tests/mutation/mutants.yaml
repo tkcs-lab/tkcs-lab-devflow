@@ -601,6 +601,11 @@ mutants:
   why: release match count ok
   old: 'if count != 1:'
   new: 'if count == 1:'
+- id: VP17
+  file: src/tld/profile/validate.py
+  why: reflektor allowed at points other than dod
+  old: 'name == "reflektor" and points != ["dod"]'
+  new: 'False'
 - id: GT10
   file: src/tld/guard/_release_dispatch.py
   why: a release dispatch with skip_checks true allowed

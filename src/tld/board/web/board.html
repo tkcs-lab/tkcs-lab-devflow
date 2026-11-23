@@ -155,6 +155,23 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     a.rel = "noopener noreferrer";
     return a;
   }
+  // A link into the board's own API: only the path of one record's report, never built from other record data.
+  var OWN_REPORT = /^api\/records\/[a-z0-9][a-z0-9-]{0,99}\/report$/;
+  function ownLink(path, text, title) {
+    if (typeof path !== "string" || !OWN_REPORT.test(path)) return null;
+    var a = el("a", null, text);
+    a.setAttribute("href", path);
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.title = title;
+    return a;
+  }
+  function reportLink(entry) {
+    var rep = entry && entry.report;
+    if (!rep || typeof rep.created_at !== "string" || typeof entry.id !== "string") return null;
+    var stamp = rep.created_at.slice(0, 16).replace("T", " ");
+    return ownLink("api/records/" + entry.id + "/report", "Change report (" + stamp + " UTC)", "report of " + rep.created_at);
+  }
   function span(text, cls) { return el("span", cls || "meta", text); }
 
   function ago(iso, now) {
@@ -227,11 +244,11 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     return memo;
   }
 
-  function detail(rec, now) {
+  function detail(rec, now, entry) {
     var box = el("div", "detail");
     var links = el("div", "links");
     add(links, link(rec.plan_url, "plan"), sessionLink(rec),
-      rec.pr && rec.pr.url ? link(rec.pr.url, "PR #" + rec.pr.number) : null);
+      rec.pr && rec.pr.url ? link(rec.pr.url, "PR #" + rec.pr.number) : null, reportLink(entry));
     if (links.childNodes.length) box.appendChild(links);
     box.appendChild(el("div", "meta", itemWord(rec) + " · " + (rec.last_event || "")));
     var depth = depths(rec.phases), stages = [];
@@ -275,7 +292,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     var sum = el("summary");
     summaryBuilder(sum, rec);
     box.appendChild(sum);
-    var body = detail(rec, now);
+    var body = detail(rec, now, entry);
     box.appendChild(body);
     if (extraBuilder && csrf) extraBuilder(body, entry);
     return box;

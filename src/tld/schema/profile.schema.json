@@ -697,7 +697,8 @@
               "tech-writer",
               "website-maintainer",
               "debugger",
-              "refactorer"
+              "refactorer",
+              "reflektor"
             ]
           },
           "description": "Roles that are never run. Missing means none."
@@ -723,7 +724,8 @@
                   "tech-writer",
                   "website-maintainer",
                   "debugger",
-                  "refactorer"
+                  "refactorer",
+                  "reflektor"
                 ]
               },
               "at": {
