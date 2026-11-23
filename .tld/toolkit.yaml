@@ -2,7 +2,7 @@
 # Reference: docs/reference/profile-reference.md
 
 tld:
-  version: ">=1.0,<2"
+  version: ">=1.5,<2"
 
 project:
   name: tkcs-lab-devflow
@@ -35,6 +35,9 @@ verify:
     - ".venv/bin/python cli/tld ops repo-admin validate-policy src/tld/templates/admin-policy.yaml"
     - ".venv/bin/python cli/tld ops repo-admin validate-policy .tld/admin-policy.yaml"
     - 'for m in tests/fixtures/privacyfence-*-manifest.yaml; do .venv/bin/python cli/tld plan validate-manifest "$m" --profile tests/fixtures/privacyfence-toolkit.yaml || exit 1; done'
+    - ".venv/bin/python cli/tld ops spec validate"
+    - ".venv/bin/python cli/tld ops sysml check"
+    - ".venv/bin/python cli/tld ops sysml render --check"
   dod_manual:
     - "Every tld command a playbook or adapter names parses with the real CLI, and every behaviour it promises of a script is covered by a test that runs the script (tests/core/test_contracts.py)."
     - "No project-specific word was added to src/, cli/, adapters/, .claude-plugin/, playbooks/, roles/, checklists/ or stacks/ (tests/core/test_no_project_words.py)."
@@ -45,6 +48,12 @@ verify:
     - ".venv/bin/python cli/tld plan validate-manifest"
 
 stacks: [python]
+
+spec:
+  version: "2.1.0"
+
+sysml:
+  subset: 1
 
 admin:
   policy: .tld/admin-policy.yaml
@@ -80,6 +89,7 @@ roles:
     - {role: code-reviewer, at: [implement_final], blocking: true}
     - {role: test-architect, at: [make_plan]}
     - {role: tech-writer, at: [dod, review]}
+    - {role: reflektor, at: [dod]}
     - {role: dependency-auditor, at: [dod], when: ["pyproject.toml", "tests/requirements.txt"]}
 
 release:
