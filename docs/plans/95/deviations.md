@@ -11,7 +11,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-plan-handover-cli
 
-- pending
+- worker: Worker reported no deviations.
+- retry: Sent back once: the security review found that a secret-scan:allow marker in the Summary skipped the secret scan and that link fields were not scanned; fixed in handover.py, with the docs row and the hit message updated.
+- review: Non-blocking, left for the pull request: errors from the Summary check and a bad --repo can echo input text on stderr (never stdout or the board). One unrelated test, test_report_slots, failed once under load and passed on rerun.
 
 ## p3-board-plan-ready
 
