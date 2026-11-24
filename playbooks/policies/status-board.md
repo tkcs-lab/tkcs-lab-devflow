@@ -48,6 +48,7 @@ never a reason to skip the record.
 | `phases` | implement's phases; for the others the items the playbook names |
 | `needs_you`, `needs_you_reason`, `needs_you_since` | true exactly while the owner is asked something or the run stopped on something only they can fix; the reason is one line starting with the verb the owner must do |
 | `next_check_at` | the armed check-in time, or `null`; always `null` while the status is `waiting_user` and in every command record (the ask timer's time goes into `last_event`, Board upkeep, rule 5) |
+| `handover` | optional, a make-plan record in `done` only: the plan's Summary, its slug, the issue, plan and spec links and the command to copy, printed by `tld plan handover`; the board shows it under "Plan ready" until a run of that plan slug is on the board, the owner dismisses it or 7 days pass |
 
 ## Keys and a record that already exists
 
@@ -98,11 +99,11 @@ planned write. The command questions reads its input from the board: without a b
 
 ## No secrets
 
-A record holds no file contents, no commit messages and no tokens. The board is readable by every session
+A record holds no file contents, no commit messages and no tokens; the one excerpt it may hold is `handover.summary`, the plan's Summary, which is already in the tracking issue and which only `tld plan handover` scans for secret-like values (the board does not scan a record). The board is readable by every session
 that has the token and by the owner. The one place a record names files is a phase's optional `scope` (implement's scope-drift
 monitoring): at most 20 repository-relative paths, and counts. The board can also hold one checked HTML report page per record, stored beside it with `tld board client put-report` and never as part of a record.
 
 ## Alerts
 
 When `needs_you` goes from false to true, call `notify_human("<project>: <reason>")` once. While it stays
-true nothing new goes out unless the reason changes. The runtime map says what an alert looks like there.
+true nothing new goes out unless the reason changes. The runtime map says what an alert looks like there. A make-plan run that ends with a hand-over also calls `notify_human` once (make-plan, section 5).
