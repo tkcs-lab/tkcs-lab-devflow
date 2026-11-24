@@ -211,7 +211,7 @@ def render(entries: list[dict]) -> str:
              f"group{'' if len(inc) == 1 else 's'} ({ecosystems}); lockfiles come from the profile's lock commands.")
 
     lines = ["## Summary", "", f"**Deviations:** {deviations}", f"**Scope:** {scope}"]
-    if secure or wf_files:
+    if secure or wf_files or moves:
         parts = []
         if secure:
             packages = unique([code(u["package"]) for e in secure for u in e["updates"]])

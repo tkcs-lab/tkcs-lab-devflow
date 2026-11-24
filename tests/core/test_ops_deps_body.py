@@ -75,6 +75,13 @@ def test_major_jumps_are_listed(tmp_path):
     assert "Major version jumps: `a` `v1.2` to `v2.0`." in text
 
 
+def test_security_line_shows_moves_without_files(tmp_path):
+    moves = [{"action": "actions/checkout", "from": "v3", "to": "v4"}]
+    text, _ = ok(tmp_path, [entry(ecosystem="github-actions", updates=[], pr=81, moves=moves, files=[])])
+    sec = next(line for line in text.split("\n") if line.startswith("**Security:**"))
+    assert "Action moves: `actions/checkout` `v3` to `v4`." in sec
+
+
 def test_workflow_files_and_action_moves_named(tmp_path):
     moves = [{"action": f"actions/a{i}", "from": "v1", "to": "v2"} for i in range(7)]
     files = [f".github/workflows/w{i}.yml" for i in range(7)] + ["README.md"]
