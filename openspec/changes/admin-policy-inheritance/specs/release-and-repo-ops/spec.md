@@ -43,7 +43,7 @@ The system SHALL refuse an extended file that holds anything credential-like, se
 - **THEN** it is refused
 
 ### Requirement: Audit with repository override files
-The system SHALL, for a policy with `extends`, read each audited repository's override file (default `.tld/admin-policy.yaml`, the path set by `repos.override_path`) from its default branch, apply it to the organisation policy and run the repository-level checks on the effective policy of that repository, where the override may set only repository-level keys, a base may not set per-repository keys, and a repository without an override file is audited with the organisation policy alone.
+The system SHALL, for a policy with `extends`, read each audited repository's override file (at the path `repos.override_path` names, which has a default) from its default branch, apply it to the organisation policy and run the repository-level checks on the effective policy of that repository, where the override may set only repository-level keys, a base may not set per-repository keys, and a repository without an override file is audited with the organisation policy alone.
 
 #### Scenario: Override merged
 - **WHEN** a repository's override sets a repository-level key
@@ -54,7 +54,7 @@ The system SHALL, for a policy with `extends`, read each audited repository's ov
 - **THEN** it is audited with the organisation policy alone
 
 #### Scenario: Organisation-level key in an override
-- **WHEN** an override sets `org`, `extends`, `repos` or an organisation-level section such as `labels`
+- **WHEN** an override (a repository file without `org`) sets `extends`, `repos` or an organisation-level section such as `labels`
 - **THEN** the audit reports an error for that repository, audits it with the organisation policy and `validate-policy` on the file exits 1
 
 #### Scenario: Per-repository key in a base
@@ -79,6 +79,10 @@ The system SHALL report, as a warning per setting, an override that loosens a gu
 #### Scenario: Loosening allowed by the run file
 - **WHEN** the policy that is run lists the setting for the repository under `repos.allow_loosen`
 - **THEN** the override value applies and no warning is made
+
+#### Scenario: Run file loosening reported
+- **WHEN** the policy that is run sets a guarded setting looser than the files it extends
+- **THEN** the audit warns for the organisation and does not change the value
 
 #### Scenario: Deletion needs the flag
 - **WHEN** `apply --yes` runs on an inherited policy without `--allow-delete`
@@ -117,6 +121,10 @@ The system SHALL propose, as one pull request per repository that writes or amen
 #### Scenario: Own release workflow
 - **WHEN** a repository's resolved profile names a release workflow other than the one tld installs
 - **THEN** the proposal replaces the workflow list without the release template
+
+#### Scenario: Detection skipped
+- **WHEN** the audit runs with detection switched off
+- **THEN** no request for pull requests, checks or tags is made and no proposal is written
 
 #### Scenario: Absent value stands down
 - **WHEN** the override has no required status checks or no release parameters yet
