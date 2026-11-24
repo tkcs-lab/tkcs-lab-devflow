@@ -63,6 +63,14 @@ The system SHALL provide `tld ops deps-prepare --base REF --branch NAME --group 
 - **WHEN** the changes of a group ref conflict with REF or with the groups already applied
 - **THEN** the branch stays at the previous group's commit, the group is listed as `left_out` with reason `does-not-apply`, and the remaining groups are still tried
 
+#### Scenario: A merge that changes more than the group
+- **WHEN** merging a group ref changes another set of paths than the group's own non-lockfile paths (for example because git followed a rename between the merge base and the branch)
+- **THEN** nothing of that group is applied and it is listed as `left_out` with reason `does-not-apply`
+
+#### Scenario: Protected paths compared without case or Unicode form
+- **WHEN** a group ref changes a path that differs from a protected path only in letter case or Unicode normalization form
+- **THEN** it is treated as that protected path
+
 #### Scenario: Nothing applied
 - **WHEN** no group ref could be applied
 - **THEN** the JSON is still printed, no branch is left and the exit code is 3
