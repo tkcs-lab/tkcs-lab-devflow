@@ -34,7 +34,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: Blocking: the maintenance guide said a dismissed or old Plan ready card moves to Done, but the code and the spec put it in Hidden (p5-retire); a fix worker corrects the sentence.
 
 ## Finishing
 
