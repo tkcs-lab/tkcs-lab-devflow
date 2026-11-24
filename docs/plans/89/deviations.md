@@ -54,7 +54,12 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - final: Third final review blocking findings fixed by fix-3 (merged, security review without blocking findings), as the owner chose on the board (ask a-62b7165f5c2cbd09).
 - final: Fourth final review: the reviewer worker approved; the code-reviewer role found one blocking gap (an audit-only group takes directory from the audit cwd, which deps-body rejects without a leading slash). Put to the owner (ask a-7900f96198a8216b).
 - final: Fourth final review blocking finding fixed by fix-4 (merged, security review without blocking findings), as the owner chose on the board (ask a-7900f96198a8216b).
+- scope: scope: docs/architecture/hooks-parsing.md (touched by fix-1, outside the touches of the phase it belongs to)
+- scope: scope: docs/reference/profile-reference.md (touched by fix-1, outside the touches of the phase it belongs to)
+- scope: scope: src/tld/ops/deps_body.py (touched by fix-1, outside the touches of the phase it belongs to)
+- scope: scope: tests/core/test_deps_playbook_contract.py (touched by fix-1, outside the touches of the phase it belongs to)
+- scope: scope: tests/core/test_ops_deps_body.py (touched by fix-1, outside the touches of the phase it belongs to)
 
 ## Finishing
 
-- pending
+- final: Scope: fix-1 touched five paths outside its phase; the results file lacks entries for p4, p5 and fix-2 to fix-4 (their checks were stored separately; p4 and p5 had none out of scope). Dod gate green; dod roles tech-writer and reflektor ran, no blocking findings. Owner decisions on the board: take over (ask a-e38c8755ce214c9d), keep the plan design for work refs (a-3f7eeb33d2bf0e46), and fix-and-review rounds (a-bbb0d1dcd9df4abc, a-62b7165f5c2cbd09, a-7900f96198a8216b).
