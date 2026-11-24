@@ -6,7 +6,7 @@
 
 **Use it:** An agent opens a tld repository and finds a short numbered guide in the entry file (`AGENTS.md` here, `CLAUDE.md` elsewhere). It says which source answers which question: a brief's `Read first:` docs, the docs index, the specs, the architecture doc, the ADRs, the changelog, then a code search. It also says what not to read. The owner, docs init or a plan's last phase runs `tld ops docs-index guide --profile .tld/toolkit.yaml --write`, which writes the guide from the profile, so each repository sees only the sources it really has. `tld ops docs-index check` warns when the written guide no longer matches the profile.
 
-**Scope:** A new module `src/tld/ops/reading_guide.py`, a new `guide` subcommand of `tld ops docs-index`, and two new check rules: stale is a warning, broken markers are an error. The reading protocol in `playbooks/policies/docs.md` is rewritten to match. Docs init writes the guide, docs tidy refreshes a stale one, the ask playbook follows it, and the make-plan retirement phase writes it. This repository's `AGENTS.md` gets the guide. No profile key, no schema change, no new command or skill, and no architecture-model change: the subcommand lives inside the existing ops part. A repository without the markers sees no new message.
+**Scope:** A new module `src/tld/ops/reading_guide.py`, a new `guide` subcommand of `tld ops docs-index`, and new check rules: a stale guide is a warning; broken markers, a guide in both entry files and a bad profile path in a written guide are errors. The reading protocol in `playbooks/policies/docs.md` is rewritten to match. Docs init writes the guide, docs tidy refreshes a stale one, the ask playbook follows it, and the make-plan retirement phase writes it. This repository's `AGENTS.md` gets the guide. No profile key, no schema change, no new command or skill, and no architecture-model change: the subcommand lives inside the existing ops part. A repository without the markers sees no new message.
 
 **Security:** The writer puts profile values into a file every session loads. It accepts only relative paths under the root with no link-breaking characters. It refuses symlinked entry files, refuses broken markers, refuses a result over 60 lines, and writes atomically.
 
@@ -18,7 +18,7 @@ The owner asked for "a very clear and focused and context-aware instruction to c
 
 ## 2. Current state
 
-- Entry chain here: `CLAUDE.md` (2 lines) links `AGENTS.md` (38 lines). The `## Docs` section of `AGENTS.md` (`AGENTS.md:16-19`) says "Open docs/README.md first, then only the rows that match your task. Do not read other docs for context. If you add, move or delete a doc, update its row in the same change."
+- Entry chain here: `CLAUDE.md` (2 lines) links `AGENTS.md` (38 lines). The `## Docs` section of `AGENTS.md` (`AGENTS.md:18-21`) says "Open docs/README.md first, then only the rows that match your task. Do not read other docs for context. If you add, move or delete a doc, update its row in the same change."
 - The reading rules live in `playbooks/policies/docs.md:22-28` ("Reading protocol"). They cover only the index, the rows and the ADR index. They say nothing of `openspec/specs/` (12 capabilities here), `sysml/model/` and its drawn `docs/architecture.md` (`src/tld/ops/sysml.py:33`, `OUTPUTS`), the changelog, `openspec/changes/` or `sysml/changes/`, or how to look into the code.
 - The entry-file shape is set in `playbooks/policies/docs.md:17-20`: a `## Docs` section with one fixed "Open … first" line. `playbooks/docs.md` init step 5 writes that shape. `playbooks/ask.md`, the `tld:ask` skill that answers plain questions, has no reading order.
 - `tld ops docs-index` (`src/tld/ops/docs_index.py`, 606 lines) has `check`, `inventory` and `move`. `load_config` (`:106-124`) reads only `docs.index`, `adr_dir`, `adr_index` and `plan_dir`. `check` (`:168-252`) looks only at the root `CLAUDE.md` (`:173-185`). The CLI parser is at `:553-576`.
@@ -49,7 +49,7 @@ The inputs come from the profile only: no filesystem, no git, no clock, no versi
 - `changelog`: `docs.changelog.file` when `docs.changelog` is a mapping with `file`.
 - `plan_dir`: `docs.plan_dir`, default `docs/plans`, without trailing `/`.
 
-The block is these lines, in this order, joined with `\n` and ending with a final `\n`. Optional items are numbered consecutively in the order shown, starting at 1:
+The block is these lines, in this order, joined with `\n` and ending with a final `\n`; each line ends at its last non-space character. Every item present is numbered 1 to n in the order shown:
 
 ```
 <!-- tld:reading-guide v1 -->
@@ -123,7 +123,7 @@ def check_entry(root: Path, inputs: dict) -> tuple[list[str], list[str]]       #
 ### 3.5 CLI and check
 
 `tld ops docs-index guide [--profile PATH] [--root DIR] [--index PATH] [--write]`. It is added to the `for name in (...)` loop of `main` (`docs_index.py:556`), so it shares `--profile`, `--root`, `--index` and `--json`; `--json` is accepted and ignored. `--write` is added to the `guide` parser only.
-- Without `--write`: print the block to stdout, exit 0.
+- Without `--write`: write the block to stdout exactly as `render` returns it (`print(block, end="")`), exit 0.
 - With `--write`: print the message from `write`, exit 0.
 - A `GuideError`: print `docs index guide: <message>` to stderr and exit 1.
 - No `docs.index` and no `--index`: the existing exit 2 of `load_config`.
@@ -135,6 +135,7 @@ def check_entry(root: Path, inputs: dict) -> tuple[list[str], list[str]]       #
 - `find_markers` on the entry file raises: error `<rel>: <message>`.
 - Markers found and the text between them, markers included, differs from `render(inputs)` without its final newline: warning `<rel>: the reading guide is out of date (run tld ops docs-index guide --write)`. A `GuideError` from `render` is an error `<rel>: <message>`.
 - No markers: nothing.
+- Only the entry file is examined for broken markers; the other of the two files is read only for the two-guides error (its markers found with `find_markers`, a `GuideError` there counted as "has markers").
 
 Stale is a warning and not an error because `check` runs after every merge, and only the retirement phase may edit the entry file. An error would block every merge between a phase that changes the profile and the retirement phase. `--strict` still turns it into an exit 1, which tidy and dod readers can choose. A missing guide is not reported, so upgrading tld adds no message to any repository.
 
@@ -176,7 +177,7 @@ None before implementation.
 ### After implementation
 
 1. **ma1-fresh-session-check** (about 5 minutes)
-   1. Open a new Claude Code session on the feature branch `feature/reading-guide` of this repository (claude.ai/code, pick the repository and the branch).
+   1. Open https://claude.ai/code, start a new session with the repository `tkcs-lab/tkcs-lab-devflow` and the branch `feature/reading-guide` (the branch's entry file: https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/reading-guide/AGENTS.md).
    2. Ask: "Which requirement says what `tld ops release-check` prints when a check is still running? Do not change anything."
    3. Expected: the session opens the guide's spec source (`openspec/specs/release-and-repo-ops/spec.md`), finds "Judge whether a commit is green for a release", and does not open `docs/plans/` or every doc.
    4. Report back on the pull request: `ma1: pass` or `ma1: fail - <which files it opened>`.
@@ -187,8 +188,8 @@ None before implementation.
 - **Eval stub.** `evals/stubs/docs-check-unindexed.json` quotes check output for a repository without a guide. The new rules print nothing there. If an eval test fails on it, stop with `status=blocked`.
 - **No-project-words test.** The rendered text is under `src/`. `tests/core/test_no_project_words.py` must pass. If it flags a word of 3.2, stop with `status=blocked` instead of rewording on your own.
 - **Contract parse.** `test_every_tld_call_parses_with_the_real_cli` checks the `guide` calls p2 adds against `guide --help`. It only works after p1 registers the subparser (hence `depends_on`).
-- **Length.** This repository's `AGENTS.md` grows from 38 to about 49 lines, under 60. If `guide --write` refuses with the line limit, stop with `status=blocked`.
-- **Rendered text.** A test-architect finding (non-blocking): the exact guide wording is the riskiest decision, and ma1 is its only real check.
+- **Length.** This repository's `AGENTS.md` grows from 38 to 50 lines (51 at the moment of the write), under 60. If `guide --write` refuses with the line limit, stop with `status=blocked`.
+- **Rendered text.** The exact guide wording is the riskiest decision, and ma1 is its only real check.
 
 ## Implementation manifest
 
@@ -254,7 +255,7 @@ phases:
       - "spec scenario Only declared sources: test_guide_renders_only_declared_sources passes"
       - "spec scenario Same profile, same guide: test_render_is_deterministic and test_guide_write_twice_is_byte_identical pass"
       - "spec scenario Write keeps existing text: test_apply_replaces_between_markers, test_apply_inserts_under_docs_heading and test_apply_appends_docs_section pass"
-      - "spec scenario Refused write: test_guide_write_refuses_symlink_entry, test_guide_write_refuses_duplicate_markers, test_guide_write_refuses_over_line_limit and test_guide_refuses_bad_profile_path pass"
+      - "spec scenario Refused write: test_guide_write_refuses_symlink_entry, test_guide_write_refuses_duplicate_markers, test_guide_write_refuses_over_line_limit, test_guide_refuses_bad_profile_path, test_guide_write_without_claude_md_exits_one and test_guide_write_refuses_unterminated_marker pass"
       - "spec scenarios Errors and Warnings: test_check_broken_markers_is_an_error, test_check_two_guides_is_an_error and test_check_stale_reading_guide_is_a_warning pass"
       - "spec scenario No reading guide: test_check_without_reading_guide_prints_nothing_about_it passes"
       - "spec scenarios Exempt documents and JSON and missing index setting: the existing tests of tests/core/test_docs_index.py pass unchanged"
@@ -285,11 +286,11 @@ phases:
          6. Release history: only the changelog section you need.
          7. Code: search for the symbol, path or exact message text and read only the lines around each hit.
          8. Never read `archive/`, another change's plan, or another change's `openspec/changes/` or `sysml/changes/`. Never read every doc."
-      3. Same file, "## Maintain": add item 4: "4. A change to the profile's `docs`, `spec` or `sysml` keys runs `tld ops docs-index guide --profile .tld/toolkit.yaml --write` in the same change (in a plan: the retirement phase); `check` warns about a stale guide." In "## Who edits the index (C3)", in the sentence that starts "Only three things edit the index or the entry file:", insert " (each of them writes the reading guide with `tld ops docs-index guide --write`)" directly before that sentence's final period.
+      3. Same file, "## Maintain": add item 4: "4. A change to the profile's `docs`, `spec` or `sysml` keys runs `tld ops docs-index guide --profile .tld/toolkit.yaml --write` in the same change (in a plan: the retirement phase); `check` warns about a stale guide." In "## Who edits the index (C3)", in the sentence that starts "Only three things edit the index or the entry file:", insert " (the retirement phase and docs init write the reading guide; tidy only refreshes it)" directly before that sentence's final period.
       4. playbooks/docs.md init step 10: append "Then run `tld ops docs-index guide --profile .tld/toolkit.yaml --write`; on exit 1 show its message, shorten the entry file and run it again, then `tld ops docs-index check --profile .tld/toolkit.yaml` until it exits 0." Step 5: replace "rewrite the entry file to the shape in the policy" with "rewrite the entry file to the shape in the policy, leaving the `## Docs` section with only its rule lines (step 10 writes the reading guide)". Tidy step 3: add a last bullet to the mechanical fixes: "an out-of-date reading guide (the check's warning): `tld ops docs-index guide --profile .tld/toolkit.yaml --write`; tidy never writes a first guide into an entry file that has none." Tidy step 4: append to the judgement items list ", a reading guide that `guide --write` refuses (with its message)".
       5. playbooks/ask.md, Rules: add as the second bullet: "- Find the answer in the order of the entry file's reading guide, or without one the Reading protocol of [policies/docs.md](policies/docs.md); open nothing the answer does not need."
       6. playbooks/make-plan.md, the paragraph starting "Index parts: the retirement phase also updates the docs index": replace "and the entry-file lines a change made untrue; it runs" with "and the entry-file lines a change made untrue; it runs `tld ops docs-index guide --profile .tld/toolkit.yaml --write` when the plan changes the profile's `docs`, `spec` or `sysml` keys or the entry file holds no reading guide yet, and it runs".
-      7. docs/guides/docs-index.md: in "## How a session reads" add a first sentence "The entry file's reading guide lists, in order, the sources this repository has; follow it." and add a section "## The reading guide" after "## Keeping it current" of at most 15 lines: what it is (a generated block between `<!-- tld:reading-guide v1 -->` and `<!-- /tld:reading-guide -->`), `tld ops docs-index guide [--write]`, the entry file rule (AGENTS.md when CLAUDE.md links it), the three write cases and that no line outside the markers is dropped, the refusals (symlink, broken markers, bad profile path, over 60 lines), check (stale is a warning, broken markers an error, no guide no message), and who writes it (docs init, a plan's retirement phase, docs tidy only refreshes).
+      7. docs/guides/docs-index.md: replace the whole paragraph under "## How a session reads" with: "The entry file's reading guide lists, in order, the sources this repository has: a brief's `Read first:` docs, the index and its matching rows, then specs, the architecture doc, the ADR index and the changelog where they exist, then a code search. Never read `archive/` or another change's plan, and never read every doc." and add a section "## The reading guide" after "## Keeping it current" of at most 15 lines: what it is (a generated block between `<!-- tld:reading-guide v1 -->` and `<!-- /tld:reading-guide -->`), `tld ops docs-index guide [--write]`, the entry file rule (AGENTS.md when CLAUDE.md links it), the three write cases and that no line outside the markers is dropped, the refusals (symlink, broken markers, bad profile path, over 60 lines), check (stale is a warning, broken markers an error, no guide no message), and who writes it (docs init, a plan's retirement phase, docs tidy only refreshes).
       8. tests/core/test_reading_guide.py: add test_reading_protocol_names_every_guide_source: the text of playbooks/policies/docs.md contains "`Read first:`", "openspec/specs/", "### Requirement", "docs/architecture.md", "sysml/model/", "ADR index", "changelog", "archive/", "openspec/changes/" and "sysml/changes/".
       9. Run `python3 evals/run.py baseline --refresh-hashes`, then `python3 evals/run.py check-baseline` (must exit 0). Say in the commit message: hashes refreshed only; the edits add a reading step and a guide write and change no command's decisions.
       Stop condition: if test_every_tld_call_parses_with_the_real_cli fails on a `guide` call, p1's parser does not match section 3.5: stop with status=blocked and quote the failure; do not change the call.
@@ -311,7 +312,7 @@ phases:
       - openspec/**
     brief: |
       Read first: docs/plans/94/plan.md sections 3.7 and 3.8, docs/plans/94/deviations.md if it exists, AGENTS.md.
-      1. Run `.venv/bin/python cli/tld ops docs-index guide --profile .tld/toolkit.yaml --write`; it must print `wrote AGENTS.md`. Then in AGENTS.md delete only the sentences "Open [docs/README.md](docs/README.md) first, then only the rows that match your task. Do not read other docs for context." so that the `## Docs` section is: heading, empty line, the block, empty line, "If you add, move or delete a doc, update its row in the same change." (plan section 3.7). Run the guide command again: it must print `unchanged AGENTS.md`.
+      1. Run `.venv/bin/python cli/tld ops docs-index guide --profile .tld/toolkit.yaml --write`; it must print `wrote AGENTS.md`. Then in AGENTS.md delete the old line "Open [docs/README.md](docs/README.md) first, then only the rows that match your task. Do not read other" (it wraps; it is the line after the block's empty line) and the words "docs for context. " at the start of the next line, so that the `## Docs` section is: heading, empty line, the block, empty line, "If you add, move or delete a doc, update its row in the same change." (plan section 3.7). Run the guide command again: it must print `unchanged AGENTS.md`.
       2. tests/core/test_docs_index.py test_claude_md_is_thin: add `assert "<!-- tld:reading-guide v1 -->" in agents`; test_this_repository_docs_index_is_clean: add `assert "reading guide" not in r.stdout`.
       3. CHANGELOG.md under "## [Unreleased]" / "### Added": add "- `tld ops docs-index guide` writes a short reading guide into the entry file from the profile (which source answers which question, what to skip); docs init writes it, a plan's last phase adds it, docs tidy refreshes it, and `tld ops docs-index check` warns when it is out of date (#94)."
       4. Spec, in this order: (1) reconcile openspec/changes/reading-guide/ with docs/plans/94/deviations.md so the deltas describe what was built; (2) `git diff --quiet $(git merge-base HEAD origin/main) origin/main -- openspec/specs` must exit 0, otherwise stop with status=blocked (main changed the specs, so the MODIFIED block may be stale); (3) `.venv/bin/python cli/tld ops spec archive --profile .tld/toolkit.yaml reading-guide`; (4) `.venv/bin/python cli/tld ops spec validate --profile .tld/toolkit.yaml` must exit 0; (5) `grep -rn "TBD" openspec/specs` must print nothing; (6) commit the moved change and the updated specs.
