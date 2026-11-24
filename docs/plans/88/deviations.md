@@ -5,7 +5,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p1-findings-check
 
-- pending
+- worker: none
+- review: The worker could not run tld, so the orchestrator ran the security-reviewer: no blocking finding, four non-blocking (mention regex lets @0abc, .@a and -@a through; HTML check covers only comments and details; a near-miss heading turns the check off without --findings; invisible letters count as words). The code follows plan section 3.4; they are inputs for the fix round.
+- level: Phase brief pointed the worker at its manifest entry in the plan instead of pasting it verbatim.
 
 ## p2-plan-gate-quick
 
