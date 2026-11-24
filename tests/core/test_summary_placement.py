@@ -11,6 +11,7 @@ from tld.plan import summary
 
 MAKE_PLAN = ROOT / "playbooks" / "make-plan.md"
 IMPLEMENT = ROOT / "playbooks" / "implement.md"
+QUICK = ROOT / "playbooks" / "quick.md"
 
 PLAN_DOC = """# Title
 
@@ -131,7 +132,7 @@ def test_the_helper_rejects_an_unknown_kind(tmp_path, monkeypatch):
         check_kinds(bad)
 
 
-@pytest.mark.parametrize("path", [MAKE_PLAN, IMPLEMENT], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [MAKE_PLAN, IMPLEMENT, QUICK], ids=lambda p: p.name)
 def test_every_call_passes_on_a_valid_fixture(path, tmp_path):
     calls = summary_calls(path)
     assert calls
@@ -154,6 +155,11 @@ def test_every_call_passes_on_a_valid_fixture(path, tmp_path):
 
 def test_implement_checks_before_the_pull_request_is_created():
     text = section(IMPLEMENT.read_text(), "## 6. Finishing")
+    assert 0 <= text.index("summary-check") < text.index("github.pr_create")
+
+
+def test_quick_checks_before_the_pull_request_is_created():
+    text = section(QUICK.read_text(), "## 6. The pull request")
     assert 0 <= text.index("summary-check") < text.index("github.pr_create")
 
 

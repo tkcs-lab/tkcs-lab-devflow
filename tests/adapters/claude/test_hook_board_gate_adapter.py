@@ -4,7 +4,7 @@ import json
 import pytest
 
 from hooks_helpers import PROFILE, claude_adapter, make_repo_with_origin, run_script
-from tld.guard import board_gate
+from tld.guard import board_gate, plan_gate
 
 ON = PROFILE + "hooks:\n  board_gate:\n    enabled: true\n"
 MCP_SET = "mcp__plugin_tld_tld-board__board_set"
@@ -220,3 +220,7 @@ def test_only_a_boolean_true_marks_a_response_failed(tmp_path, tool, value):
 def test_a_deeply_nested_event_is_a_hook_problem_not_a_crash():
     r = claude_adapter.execute("board-gate", "[" * 200000)
     assert r.code in (0, 1)
+
+
+def test_opening_commands_are_known_commands():
+    assert set(plan_gate.OPENING) <= claude_adapter.known_commands()
