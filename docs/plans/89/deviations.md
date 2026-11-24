@@ -35,6 +35,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - scope: tests/core/test_deps_playbook_contract.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
 - scope: tests/core/test_ops_deps_body.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
 - final: Fix fix-2 after the second final review: fix-1 left groups the session itself leaves out (verify-red, conflicts-with-others, time-budget, lock-other-files, push-refused) without a reason; the playbook now gives them left_out, that reason and a null file. Contract tests now guard the playbook text; baseline hashes refreshed again.
+- final: Fix fix-3 after the third final review: the playbook now gives an audit-only security group one updates item (package, from, fixed version) after a shape check of the fixed version before it reaches the manifest, gives groups stopped with needs_you no entry, gives unstarted groups the time-budget reason, and orders the clauses so only groups with a combine entry take its state. Non-blocking, open: the fixed-version check should say the whole value must match, the audited package name is only che
 
 ## p5-retire
 
@@ -47,6 +48,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - final: Second final review: the code-reviewer role found fix-1 left no reason for groups the session itself leaves out (verify-red, conflicts-with-others, time-budget, lock-other-files, push-refused); blocking, sent to fix-2. The reviewer worker approved.
 - final: Second final review blocking finding fixed by fix-2 (merged, security review pass).
 - final: Third final review: changes, two blocking findings in playbooks/deps.md section 4 step 4 that come from the plan itself: an audit-only security group gets an empty updates list (deps-body rejects it), and groups stopped with needs_you or not started because of the time budget have no entry rule. Put to the owner on the board (ask a-62b7165f5c2cbd09).
+- final: Third final review blocking findings fixed by fix-3 (merged, security review without blocking findings), as the owner chose on the board (ask a-62b7165f5c2cbd09).
 
 ## Finishing
 
