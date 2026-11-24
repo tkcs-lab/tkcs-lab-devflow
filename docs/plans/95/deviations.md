@@ -38,4 +38,5 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Finishing
 
-- pending
+- scope: Scope drift was not measured for p1, p3 and p5 (they were merged locally before the check ran) and was not recorded for p2 and p4; by hand, every changed file of each phase sat inside its declared touches.
+- final: Fix fix-1 (one sentence in the maintenance guide) merged after the first final review; the second review and both final roles passed. The full suite passed on the final head.
