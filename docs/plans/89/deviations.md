@@ -29,11 +29,11 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - worker: In playbooks/deps.md section 4 step 6 the pull request title span is quoted inside the span, because the verbatim span made test_every_action_a_file_uses_is_defined_in_runtime read chore( as an action call. The baseline command hashes were refreshed (all 16 move because the shared policy files changed); the pr_update_branch MCP row of the hooks test was removed as the plan says.
 - review: Non-blocking, open: the protected-changes exception says every commit carries the bot identity, but work refs skip that check (plan 3.1); the PR template appended to the body is read from the working tree and the closing-keyword filter misses the URL form; a fixed version taken from audit output is written to the manifest without a shape check.
 - final: Fix fix-1 after the final review: the playbook copied state applied from deps-prepare although deps-body accepts only included or left_out, so the body step would have been rejected; the playbook now maps applied to included and keeps a section 3 left_out entry as left_out. The superseded-PR rule also accepts commits by tld <tld@localhost>. deps_body.py prints the Security line when an entry has moves; docs wording for lockfile names and the bot identity was corrected.
-- scope: scope: docs/architecture/hooks-parsing.md (fix-1 touched a file outside the phase touches; see the final-review entry above)
-- scope: scope: docs/reference/profile-reference.md (fix-1 touched a file outside the phase touches; see the final-review entry above)
-- scope: scope: src/tld/ops/deps_body.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
-- scope: scope: tests/core/test_deps_playbook_contract.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
-- scope: scope: tests/core/test_ops_deps_body.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
+- scope: docs/architecture/hooks-parsing.md (fix-1 touched a file outside the phase touches; see the final-review entry above)
+- scope: docs/reference/profile-reference.md (fix-1 touched a file outside the phase touches; see the final-review entry above)
+- scope: src/tld/ops/deps_body.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
+- scope: tests/core/test_deps_playbook_contract.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
+- scope: tests/core/test_ops_deps_body.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
 
 ## p5-retire
 
