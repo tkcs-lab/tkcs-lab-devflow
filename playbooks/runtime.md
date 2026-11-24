@@ -244,6 +244,7 @@ All of them act on this repository unless they name another. A refusal is report
 | `github.workflow_runs(repo, workflow)` | list a workflow's runs |
 | `github.workflow_run(repo, run)` | read one run |
 | `github.job_logs(repo, run)` | read a run's job logs |
+| `github.commit_checks(sha, workflow)` | the check runs of a commit, leaving out the runs of the workflow file `workflow`, as a JSON list of `{name, status, conclusion}` (`status` is `queued`, `in_progress` or `completed`) and, when the runtime can read it, the commit's combined status `{state, total_count}`; what the runtime cannot see is said so, never guessed |
 | `github.collaborator_permission(login)` | the login's permission on the repository (`admin`, `maintain`, `write`, `read`, `none`) |
 | `github.attach_repo(repo, access)` | make another repository reachable from this session (`read` or `push`) |
 

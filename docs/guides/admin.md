@@ -241,8 +241,9 @@ pre-release checks (version sequence, changelog section) instead of keeping a se
 - With a `check_script`, every run (a dry run too) clones the repository with every tag, checks out the main branch
   at the commit to be tagged, and runs the script there. The read-only workflow token is used for the fetch only; the
   script gets no token.
-- Unticked, it checks that every check run on the head commit succeeded (and the commit status is neither failing nor pending), creates an
+- Unticked, it checks that every check run on the head commit succeeded (the rule of `tld ops release-check`: a check run still running or not success, skipped or neutral stops it, as does a commit status that is failure, error or pending with at least one status), creates an
   annotated tag on that commit and, unless `create_release` is `false`, a GitHub release with generated notes. It stops if the tag exists.
+  To roll an updated template out, run `apply`; each repository gets one pull request.
 - Its `GITHUB_TOKEN` only reads (`contents: read`); the notes, the tag and the release are made with
   `TLD_RELEASE_TOKEN`, and the run stops when that secret is missing. A tag made with it starts other workflows (a
   build, a publish). It is separate from `TLD_AGENT_TOKEN` so the release never runs as the agent.

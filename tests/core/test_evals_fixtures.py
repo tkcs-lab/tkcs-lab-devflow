@@ -9,7 +9,7 @@ from evals.harness.common import git
 from evals.harness.runner import build_fixture
 from evals.harness.taskspec import discover
 
-BUILDERS = ["tiny_app", "review_seeded", "guardrail", "setup_repos", "commands"]
+BUILDERS = ["tiny_app", "review_seeded", "guardrail", "setup_repos", "commands", "release_gate"]
 
 
 @pytest.mark.parametrize("name", BUILDERS)
@@ -127,3 +127,22 @@ def test_implement_fixture_plan_passes_check_url_and_fails_validation(tmp_path):
     bad = subprocess.run([*tld_cmd("plan", "validate-manifest", str(plan), "--profile", str(r / ".tld" / "toolkit.yaml"))],
                          cwd=r, capture_output=True, text=True)
     assert bad.returncode == 1 and expected["stop_message"] in bad.stdout + bad.stderr
+
+
+@pytest.mark.parametrize("state,code,line", [("red", 1, "red: lint: completed failure"), ("running", 3, "waiting: test: in_progress"),
+                                              ("moved", 0, "release-check: green")])
+def test_release_gate_fixture_reaches_the_green_check(tmp_path, vp, state, code, line):
+    import subprocess
+    import sys
+    import yaml
+    from conftest import BIN
+    repo = tmp_path / "r"
+    builder("release_gate").build(repo, state=state)
+    errors, _, _ = vp.validate(yaml.safe_load((repo / ".tld/toolkit.yaml").read_text()), repo)
+    assert errors == []
+    prep = subprocess.run([sys.executable, str(BIN), "ops", "release-prepare", "--check", "--version", "1.2.0"], cwd=repo,
+                          capture_output=True, text=True)
+    assert prep.returncode == 0, prep.stdout + prep.stderr
+    check = subprocess.run([sys.executable, str(BIN), "ops", "release-check", "--checks", "ci-state/checks.json"], cwd=repo,
+                           capture_output=True, text=True)
+    assert check.returncode == code and line in check.stdout, check.stdout + check.stderr

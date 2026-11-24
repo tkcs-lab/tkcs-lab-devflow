@@ -69,6 +69,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("ops", "land-order"): ("tld.ops.land_order", (), "order open pull requests for /land"),
     ("ops", "pick-release"): ("tld.ops.pick_release", (), "pick the newest eligible release tag"),
     ("ops", "release-prepare"): ("tld.ops.release_prepare", (), "prepare a release: bump the version files and open the changelog's version heading"),
+    ("ops", "release-check"): ("tld.ops.release_check", (), "judge the check runs and the status of a commit by the rule of the release workflow: exit 0 green, 3 still running, 1 red"),
     ("ops", "upstream-sync"): ("tld.ops.upstream_sync", (), "plan | prepare: sync a fork to an upstream release"),
     ("ops", "repo-admin"): ("tld.ops.repo_admin", (), "validate-policy | whoami | audit | apply"),
     ("ops", "docs-index"): ("tld.ops.docs_index", (), "check | inventory | move: the docs index"),

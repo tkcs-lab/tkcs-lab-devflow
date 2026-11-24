@@ -118,22 +118,69 @@ jobs:
           SELF: tld-release
         run: |
           set -euo pipefail
-          bad=$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[]
-            | select(.name != env.SELF)
-            | select(.status != "completed" or (.conclusion | IN("success", "skipped", "neutral") | not))
-            | "\(.name): \(.status) \(.conclusion // "")"')
-          if [ -n "$bad" ]; then
-            echo "::error::checks on $SHA are not all green:"
-            echo "$bad"
-            exit 1
-          fi
-          read -r state total < <(gh api "repos/$REPO/commits/$SHA/status" --jq '[.state, .total_count] | @tsv')
-          # "pending" with no status at all is what a commit without legacy statuses reports: only a real pending one blocks
-          if [ "$state" = "failure" ] || [ "$state" = "error" ] || { [ "$state" = "pending" ] && [ "$total" != "0" ]; }; then
-            echo "::error::commit status of $SHA is $state"
-            exit 1
-          fi
-          echo "checks on $SHA are green"
+          # The rule is the one of `tld ops release-check` (src/tld/ops/release_check.py): the part between the
+          # markers is a verbatim copy, and tests/core/test_release_workflow.py fails when the two differ.
+          runs=$(mktemp)
+          status=$(mktemp)
+          gh api --paginate "repos/$REPO/commits/$SHA/check-runs" --jq '.check_runs[]' > "$runs"
+          gh api "repos/$REPO/commits/$SHA/status" --jq '{state: .state, total_count: .total_count}' > "$status"
+          RUNS="$runs" STATUS="$status" python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          # BEGIN GREEN RULE
+          GOOD = ("success", "skipped", "neutral")
+
+
+          def load_runs(text):
+              """The check runs: a check-runs API answer, a JSON list, or JSON values one after another (gh api --paginate)."""
+              runs, pos, decoder = [], 0, json.JSONDecoder()
+              while True:
+                  while pos < len(text) and text[pos].isspace():
+                      pos += 1
+                  if pos >= len(text):
+                      return runs
+                  data, pos = decoder.raw_decode(text, pos)
+                  if isinstance(data, dict) and "check_runs" in data:
+                      if not isinstance(data["check_runs"], list):
+                          raise ValueError("check_runs is not a list")
+                      runs += data["check_runs"]
+                  elif isinstance(data, list):
+                      runs += data
+                  else:
+                      runs.append(data)
+
+
+          def judge(runs, state, total, skip=()):
+              """(red, waiting): the lines that stop a release, from the check runs and the combined status."""
+              red, waiting = [], []
+              for run in runs:
+                  if run.get("name") in skip:
+                      continue
+                  line = f"{run.get('name')}: {run.get('status')} {run.get('conclusion') or ''}".rstrip()
+                  if run.get("status") != "completed":
+                      waiting.append(line)
+                  elif run.get("conclusion") not in GOOD:
+                      red.append(line)
+              if state in ("failure", "error"):
+                  red.append(f"commit status: {state}")
+              elif state == "pending" and total != 0:
+                  waiting.append("commit status: pending")
+              return red, waiting
+          # END GREEN RULE
+
+          runs = load_runs(open(os.environ["RUNS"], encoding="utf-8").read())
+          status = json.load(open(os.environ["STATUS"], encoding="utf-8"))
+          red, waiting = judge(runs, status.get("state"), status.get("total_count"), (os.environ["SELF"],))
+          sha = os.environ["SHA"]
+          if red or waiting:
+              print(f"::error::checks on {sha} are not all green:")
+              for line in red + waiting:
+                  print(f"  {line}")
+              sys.exit(1)
+          print(f"checks on {sha} are green")
+          PY
 
       - name: Run the project's release check
         env:

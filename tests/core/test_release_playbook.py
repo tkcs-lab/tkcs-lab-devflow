@@ -41,3 +41,29 @@ def test_a_real_dispatch_comes_only_after_the_marker():
 def test_it_writes_no_status_record_and_says_why():
     text = " ".join(PLAYBOOK.read_text().split())
     assert "writes no status record" in text and "short attended flow" in text
+
+
+BODY = LINES[:next(i for i, line in enumerate(LINES) if line.startswith("## Rules"))]
+
+
+def body_with(text):
+    return [i for i, line in enumerate(BODY) if text in line]
+
+
+def test_the_commit_is_checked_before_the_yes():
+    start = body_with("id `start`")[0]
+    assert body_with("tld ops release-check")[0] < start
+
+
+def test_the_commit_is_checked_again_between_the_yes_and_the_dispatch():
+    start = body_with("id `start`")[0]
+    allow = body_with("tld guard allow-release")[0]
+    dispatch = body_with("workflow_dispatch")[0]
+    assert any(start < i < allow for i in body_with("tld ops release-check")) and allow < dispatch
+
+
+def test_the_wait_sits_in_the_green_step():
+    check = body_with("tld ops release-check")[0]
+    start = body_with("id `start`")[0]
+    assert any(check < i < start for i in body_with("schedule_wakeup"))
+    assert "github.commit_checks" in "\n".join(BODY)
