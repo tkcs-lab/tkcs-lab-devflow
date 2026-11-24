@@ -37,7 +37,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p6-retire
 
-- pending
+- worker: none
+- review: The worker could not run tld, so the orchestrator ran the security-reviewer: no blocking finding, two non-blocking (the duplicate-findings-section message is not in the archived spec; ask wording after the new /quick sentence does not say who starts the command). The orchestrator ran the spec, docs-index, sysml, baseline and full test checks on the merged branch: all pass except the known plan-link test.
+- level: Phase brief pointed the worker at its manifest entry in the plan instead of pasting it verbatim.
 
 ## Final review
 
