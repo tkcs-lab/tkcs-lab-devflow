@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Combine dependency update groups without merging lockfiles
-The system SHALL provide `tld ops deps-prepare --base REF --branch NAME --group REF...`, which creates branch NAME from REF, applies in order each group ref's changes since its merge base with REF except lockfiles, and prints JSON naming each group's outcome and the lock commands of the trusted profile that must run. It never pushes and never runs a profile command.
+The system SHALL provide `tld ops deps-prepare --base REF --branch NAME --group REF... [--bot-ref REF...]`, which creates branch NAME from REF, applies in order each group ref's changes since its merge base with REF except lockfiles, and prints JSON naming each group's outcome and the lock commands of the trusted profile that must run. It never pushes and never runs a profile command.
 
 #### Scenario: Groups applied, lockfiles left for the lock command
 - **WHEN** two group refs each change a manifest and its lockfile, and the profile has a lock entry whose `when` matches the manifests and whose `lockfiles` match the lockfiles
@@ -19,6 +19,14 @@ The system SHALL provide `tld ops deps-prepare --base REF --branch NAME --group 
 - **WHEN** REF resolves to neither the commit the guards trust nor the current commit of the remote default branch, or no trusted copy of the profile can be read
 - **THEN** `deps: <message>` is printed on stderr, no branch is created and the exit code is 1
 
+#### Scenario: The base is the current remote default branch
+- **WHEN** the remote default branch moved after the trusted copy was read, REF resolves to its current commit and the profile is unchanged
+- **THEN** that commit is the base of the branch and the exit code is 0
+
+#### Scenario: The local profile decides nothing
+- **WHEN** the working tree or a local branch carries another profile than the remote default branch
+- **THEN** the lock commands and the protected paths follow the remote default branch's profile
+
 #### Scenario: A lockfile no entry covers
 - **WHEN** a group ref changes a built-in lockfile name that no lock entry lists
 - **THEN** nothing of that group is applied and it is listed as `left_out` with reason `lock-uncovered` and that file
@@ -33,6 +41,10 @@ The system SHALL provide `tld ops deps-prepare --base REF --branch NAME --group 
 
 #### Scenario: Workflow files only as action version bumps
 - **WHEN** a group ref changes a file under `.github/workflows/` in any way other than moving the ref of an action it already uses (another action, a local or docker action, a pinned commit replaced by a movable ref, an added or removed line)
+- **THEN** nothing of that group is applied and it is listed as `left_out` with reason `workflow-not-a-bump`
+
+#### Scenario: A workflow change from a work branch
+- **WHEN** a group ref is a local work branch and a workflow file on it differs from the same file at the tip of every `--bot-ref`
 - **THEN** nothing of that group is applied and it is listed as `left_out` with reason `workflow-not-a-bump`
 
 #### Scenario: Other protected paths
