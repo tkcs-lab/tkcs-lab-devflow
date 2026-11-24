@@ -28,6 +28,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - worker: none
 - review: The worker could not run tld, so the orchestrator ran the security-reviewer: no blocking finding, four non-blocking (step 6.3 pushes to the PR head without the protected-path check; an outsider-only issue gives an empty ask; the branch kebab from an issue title is not validated; pr-steward branch table omits quick). Inputs for the fix round.
 - level: Phase brief pointed the worker at its manifest entry in the plan instead of pasting it verbatim, and asked for an adapter-level /tld:quick test (a p2 review follow-up).
+- final: Final review (code-reviewer, blocking): the quick playbook never pushes the fix round merge before the protected-path check and the pull request, so the pull request would open without the fixes it lists. Sent to fix-1.
 
 ## p5-fix-round-eval
 
@@ -43,7 +44,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: Blocking: the fix round merge is not pushed before the pull request in quick (p4); fix-1 follows. Eleven non-blocking findings of the final reviewers go to the fix round.
 
 ## Finishing
 
