@@ -78,7 +78,7 @@ def test_major_jumps_are_listed(tmp_path):
 def test_security_line_shows_moves_without_files(tmp_path):
     moves = [{"action": "actions/checkout", "from": "v3", "to": "v4"}]
     text, _ = ok(tmp_path, [entry(ecosystem="github-actions", updates=[], pr=81, moves=moves, files=[])])
-    sec = next(line for line in text.split("\n") if line.startswith("**Security:**"))
+    sec = next((line for line in text.split("\n") if line.startswith("**Security:**")), "")
     assert "Action moves: `actions/checkout` `v3` to `v4`." in sec
 
 
@@ -87,7 +87,7 @@ def test_workflow_files_and_action_moves_named(tmp_path):
     files = [f".github/workflows/w{i}.yml" for i in range(7)] + ["README.md"]
     entries = [entry(ecosystem="github-actions", pr=81, updates=[], security=True, moves=moves, files=files)]
     text, out = ok(tmp_path, entries)
-    sec = next(line for line in text.split("\n") if line.startswith("**Security:**"))
+    sec = next((line for line in text.split("\n") if line.startswith("**Security:**")), "")
     assert "Workflow files changed: `.github/workflows/w0.yml`" in sec and "`.github/workflows/w4.yml` and 2 more." in sec
     assert "`README.md`" not in sec
     assert "Action moves: `actions/a0` `v1` to `v2`" in sec and "`actions/a4` `v1` to `v2` and 2 more." in sec
