@@ -68,7 +68,9 @@ tld ops deps-prepare --base REF --branch NAME --group REF [--group REF ...] [--b
 
 Runs in the current repository (`git rev-parse --show-toplevel`). Every git call goes through one helper that
 runs `git -c core.hooksPath=/dev/null -c protocol.ext.allow=never` with the environment of
-`tld.guard.trust._env()` (no `GIT_DIR`, `GIT_INDEX_FILE` and the like), `check=True`, text output.
+`tld.guard.trust._env()` (no `GIT_DIR`, `GIT_INDEX_FILE` and the like), `check=True`, text output. The helper takes an
+`env_extra` dict applied after `_env()`; only the lockfile neutralising calls pass `{"GIT_INDEX_FILE": <temp dir>/index}`,
+so the real index is never touched.
 
 **Errors** (stderr `deps: <message>`, exit 1, no branch created), checked in this order:
 
@@ -77,7 +79,7 @@ runs `git -c core.hooksPath=/dev/null -c protocol.ext.allow=never` with the envi
    `/`, `.` or `.lock`: `deps: not a plain ref name: <value>`.
 3. `git status --porcelain --untracked-files=no` not empty: `deps: the working tree has uncommitted changes`.
 4. `refs/heads/NAME` exists, or `git ls-remote --heads origin NAME` prints a line:
-   `deps: branch NAME already exists`.
+   `deps: branch NAME already exists`; a `git ls-remote` that fails: `deps: cannot reach origin`.
 5. A `--group` or `--bot-ref` ref that `git rev-parse --verify --quiet <ref>^{commit}` cannot resolve: `deps: unknown ref: <ref>`.
 6. `t = tld.guard.trust.trusted(<toplevel>)`; `not t.available`: `deps: no trusted copy of the profile (<t.problem>)`;
    `t.profile is None`: `deps: the remote default branch has no .tld/toolkit.yaml`.
@@ -99,7 +101,7 @@ BOT_AUTHOR = ("dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.
 BOT_COMMITTER = BOT_AUTHOR + ("noreply@github.com",)   # GitHub's web-flow committer signs API commits; matched by e-mail or by name `GitHub`
 WORK_PREFIX = "refs/heads/tld-deps/"                  # local work branches: the only refs exempt from the bot check
 WORKFLOW_DIR = ".github/workflows/"
-USES_LINE = re.compile(r"^(\s*(?:-\s+)?uses:\s*)([A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)@([A-Za-z0-9][A-Za-z0-9_.-]*)\s*(#.*)?$")
+USES_LINE = re.compile(r"^(\s*(?:-\s+)?uses:\s*)([A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)@([A-Za-z0-9][A-Za-z0-9_.-]*)(\s+#.*)?\s*$")
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 ```
 
@@ -118,7 +120,7 @@ any depth; `**` crosses directories).
 1. `mb = git merge-base <base sha> <ref>`; none: `left_out`, `does-not-apply`.
 2. `git diff --raw --no-renames -z <mb> <ref>` gives mode, status and path of every change. The path list is
    `files`; `lockfiles` are the lockfile ones; the others are `changed`.
-3. Reasons, first match wins (each sets `file` to the first offending path in sorted order):
+3. Reasons, first match wins (`file` is the first offending path in sorted order for `lock-uncovered`, `protected-path`, `unexpected-change` and `workflow-not-a-bump` only, null for every other reason; `deps_checks.py` defines `PREPARE_REASONS` (all eight reasons `deps-prepare` emits) and `FILE_REASONS` (those four), and the code and `deps-body` use them):
    - a ref whose full name (`git rev-parse --symbolic-full-name <ref>`, or the ref itself when that prints nothing)
      does not start with `WORK_PREFIX`, and whose commits `git log --format=%an%x00%ae%x00%cn%x00%ce <mb>..<ref>`
      include one whose author name and e-mail are not both of `BOT_AUTHOR` (name `dependabot[bot]`, either e-mail
@@ -129,7 +131,7 @@ any depth; `**` crosses directories).
    - a *protected* path: `protected-path`;
    - a path under `WORKFLOW_DIR` (for every ref, work branches included) that is added, deleted or whose
      `git diff -U0 <mb> <ref> -- <path>` is not a pure move of action refs: split the hunks' removed (`-`) and added
-     (`+`, not `+++`/`---`) lines; their counts must be equal; each removed line paired with the added line at the
+     (`+`) lines of every hunk, counting a line as content from the first `@@` on and treating the `---`/`+++` file header only before it; their counts must be equal; each removed line paired with the added line at the
      same position must match `USES_LINE` (groups: prefix, action, ref, comment) with the same prefix and the same
      action; the action is not `docker`-scheme and has no `..` segment; the refs differ; and when the old ref is
      40 hex digits (`SHA40`) the new one must be too. The moves `(action, old ref, new ref)` are kept for the JSON
@@ -150,7 +152,7 @@ any depth; `**` crosses directories).
    `no-change`. Else `head = git commit-tree <tree> -p <head> -m "chore(deps): apply <ref>"`, state `applied`.
 
 After the last group: no group applied: print the JSON, exit 3, no branch. Otherwise
-`git update-ref refs/heads/NAME <head>` and `git checkout -q NAME`; print the JSON; exit 0.
+`git update-ref refs/heads/NAME <head>` and `git checkout -q NAME`; when the checkout fails (an untracked file in the way), delete the ref again and exit 1 with `deps: cannot check out NAME: <git's message>`; otherwise print the JSON; exit 0.
 
 **Lock commands**: entry `i` is listed when any `changed` path of an applied group matches one of its `when` globs, or
 any lockfile of an applied group matches one of its `lockfiles` globs; in profile order, each once.
@@ -231,7 +233,7 @@ The group label is `<ecosystem> <directory>`; `#<pr>` or `audit`. Output, exactl
 
 | Group | Dependabot PR | Package | From | To | Security |
 |---|---|---|---|---|---|
-| pip / | #88 | coverage | 7.17.2 | 7.17.3 | no |
+| `pip /` | `#88` | `coverage` | `7.17.2` | `7.17.3` | no |
 
 ## Action moves
 
@@ -329,11 +331,12 @@ This step always runs once a group is green, also after 80% of the time budget: 
    `time-budget`, and set `needs_you` with `Run deps again: time budget used`. A prefix of none means no pull
    request.
 4. **Body.** Write the entries to a scratch file: one entry per dependency-bot pull request (one per audit-only
-   security group, `pr: null`; a `--group` is always one pull request's branch, so its prepare entry maps to
-   exactly one entry) with its ecosystem; `directory` (`/` plus the directory of the first changed non-lockfile
+   security group, `pr: null`) with its ecosystem; `directory` (`/` plus the directory of the first changed non-lockfile
    path, `/` for the root; the audit entry's `cwd` for an audit-only group); `security` (true when an audit finding
-   names one of its packages); `state`, `reason`, `file`; the `files` of its prepare entry (the first 200) and
-   `moves` from its `workflow_moves`; and `updates` read from its title only when the whole title matches
+   names one of its packages); `files` (the first 200) and `moves` (from `workflow_moves`) from the entry of its own
+   branch in the JSON of section 3 step 2 (one `--group` there is one pull request's branch); `state`, `reason`
+   and `file` from the combine entry of its group (this step's JSON), or from section 3 when the group was left out
+   there; and `updates` read from its title only when the whole title matches
    `^Bump (\S+) from (\S+) to (\S+)( in \S+)?$` (otherwise an empty list). Run `tld ops deps-body <entries file>`
    into the body file. When the repository has a pull request template (`.github/pull_request_template.md`,
    `.github/PULL_REQUEST_TEMPLATE.md`, `docs/pull_request_template.md` or `pull_request_template.md`, the first
@@ -515,7 +518,7 @@ files; `actions` the shell calls, in this order, each with `error: null`, `outpu
 `git fetch origin dependabot/pip/alpha-2.0.0`; `tld ops deps-prepare --base origin/main --branch tld-deps/1 --group origin/dependabot/pip/alpha-2.0.0`;
 `python3 tools/lock.py`; `git status --porcelain --untracked-files=all`; `git add -A && git commit -m 'chore(deps): regenerate lockfiles'`;
 `python3 -m unittest discover -s tests -q`; `tld ops deps-prepare --base origin/main --branch tld-deps/combined-1 --group tld-deps/1 --bot-ref origin/dependabot/pip/alpha-2.0.0`;
-`python3 tools/lock.py`; `git push origin 'tld-deps/combined-1:refs/heads/chore/deps-20260101'` (the `tld` calls are written
+`python3 tools/lock.py`; `git status --porcelain --untracked-files=all`; `git add -A && git commit -m 'chore(deps): regenerate lockfiles'`; `git push origin 'tld-deps/combined-1:refs/heads/chore/deps-20260101'` (the `tld` calls are written
 as `"${CLAUDE_PLUGIN_ROOT}/cli/tld" ops ...`); `result_text`: `Pushed chore/deps-20260101.\nLeft out: #12 (pip /tools), red after two fix attempts.`
 
 ### 3.7 Docs
@@ -627,6 +630,7 @@ phases:
       - docs/reference/cli.md
       - tests/core/test_ops_deps_prepare.py
       - tests/mutation/mutants.yaml
+      - tests/core/test_mutants_file.py
     brief: |
       Read first: docs/plans/89/plan.md (sections 3.1 and 3.7), docs/reference/cli.md, CONTRIBUTING.md (Mutation check), stacks/python.md
       1. Create src/tld/ops/deps_checks.py (pure functions, no git calls): `is_lockfile(path, lock_globs)`,
@@ -668,10 +672,14 @@ phases:
          test_a_ref_without_the_bot_identity (parametrized: foreign author, foreign committer, the ref given by its
          full name refs/remotes/origin/dependabot/..., and the positive cases of a GitHub-committed bot commit and
          the bot as committer);
-         test_workflow_files_only_as_action_ref_moves (parametrized: a ref move of the same action is applied; a `run:`
-         line, another action, a local action `./x@y`, a SHA pin replaced by a tag, a file added, a file deleted are
-         `workflow-not-a-bump`); test_workflow_from_a_work_branch_needs_a_bot_ref (a `tld-deps/1` ref with a bump and
-         no --bot-ref, or with a non-bot ref, is `workflow-not-a-bump`; with the bot ref it is applied);
+         test_workflow_files_only_as_action_ref_moves (parametrized: a ref move of the same action and a SHA-to-SHA move
+         are applied; a `run:` line, another action, a local action `./x@y`, a SHA pin replaced by a tag, a file added,
+         a file deleted, an extra added `uses:` line, an indentation change, a comment-only change, a removed `---`
+         line, an added `++x` line and `@v5#x` are `workflow-not-a-bump`); test_workflow_from_a_work_branch_needs_a_bot_ref (a `tld-deps/1` ref with a bump and
+         no --bot-ref, or with a non-bot ref, is `workflow-not-a-bump`; with the bot ref it is applied; and the case
+         that matters: `tld-deps/1` is the bot commit plus a fix commit moving `actions/checkout@v5` to `@v6`, run with
+         the valid bot ref: `left_out`, `workflow-not-a-bump`, `file` that workflow path, the clean second group still
+         applied);
          test_other_protected_paths (parametrized: .tld/toolkit.yaml, .env, .env.production, .mcp.json,
          .claude/settings.local.json, .claude/hooks/x, a custom hooks.protect_paths entry, a bot bump of
          .github/workflows/tld-land.yml: all `protected-path`; .env.example is applied);
@@ -679,24 +687,31 @@ phases:
          mode 644 to 755, file replaced by a symlink); test_a_group_that_does_not_apply (three groups, g2 conflicts
          with g1, g3 still applies); test_main_moved_with_the_same_lockfile_changed_still_applies (main and the bot
          ref both change requirements.in on non-conflicting lines and both change requirements.lock: exit 0,
-         `applied`, the branch's lock blob equals origin/main's); test_nothing_applied (exit 3, JSON printed, no
+         `applied`, the branch's lock blob equals origin/main's; and in this test and in
+         test_groups_applied_lockfiles_left_for_the_lock_command `git status --porcelain` is empty and
+         `git diff --cached --quiet` exits 0 afterwards); test_nothing_applied (exit 3, JSON printed, no
          branch, the checkout unchanged); test_errors (parametrized, one case per error of 3.1 with its exact message,
-         no refs/heads/<branch>, HEAD unchanged, empty stdout; ref names `-x`, `a..b`, `a@{1}`, `x.lock`, `a//b`, `a/`;
+         no refs/heads/<branch>, HEAD unchanged, empty stdout; no trusted copy is made by pointing `refs/tld/trusted`
+         at another commit; an unreachable origin; an untracked file at a path the group adds; ref names `-x`, `a..b`, `a@{1}`, `x.lock`, `a//b`, `a/`;
          a bad ref together with a dirty tree gives the ref message);
          test_prepare_leaves_remote_and_group_refs_unchanged (`git for-each-ref` without the new branch and
          `git ls-remote origin` are equal before and after; a lock entry `run: "touch ran"` never runs; a
          `.git/hooks/post-checkout` marker is never written); test_commit_order_and_no_change (commits follow the
          `--group` order; a group already on main is `no-change`).
-      5. Add mutants to tests/mutation/mutants.yaml for src/tld/ops/deps_checks.py (the USES_LINE anchors, the
-         BOT_AUTHOR comparison, the protected list) and src/tld/ops/deps_prepare.py (the lockfile neutralising loop),
-         each with the test node ids above that must fail; copy the format of the existing entries and run
-         `.venv/bin/python -m pytest tests/core/test_mutants_file.py -q`.
+      5. Add `src/tld/ops/deps_checks.py`, `src/tld/ops/deps_prepare.py` and `src/tld/ops/deps_body.py` to `MODULES` in
+         tests/core/test_mutants_file.py. In tests/mutation/mutants.yaml add `tests:` entries mapping each of the two
+         files of this phase to tests/core/test_ops_deps_prepare.py, and mutants with `id`, `file`, `why`, `old`,
+         `new` (copy the format of the existing ones) for deps_checks.py (the USES_LINE anchors, the BOT_AUTHOR
+         comparison, the protected list) and deps_prepare.py (the lockfile neutralising loop and the blob-equality
+         comparison for work-branch workflows, killed by test_workflow_from_a_work_branch_needs_a_bot_ref); run
+         `.venv/bin/python -m pytest tests/core/test_mutants_file.py -q` and
+         `.venv/bin/python tests/mutation/run_mutants.py --only <the new ids>`: every one must be killed.
       6. Run `.venv/bin/python -m pytest tests -q` and `.venv/bin/python cli/tld ops spec validate`.
       Stop with status=blocked if `git merge-tree --write-tree --merge-base` is not available, if
       tld.guard.trust.trusted cannot read a trusted copy in the test repositories (quote the problem), or if
       the neutralised merge of test_main_moved_with_the_same_lockfile_changed_still_applies still conflicts.
     acceptance:
-      - "`.venv/bin/python -m pytest tests/core/test_ops_deps_prepare.py -q` passes, and `.venv/bin/python -m pytest tests/core/test_ops_deps_prepare.py --collect-only -q` lists test_groups_applied_lockfiles_left_for_the_lock_command, test_what_counts_as_a_lockfile, test_lock_entries_from_defaults_and_explicit_values_alike, test_the_profile_comes_from_the_remote_default_branch, test_a_base_that_is_the_current_remote_head_is_accepted, test_a_lockfile_no_entry_covers, test_only_lockfiles_changed, test_a_ref_without_the_bot_identity, test_workflow_files_only_as_action_ref_moves, test_workflow_from_a_work_branch_needs_a_bot_ref, test_other_protected_paths, test_unexpected_kinds_of_change, test_a_group_that_does_not_apply, test_nothing_applied, test_errors"
+      - "`.venv/bin/python -m pytest tests/core/test_ops_deps_prepare.py -q` passes, and `.venv/bin/python -m pytest tests/core/test_ops_deps_prepare.py --collect-only -q` lists test_groups_applied_lockfiles_left_for_the_lock_command, test_what_counts_as_a_lockfile, test_lock_entries_from_defaults_and_explicit_values_alike, test_the_profile_comes_from_the_remote_default_branch, test_a_base_that_is_the_current_remote_head_is_accepted, test_a_lockfile_no_entry_covers, test_only_lockfiles_changed, test_a_ref_without_the_bot_identity, test_workflow_files_only_as_action_ref_moves, test_workflow_from_a_work_branch_needs_a_bot_ref, test_other_protected_paths, test_unexpected_kinds_of_change, test_a_group_that_does_not_apply, test_nothing_applied, test_errors, test_commit_order_and_no_change"
       - "`.venv/bin/python -m pytest tests/core/test_ops_deps_prepare.py::test_main_moved_with_the_same_lockfile_changed_still_applies tests/core/test_ops_deps_prepare.py::test_local_profile_does_not_choose_lock_commands tests/core/test_ops_deps_prepare.py::test_local_origin_main_moved_is_refused tests/core/test_ops_deps_prepare.py::test_prepare_leaves_remote_and_group_refs_unchanged -q` passes"
       - "`.venv/bin/python cli/tld ops deps-prepare --help` exits 0"
       - "`.venv/bin/python -m pytest tests/core/test_cli_reference.py tests/core/test_contracts.py tests/core/test_mutants_file.py -q` passes"
@@ -726,7 +741,7 @@ phases:
          the highest `pr`, plus an audit-only security entry with `pr: null`; assert the order of the Updates rows
          and the `Security updates first:` text); test_versions_not_known; test_workflow_files_and_action_moves_named
          (`## Action moves` and the Security line, at most 5 listed then `and <m> more`);
-         test_a_left_out_group_is_named; test_nothing_left_out; test_no_closing_keyword (the regex
+         test_a_left_out_group_is_named; test_nothing_left_out; test_no_closing_keyword (adversarial input: package `closes`, ecosystem `fixes`, directory `/resolves`, `pr` 7; the regex
          `(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\b:?\s+(\S+/\S+)?#\d` finds nothing);
          test_untrusted_values_render_in_code_spans (packages `@scope/pkg` and `@someone`: no `@\w` outside
          backticks anywhere in the body); test_untrusted_values_refused (parametrized, exit 1 and empty stdout:
@@ -736,10 +751,12 @@ phases:
          than 1000000 bytes, invalid JSON, a JSON array; and the passing boundaries 100 entries, 50 updates, 200
          files); test_body_passes_summary_check (`tld plan summary-check <out> --kind pr` exits 0 for 1, 7 and 100
          entries, and for 100 included entries with 50 moves each); test_every_prepare_reason_is_accepted_by_body
-         (each reason of deps_prepare's reason set, as an entry with a `file` where it carries one, renders with
-         exit 0).
-      4. Add mutants to tests/mutation/mutants.yaml for the deps-body validators (a regex, the 100-entry limit, the
-         `not security` sort key), each with the test node ids that must fail.
+         (every reason of `PREPARE_REASONS` from deps_checks.py, as an entry with a `file` exactly for the reasons of
+         `FILE_REASONS`, renders with exit 0; both sets are imported, not copied).
+      4. Add a `tests:` entry for src/tld/ops/deps_body.py (mapped to tests/core/test_ops_deps_body.py) and mutants
+         (`id`, `file`, `why`, `old`, `new`) for the deps-body validators (a regex, the 100-entry limit, the
+         `not security` sort key) to tests/mutation/mutants.yaml, and run
+         `.venv/bin/python tests/mutation/run_mutants.py --only <the new ids>`: every one must be killed.
       5. Run `.venv/bin/python -m pytest tests -q`.
       Stop with status=blocked if a body of 100 entries with 50 moves each exceeds the 175-word Summary limit even
       with the caps of 3.2, and report the word count.
@@ -781,11 +798,10 @@ phases:
          `49699333+dependabot[bot]@users.noreply.github.com` and `noreply@github.com`, and
          test_deps_combine_fixture_matches_the_real_prepare_and_lock: build_fixture, run the two deps-prepare calls
          of the stub through tld_cmd and `python3 tools/lock.py` as the stub does, and expect exactly
-         `expected["branch_files"]["equals"]`.
+         `expected["branch_files"]["equals"]` as the blobs on `tld-deps/combined-1` (`git show tld-deps/combined-1:<path>`).
       6. In tests/core/test_evals_stubs.py add test_deps_combine_stub_fails_on_a_bad_outcome, parametrized over copies
          of the stub with: `tools/requirements.in` holding `gamma==2.0.0`; the lock text of the bot branch; an action
-         `git push origin HEAD:dependabot/pip/alpha-2.0.0`; the branch pushed as `tld-deps/1`; two chore/deps-*
-         branches; each must grade `passed is False`.
+         `git push origin HEAD:dependabot/pip/alpha-2.0.0`; the branch pushed as `tld-deps/1`; each must grade `passed is False`.
       7. Run `python3 evals/run.py validate`, `python3 evals/run.py run --agent stub --repeats 1 --require-pass` and
          `.venv/bin/python -m pytest tests -q`.
       Stop with status=blocked if the fixture's bot commits do not have the identity of step 5.

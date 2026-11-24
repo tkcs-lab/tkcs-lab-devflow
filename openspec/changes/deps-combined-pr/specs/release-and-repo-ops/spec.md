@@ -11,6 +11,10 @@ The system SHALL provide `tld ops deps-prepare --base REF --branch NAME --group 
 - **WHEN** a changed path matches a `lockfiles` glob of a `deps.lock_freshness` entry of the resolved trusted profile, or a built-in lockfile name
 - **THEN** it is treated as a lockfile and is never taken from the group ref
 
+#### Scenario: Main changed the same lockfile
+- **WHEN** the remote default branch and a group ref both changed the same lockfile and non-conflicting manifest lines
+- **THEN** the group is applied and the lockfile on the branch equals the one at REF
+
 #### Scenario: Lock entries from defaults and explicit values alike
 - **WHEN** the lock entries come from the resolved profile, whether written in the profile or filled in by the profile's defaults
 - **THEN** the same groups are applied and the same lock commands are listed
