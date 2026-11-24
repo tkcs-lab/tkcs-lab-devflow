@@ -72,6 +72,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("ops", "release-check"): ("tld.ops.release_check", (), "judge the check runs and the status of a commit by the rule of the release workflow: exit 0 green, 3 still running, 1 red"),
     ("ops", "upstream-sync"): ("tld.ops.upstream_sync", (), "plan | prepare: sync a fork to an upstream release"),
     ("ops", "deps-prepare"): ("tld.ops.deps_prepare", (), "combine dependency update groups onto one branch"),
+    ("ops", "deps-body"): ("tld.ops.deps_body", (), "render the combined dependency pull request body"),
     ("ops", "repo-admin"): ("tld.ops.repo_admin", (), "validate-policy | whoami | audit | apply"),
     ("ops", "docs-index"): ("tld.ops.docs_index", (), "check | inventory | move: the docs index"),
     ("ops", "spec"): ("tld.ops.spec", (), "init | new-change | list | validate | archive: the pinned OpenSpec CLI"),
