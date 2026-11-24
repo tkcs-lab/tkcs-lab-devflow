@@ -9,6 +9,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 - `tld ops release-check` judges a commit's check runs and status by the rule of the `tld-release` workflow (exit 0 green, 3 still running, 1 red).
 - A done make-plan status record may carry an optional `handover` object (the plan Summary, the plan slug, links bound to the record's repository and the `/tld:implement <plan URL>` command). The record validator, and so the board server, checks it; records without it validate as before.
+- `tld plan handover` prints the board hand-over of a finished plan or tracking-issue body as JSON: the `## Summary` word for word, the slug, the links and the implement command, checked by the status-record rules and the secret scan (#95).
 
 ### Fixed
 
