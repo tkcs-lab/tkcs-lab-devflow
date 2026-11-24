@@ -63,9 +63,13 @@ they are.
 2. Build the work branch: `tld ops deps-prepare --base origin/<main> --branch tld-deps/<k> --group 'origin/<head branch>'`
    with one `--group` per pull request (`<k>` is the group's item number). Every group entry of its JSON that is
    `left_out` keeps its `reason` for the pull request body; exit 3 ends the group (item `failed`), exit 1 stops it
-   with `needs_you` and `Check deps group <ecosystem>: <message>`. A security group without a pull request (audit-only): first check the fixed version against
-   `[A-Za-z0-9][A-Za-z0-9.+_-]{0,49}` (no match: section 4 step 4); then
-   `git checkout -b tld-deps/<k> origin/<main>`, change the version in the manifest, commit, and run the
+   with `needs_you` and `Check deps group <ecosystem>: <message>`. A security group without a pull request (audit-only): first check the WHOLE fixed version (no whitespace or newline)
+   against `[A-Za-z0-9][A-Za-z0-9.+_-]{0,49}` (no match: stop the group with `needs_you` and
+   `Check deps group <ecosystem>: unexpected fixed version`), the WHOLE audited package name against
+   `[A-Za-z0-9@][A-Za-z0-9@._/+-]{0,99}` (no match: the same stop with `Check deps group <ecosystem>: unexpected package name`)
+   and the directory (section 4 step 4; no match: the same stop with `Check deps group <ecosystem>: unexpected directory`);
+   a group stopped here has not started and gets no entry (section 4 step 4); then
+   `git checkout -b tld-deps/<k> origin/<main>`, change only the version of the entry that already exists in the manifest, commit, and run the
    `deps.lock_freshness` entries whose `when` globs match the manifest.
 3. Run each listed lock command as section 5 says.
 4. Run `verify.fast`, then `verify.dod`. If red, port the code and tests to the new API (no size limit, only the
@@ -93,9 +97,10 @@ This step always runs once a group is green, also after 80% of the time budget: 
    request.
 4. **Body.** Write the entries to a scratch file: one entry per dependency-bot pull request (one per audit-only
    security group, `pr: null`) with its ecosystem; a group stopped with `needs_you` and `Check deps group ...`
-   (section 3 step 1, step 2 exit 1, step 6) gets no entry: its dependency-bot pull requests stay for the owner, and
-   the body's left-out part names only groups left out of the combined pull request with a reason; `directory` (`/` plus the directory of the first changed non-lockfile
-   path, `/` for the root; the audit entry's `cwd` for an audit-only group); `security` (true when an audit finding
+   (section 3 step 1, step 2 exit 1, step 2 pre-check of an audit-only group, step 6) gets no entry: its dependency-bot pull requests stay for the owner, and
+   the body's left-out part names only groups left out of the combined pull request with a reason. This does not cover `lock-other-files` (section 5), which takes its own reason `lock-other-files`. `directory` (`/` plus the directory of the first changed non-lockfile
+   path, `/` for the root; for an audit-only group `/` plus the audit entry's `cwd` without a trailing `/`, and `/` when it has no `cwd` or it is `.`; when the result does not match deps-body's directory form
+   `/[A-Za-z0-9._/-]{0,199}` without `..`, stop the group with `needs_you` and `Check deps group <ecosystem>: unexpected directory`); `security` (true when an audit finding
    names one of its packages); `files` (the first 200) and `moves` (from `workflow_moves`) from the entry of its own
    branch in the JSON of section 3 step 2 (one `--group` there is one pull request's branch; an audit-only group has
    no such entry and takes them from its combine entry); `state`, `reason` and `file`: a pull request whose own
@@ -110,8 +115,9 @@ This step always runs once a group is green, also after 80% of the time budget: 
    title, and `deps-body` rejects an empty `updates` without a pull request number, so its `updates` is one item
    `{package: <audited package>, from: <manifest version before the change, or null>, to: <fixed version from
    deps.audit>}`. `package` must match `[A-Za-z0-9@][A-Za-z0-9@._/+-]{0,99}`, `from` and `to` `[A-Za-z0-9][A-Za-z0-9.+_-]{0,49}`
-   (`from` may be null, `to` may not); when the fixed version does not match, stop the group with `needs_you` and
-   `Check deps group <ecosystem>: unexpected fixed version`, before it is written to the manifest. Run `tld ops deps-body <entries file>`
+   (`from` is null when the manifest value does not match that form, e.g. a range; `to` may not be null); the WHOLE fixed version (no whitespace or newline) and the WHOLE package name
+   are checked in section 3 step 2, before anything is written to the manifest: a mismatch stops the group with `needs_you` and
+   `Check deps group <ecosystem>: unexpected fixed version` or `Check deps group <ecosystem>: unexpected package name`. Run `tld ops deps-body <entries file>`
    into the body file. When the repository has a pull request template (`.github/pull_request_template.md`,
    `.github/PULL_REQUEST_TEMPLATE.md`, `docs/pull_request_template.md` or `pull_request_template.md`, the first
    that exists), append its sections after the rendered body, leaving out a `## Summary` heading of its own and any
