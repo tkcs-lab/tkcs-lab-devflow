@@ -28,6 +28,8 @@ tests:
   - tests/core/test_validate_manifest.py
   src/tld/plan/summary.py:
   - tests/core/test_plan_summary.py
+  src/tld/plan/findings.py:
+  - tests/core/test_plan_findings.py
   src/tld/guard/markers.py:
   - tests/core/test_guard_markers.py
   - tests/core/test_guard_mutations.py
@@ -581,6 +583,21 @@ mutants:
   why: problems exit 0 (killed by every exit-1 test)
   old: "        print(f\"summary: {problem}\")\n    return 1"
   new: "        print(f\"summary: {problem}\")\n    return 0"
+- id: FI1
+  file: src/tld/plan/findings.py
+  why: the row count may differ from the count given (killed by test_n_with_a_different_row_count_is_a_problem)
+  old: "len(rows) != n"
+  new: "len(rows) == n"
+- id: FI2
+  file: src/tld/plan/findings.py
+  why: a two-word text is accepted (killed by test_a_two_word_text_is_a_problem)
+  old: "MIN_VALUE_WORDS = 3"
+  new: "MIN_VALUE_WORDS = 2"
+- id: FI3
+  file: src/tld/plan/findings.py
+  why: a mention is no longer rejected (killed by test_a_mention_is_a_problem)
+  old: "or MENTION.search(line)"
+  new: "or False"
 - id: VP13
   file: src/tld/profile/validate.py
   why: release pattern regex error ok
