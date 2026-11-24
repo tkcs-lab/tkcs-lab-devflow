@@ -63,7 +63,8 @@ they are.
 2. Build the work branch: `tld ops deps-prepare --base origin/<main> --branch tld-deps/<k> --group 'origin/<head branch>'`
    with one `--group` per pull request (`<k>` is the group's item number). Every group entry of its JSON that is
    `left_out` keeps its `reason` for the pull request body; exit 3 ends the group (item `failed`), exit 1 stops it
-   with `needs_you` and `Check deps group <ecosystem>: <message>`. A security group without a pull request:
+   with `needs_you` and `Check deps group <ecosystem>: <message>`. A security group without a pull request (audit-only): first check the fixed version against
+   `[A-Za-z0-9][A-Za-z0-9.+_-]{0,49}` (no match: section 4 step 4); then
    `git checkout -b tld-deps/<k> origin/<main>`, change the version in the manifest, commit, and run the
    `deps.lock_freshness` entries whose `when` globs match the manifest.
 3. Run each listed lock command as section 5 says.
@@ -91,17 +92,26 @@ This step always runs once a group is green, also after 80% of the time budget: 
    `time-budget`, and set `needs_you` with `Run deps again: time budget used`. A prefix of none means no pull
    request.
 4. **Body.** Write the entries to a scratch file: one entry per dependency-bot pull request (one per audit-only
-   security group, `pr: null`) with its ecosystem; `directory` (`/` plus the directory of the first changed non-lockfile
+   security group, `pr: null`) with its ecosystem; a group stopped with `needs_you` and `Check deps group ...`
+   (section 3 step 1, step 2 exit 1, step 6) gets no entry: its dependency-bot pull requests stay for the owner, and
+   the body's left-out part names only groups left out of the combined pull request with a reason; `directory` (`/` plus the directory of the first changed non-lockfile
    path, `/` for the root; the audit entry's `cwd` for an audit-only group); `security` (true when an audit finding
    names one of its packages); `files` (the first 200) and `moves` (from `workflow_moves`) from the entry of its own
-   branch in the JSON of section 3 step 2 (one `--group` there is one pull request's branch); `state`, `reason` and `file`: a pull request whose own
+   branch in the JSON of section 3 step 2 (one `--group` there is one pull request's branch; an audit-only group has
+   no such entry and takes them from its combine entry); `state`, `reason` and `file`: a pull request whose own
    section 3 entry is `left_out` keeps that entry's `state`, `reason` and `file`, also when its group went green
-   (its change is not on the branch); any other takes `state` `included` when the combine entry's `state` is
-   `applied`, `left_out` otherwise (`deps-body` rejects `applied`), with `reason` and `file` from the combine entry of
-   its group (this step's JSON); a group the session itself left out by a step of sections 3 to 5 or step 6 with a
+   (its change is not on the branch); a group the session itself left out by a step of sections 3 to 5 or step 6 with a
    named reason (`verify-red`, `conflicts-with-others`, `time-budget`, `lock-other-files`, `push-refused`) has no
-   combine entry and takes `state` `left_out`, that reason and `file` null; and `updates` read from its title only when the whole title matches
-   `^Bump (\S+) from (\S+) to (\S+)( in \S+)?$` (otherwise an empty list). Run `tld ops deps-body <entries file>`
+   combine entry and takes `state` `left_out`, that reason and `file` null; an unstarted group (marked `pending` after
+   80% of the time budget, Rules) takes `state` `left_out`, reason `time-budget` and `file` null; any other group that has a combine entry
+   takes `state` `included` when the combine entry's `state` is `applied`, `left_out` otherwise (`deps-body` rejects
+   `applied`), with `reason` and `file` from that combine entry (this step's JSON); and `updates` read from its title only when the whole title matches
+   `^Bump (\S+) from (\S+) to (\S+)( in \S+)?$` (otherwise an empty list), except an audit-only entry: it has no
+   title, and `deps-body` rejects an empty `updates` without a pull request number, so its `updates` is one item
+   `{package: <audited package>, from: <manifest version before the change, or null>, to: <fixed version from
+   deps.audit>}`. `package` must match `[A-Za-z0-9@][A-Za-z0-9@._/+-]{0,99}`, `from` and `to` `[A-Za-z0-9][A-Za-z0-9.+_-]{0,49}`
+   (`from` may be null, `to` may not); when the fixed version does not match, stop the group with `needs_you` and
+   `Check deps group <ecosystem>: unexpected fixed version`, before it is written to the manifest. Run `tld ops deps-body <entries file>`
    into the body file. When the repository has a pull request template (`.github/pull_request_template.md`,
    `.github/PULL_REQUEST_TEMPLATE.md`, `docs/pull_request_template.md` or `pull_request_template.md`, the first
    that exists), append its sections after the rendered body, leaving out a `## Summary` heading of its own and any

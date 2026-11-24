@@ -53,3 +53,43 @@ def test_session_left_out_with_reason_and_null_file_is_accepted():
 def test_left_out_without_reason_is_rejected():
     with pytest.raises(BodyError):
         check_entry(0, entry("left_out"))
+
+
+def playbook_text():
+    return " ".join((ROOT / "playbooks" / "deps.md").read_text().split())
+
+
+def test_playbook_states_audit_only_stopped_and_unstarted_rules():
+    text = playbook_text()
+    assert "except an audit-only entry: it has no title" in text
+    assert "its `updates` is one item `{package: <audited package>, from: <manifest version before the change, or null>, to: <fixed version from deps.audit>}`" in text
+    assert "an audit-only group has no such entry and takes them from its combine entry" in text
+    assert "`Check deps group <ecosystem>: unexpected fixed version`" in text
+    assert "gets no entry: its dependency-bot pull requests stay for the owner" in text
+    assert "an unstarted group (marked `pending` after 80% of the time budget, Rules) takes `state` `left_out`, reason `time-budget` and `file` null" in text
+    assert "any other group that has a combine entry takes `state` `included`" in text
+    assert text.index("an unstarted group (marked") < text.index("any other group that has a combine entry")
+
+
+def audit_entry(updates):
+    return {"ecosystem": "pip", "directory": "/", "pr": None, "security": True, "updates": updates,
+            "moves": [], "files": ["requirements.txt"], "state": "included", "reason": None, "file": None}
+
+
+def test_audit_only_entry_with_filled_updates_is_accepted():
+    e = audit_entry([{"package": "requests", "from": None, "to": "2.32.4"}])
+    assert check_entry(0, e)["pr"] is None
+    e = audit_entry([{"package": "requests", "from": "2.31.0", "to": "2.32.4"}])
+    assert check_entry(0, e)["updates"][0]["to"] == "2.32.4"
+
+
+def test_audit_only_entry_with_empty_updates_is_rejected():
+    with pytest.raises(BodyError):
+        check_entry(0, audit_entry([]))
+
+
+def test_unstarted_group_left_out_for_time_budget_is_accepted():
+    e = entry("left_out")
+    e["reason"], e["file"] = "time-budget", None
+    e["files"], e["moves"] = [], []
+    assert check_entry(0, e)["reason"] == "time-budget"
