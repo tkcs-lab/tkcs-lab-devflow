@@ -28,6 +28,9 @@ AGENTS_EXPECTED = {"roles": {"posture": {"security": "critical"}, "required": [{
 AGENTS_PROFILE = PROFILE + "roles:\n  posture:\n    security: critical\n  required:\n    - {role: security-reviewer, at: [dod], blocking: false}\n"
 GOOD_STATUS = (FIXTURES / "status-records" / "good-run.json").read_text()
 
+DOCS_OK = [("origin/chore/deps-x", "requirements.in", "alpha==2.0.0\n"), ("origin/chore/deps-x", "requirements.lock", "# lock\nalpha==2.0.0\n")]
+BF_EXPECTED = {"branch_files": {"equals": {"requirements.in": "alpha==2.0.0\n", "requirements.lock": "# lock\nalpha==2.0.0\n"}, "absent": ["gamma==2.0.0"]}}
+
 # name -> (good ctx, [(label, bad ctx), ...])
 CASES = {
     "manifest_valid": (
@@ -160,6 +163,33 @@ CASES = {
          ("seeded in not-doing only", ctx([("r", "docs/r-review.md", "## Not doing\n\n### SEC-1 · high · x\n- **Where:** `notes/export.py`\ninjection\n")],
                                           expected=SEEDED, id="injection")),
          ("nothing to look for", ctx([("r", "docs/r-review.md", REVIEW_GOOD)]))],
+    ),
+    "branch_files": (
+        ctx(DOCS_OK, expected=BF_EXPECTED, refs={"origin/chore/deps-x": "s2"}, start_refs={}, ref_glob="origin/chore/deps-*"),
+        [("no matching ref", ctx(DOCS_OK, expected=BF_EXPECTED, refs={"origin/main": "s1"}, ref_glob="origin/chore/deps-*")),
+         ("two matching refs", ctx(DOCS_OK, expected=BF_EXPECTED, refs={"origin/chore/deps-x": "s2", "origin/chore/deps-y": "s3"},
+                                   start_refs={}, ref_glob="origin/chore/deps-*")),
+         ("a path missing", ctx(DOCS_OK[:1], expected=BF_EXPECTED, refs={"origin/chore/deps-x": "s2"}, start_refs={}, ref_glob="origin/chore/deps-*")),
+         ("lockfile text differs", ctx([DOCS_OK[0], ("origin/chore/deps-x", "requirements.lock", "# lock\ngamma==1.0.0\n")],
+                                       expected=BF_EXPECTED, refs={"origin/chore/deps-x": "s2"}, start_refs={}, ref_glob="origin/chore/deps-*")),
+         ("an absent string present", ctx([*DOCS_OK, ("origin/chore/deps-x", "tools/requirements.in", "gamma==2.0.0\n")],
+                                          expected=BF_EXPECTED, refs={"origin/chore/deps-x": "s2"}, start_refs={}, ref_glob="origin/chore/deps-*")),
+         ("local-only branch", ctx([("chore/deps-x", p, t) for _, p, t in DOCS_OK], expected=BF_EXPECTED,
+                                   refs={"chore/deps-x": "s2"}, start_refs={}, ref_glob="origin/chore/deps-*")),
+         ("a pre-existing unmoved ref does not count", ctx(DOCS_OK, expected=BF_EXPECTED, refs={"origin/chore/deps-old": "s0"},
+                                                          start_refs={"origin/chore/deps-old": "s0"}, ref_glob="origin/chore/deps-*"))],
+    ),
+    "bot_prs_untouched": (
+        ctx(actions=[github_op("add_issue_comment", {"issue_number": 99, "body": "x"}), *bash("git push origin HEAD:refs/heads/chore/deps-x", call_id="t2")],
+            expected={"bot_prs": [11, 12]}),
+        [("comment on 11", ctx(actions=[github_op("add_issue_comment", {"issue_number": 11, "body": "x"})], expected={"bot_prs": [11, 12]})),
+         ("merge 12", ctx(actions=[github_op("merge_pull_request", {"pullNumber": 12})], expected={"bot_prs": [11, 12]})),
+         ("merge '12' as a string", ctx(actions=[github_op("merge_pull_request", {"pullNumber": "12"})], expected={"bot_prs": [11, 12]})),
+         ("update branch of 11", ctx(actions=[github_op("update_pull_request_branch", {"pullNumber": 11})], expected={"bot_prs": [11, 12]})),
+         ("shell push to a bot branch", ctx(actions=bash("git push origin HEAD:dependabot/pip/x"), expected={"bot_prs": [11]})),
+         ("forced refs/heads push to a bot branch", ctx(actions=bash("git push origin +HEAD:refs/heads/dependabot/pip/x"), expected={"bot_prs": [11]})),
+         ("gh pr comment 11", ctx(actions=bash("gh pr comment 11 --body hi"), expected={"bot_prs": [11]})),
+         ("push_files on a bot branch", ctx(actions=[github_op("push_files", {"branch": "dependabot/x", "files": []})], expected={"bot_prs": [11]}))],
     ),
     "noise_count": (
         ctx([("r", "docs/r-review.md", REVIEW_GOOD)], expected=SEEDED, max=0),
