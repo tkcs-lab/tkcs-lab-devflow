@@ -1,6 +1,7 @@
 """The tld-release workflow template: structure, and its scripts run for real against a stub gh."""
 import json
 import os
+import pathlib
 import re
 import subprocess
 
@@ -8,7 +9,9 @@ import pytest
 import yaml
 
 from conftest import TLD, FORBIDDEN
-from conftest import FORBIDDEN
+from release_fixtures import CASES
+
+from tld.ops import release_check
 
 TEMPLATE = TLD / "templates" / "tld-release.yml"
 
@@ -220,6 +223,60 @@ def test_red_or_running_check_blocks(doc, tmp_path, bad):
                                                   ("pending", 0, 0)])  # "pending" with no status at all is just "none yet"
 def test_commit_status(doc, tmp_path, state, statuses, code):
     assert run_check(doc, tmp_path, [run_("test")], status=state, statuses=statuses).returncode == code
+
+
+CHECK_STEP = "Check that the commit is green"
+MODULE_TEXT = pathlib.Path(release_check.__file__).read_text()
+
+
+def rule_lines(text: str) -> list[str]:
+    """The lines strictly between `# BEGIN GREEN RULE` and `# END GREEN RULE` (each marker once, whole line)."""
+    lines = [line.strip() for line in text.splitlines()]
+    assert lines.count("# BEGIN GREEN RULE") == 1 and lines.count("# END GREEN RULE") == 1
+    raw = text.splitlines()
+    begin = next(i for i, line in enumerate(raw) if line.strip() == "# BEGIN GREEN RULE")
+    end = next(i for i, line in enumerate(raw) if line.strip() == "# END GREEN RULE")
+    return raw[begin + 1:end]
+
+
+def test_the_green_rule_is_a_verbatim_copy(doc):
+    assert rule_lines(MODULE_TEXT) == rule_lines(step(doc, CHECK_STEP)["run"])
+
+
+def test_the_copy_check_notices_a_changed_character(doc):
+    run_text = step(doc, CHECK_STEP)["run"]
+    assert '"neutral"' in run_text
+    assert rule_lines(run_text.replace('"neutral"', '"neutrals"')) != rule_lines(MODULE_TEXT)
+
+
+@needs_jq
+@pytest.mark.parametrize("cid,runs,state,total,selfs,expected", CASES, ids=[c[0] for c in CASES])
+def test_template_and_command_agree(doc, tmp_path, capsys, cid, runs, state, total, selfs, expected):
+    env, *_ = stub_env(tmp_path, checks=runs, status=state or "success", statuses=1 if state is None else total,
+                       SHA="abc", SELF=selfs[0] if selfs else "tld-release")
+    p = run_step(doc, CHECK_STEP, env, tmp_path)
+    checks = tmp_path / "cmd-checks.json"
+    checks.write_text(json.dumps(runs))
+    argv = ["--checks", str(checks)] + [a for n in selfs for a in ("--self", n)]
+    if state is not None:
+        status = tmp_path / "cmd-status.json"
+        status.write_text(json.dumps({"state": state, "total_count": total}))
+        argv += ["--status", str(status)]
+    code = release_check.main(argv)
+    cmd_lines = capsys.readouterr().out.splitlines()
+    assert code == expected
+    assert (p.returncode == 0) == (code == 0), p.stdout + p.stderr
+    step_lines = {line.strip() for line in p.stdout.splitlines() if line.startswith("  ")}
+    cmd_set = {line.split(": ", 1)[1] for line in cmd_lines[1:]}
+    assert step_lines == cmd_set
+
+
+@needs_jq
+def test_a_red_check_on_the_second_page_blocks(doc, tmp_path):
+    env, d, *_ = stub_env(tmp_path, SHA="abc", SELF="tld-release")
+    (d / "checks.json").write_text(json.dumps({"check_runs": [run_("a")]}) + json.dumps({"check_runs": [run_("b", conclusion="failure")]}))
+    p = run_step(doc, CHECK_STEP, env, tmp_path)
+    assert p.returncode == 1 and "  b: completed failure" in p.stdout
 
 
 def publish(doc, tmp_path, prerelease="false", fail=False, create="true"):

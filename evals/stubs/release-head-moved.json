@@ -1,0 +1,8 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "Main moved while you decided: the yes was for 1111111 and origin/main is now 935bf78. Nothing is dispatched; I go back to step 4 with the new head and ask again once it is green.",
+  "actions": []
+}
