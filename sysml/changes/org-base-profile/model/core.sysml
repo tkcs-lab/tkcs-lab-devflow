@@ -40,6 +40,8 @@ package Core {
     dependency from Roles to Profile;
     dependency from Profile to Plan;
     dependency from Profile to ProfileBase;
+    dependency from Profile to Guard;
+    dependency from ProfileBase to Guard;
     dependency from Guard to Profile;
     dependency from Plan to Profile;
     dependency from Ops to Profile;

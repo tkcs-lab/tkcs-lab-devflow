@@ -21,7 +21,7 @@ The system SHALL, for `tld profile validate [PROFILE]` (default `.tld/toolkit.ya
 
 #### Scenario: Old profile without extends
 - **WHEN** a profile written for an earlier tld sets every key it needs and has no `tld.extends`
-- **THEN** it validates as before and its values are unchanged
+- **THEN** it validates as before and every key it wrote keeps its value; only keys it left out receive the listed defaults
 
 ### Requirement: Print the resolved profile
 The system SHALL, with `--resolved`, print the resolved profile as indented JSON instead of the OK line: the repository's keys over the base's keys over the built-in defaults, with `docs.plan_dir` carrying no trailing slash and the whole `hooks` section included. With `--explain` it SHALL print one line per resolved key, `<dotted key> = <json value>  # <source>`, where the source is the repository, the base (with its source and the first seven characters of its commit), a built-in default or a detected value.
@@ -207,7 +207,7 @@ The system SHALL apply `docs.index` `docs/README.md`, `docs.adr_dir` `docs/adr` 
 
 #### Scenario: Website default
 - **WHEN** `scripts/build_site.py` exists
-- **THEN** `docs.website` is `website`, `python3 scripts/build_site.py --out _site` and `python3 -m pytest tests/unit/test_website_links.py -q`
+- **THEN** `docs.website` has `dir` `.`, `build` `python3 scripts/build_site.py --out _site` and `links` `python3 -m pytest tests/unit/test_website_links.py -q`
 
 #### Scenario: Turned off with false
 - **WHEN** a profile sets `docs.changelog: false` (or `docs.index`, `docs.adr_dir`, `docs.website`, `admin`, `git_ops` or `land.max_prs`) and the file exists
