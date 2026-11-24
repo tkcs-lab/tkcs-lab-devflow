@@ -1,4 +1,4 @@
-"""The state mapping `playbooks/deps.md` section 4 states: deps-prepare's `applied` becomes `included` for deps-body."""
+"""The state mapping `playbooks/deps.md` section 4 states, and what deps-body accepts for it."""
 import re
 from pathlib import Path
 
@@ -20,31 +20,36 @@ def entry(state):
             "state": state, "reason": COMBINE["reason"], "file": COMBINE["file"]}
 
 
-def mapped(state, section3_state="applied"):
-    """The playbook's rule: a section 3 left_out entry keeps its state; any other maps the combine entry."""
-    if section3_state == "left_out":
-        return "left_out"
-    return "included" if state == "applied" else "left_out"
-
-
 def test_playbook_states_the_mapping():
+    """Only this text test guards the playbook rule; the tests below guard what deps-body accepts."""
     text = " ".join((ROOT / "playbooks" / "deps.md").read_text().split())
     assert re.search(r"`included` when the combine entry's `state` is `applied`, `left_out` otherwise", text)
     assert "keeps that entry's `state`, `reason` and `file`" in text
+    assert "also when its group went green" in text
+    assert re.search(r"has no combine entry and takes `state` `left_out`, that reason and `file` null", text)
 
 
-def test_mapped_applied_entry_is_accepted():
-    assert check_entry(0, entry(mapped(COMBINE["state"])))["state"] == "included"
+def test_included_applied_entry_is_accepted():
+    assert check_entry(0, entry("included"))["state"] == "included"
 
 
-def test_unmapped_applied_entry_is_rejected():
+def test_applied_entry_is_rejected():
     with pytest.raises(BodyError):
         check_entry(0, entry(COMBINE["state"]))
 
 
-def test_left_out_in_section_3_stays_left_out():
-    state = mapped(COMBINE["state"], section3_state="left_out")
-    assert state == "left_out"
-    e = entry(state)
+def test_left_out_with_file_reason_is_accepted():
+    e = entry("left_out")
     e["reason"] = "lockfile-only"
     assert check_entry(0, e)["state"] == "left_out"
+
+
+def test_session_left_out_with_reason_and_null_file_is_accepted():
+    e = entry("left_out")
+    e["reason"], e["file"] = "verify-red", None
+    assert check_entry(0, e)["reason"] == "verify-red"
+
+
+def test_left_out_without_reason_is_rejected():
+    with pytest.raises(BodyError):
+        check_entry(0, entry("left_out"))

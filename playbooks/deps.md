@@ -98,7 +98,9 @@ This step always runs once a group is green, also after 80% of the time budget: 
    section 3 entry is `left_out` keeps that entry's `state`, `reason` and `file`, also when its group went green
    (its change is not on the branch); any other takes `state` `included` when the combine entry's `state` is
    `applied`, `left_out` otherwise (`deps-body` rejects `applied`), with `reason` and `file` from the combine entry of
-   its group (this step's JSON); and `updates` read from its title only when the whole title matches
+   its group (this step's JSON); a group the session itself left out by a step of sections 3 to 5 or step 6 with a
+   named reason (`verify-red`, `conflicts-with-others`, `time-budget`, `lock-other-files`, `push-refused`) has no
+   combine entry and takes `state` `left_out`, that reason and `file` null; and `updates` read from its title only when the whole title matches
    `^Bump (\S+) from (\S+) to (\S+)( in \S+)?$` (otherwise an empty list). Run `tld ops deps-body <entries file>`
    into the body file. When the repository has a pull request template (`.github/pull_request_template.md`,
    `.github/PULL_REQUEST_TEMPLATE.md`, `docs/pull_request_template.md` or `pull_request_template.md`, the first
