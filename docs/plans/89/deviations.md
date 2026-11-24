@@ -11,11 +11,13 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - review: Accepted by the owner (ask a-3f7eeb33d2bf0e46): a tld-deps/* work ref skips the bot-identity check for its whole history, as plan 3.1 says; the workflow blob comparison and owner review remain the controls.
 - review: Non-blocking, open: lockfile classification and a few Unicode or trailing-dot aliases are not case-folded; the post-merge path check requires equal sets, so an overlapping group may be left out as does-not-apply. Plan 3.1 should mention that check.
 - review: tests/mutation/run_mutants.py deselects slow tests, so mutants whose tests are all slow count as killed; all p1 mutants were killed with a loop that includes slow tests. Needs a fix in another phase.
+- final: Final review: deps-prepare signs its commits as tld <tld@localhost> (the plan sets no identity), the git helper adds -c commit.gpgsign=false plus --no-ext-diff and --no-textconv, and the test list gained test_workflow_file_added_or_deleted_is_not_a_bump, test_a_rename_on_main_cannot_carry_a_group_into_a_protected_path and test_protected_paths_are_matched_case_folded (the added and deleted workflow cases moved out of test_workflow_files_only_as_action_ref_moves).
 
 ## p2-deps-body
 
 - None.
 - review: Decisions the plan left open were taken by the worker: entry index is 0-based, left-out count counts entries, file may be null, pr capped at 10^9, moves/files/reason/file optional. Non-blocking, open: ecosystem names in the Scope line are not in code spans.
+- final: Final review: deps-body writes "It has no Dependabot pull request." for a left-out audit-only entry (a line the plan does not give); the cases of test_untrusted_values_refused were split into test_untrusted_input_refused, test_boundaries_pass and test_a_missing_file_is_refused; test_major_jumps_are_listed was added.
 
 ## p3-deps-eval
 
