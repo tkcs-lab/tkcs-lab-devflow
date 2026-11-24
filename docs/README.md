@@ -44,6 +44,7 @@ Plans (`<n>/plan.md`) and `deviations.md` are kept history, transient and not li
 - [../playbooks/policies/untrusted-text.md](../playbooks/policies/untrusted-text.md) - whose text can be an ask or an instruction; read when a playbook reads issues, comments or files.
 - [../playbooks/policies/research.md](../playbooks/policies/research.md) - what a session does with a limited network and how it asks the owner for research; read when a question needs the open web or a playbook step asks the owner for outside facts.
 - [../playbooks/policies/protected-changes.md](../playbooks/policies/protected-changes.md) - how a change to a protected file (the profile, workflows) is reported by a worker, shown to the owner as a diff and applied as one pull request to the main branch; read when a guard denies an edit or a plan touches a protected path.
+- [../playbooks/policies/findings-fix.md](../playbooks/policies/findings-fix.md) - the one fix round for the non-blocking findings after an approved final review (the list, the single worker, the diff-only re-check, what happens when it fails, the pull request section); read when changing implement's Finishing or the quick playbook.
 
 ## Reference
 
