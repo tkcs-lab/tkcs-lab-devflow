@@ -336,7 +336,7 @@ def test_profile_schema_has_no_status_key():
 
 def test_profile_with_the_old_status_key_is_rejected(tmp_path):
     profile = tmp_path / "toolkit.yaml"
-    profile.write_text((ROOT / ".tld" / "toolkit.yaml").read_text() + "status:\n  board_url: https://example.org/x\n")
+    profile.write_text((ROOT / ".tld" / "toolkit.yaml").read_text().rstrip("\n") + "\nstatus:\n  board_url: https://example.org/x\n")
     result = subprocess.run([*tld_cmd("profile", "validate"), str(profile), "--no-file-checks"],
                             capture_output=True, text=True)
     assert result.returncode == 1

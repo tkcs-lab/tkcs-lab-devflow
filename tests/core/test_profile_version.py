@@ -61,7 +61,7 @@ def test_validate_rejects_a_malformed_specifier(vp):
 
 def test_repo_profile_and_template_carry_a_satisfied_version():
     for path in (ROOT / ".tld" / "toolkit.yaml", ROOT / "src" / "tld" / "templates" / "toolkit.yaml"):
-        assert "version: \">=1.0,<2\"" in path.read_text(), path
+        assert re.search(r'^  version: ">=\d+\.\d+,<2"', path.read_text(), re.M), path
         r = subprocess.run([*tld_cmd("profile", "validate"), str(path), "--no-file-checks"], capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
 
