@@ -99,7 +99,7 @@ planned write. The command questions reads its input from the board: without a b
 
 ## No secrets
 
-A record holds no file contents, no commit messages and no tokens; the one excerpt it may hold is `handover.summary`, the plan's Summary, which is already in the tracking issue and which only `tld plan handover` scans for secret-like values (the board does not scan a record). The board is readable by every session
+A record holds no file contents, no commit messages and no tokens; the one excerpt it may hold is `handover.summary`, the plan's Summary, which is already in the plan file and, with a tracking issue, in the issue; `tld plan handover` is what scans it for secret-like values before it reaches the board, and the board itself does not scan a record. The board is readable by every session
 that has the token and by the owner. The one place a record names files is a phase's optional `scope` (implement's scope-drift
 monitoring): at most 20 repository-relative paths, and counts. The board can also hold one checked HTML report page per record, stored beside it with `tld board client put-report` and never as part of a record.
 
