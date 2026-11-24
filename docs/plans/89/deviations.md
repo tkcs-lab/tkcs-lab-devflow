@@ -46,6 +46,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - final: First final review: changes, two blocking findings (p1 and p2 deviation entries missing), both fixed by adding the entries; the final code review also found the playbook state mapping blocking, fixed by fix-1 (see p4-deps-playbook).
 - final: Second final review: the code-reviewer role found fix-1 left no reason for groups the session itself leaves out (verify-red, conflicts-with-others, time-budget, lock-other-files, push-refused); blocking, sent to fix-2. The reviewer worker approved.
 - final: Second final review blocking finding fixed by fix-2 (merged, security review pass).
+- final: Third final review: changes, two blocking findings in playbooks/deps.md section 4 step 4 that come from the plan itself: an audit-only security group gets an empty updates list (deps-body rejects it), and groups stopped with needs_you or not started because of the time budget have no entry rule. Put to the owner on the board (ask a-62b7165f5c2cbd09).
 
 ## Finishing
 
