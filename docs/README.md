@@ -13,6 +13,7 @@ Plans (`<n>/plan.md`) and `deviations.md` are kept history, transient and not li
 - [architecture/evals.md](architecture/evals.md) - the eval harness in evals/ (neutral core, Claude adapter), tasks per command, stub mode, graders, baselines and their staleness; read when measuring a change to a command, playbook or hook.
 - [architecture/evals-implement.md](architecture/evals-implement.md) - the design of the stubbed-children /implement eval (not built) and its cost; read before building it.
 - [architecture/maintenance-spike.md](architecture/maintenance-spike.md) - historical record of what a cloud session can and cannot do; read before changing how the maintenance commands push or comment.
+- [architecture.md](architecture.md) - the architecture model and its diagram, generated from sysml/model; read when you change how the parts of the system relate.
 
 ## Guides
 
