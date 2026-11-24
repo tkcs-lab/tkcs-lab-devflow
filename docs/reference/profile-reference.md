@@ -189,6 +189,8 @@ deps:
 
 All three keys are required; `when`, `run` and `lockfiles` entries are non-empty strings.
 
+`when` and `lockfiles` are globs as in `hooks.protect_paths`: without a `/` a glob matches the file name at any depth, `**` crosses directories. A changed lockfile that no entry lists keeps its group out of the combined `/deps` pull request only when its name is built in (`*.lock`, `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `go.sum`); any other lockfile is seen only when an entry lists it.
+
 ### `verify.dod_conditional`
 
 `when` globs are matched against `git diff --name-only origin/<main_branch>...HEAD`.
