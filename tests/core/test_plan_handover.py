@@ -106,7 +106,7 @@ def test_handover_secret_in_summary_names_line_not_value(tmp_path):
     text = "# Title\n\n\n## Summary\n\n" + summary + "\n\n## 1. Goal\n\nmore\n"
     r = run(write(tmp_path, text))
     assert r.returncode == 1 and r.stdout == ""
-    assert r.stderr == "handover: the Summary holds a secret-like value on line 3\n"
+    assert r.stderr == "handover: a secret-like value on line 3 of the Summary\n"
     assert value not in r.stdout + r.stderr
 
 
@@ -140,3 +140,20 @@ def test_handover_unreadable_file(tmp_path, case):
     assert (r.returncode, r.stdout) == (1, "")
     lines = r.stderr.splitlines()
     assert len(lines) == 1 and lines[0].startswith("handover: ")
+
+
+def test_handover_summary_with_allow_marker(tmp_path):
+    line = "api_key = '" + _secret() + "'  # secret-scan:allow"
+    r = run(write(tmp_path, plan(with_extra(line))))
+    assert (r.returncode, r.stdout) == (1, "")
+    assert r.stderr == "handover: the Summary must not contain 'secret-scan:allow'\n"
+    assert _secret() not in r.stderr
+
+
+def test_handover_token_shaped_link(tmp_path):
+    token = "ghp_" + _secret()[:36]
+    url = f"{BASE}/blob/{token}/plan.md"
+    r = run(write(tmp_path, plan(BODY)), "--plan-url", url, "--command-prefix", "implement")
+    assert (r.returncode, r.stdout) == (1, "")
+    assert token not in r.stderr and "secret-like value" in r.stderr
+    assert "'plan_url' holds a secret-like value" in r.stderr

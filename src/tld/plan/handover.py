@@ -5,7 +5,7 @@
                       [--issue-url URL] [--plan-url URL] [--spec-url URL] [--command-prefix PREFIX]
 
 Reads the plan or the tracking-issue body FILE, checks its `## Summary` like `tld plan summary-check`, refuses a
-Summary with an unsafe character, more than 4000 characters or a secret-like value, builds the `handover` object of
+Summary with an unsafe character, more than 4000 characters, a secret-like value or the `secret-scan:allow` marker, scans every other field too, builds the `handover` object of
 a done make-plan status record and checks it with the status-record rules. Prints the object as JSON (exit 0), or
 `handover: <problem>` lines on stderr and nothing on stdout (exit 1). Writes nothing and runs nothing.
 Python 3.11+, stdlib only.
@@ -22,6 +22,7 @@ from tld.guard import secret_scan
 from tld.plan import summary
 
 KINDS = ("plan", "issue")
+ALLOW_MARK = "secret-scan:allow"  # scan_text skips a line that ends with it; nothing here may opt out
 UNSAFE_MESSAGE = "'handover.summary' holds a control, format, surrogate, private-use or separator character"
 
 
@@ -72,9 +73,11 @@ def main(argv: list[str] | None = None) -> int:
         return fail([UNSAFE_MESSAGE])
     if len(section) > record.HANDOVER_MAX_CHARS:
         return fail([f"'handover.summary' has {len(section)} characters, at most {record.HANDOVER_MAX_CHARS} are allowed"])
+    if ALLOW_MARK in section:
+        return fail([f"the Summary must not contain '{ALLOW_MARK}'"])
     hits = secret_scan.scan_text(section)
     if hits:
-        return fail([f"the Summary holds a secret-like value on line {n}" for n, _, _ in hits])
+        return fail([f"a secret-like value on line {n} of the Summary" for n, _, _ in hits])
     if args.command_prefix is not None and args.plan_url is None:
         return fail(["--command-prefix needs --plan-url"])
     obj = {
@@ -88,6 +91,10 @@ def main(argv: list[str] | None = None) -> int:
     errors = record.handover_errors(obj, args.repo)
     if errors:
         return fail(errors)
+    flagged = [k for k, v in obj.items() if k != "summary" and isinstance(v, str)
+               and (ALLOW_MARK in v or secret_scan.scan_text(v))]
+    if flagged:
+        return fail([f"'{k}' holds a secret-like value" for k in flagged])
     print(json.dumps(obj, ensure_ascii=False))
     return 0
 
