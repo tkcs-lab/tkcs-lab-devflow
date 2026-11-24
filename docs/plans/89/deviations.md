@@ -42,7 +42,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: First final review: changes, two blocking findings (p1 and p2 deviation entries missing), both fixed by adding the entries; the final code review also found the playbook state mapping blocking, fixed by fix-1 (see p4-deps-playbook).
 
 ## Finishing
 
