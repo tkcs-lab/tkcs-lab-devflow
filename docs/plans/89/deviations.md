@@ -24,7 +24,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p4-deps-playbook
 
-- pending
+- worker: In playbooks/deps.md section 4 step 6 the pull request title span is quoted inside the span, because the verbatim span made test_every_action_a_file_uses_is_defined_in_runtime read chore( as an action call. The baseline command hashes were refreshed (all 16 move because the shared policy files changed); the pr_update_branch MCP row of the hooks test was removed as the plan says.
+- review: Non-blocking, open: the protected-changes exception says every commit carries the bot identity, but work refs skip that check (plan 3.1); the PR template appended to the body is read from the working tree and the closing-keyword filter misses the URL form; a fixed version taken from audit output is written to the manifest without a shape check.
 
 ## p5-retire
 
