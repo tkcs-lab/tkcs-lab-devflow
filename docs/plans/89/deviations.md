@@ -35,7 +35,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - scope: tests/core/test_deps_playbook_contract.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
 - scope: tests/core/test_ops_deps_body.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
 - final: Fix fix-2 after the second final review: fix-1 left groups the session itself leaves out (verify-red, conflicts-with-others, time-budget, lock-other-files, push-refused) without a reason; the playbook now gives them left_out, that reason and a null file. Contract tests now guard the playbook text; baseline hashes refreshed again.
-- final: Fix fix-3 after the third final review: the playbook now gives an audit-only security group one updates item (package, from, fixed version) after a shape check of the fixed version before it reaches the manifest, gives groups stopped with needs_you no entry, gives unstarted groups the time-budget reason, and orders the clauses so only groups with a combine entry take its state. Non-blocking, open: the fixed-version check should say the whole value must match, the audited package name is only che
+- final: Fix fix-3 after the third final review: the playbook now gives an audit-only security group one updates item (package, from, fixed version) after a shape check of the fixed version before it reaches the manifest, gives groups stopped with needs_you no entry, gives unstarted groups the time-budget reason, and orders the clauses so only groups with a combine entry take its state. Open hardening items are listed in the next entry.
+- review: Non-blocking, open: the fixed-version check should say the whole value must match; the audited package name is only checked by deps-body, after the manifest edit; a version range in the manifest does not match the from pattern.
 
 ## p5-retire
 
