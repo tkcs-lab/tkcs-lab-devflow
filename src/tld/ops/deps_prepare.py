@@ -162,7 +162,7 @@ def classify(root, ref, sha, mb, resolved, entries, bot_tips):
             return out("protected-path", path)
     moves: list[dict] = []
     for old_mode, new_mode, status, path in changes:
-        if not path.startswith(chk.WORKFLOW_DIR):
+        if not chk.is_workflow(path):
             continue
         if status != "M":
             return out("workflow-not-a-bump", path)
@@ -197,12 +197,17 @@ def neutral_commit(root, sha, mb, lockfiles) -> str:
                 mode, _, blob = meta.split()
                 git("update-index", "--add", "--cacheinfo", f"{mode},{blob},{path}", cwd=root, env_extra=env)
             else:
-                git("update-index", "--force-remove", path, cwd=root, env_extra=env)
+                git("update-index", "--force-remove", "--", path, cwd=root, env_extra=env)
         tree = git("write-tree", cwd=root, env_extra=env).stdout.strip()
     return git("commit-tree", tree, "-p", mb, "-m", "neutral", cwd=root, env_extra=IDENT).stdout.strip()
 
 
-def apply_group(root, head, mb, sha, lockfiles, ref):
+def raw_paths(root, a, b) -> list[str]:
+    out = git("diff", "--raw", "--no-renames", "--no-ext-diff", "-z", a, b, cwd=root).stdout.split("\0")
+    return [out[i + 1] for i in range(0, len(out) - 1, 2) if out[i].startswith(":")]
+
+
+def apply_group(root, head, mb, sha, changed, lockfiles, ref):
     """(new head or None, reason or None): merge `sha` without its lockfiles into `head`."""
     neutral = neutral_commit(root, sha, mb, lockfiles)
     merged = git("merge-tree", "--write-tree", "--merge-base", mb, head, neutral, cwd=root, check=False)
@@ -213,6 +218,10 @@ def apply_group(root, head, mb, sha, lockfiles, ref):
     tree = merged.stdout.splitlines()[0].strip()
     if tree == git("rev-parse", f"{head}^{{tree}}", cwd=root).stdout.strip():
         return None, "no-change"
+    # merge-tree follows renames between mb and head, which the group's own diff did not: the merge may then change
+    # another path than the group does. Only the group's own non-lockfile paths may differ from head.
+    if set(raw_paths(root, head, tree)) != set(changed):
+        return None, "does-not-apply"
     new = git("commit-tree", tree, "-p", head, "-m", f"chore(deps): apply {ref}", cwd=root, env_extra=IDENT)
     return new.stdout.strip(), None
 
@@ -257,7 +266,7 @@ def prepare(args) -> tuple[dict, int]:
         if reason:
             entry["reason"] = reason
             continue
-        new, reason = apply_group(root, head, mb, sha, lockfiles, ref)
+        new, reason = apply_group(root, head, mb, sha, [f for f in files if f not in lockfiles], lockfiles, ref)
         if reason:
             entry["reason"] = reason
             continue
@@ -277,7 +286,7 @@ def prepare(args) -> tuple[dict, int]:
     if not applied:
         return result, 3
     git("update-ref", head_ref, head, ZERO, cwd=root)
-    checkout = git("checkout", "-q", args.branch, cwd=root, check=False)
+    checkout = git("checkout", "-q", args.branch, "--", cwd=root, check=False)
     if checkout.returncode != 0:
         git("update-ref", "-d", head_ref, cwd=root, check=False)
         raise DepsError(f"cannot check out {args.branch}: {(checkout.stderr or checkout.stdout).strip()}")

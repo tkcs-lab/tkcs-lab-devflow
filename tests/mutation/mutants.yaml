@@ -760,3 +760,13 @@ mutants:
   why: a base that is not the commit origin reports for the default branch is accepted
   old: '    if sha and t.branch and ls_remote_heads(root, head).get(head) == sha:'
   new: '    if sha and t.branch:'
+- id: deps-merge-paths-unchecked
+  file: src/tld/ops/deps_prepare.py
+  why: the merged tree is not checked against the group's own paths, so a rename on main carries a stale group into a protected path
+  old: '    if set(raw_paths(root, head, tree)) != set(changed):'
+  new: '    if False:'
+- id: deps-protected-not-case-folded
+  file: src/tld/ops/deps_checks.py
+  why: protected paths are matched case-sensitively, so `.CLAUDE/settings.json` passes on a case-insensitive file system
+  old: '    path = fold(path)'
+  new: '    pass'

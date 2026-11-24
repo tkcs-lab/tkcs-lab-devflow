@@ -6,6 +6,7 @@ Everything here is a function of its arguments, so the tests can reach every bra
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from tld.guard._common import BUILTIN_PROTECT_ALLOW, GUARDED_WORKFLOWS
 from tld.guard.protect_paths import ALWAYS_PROTECTED, matches
@@ -42,18 +43,30 @@ def is_lockfile(path: str, lock_globs: list[str]) -> bool:
     return is_covered(path, lock_globs) or any(matches(p, path) for p in BUILTIN_LOCKFILES)
 
 
+def fold(text: str) -> str:
+    """NFC and case-folded: a case-insensitive file system maps `.CLAUDE/x` onto `.claude/x`."""
+    return unicodedata.normalize("NFC", text).casefold()
+
+
+def is_workflow(path: str) -> bool:
+    return fold(path).startswith(WORKFLOW_DIR)
+
+
 def is_protected(path: str, resolved: dict) -> bool:
-    """A path a dependency group may not change (the protected list of the profile and the fixed paths)."""
-    if any(matches(p, path) for p in _FIXED_PROTECTED + tuple(ALWAYS_PROTECTED) + tuple(GUARDED_WORKFLOWS)):
+    """A path a dependency group may not change (the protected list of the profile and the fixed paths). Paths and
+    patterns are compared case-folded."""
+    path = fold(path)
+    fixed = [fold(p) for p in _FIXED_PROTECTED + tuple(ALWAYS_PROTECTED) + tuple(GUARDED_WORKFLOWS)]
+    if any(matches(p, path) for p in fixed):
         return True
-    if any(matches(a, path) for a in BUILTIN_PROTECT_ALLOW):
+    if any(matches(fold(a), path) for a in BUILTIN_PROTECT_ALLOW):
         return False  # templates of environment files, as for the guard
     if any(matches(p, path) for p in _ENV_PATTERNS):
         return True
     entries = (resolved.get("deps") or {}).get("lock_freshness") or []
     exempt = set(BUILTIN_LOCKFILES) | set(entry_globs(entries)) | {".github/workflows/**"}
     extra = (resolved.get("hooks") or {}).get("protect_paths") or []
-    return any(p not in exempt and matches(p, path) for p in extra)
+    return any(p not in exempt and matches(fold(p), path) for p in extra)
 
 
 def identity_ok(author_name: str, author_email: str, committer_name: str, committer_email: str) -> bool:

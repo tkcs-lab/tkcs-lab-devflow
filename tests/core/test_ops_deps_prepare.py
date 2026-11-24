@@ -608,3 +608,30 @@ def test_commit_order_and_no_change(tmp_path):
     assert [x["sha"] for x in out["groups"] if x["state"] == "applied"] == \
         sh(repo, "log", "--reverse", "--format=%H", "origin/main..chore/deps-test").splitlines()
     assert {x["reason"] for x in out["groups"]} - {None} <= set(deps_checks.PREPARE_REASONS)
+
+
+@pytest.mark.parametrize("target", [".github/workflows/ci2.yml", ".claude/settings.json", "secrets/t.json"])
+def test_a_rename_on_main_cannot_carry_a_group_into_a_protected_path(tmp_path, target):
+    repo = build(tmp_path, files={"tmpl/t.json": "".join(f"line {i}\n" for i in range(20))})
+    g = group(repo, "stale", {"tmpl/t.json": "".join(f"line {i}\n" for i in range(20)).replace("line 3\n", "bump\n")})
+    sh(repo, "checkout", "-q", "main")
+    sh(repo, "mv", "tmpl/t.json", target) if (repo / target).parent.exists() else (
+        (repo / target).parent.mkdir(parents=True), sh(repo, "mv", "tmpl/t.json", target))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "main renames the file")
+    git(repo, "push", "-q", "origin", "main")
+    sh(repo, "checkout", "-q", "feature/demo")
+    proc, out = run(repo, *groups(g, clean(repo)))
+    assert proc.returncode == 0, proc.stderr
+    assert by_ref(out)[g]["reason"] == "does-not-apply" and by_ref(out)[g]["state"] == "left_out"
+    assert branch_files(repo) == {"pkg/clean.txt"}
+
+
+@pytest.mark.parametrize("path", [".CLAUDE/settings.json", ".Claude/hooks/x.sh", ".MCP.json", ".ENV", ".Env.Local"])
+def test_protected_paths_are_matched_case_folded(tmp_path, path):
+    repo = build(tmp_path)
+    g = group(repo, "p", {path: "x\n"})
+    proc, out = run(repo, *groups(g, clean(repo)))
+    assert_left_out(repo, proc, out, g, "protected-path", path, leaked=[path])
+    assert deps_checks.is_protected(".ENV.EXAMPLE", {}) is False
+    assert deps_checks.is_workflow(".GitHub/Workflows/x.yml")
