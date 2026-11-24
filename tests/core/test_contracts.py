@@ -22,7 +22,7 @@ RUNTIME = PLAYBOOKS / "runtime.md"
 CORE_DIRS = [ROOT / d for d in ("playbooks", "roles", "checklists", "stacks")]
 CORE_FILES = sorted(p for d in CORE_DIRS for p in d.rglob("*.md"))
 ADAPTER_FILES = sorted(CLAUDE.rglob("*.md"))
-COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "ci", "upstream", "docs", "board", "migrate", "usage", "questions", "spec", "sysml")
+COMMANDS = ("setup", "review", "make-plan", "implement", "dod", "land", "deps", "ci", "upstream", "docs", "board", "migrate", "usage", "questions", "spec", "sysml", "quick")
 
 cli = _load("tld.cli")
 dispatch = _load("tld.roles.dispatch")

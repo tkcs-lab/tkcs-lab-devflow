@@ -73,6 +73,12 @@ COMPAT = {
         ("git checkout -b chore/ci-pages-20260101 origin/main", "git checkout -b chore/ci-<workflow>-<yyyymmdd> origin/<main>"),
         ("git push -u origin chore/ci-pages-20260101", "git push -u origin chore/ci-<workflow>-<yyyymmdd>"),
     ],
+    "quick": [
+        ("git ls-remote --heads origin feature/demo", "git ls-remote --heads origin <branch>"),
+        ("git merge origin/main && git push origin feature/demo", "Merge `origin/<main>` into `<feature>` once"),
+        ("git diff --name-only --no-renames origin/main...origin/feature/demo",
+         "git diff --name-only --no-renames origin/<main>...origin/<feature>"),
+    ],
     "sysml": [
         ("git checkout -b chore/sysml-init-20260101 origin/main", "git checkout -b chore/sysml-init-<yyyymmdd> origin/<main>"),
         ("git push -u origin chore/sysml-init-20260101", "git push -u origin chore/sysml-init-<yyyymmdd>"),
