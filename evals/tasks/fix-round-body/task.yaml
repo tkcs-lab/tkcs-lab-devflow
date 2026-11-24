@@ -1,0 +1,21 @@
+id: fix-round-body
+description: The PR body lists every non-blocking finding as fixed or declined, in the grammar of playbooks/policies/findings-fix.md, and passes tld plan summary-check --findings.
+prompt: >-
+  Write pr-body.md for a pull request, following playbooks/policies/findings-fix.md ("The pull request section").
+  Three non-blocking findings came out of the review: F1 from the final review at notes/cli.py:12 (the --limit help
+  text is missing), fixed in commit abc1234def; F2 from the code-reviewer role at dod at notes/store.py:30 (a variable
+  name is unclear), fixed in commit 0123456789ab; F3 from the final review at notes/cli.py:40 (suggested: cache the
+  note list), declined because notes are read once per run, so caching adds state for no gain. Start the body with
+  "Closes #5", then "## Summary" with the labels the policy and tld plan summary-check expect for a pull request,
+  then the findings section. Check the file with tld plan summary-check --kind pr --findings 3 and fix what it prints.
+fixture:
+  builder: tiny_app
+repeats: 3
+timeout_s: 600
+cost_ceiling_usd: 1.0
+requires: [src/tld/plan/findings.py]
+graders:
+  - name: findings_section_valid
+    glob: pr-body.md
+    count: 3
+  - forbidden_ops_absent
