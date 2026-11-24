@@ -18,7 +18,8 @@ PLUGIN = ROOT  # the tld plugin is sourced from the repository root
 # neutral content the commands follow (playbooks, roles, checklists, stacks)
 PLUGIN_PATHS = (".claude-plugin", "adapters", "cli", "src", "playbooks", "roles", "checklists", "stacks")
 CORE_MODULES = {"validate_profile": "tld.profile.validate", "validate_manifest": "tld.plan.manifest",
-                "validate_status_record": "tld.board.record", "docs_index": "tld.ops.docs_index"}
+                "validate_status_record": "tld.board.record", "docs_index": "tld.ops.docs_index",
+                "findings": "tld.plan.findings"}
 TASKS_DIR = EVALS / "tasks"
 STUBS_DIR = EVALS / "stubs"
 BASELINES_DIR = EVALS / "baselines"
