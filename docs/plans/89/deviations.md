@@ -19,7 +19,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-deps-eval
 
-- pending
+- worker: The task file sets repeats: 3 instead of the plan repeats: 1, because test_evals_tasks.py asserts three repeats and is outside touches; the stub is deterministic. The task description is double-quoted because the plan text breaks YAML.
+- review: Non-blocking, open: the fixture test inherits the real HOME and git config; the bot-PR grader misses some write operations (issue_write, gh global flags before the subcommand). docs/architecture/evals.md needs rows for the new graders and task (phase p5).
 
 ## p4-deps-playbook
 
