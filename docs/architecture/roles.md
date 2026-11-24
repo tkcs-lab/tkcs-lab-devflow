@@ -62,9 +62,9 @@ roles:
 |---|---|---|---|
 | `make_plan` | the planner | review | a blocking finding is resolved in the plan before it is pushed; a non-blocking one goes to the plan's Risks |
 | `implement_phase` | the phase's worker | edit for the edit roles, review for the others | the orchestrator sends the phase back |
-| `implement_final` | the final reviewer | review | a blocking finding is a blocking finding of the review |
+| `implement_final` | the final reviewer | review | a blocking finding is a blocking finding of the review; its non-blocking findings feed the fix round of [findings-fix.md](../../playbooks/policies/findings-fix.md) |
 | `review` | the review session: the roles are its dimensions (C11) | review | their findings are the candidates, one id space (`SEC`, `DEP`, `TST`, `DOC`, `WEB`) |
-| `dod` | the dod session, the orchestrator's included | review | row `FAIL` |
+| `dod` | the dod session, the orchestrator's included | review | row `FAIL`; its non-blocking findings feed the fix round of [findings-fix.md](../../playbooks/policies/findings-fix.md) |
 
 A role runs at most once per point, apart from a re-run after the session fixed that role's own blocking findings;
 `tld roles verify` reads the last report line per role and point.
