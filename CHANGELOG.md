@@ -7,7 +7,13 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Added
 
+- `/tld:quick` runs one small change end to end without a plan: tracking issue, size check (a large change is refused and sent to `/tld:make-plan`), one worker, the final review, the fix round, dod and one pull request (#88).
+- `tld plan summary-check --findings N` checks the pull request's `## Non-blocking findings` section.
 - `tld ops release-check` judges a commit's check runs and status by the rule of the `tld-release` workflow (exit 0 green, 3 still running, 1 red).
+
+### Changed
+
+- After an approving final review `/tld:implement` runs one fix round: one worker fixes or declines every non-blocking finding of the final review and the dod roles, and the pull request lists each as fixed or declined with its reason (#88).
 
 ### Fixed
 

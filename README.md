@@ -58,6 +58,7 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | `/tld:setup [create \| update]` | surveys the repository and writes or updates the profile, including the `roles` block; asks you the posture; one pull request ([guide](docs/guides/setup.md)) |
 | `/tld:make-plan <what you want>` | researches the repository, then writes a single-session prompt (small scope) or a plan with an implementation manifest on its feature branch (large scope); manual steps become an ask |
 | `/tld:implement <plan URL>` | one worker session per phase, merges into one feature branch, verification after every merge, scope-drift monitoring, one final review, one pull request driven to green ([scope drift](docs/architecture/scope-drift.md)) |
+| `/tld:quick <prompt or issue>` | one small change end to end without a plan: creates the tracking issue, refuses a large change (use `/tld:make-plan`), one worker, the final review, one fix round for the non-blocking findings, dod, one pull request driven to green |
 | `/tld:review [scope]` | deep review of security, tests (unit, integration, e2e) and docs by the roles; verified findings in a review document on a `review/<slug>` branch; your decisions are one ask ([guide](docs/guides/review.md)) |
 | `/tld:dod` | runs the profile's definition of done and reports a table |
 | `/tld:land` | orders the bot's open pull requests, resolves conflicts before review, runs CI once on the set, installs the land workflow |
