@@ -15,7 +15,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-board-plan-ready
 
-- pending
+- worker: Worker reported no deviations.
+- review: Non-blocking, left for the pull request: the browser does not re-check the shape of the repo name before building link patterns; the server already enforces it on every write.
 
 ## p4-playbook-handover
 
