@@ -32,15 +32,19 @@ The system SHALL show every done record with a hand-over that finished in the la
 
 #### Scenario: Plan ready card
 - **WHEN** the page shows a record with a hand-over
-- **THEN** its card under "Plan ready" shows each summary label in bold followed by its text, links named issue, plan and spec for the links that are set, and the command in a read-only field with a Copy button
+- **THEN** its card under "Plan ready" shows each summary label in bold followed by its text, links named issue, plan and spec for the links that are set, the record's repository as text, and the command in a read-only field with a Copy button
 
 #### Scenario: Copy the command
 - **WHEN** the owner presses Copy
 - **THEN** on a secure page the command is put on the clipboard and the button says `Copied`; elsewhere the field's text is selected and the button says `Selected: copy it`; in both cases the card does not open or close
 
 #### Scenario: Implementation started
-- **WHEN** a run record of the same project whose plan slug equals the hand-over's plan slug is on the board
+- **WHEN** a run record of the same project whose plan slug equals the hand-over's plan slug and which was updated at or after the hand-over record finished is on the board
 - **THEN** the card is shown under "Done" instead of "Plan ready"
+
+#### Scenario: Re-planned card
+- **WHEN** a run record of the same project and plan slug exists but was last updated before the hand-over record finished
+- **THEN** the card stays under "Plan ready"
 
 #### Scenario: Old or dismissed card
 - **WHEN** the record finished more than seven days ago or the owner dismissed it

@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Hand-over from a plan or an issue body
-The system SHALL, in `tld plan handover FILE --kind plan|issue --repo OWNER/NAME --plan-slug SLUG [--issue-url URL] [--plan-url URL] [--spec-url URL] [--command-prefix PREFIX]`, print one JSON object with the fields `summary`, `plan_slug`, `issue_url`, `plan_url`, `spec_url` and `next_command`, whose summary is the text of the file's `## Summary` section word for word and whose command is the prefix, one space and the plan link, and SHALL exit 0, or print `handover: <problem>` per problem and exit 1.
+The system SHALL, in `tld plan handover FILE --kind plan|issue --repo OWNER/NAME --plan-slug SLUG`, print one JSON hand-over object for a status record, or print `handover: <problem>` per problem and exit 1.
 
 #### Scenario: Hand-over printed
-- **WHEN** the file passes the Summary section check of its kind, its Summary holds nothing the secret scan finds, and every value passes the hand-over rules of a status record of that repository
-- **THEN** the object is printed with the Summary text between its heading and the next heading, without leading or trailing blank lines, and null for each link not given and for the command when no prefix is given
+- **WHEN** the file passes the Summary section check of its kind, its Summary holds nothing the secret scan finds, and every given value (`--issue-url`, `--plan-url`, `--spec-url`, `--command-prefix`) passes the hand-over rules of a status record of that repository
+- **THEN** the object with the fields `summary`, `plan_slug`, `issue_url`, `plan_url`, `spec_url` and `next_command` is printed and the exit code is 0
+
+#### Scenario: Summary word for word and command built
+- **WHEN** a hand-over is printed
+- **THEN** the summary is the Summary section text between its heading and the next heading without leading or trailing blank lines, the command is the prefix, one space and the plan link, and each link not given and the command without a prefix are null
 
 #### Scenario: Summary fails its check
 - **WHEN** the file's Summary fails the Summary section check of its kind
