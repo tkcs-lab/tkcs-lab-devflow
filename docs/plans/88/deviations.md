@@ -18,7 +18,10 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-fix-round
 
-- pending
+- worker: none
+- review: The worker could not run tld, so the orchestrator ran the security-reviewer: no blocking finding, four non-blocking, all in policy text the plan says to write as is (undo path of the fix merge, fix-worker brief lacks the plan-directory and no-merge rules, newline folding of finding text, location field copied into the PR body). Inputs for the fix round.
+- review: The worker did not re-run the whole suite after its last fixes; the orchestrator did on the merged branch: 6638 passed, only the known plan-link test excluded.
+- level: Phase brief pointed the worker at its manifest entry in the plan instead of pasting it verbatim.
 
 ## p4-quick-command
 
