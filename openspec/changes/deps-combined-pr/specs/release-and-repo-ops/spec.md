@@ -16,7 +16,7 @@ The system SHALL provide `tld ops deps-prepare --base REF --branch NAME --group 
 - **THEN** the same groups are applied and the same lock commands are listed
 
 #### Scenario: The profile comes from the remote default branch
-- **WHEN** REF does not resolve to the commit of the remote default branch that the guards trust, or no trusted copy of the profile can be read
+- **WHEN** REF resolves to neither the commit the guards trust nor the current commit of the remote default branch, or no trusted copy of the profile can be read
 - **THEN** `deps: <message>` is printed on stderr, no branch is created and the exit code is 1
 
 #### Scenario: A lockfile no entry covers
@@ -27,12 +27,12 @@ The system SHALL provide `tld ops deps-prepare --base REF --branch NAME --group 
 - **WHEN** a group ref changes nothing but lockfiles
 - **THEN** nothing of that group is applied and it is listed as `left_out` with reason `lockfile-only`
 
-#### Scenario: A dependency-bot ref with a commit by someone else
-- **WHEN** a group ref whose name starts with `origin/dependabot/` has a commit since its merge base whose author is not the dependency bot
+#### Scenario: A group ref with a commit not carrying the dependency bot's identity
+- **WHEN** a group ref that is not a local work branch has a commit since its merge base whose author is not the dependency bot or whose committer is neither the bot nor GitHub's own
 - **THEN** nothing of that group is applied and it is listed as `left_out` with reason `not-bot-authored`
 
 #### Scenario: Workflow files only as action version bumps
-- **WHEN** a group ref changes a file under `.github/workflows/` with any changed line that is not a `uses:` line
+- **WHEN** a group ref changes a file under `.github/workflows/` in any way other than moving the ref of an action it already uses (another action, a local or docker action, a pinned commit replaced by a movable ref, an added or removed line)
 - **THEN** nothing of that group is applied and it is listed as `left_out` with reason `workflow-not-a-bump`
 
 #### Scenario: Other protected paths
@@ -66,9 +66,9 @@ The system SHALL provide `tld ops deps-body FILE`, which reads a JSON object wit
 - **WHEN** an entry has a pull request number and no package updates
 - **THEN** its row names the pull request and says `see #<n>` instead of the package and versions
 
-#### Scenario: Workflow files named
-- **WHEN** an included entry lists changed files under `.github/workflows/`
-- **THEN** the `**Security:**` line names each of those files
+#### Scenario: Workflow files and action moves named
+- **WHEN** an included entry lists changed files under `.github/workflows/` and action moves
+- **THEN** the `**Security:**` line names each of those files and each move
 
 #### Scenario: A left-out group is named
 - **WHEN** an entry is left out with a reason

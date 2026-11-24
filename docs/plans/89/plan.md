@@ -8,7 +8,7 @@
 
 **Scope:** New CLI commands `tld ops deps-prepare` (builds the combined branch: applies each group's changes except lockfiles, with safety checks) and `tld ops deps-body` (renders the body from validated data). The deps playbook's sections 2 to 4 are rewritten; pre-check, cooldown check, audit, time budget and the two-attempt rule stay. Dependabot branches are no longer pushed to or updated. The policies gain the `chore/deps-<yyyymmdd>` branch and a narrow protected-path exception for Dependabot's own action version bumps. A stub eval, docs and the changelog follow. No profile key changes; defaults and explicit `deps` values work alike.
 
-**Security:** Workflow files reach the combined pull request only as `uses:` line changes from commits authored by Dependabot, read against the profile of the remote default branch; every other protected path, symbolic link or mode change leaves the group out. The body is rendered from strictly validated fields, never from pull request text, and carries no closing keyword.
+**Security:** Workflow files reach the combined pull request only as moves of an action's ref (same action, listed in the body) from commits carrying Dependabot's identity, read against the profile of the remote default branch; every other protected path, symbolic link or mode change leaves the group out. The body is rendered from strictly validated fields, never from pull request text, and carries no closing keyword.
 
 **Performance:** One combined verify replaces one CI run per group; a red combination costs a few extra `verify.fast` runs inside the 20% time reserve.
 
@@ -81,7 +81,10 @@ runs `git -c core.hooksPath=/dev/null -c protocol.ext.allow=never` with the envi
 5. A ref that `git rev-parse --verify --quiet <ref>^{commit}` cannot resolve: `deps: unknown ref: <ref>`.
 6. `t = tld.guard.trust.trusted(<toplevel>)`; `not t.available`: `deps: no trusted copy of the profile (<t.problem>)`;
    `t.profile is None`: `deps: the remote default branch has no .tld/toolkit.yaml`.
-7. `--base` does not resolve to `t.sha`: `deps: --base <REF> is not the remote default branch (<t.sha[:12]>)`.
+7. `--base` does not resolve to `t.sha`: only when `git ls-remote origin refs/heads/<t.branch>` names the commit
+   `--base` resolves to (the trusted copy is cached and the playbook has just fetched a newer main) is it accepted,
+   and that commit is then the base; otherwise
+   `deps: --base <REF> is not the remote default branch (<t.sha[:12]>)`.
 8. `errors, _, resolved = validate(t.profile, None)`; any error: `deps: the trusted profile is invalid: <errors[0]>`.
 
 `entries = resolved.get("deps", {}).get("lock_freshness", [])`.
@@ -90,10 +93,12 @@ runs `git -c core.hooksPath=/dev/null -c protocol.ext.allow=never` with the envi
 
 ```python
 BUILTIN_LOCKFILES = ("*.lock", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "go.sum")
-BOT_REF_PREFIX = "origin/dependabot/"
 BOT_AUTHOR = ("dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.com")
+BOT_COMMITTER = BOT_AUTHOR + ("noreply@github.com",)   # GitHub's web-flow committer signs API commits; matched by e-mail or by name `GitHub`
+WORK_PREFIX = "refs/heads/tld-deps/"                  # local work branches: the only refs exempt from the bot check
 WORKFLOW_DIR = ".github/workflows/"
-USES_LINE = re.compile(r"^\s*(-\s+)?uses:\s*[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[A-Za-z0-9_.-]+\s*(#.*)?$")
+USES_LINE = re.compile(r"^(\s*(?:-\s+)?uses:\s*)([A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)@([A-Za-z0-9][A-Za-z0-9_.-]*)\s*(#.*)?$")
+SHA40 = re.compile(r"^[0-9a-f]{40}$")
 ```
 
 Glob matching uses `tld.guard.protect_paths.matches(pattern, path)` (a pattern without `/` matches the file name at
@@ -112,14 +117,21 @@ any depth; `**` crosses directories).
 2. `git diff --raw --no-renames -z <mb> <ref>` gives mode, status and path of every change. The path list is
    `files`; `lockfiles` are the lockfile ones; the others are `changed`.
 3. Reasons, first match wins (each sets `file` to the first offending path in sorted order):
-   - a ref that starts with `BOT_REF_PREFIX` whose commits `git log --format=%an%x00%ae <mb>..<ref>` include an author
-     other than `BOT_AUTHOR`: `not-bot-authored` (no `file`);
+   - a ref whose full name (`git rev-parse --symbolic-full-name <ref>`, or the ref itself when that prints nothing)
+     does not start with `WORK_PREFIX`, and whose commits `git log --format=%an%x00%ae%x00%cn%x00%ce <mb>..<ref>`
+     include one whose author name and e-mail are not both of `BOT_AUTHOR` (name `dependabot[bot]`, either e-mail
+     form) or whose committer e-mail is not in `BOT_COMMITTER` (and whose committer name is not `GitHub`):
+     `not-bot-authored` (no `file`);
    - a new mode `120000` (symbolic link) or `160000` (submodule), or a status `M` with old and new mode differing:
      `unexpected-change`;
    - a *protected* path: `protected-path`;
-   - a path under `WORKFLOW_DIR` whose `git diff -U0 <mb> <ref> -- <path>` has an added or removed line (starting
-     with `+` or `-`, not `+++`/`---`) that does not match `USES_LINE`, or that was added or deleted as a whole:
-     `workflow-not-a-bump`;
+   - a path under `WORKFLOW_DIR` (for every ref, work branches included) that is added, deleted or whose
+     `git diff -U0 <mb> <ref> -- <path>` is not a pure move of action refs: split the hunks' removed (`-`) and added
+     (`+`, not `+++`/`---`) lines; their counts must be equal; each removed line paired with the added line at the
+     same position must match `USES_LINE` (groups: prefix, action, ref, comment) with the same prefix and the same
+     action; the action is not `docker`-scheme and has no `..` segment; the refs differ; and when the old ref is
+     40 hex digits (`SHA40`) the new one must be too. The moves `(action, old ref, new ref)` are kept for the JSON
+     (`workflow_moves`). Anything else: `workflow-not-a-bump`;
    - a lockfile that is not *covered*: `lock-uncovered`;
    - `changed` empty: `lockfile-only`.
 4. Otherwise `git merge-tree --write-tree --merge-base <mb> <head> <ref>`; a non-zero exit: `does-not-apply`.
@@ -141,13 +153,20 @@ any lockfile of an applied group matches one of its `lockfiles` globs; in profil
 ```json
 {"branch": "NAME", "base": "REF", "base_sha": "<sha>",
  "groups": [{"ref": "<ref>", "sha": "<sha>", "state": "applied", "reason": null, "file": null,
-             "files": ["requirements.in", "requirements.lock"], "lockfiles": ["requirements.lock"]}],
+             "files": ["requirements.in", "requirements.lock"], "lockfiles": ["requirements.lock"],
+             "workflow_moves": [{"action": "actions/checkout", "from": "v4", "to": "v5"}]}],
  "lock_commands": [{"index": 0, "run": "<run>", "when": ["..."], "lockfiles": ["..."]}]}
 ```
 
+A workflow change by a fix commit on a work branch passes only as a same-action ref move, like Dependabot's;
+the bot check does not run for `WORK_PREFIX` refs because their fix commits are the session's own (the playbook
+forbids editing workflow files, and the shape check is what remains of that rule if it is broken). The bot check
+cannot prove a commit is Dependabot's, only that its identity says so; the owner's review of the combined pull
+request, where the Security line shows every action move, is the control.
+
 Rejected: applying a `git diff | git apply` patch inside the script (trusts patch header paths and writes the
 working tree before anything is checked); `git merge --no-ff` in the playbook (merges lockfiles as text, which the
-ask forbids, and nothing checks provenance); reading the profile from `--base` (a local ref could choose the lock
+ask forbids, and nothing checks provenance or the shape of a workflow change); reading the profile from `--base` (a local ref could choose the lock
 commands the session then runs).
 
 ### 3.2 `tld ops deps-body` (`src/tld/ops/deps_body.py`)
@@ -162,6 +181,7 @@ Registered as `("ops", "deps-body"): ("tld.ops.deps_body", (), "render the combi
 | `pr` | positive integer or `null` (an audit-only security update) |
 | `security` | boolean |
 | `updates` | list of 0..50 `{"package", "from", "to"}`; `package` `^[A-Za-z0-9@][A-Za-z0-9@._/+-]{0,99}$`; `from` `null` or a version, `to` a version, version `^[A-Za-z0-9][A-Za-z0-9.+_-]{0,49}$`; empty only when `pr` is set |
+| `moves` | list of 0..50 `{"action", "from", "to"}`, `action` `^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_./-]{1,99}$` without `..`, `from` and `to` `^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$` |
 | `files` | list of 0..200 paths, each `^[A-Za-z0-9._@+-][A-Za-z0-9._/@+-]{0,199}$`, no `..` |
 | `state` | `included` or `left_out` |
 | `reason` | `null` when included; when left out one key of `REASONS` below |
@@ -196,7 +216,7 @@ The group label is `<ecosystem> <directory>`; `#<pr>` or `audit`. Output, exactl
 
 **Deviations:** <None. | Left out <k> update(s): <label> (<#n>), ... ; see Left out.>
 **Scope:** <u> package update(s) in <g> group(s) (<ecosystems, sorted, comma-separated>); lockfiles come from the profile's lock commands.
-**Security:** <only when an included entry is security or lists a workflow file: "Audit fixes: <packages>." and/or "Workflow files changed: <files>.">
+**Security:** <only when an included entry is security or lists a workflow file: "Audit fixes: <packages>." and/or "Workflow files changed: <files>." and/or "Action moves: <action> <from> to <to>, ...">
 **Review focus:** <see below>
 
 ## Updates
@@ -212,6 +232,7 @@ The group label is `<ecosystem> <directory>`; `#<pr>` or `audit`. Output, exactl
 The Dependabot pull requests of the included updates stay open; Dependabot closes each one once its update is on the main branch.
 ```
 
+- `**Security:**` lists every included move (no cap, shortened to the word limit by dropping the `Workflow files` part first).
 - A list in the Summary names at most 5 items, then `and <m> more`; packages, files and labels in backticks.
 - An entry with no `updates` gets one row with Package `see #<pr>` and From and To `-`; `from` null prints `new`.
 - `**Review focus:**`: `Security updates first: <packages, at most 3>.` when any included entry is security; then
@@ -260,7 +281,9 @@ they are.
 
 1. `git fetch origin <main>`, and for each dependency-bot pull request of the group `git fetch origin '<head branch>'`.
    Use a head branch only when it matches `^dependabot/[A-Za-z0-9._/@+-]+$`; otherwise stop the group with
-   `needs_you` and `Check deps group <ecosystem>: unexpected branch name`.
+   `needs_you` and `Check deps group <ecosystem>: unexpected branch name`. Then `git rev-parse 'origin/<head branch>'`
+   must equal the head SHA that `github.pr_list` reported for that pull request; on a mismatch stop the group with
+   `needs_you` and `Check deps group <ecosystem>: branch moved`.
 2. Build the work branch: `tld ops deps-prepare --base origin/<main> --branch tld-deps/<k> --group 'origin/<head branch>'`
    with one `--group` per pull request (`<k>` is the group's item number). Every group entry of its JSON that is
    `left_out` keeps its `reason` for the pull request body; exit 3 ends the group (item `failed`), exit 1 stops it
@@ -371,9 +394,10 @@ implement (the deps playbook or by the owner)." (in "What is protected"), add:
 
 ```
 **The deps exception.** The deps playbook's combined pull request may carry a dependency bot's own workflow
-version bumps: `tld ops deps-prepare` takes a change under `.github/workflows/` only when every changed line is a
-`uses:` line and every commit is the bot's, and leaves out any group that touches another protected path. The
-owner reviews those lines in that pull request; no other path goes this way.
+version bumps: `tld ops deps-prepare` takes a change under `.github/workflows/` only when every change moves the ref
+of the same action and every commit carries the bot's identity, and leaves out any group that touches another
+protected path. The pull request body lists each action move and the owner reviews them there; no other path goes
+this way.
 ```
 
 `playbooks/policies/pr-steward.md:64`: replace `` `chore/deps-<ecosystem>-<yyyymmdd>` (deps) `` with
@@ -580,8 +604,11 @@ phases:
          without merging lockfiles" in openspec/changes/deps-combined-pr/specs/release-and-repo-ops/spec.md, named
          test_<scenario in snake case>, plus: main moved after the group branches were cut (both still apply);
          a group ref whose lockfile changed is regenerated nowhere by the script (lockfile bytes equal origin/main's);
-         a workflow change of only `uses:` lines by the bot is applied; one with a `run:` line is
-         `workflow-not-a-bump`; a remote branch of the same name is an error; exit 3 leaves no branch and the
+         a workflow change that only moves the ref of the same action by the bot is applied; one with a `run:`
+         line, a different action, a local action, or a SHA pin replaced by a tag is `workflow-not-a-bump`; a bot ref
+         named with its full name `refs/remotes/origin/dependabot/...` and one with a foreign committer are
+         `not-bot-authored`; a `--base` that is the current remote default branch but not the cached trusted sha is
+         accepted; a remote branch of the same name is an error; exit 3 leaves no branch and the
          original checkout. For "lock entries from defaults and explicit values alike" put the entry lookup in a
          function `lock_entries(profile: dict) -> list[dict]` that calls `validate(profile, None)` and reads the
          resolved form; test it in process: once with a profile that writes the entry, once with
@@ -591,7 +618,7 @@ phases:
       Stop with status=blocked if `git merge-tree --write-tree --merge-base` is not available, or if
       tld.guard.trust.trusted cannot read a trusted copy in the test repositories (quote the problem).
     acceptance:
-      - "`.venv/bin/python -m pytest tests/core/test_ops_deps_prepare.py -q` passes with a test for each scenario of the requirement Combine dependency update groups without merging lockfiles: groups applied lockfiles left for the lock command, what counts as a lockfile, lock entries from defaults and explicit values alike, the profile comes from the remote default branch, a lockfile no entry covers, only lockfiles changed, a dependency-bot ref with a commit by someone else, workflow files only as action version bumps, other protected paths, unexpected kinds of change, a group that does not apply, nothing applied, errors"
+      - "`.venv/bin/python -m pytest tests/core/test_ops_deps_prepare.py -q` passes with a test for each scenario of the requirement Combine dependency update groups without merging lockfiles: groups applied lockfiles left for the lock command, what counts as a lockfile, lock entries from defaults and explicit values alike, the profile comes from the remote default branch, a lockfile no entry covers, only lockfiles changed, a group ref with a commit not carrying the dependency bot's identity, workflow files only as action version bumps, other protected paths, unexpected kinds of change, a group that does not apply, nothing applied, errors"
       - "`.venv/bin/python cli/tld ops deps-prepare --help` exits 0"
       - "`.venv/bin/python -m pytest tests/core/test_cli_reference.py tests/core/test_contracts.py -q` passes"
       - "`.venv/bin/python -m pytest tests -q` passes"
@@ -620,7 +647,7 @@ phases:
          never matches `(?i)\b(closes|fixes|resolves)\s+#\d`.
       4. Run `.venv/bin/python -m pytest tests -q`.
     acceptance:
-      - "`.venv/bin/python -m pytest tests/core/test_ops_deps_body.py -q` passes with a test for each scenario of the requirement Render the combined dependency pull request body: security first, versions not known, workflow files named, a left-out group is named, nothing left out, no closing keyword, untrusted values refused"
+      - "`.venv/bin/python -m pytest tests/core/test_ops_deps_body.py -q` passes with a test for each scenario of the requirement Render the combined dependency pull request body: security first, versions not known, workflow files and action moves named, a left-out group is named, nothing left out, no closing keyword, untrusted values refused"
       - "`.venv/bin/python -m pytest tests/core/test_cli_reference.py tests/core/test_contracts.py -q` passes"
       - "`.venv/bin/python -m pytest tests -q` passes"
   - id: p3-deps-eval
