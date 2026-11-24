@@ -77,6 +77,8 @@ tests:
   - tests/core/test_ops_deps_prepare.py
   src/tld/ops/deps_prepare.py:
   - tests/core/test_ops_deps_prepare.py
+  src/tld/ops/deps_body.py:
+  - tests/core/test_ops_deps_body.py
 mutants:
 - id: NM1
   file: src/tld/guard/no_merge.py
@@ -770,3 +772,18 @@ mutants:
   why: protected paths are matched case-sensitively, so `.CLAUDE/settings.json` passes on a case-insensitive file system
   old: '    path = fold(path)'
   new: '    pass'
+- id: deps-body-package-regex
+  file: src/tld/ops/deps_body.py
+  why: a package name may hold a space (or a pipe or a backtick in the same way), which breaks the table
+  old: 'PACKAGE = re.compile(r"[A-Za-z0-9@][A-Za-z0-9@._/+-]{0,99}")'
+  new: 'PACKAGE = re.compile(r"[A-Za-z0-9@][A-Za-z0-9@._/+ -]{0,99}")'
+- id: deps-body-entry-limit
+  file: src/tld/ops/deps_body.py
+  why: 101 entries are accepted
+  old: 'MAX_ENTRIES = 100'
+  new: 'MAX_ENTRIES = 101'
+- id: deps-body-security-not-first
+  file: src/tld/ops/deps_body.py
+  why: security updates are not listed first
+  old: '    return (not entry["security"], entry["ecosystem"]'
+  new: '    return (False, entry["ecosystem"]'
