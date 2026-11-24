@@ -29,7 +29,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p5-fix-round-eval
 
-- pending
+- worker: none
+- review: The worker could not run tld, so the orchestrator ran the security-reviewer: pass, no findings. One note: the new grader reads the first matching document instead of the worktree copy; the agent controls both, so no grade can be forged.
+- level: Phase brief pointed the worker at its manifest entry in the plan instead of pasting it verbatim.
 
 ## p6-retire
 
