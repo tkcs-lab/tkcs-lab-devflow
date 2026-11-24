@@ -34,6 +34,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - scope: src/tld/ops/deps_body.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
 - scope: tests/core/test_deps_playbook_contract.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
 - scope: tests/core/test_ops_deps_body.py (fix-1 touched a file outside the phase touches; see the final-review entry above)
+- final: Fix fix-2 after the second final review: fix-1 left groups the session itself leaves out (verify-red, conflicts-with-others, time-budget, lock-other-files, push-refused) without a reason; the playbook now gives them left_out, that reason and a null file. Contract tests now guard the playbook text; baseline hashes refreshed again.
 
 ## p5-retire
 
@@ -44,6 +45,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - final: First final review: changes, two blocking findings (p1 and p2 deviation entries missing), both fixed by adding the entries; the final code review also found the playbook state mapping blocking, fixed by fix-1 (see p4-deps-playbook).
 - final: Second final review: the code-reviewer role found fix-1 left no reason for groups the session itself leaves out (verify-red, conflicts-with-others, time-budget, lock-other-files, push-refused); blocking, sent to fix-2. The reviewer worker approved.
+- final: Second final review blocking finding fixed by fix-2 (merged, security review pass).
 
 ## Finishing
 
