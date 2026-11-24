@@ -4,7 +4,7 @@
 The system SHALL, in `tld plan handover FILE --kind plan|issue --repo OWNER/NAME --plan-slug SLUG`, print one JSON hand-over object for a status record, or print `handover: <problem>` per problem and exit 1.
 
 #### Scenario: Hand-over printed
-- **WHEN** the file passes the Summary section check of its kind, its Summary holds nothing the secret scan finds, and every given value (`--issue-url`, `--plan-url`, `--spec-url`, `--command-prefix`) passes the hand-over rules of a status record of that repository
+- **WHEN** the file passes the Summary section check of its kind, its Summary holds nothing the secret scan finds and not the `secret-scan:allow` marker, and every given value (`--issue-url`, `--plan-url`, `--spec-url`, `--command-prefix`) passes the hand-over rules of a status record of that repository
 - **THEN** the object with the fields `summary`, `plan_slug`, `issue_url`, `plan_url`, `spec_url` and `next_command` is printed and the exit code is 0
 
 #### Scenario: Summary word for word and command built
@@ -16,8 +16,12 @@ The system SHALL, in `tld plan handover FILE --kind plan|issue --repo OWNER/NAME
 - **THEN** each problem is printed as `handover: summary: <problem>` and the exit code is 1
 
 #### Scenario: Secret in the Summary
-- **WHEN** the secret scan finds a secret-like value in the Summary
-- **THEN** `handover: the Summary holds a secret-like value on line <n>` is printed, without the value, and the exit code is 1
+- **WHEN** the secret scan finds a secret-like value in the Summary, or the Summary holds the `secret-scan:allow` marker
+- **THEN** `handover: a secret-like value on line <n> of the Summary` (or `handover: the Summary must not contain 'secret-scan:allow'`) is printed, without the value, and the exit code is 1
+
+#### Scenario: Secret in another field
+- **WHEN** a link, the slug or the command holds a secret-like value or the `secret-scan:allow` marker
+- **THEN** `handover: '<field>' holds a secret-like value` is printed, without the value, and the exit code is 1
 
 #### Scenario: Value fails the record rules
 - **WHEN** a link, the slug or the prefix breaks the hand-over rules of a status record, or a prefix is given without a plan link
