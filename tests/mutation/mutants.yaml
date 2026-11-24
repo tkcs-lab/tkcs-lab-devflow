@@ -73,6 +73,9 @@ tests:
   - tests/core/test_guard_trust.py
   src/tld/plan/active.py:
   - tests/core/test_plan_active.py
+  src/tld/board/record.py:
+  - tests/core/test_status_record.py
+  - tests/core/test_board_store.py
 mutants:
 - id: NM1
   file: src/tld/guard/no_merge.py
@@ -711,3 +714,33 @@ mutants:
   why: the targets are not checked before the first write, so an unsafe target is found after the model was changed
   old: '    for path in (*model_paths.values(), *OUTPUTS, plan.dest):'
   new: '    for path in ():'
+- id: REC-H1
+  file: src/tld/board/record.py
+  why: a handover link with a trailing line break is accepted (fullmatch became match)
+  old: '    if len(value) > HANDOVER_URL_MAX or not re.fullmatch(pattern, value):'
+  new: '    if len(value) > HANDOVER_URL_MAX or not re.match(pattern, value):'
+- id: REC-H2
+  file: src/tld/board/record.py
+  why: a link with an empty, dot or dot-dot segment is accepted
+  old: '    return all(seg not in ("", ".", "..") for seg in value[len(GITHUB):].split("/"))'
+  new: '    return True'
+- id: REC-H3
+  file: src/tld/board/record.py
+  why: a summary of exactly 350 words is refused
+  old: '            if words > HANDOVER_MAX_WORDS:'
+  new: '            if words >= HANDOVER_MAX_WORDS:'
+- id: REC-H4
+  file: src/tld/board/record.py
+  why: a next_command that only starts with the prefix and plan link is accepted
+  old: 'any(command == p + " " + plan_url for p in NEXT_COMMAND_PREFIXES)'
+  new: 'any(command.startswith(p + " " + plan_url) for p in NEXT_COMMAND_PREFIXES)'
+- id: REC-H5
+  file: src/tld/board/record.py
+  why: the repository name is used as a pattern, so a dot matches any character
+  old: '    base = re.escape(GITHUB + repo)'
+  new: '    base = re.escape(GITHUB) + repo'
+- id: REC-H6
+  file: src/tld/board/record.py
+  why: a handover on a record that is not done is accepted
+  old: '        if rec.get("status") != "done":'
+  new: '        if False:'

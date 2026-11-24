@@ -12,7 +12,9 @@ slug of a repository (`project_slug`), the only value a record's `project` may h
 
 The record model (C7): `attended` says whether a person started the command and can answer;
 `orchestrator_session` is the session id, or null when the session cannot read its own id; the final
-states are `done`, `failed` and `pr_open`. Python 3.11+, stdlib only.
+states are `done`, `failed` and `pr_open`. A done make-plan command record may carry the optional
+`handover` object (the Summary, the plan slug, links bound to the record's repo and the command to start
+implement), checked by `handover_errors`. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
 
@@ -21,6 +23,7 @@ import hashlib
 import json
 import re
 import sys
+import unicodedata
 from datetime import datetime
 
 FIELDS = (
@@ -37,6 +40,16 @@ SCOPE_PATHS_MAX = 20
 SCOPE_PATH_MAX_LEN = 300
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 PR_FIELDS = ("number", "url", "state", "ci", "awaiting")
+OPTIONAL_FIELDS = ("handover",)
+HANDOVER_FIELDS = ("summary", "plan_slug", "issue_url", "plan_url", "spec_url", "next_command")
+HANDOVER_UNSAFE = ("Cc", "Cf", "Cs", "Co", "Zl", "Zp")
+HANDOVER_MAX_WORDS = 350
+HANDOVER_MAX_CHARS = 4000
+HANDOVER_URL_MAX = 300
+NEXT_COMMAND_PREFIXES = ("/tld:implement", "implement")
+HANDOVER_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,79}$")
+REF_PATH = r"[A-Za-z0-9._/-]+"
+GITHUB = "https://github.com/"
 
 KINDS = ("run", "command")
 COMMANDS = ("deps", "upstream", "ci", "land", "setup", "docs", "review", "make-plan", "migrate", "questions", "spec", "sysml")
@@ -163,6 +176,64 @@ def _count(value) -> bool:
     return _is_int(value) and value >= 0
 
 
+def _link_ok(pattern: str, value: str) -> bool:
+    """Whether `value` is a short link of the given shape with no empty, `.` or `..` segment."""
+    if len(value) > HANDOVER_URL_MAX or not re.fullmatch(pattern, value):
+        return False
+    return all(seg not in ("", ".", "..") for seg in value[len(GITHUB):].split("/"))
+
+
+def handover_errors(handover, repo: str) -> list[str]:
+    """The error messages (without the `status-record: ` prefix) of a make-plan `handover` object."""
+    if not isinstance(handover, dict):
+        return ["'handover' must be an object"]
+    errors: list[str] = []
+    for key in HANDOVER_FIELDS:
+        if key not in handover:
+            errors.append(f"'handover' is missing '{key}'")
+    for key in handover:
+        if key not in HANDOVER_FIELDS:
+            errors.append(f"'handover' has unknown field '{key}'")
+    if "summary" in handover:
+        summary = handover["summary"]
+        if not (isinstance(summary, str) and summary.strip()):
+            errors.append("'handover.summary' must be a non-empty string")
+        else:
+            if any(c != "\n" and unicodedata.category(c) in HANDOVER_UNSAFE for c in summary):
+                errors.append("'handover.summary' holds a control, format, surrogate, private-use or separator character")
+            words = sum(1 for t in summary.split() if re.search(r"\w", t))
+            if words > HANDOVER_MAX_WORDS:
+                errors.append(f"'handover.summary' has {words} words, at most {HANDOVER_MAX_WORDS} are allowed")
+            if len(summary) > HANDOVER_MAX_CHARS:
+                errors.append(f"'handover.summary' has {len(summary)} characters, at most {HANDOVER_MAX_CHARS} are allowed")
+    slug = handover.get("plan_slug")
+    slug_ok = isinstance(slug, str) and bool(HANDOVER_SLUG.fullmatch(slug)) if "plan_slug" in handover else False
+    if "plan_slug" in handover and not slug_ok:
+        errors.append(f"'handover.plan_slug' must match {HANDOVER_SLUG.pattern}")
+    base = re.escape(GITHUB + repo)
+    shapes = {
+        "issue_url": (base + "/issues/[1-9][0-9]{0,9}", "issues/<n>"),
+        "plan_url": (base + "/blob/" + REF_PATH + r"\.md", "blob/<branch>/<path>.md"),
+        "spec_url": (base + "/tree/" + REF_PATH + "/openspec/changes/" + (re.escape(slug) if slug_ok else REF_PATH),
+                     "tree/<branch>/openspec/changes/<plan_slug>"),
+    }
+    for key, (pattern, shape) in shapes.items():
+        if key not in handover or handover[key] is None:
+            continue
+        value = handover[key]
+        if not (isinstance(value, str) and _link_ok(pattern, value)):
+            errors.append(f"'handover.{key}' must be null or https://github.com/{repo}/{shape} "
+                          "(at most 300 characters, no empty, . or .. segment)")
+    command = handover.get("next_command")
+    if "next_command" in handover and command is not None:
+        plan_url = handover.get("plan_url")
+        if plan_url is None:
+            errors.append("'handover.next_command' must be null when 'handover.plan_url' is null")
+        elif not (isinstance(plan_url, str) and any(command == p + " " + plan_url for p in NEXT_COMMAND_PREFIXES)):
+            errors.append(f"'handover.next_command' must be '<prefix> <plan_url>' with a prefix of {', '.join(NEXT_COMMAND_PREFIXES)}")
+    return errors
+
+
 def _check_scope(scope, where: str, kind, errors: list[str]) -> None:
     """The optional per-phase scope-drift field: counts and paths only."""
     where = f"{where} field 'scope'"
@@ -267,7 +338,7 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
         if key not in rec:
             errors.append(f"'{key}' is required")
     for key in rec:
-        if key not in FIELDS:
+        if key not in FIELDS and key not in OPTIONAL_FIELDS:
             errors.append(f"'{key}' is not a known field")
     if "schema" in rec and not (_is_int(rec["schema"]) and rec["schema"] == 1):
         errors.append("'schema' must be 1")
@@ -326,6 +397,13 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
             errors.append("'orchestrator_session' must be the session id when 'attended' is true")
     if "attended" in rec and not isinstance(rec["attended"], bool):
         errors.append("'attended' must be true or false")
+
+    if "handover" in rec:
+        if not (kind == "command" and command == "make-plan"):
+            errors.append("'handover' is only allowed in a make-plan command record")
+        if rec.get("status") != "done":
+            errors.append("'handover' is only allowed when 'status' is 'done'")
+        errors += handover_errors(rec["handover"], rec["repo"] if isinstance(rec.get("repo"), str) else "")
 
     # Rule 3: enums.
     status = rec.get("status")
