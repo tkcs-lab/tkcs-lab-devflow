@@ -156,7 +156,7 @@ New module `src/tld/plan/findings.py` (stdlib only), one function `check(lines: 
 3. Otherwise every line must start with `- ` and split on ` · ` into at least 5 fields (id, source, location, text..., status): the id is `F<digits>`; the source is `final-review` or `<role>@implement_final` or `<role>@dod` (role: lower-case letters and `-`); the location has no space; the text (the fields between the location and the last field, joined with ` · `) has at least 3 words (`MIN_VALUE_WORDS` of `summary.py`); the status is `fixed <7-40 hexadecimal characters>` or `declined: <reason>` where the reason has at least 3 words, is not a placeholder (`summary.is_placeholder`) and is not `none`. One problem per bad line: `row <k>: <what>`.
 4. Ids are unique and, in order, `F1`, `F2`, ... without a gap; a problem `ids must run F1..F<k> in order` otherwise.
 5. With `n` given and greater than 0: exactly `n` rows (`<k> rows, expected <n>`); with `n` equal to 0 any row is a problem (`rows but no findings were counted`).
-6. In every line: no `<!--`, no `<details` (case-insensitive), no character of Unicode category Cc, Cf, Cs, Co, Zl or Zp, and no `@` followed by a letter (a mention). Problem `row <k>: hidden markup, control characters or a mention`.
+6. In every line: no `<!--`, no `<details` (case-insensitive), no character of Unicode category Cc, Cf, Cs, Co, Zl or Zp, and no mention: an `@` followed by a letter that does not follow a word character, a dot or a hyphen (regex `(?<![\w.-])@[A-Za-z]`, so the source `code-reviewer@dod` is allowed). Problem `row <k>: hidden markup, control characters or a mention`.
 
 `src/tld/plan/summary.py` gets `--findings N` (integer at least 0; only with `--kind pr`, otherwise `ap.error("--findings is only for --kind pr")`). `check(text, kind, deviations_text=None, findings=None)` keeps its return type; when `kind == "pr"` it looks for the heading exactly `## Non-blocking findings` among `heads` (a `## ` line outside a fence): when it exists its body goes to `findings.check`, and each problem is added as `findings: <problem>`; two such headings give `2 '## Non-blocking findings' sections`; when it is missing and `findings is not None` the problem is `no '## Non-blocking findings' section`. Without `--findings`, a missing section is not a problem (older bodies and make-plan's prompt have none) but a present one is always checked, so a declined row without a reason always fails. The heading holds no word `summary`, so the near-miss rule does not fire. The module `findings.py` must not import `summary.py` at import time in a way that creates a cycle: it takes the word-count and placeholder helpers as plain functions defined in `findings.py` itself (copy the three-line `count_words`, `is_none` and `is_placeholder` logic; the 80-character cut `TEXT_MAX` is not needed). It prints nothing and runs nothing.
 
@@ -269,8 +269,9 @@ exactly like a blocking review finding, then dod runs again.
 ## 5. The fix round
 
 Run [policies/findings-fix.md](policies/findings-fix.md): the fix branch is `<feature>--fix-<n>` with the next free
-`<n>`, the merge message is `Merge <feature> fix-findings`, the item is `fix-findings`. Re-run the protected-path and
-lockfile check of step 2 after the merge.
+`<n>`, the merge message is `Merge <feature> fix-findings`, the item is `fix-findings`. After the merge run the
+protected-path and lockfile check again: `git diff --name-only --no-renames origin/<main>...origin/<feature>` against
+the main profile's list and the excluded set, as step 2 does.
 
 ## 6. The pull request
 
@@ -314,7 +315,7 @@ fix-round worker; take a change that is not small.
 ### 3.8 Evals
 
 - `fix-round-body` (p5): a prompt task on the `tiny_app` fixture. The prompt gives three findings with their outcomes (two fixed with sha values, one declined with a reason) and asks the agent to write `pr-body.md` for a pull request following `playbooks/policies/findings-fix.md` and to check it with `tld plan summary-check`. A new grader `findings_section_valid` (params `glob`, `count`) runs `tld.plan.findings.check` on the `## Non-blocking findings` section of the first document that matches. The stub writes a valid body.
-- `quick-refuses-large` (p4): `command: /tld:quick`, builder `tiny_app`; the arguments describe a change of many modules (move the storage layer to a database, add a web UI and write a migration). Graders: `result_matches` with `must: ["make-plan"]`, `forbidden_ops_absent`, `no_changes` with `allow: ["*"]`. An eval session has no GitHub tool (`docs/architecture/evals.md`), so the run stops at step 0.2 and its refusal names make-plan; the size refusal itself (step 1) is proved by the playbook contract test of p4, which checks that `quick.md` names make-plan in its refusal step and starts no worker before the size check.
+- `quick-refuses-large` (p4): `command: /tld:quick`, builder `tiny_app`; the arguments describe a change of many modules (move the storage layer to a database, add a web UI and write a migration). Graders: `result_matches` with `must: ["make-plan"]`, `forbidden_ops_absent`, `no_changes` with `allow: ["*"]`. An eval session has no GitHub tool (`docs/architecture/evals.md`), so the run stops at step 0.2 and its refusal names make-plan (the task description says it proves only that refusal); the size refusal itself (step 1) is proved by the playbook contract test of p4, which checks that `quick.md` names make-plan in its refusal step and starts no worker before the size check.
 
 ## 4. Manual steps
 
@@ -359,9 +360,11 @@ phases:
       - src/tld/plan/summary.py
       - tests/core/test_plan_findings.py
       - tests/core/test_plan_summary.py
+      - tests/core/test_mutants_file.py
+      - tests/mutation/mutants.yaml
       - docs/reference/cli.md
     brief: |
-      Read first: AGENTS.md, docs/reference/cli.md.
+      Read first: AGENTS.md, docs/reference/cli.md, tests/core/test_mutants_file.py.
       Do not edit any path outside `touches`; report a needed change elsewhere in your report.
       1. Read `src/tld/plan/summary.py` and its test file `tests/core/test_plan_summary.py` in full.
       2. Create `src/tld/plan/findings.py` as the plan's section 3.4 says: a module docstring, constants `MIN_VALUE_WORDS = 3`,
@@ -379,13 +382,26 @@ phases:
          with and without `n`, a row missing its status, a `declined:` row with a two-word reason, with the reason
          `none`, with the placeholder `tbd`, a `fixed` row with a six-character sha, a duplicate id, a gap in ids,
          `n=2` with three rows, `n=0` with a row, `<!--` in a row, a control character in a row, `@someone` in a row, and
-         one valid section of two rows with `n=2`). Extend `tests/core/test_plan_summary.py` (copy the helper style of
+         one valid section of two rows with `n=2`; plus: a row with source `code-reviewer@dod` returns `[]` (the role-source
+         case); the source `random`, the location `a b.py`, a two-word text, the id `G1`, the sha `xyz1234` and a 41-character
+         sha each give a problem; `<DETAILS>` is rejected; U+202E (category Cf) is rejected; a text containing ` \u00b7 `
+         is accepted; the rows `F2` then `F1` give the order problem; `None.` is accepted with `n=0` and rejected with `n=3`). Extend `tests/core/test_plan_summary.py` (copy the helper style of
          `pr_summary`) with: a pr body with a valid section and `--findings 2` exits 0; a missing section with
          `--findings 1` exits 1 and prints `summary: no '## Non-blocking findings' section`; a declined row with a
-         two-word reason exits 1 even without `--findings`; `--findings` with `--kind plan` is an argument error; two
-         sections print `2 '## Non-blocking findings' sections`.
+         two-word reason exits 1 even without `--findings`; `--findings` with `--kind plan` is an argument error;
+         `--findings -1` is an argument error; two sections print `2 '## Non-blocking findings' sections`; two valid rows
+         with `--findings 3` exit 1 and print `summary: findings: 2 rows, expected 3` (this proves `N` reaches the checker);
+         `--findings 0` with the section `None.` exits 0; a `## Non-blocking findings` line inside a fenced block is ignored;
+         a pr body without the section and without `--findings` exits 0.
       5. In `docs/reference/cli.md` change the `summary-check` row as section 3.7 says.
-      6. Run `.venv/bin/python -m pytest tests/core/test_plan_findings.py tests/core/test_plan_summary.py tests/core/test_cli_reference.py -q`
+      6. `tests/core/test_mutants_file.py` requires every mutant text of `tests/mutation/mutants.yaml` to occur in its file exactly
+         once: in `summary.py` do not repeat the lines `if len(exact) > 1:`, `end = after[0][0] if after else len(lines)`,
+         `sect = lines[start:end]` and `rest = line[2:] if line.startswith("- ") else line`; write the findings section slicing
+         with different names. Add `src/tld/plan/findings.py` to the `MODULES` tuple of `tests/core/test_mutants_file.py` and add
+         three mutants to `tests/mutation/mutants.yaml` for `findings.py` (pattern: the `summary.py` entries at the end of that
+         file): the `n` comparison `len(rows) != n` flipped, the `MIN_VALUE_WORDS` bound lowered by one, and the mention regex
+         removed; each names the test that kills it.
+      7. Run `.venv/bin/python -m pytest tests/core/test_plan_findings.py tests/core/test_plan_summary.py tests/core/test_cli_reference.py tests/core/test_mutants_file.py -q`
          (create the venv as `verify.fast` of the profile does if it does not exist), then the dod playbook.
       Stop condition: if `summary.check` cannot take the new argument without changing its return type, stop with
       `status=blocked` and say why.
@@ -416,10 +432,13 @@ phases:
          (a) a plain session `s1` is denied a write to `src/a.py` by plan-gate; after the prompt `/tld:quick x` with
          `invoked="quick"` the same session is allowed; a second session `s2` that sent no prompt is still denied.
          (b) a worker session (prompt text starting with the line `tld-worker: quick #1`, `invoked=None`) is allowed.
-         (c) in a quick session, protect-paths gives the same verdict for each path of `[".env", ".env.local", "uv.lock",
+         (c) open plan-gate for session `s1` with the prompt `/tld:quick x` and also write the marker the workers write
+         (`markers.write(str(repo), "plan-open")`); then, for each path of `[".env", ".env.local", "uv.lock",
          "package-lock.json", "go.sum", "Cargo.lock", ".github/workflows/tld-land.yml", ".github/workflows/tld-release.yml",
-         ".git/config", ".tld/toolkit.yaml", ".github/workflows/ci.yml", "src/app.py"]` as in a session with no prompt (the
-         protect-paths hook reads no session state); and the first nine are denied (exit 2) in both.
+         ".git/config"]`, protect-paths exits 2 both for `event("Write", repo, file_path=path, content="x")` and for
+         `bash("echo x > " + path, repo)`; and for `src/app.py` it exits 0 for both. A final test: a protect-paths verdict
+         for `.tld/toolkit.yaml` and `.github/workflows/ci.yml` is the same before and after the quick session opened (the
+         profile decides them, not the session).
       4. In `docs/architecture/hooks.md` add `quick` to the list of opening commands in the plan-gate section (line 265) and
          one sentence at the end of the "Workers" bullet: `A quick session opens like any other command; its workers open through the tld-worker: line and rule 0.`
       5. Run `.venv/bin/python -m pytest tests/core/test_hook_plan_gate.py tests/core/test_quick_guard.py tests/core/test_hook_protect_paths.py tests/core/test_hooks_doc_board_gate.py -q`, then the dod playbook.
@@ -438,9 +457,10 @@ phases:
       - playbooks/policies/roles.md
       - docs/architecture/roles.md
       - tests/core/test_findings_fix.py
+      - tests/core/test_summary_placement.py
       - evals/baselines/default.json
     brief: |
-      Read first: playbooks/implement.md, playbooks/policies/roles.md, docs/architecture/roles.md, tests/core/test_contracts.py (the neutrality and link tests).
+      Read first: playbooks/implement.md, playbooks/policies/roles.md, docs/architecture/roles.md, tests/core/test_contracts.py (the neutrality and link tests), tests/core/test_summary_placement.py.
       Do not edit any path outside `touches`. Do not edit the docs index.
       1. Create `playbooks/policies/findings-fix.md` with the full text of the plan's section 3.3 (the fenced markdown block), as is.
          It names no runtime tool or model and no `/tld:` form; links are relative.
@@ -449,9 +469,15 @@ phases:
       3. Edit `playbooks/policies/roles.md` and `docs/architecture/roles.md` as section 3.7 says.
       4. Create `tests/core/test_findings_fix.py` (pattern: `tests/core/test_implement_protected.py`): the policy file exists and
          links `untrusted-text.md`; `implement.md` links `policies/findings-fix.md`, contains `Finishing step 1b` text `1b.`, contains
-         `--findings <N>` and no longer contains the phrase `open non-blocking findings`; the policy mentions `Fixes-Finding:`,
+         `--findings <N>` and no longer contains the phrase `open non-blocking findings` (every phrase check runs on
+         whitespace-normalised text, `" ".join(text.split())`, because implement.md wraps lines); in implement.md `1a.` comes before
+         `1b.` before `Then settle the scope drift`, and `## Phases` comes before `## Non-blocking findings` in the body paragraph; the policy mentions `Fixes-Finding:`,
          `FIX-REPORT`, `## Non-blocking findings` and `declined: fix round did not complete`; the policy contains the sentence
          `Exactly one fix worker per run`; `make-plan.md` and `dod.md` do not link the policy.
+      4b. In `tests/core/test_summary_placement.py` the test `test_every_call_passes_on_a_valid_fixture[implement.md]` maps each
+         placeholder of a call to a file path from a two-item iterator, so the new third placeholder (`<N>`) fails it. Map the
+         token after `--findings` to the literal `0`; add `## Non-blocking findings` with the body line `None.` right after the
+         `## Phases` block of `PR_DOC`, and remove the words `Non-blocking findings: none.` from its final-review line.
       5. Run `.venv/bin/python -m pytest tests -q`. The baseline test fails because the command hashes changed; run
          `python3 evals/run.py baseline --refresh-hashes` and commit the file with a message that says: the change adds a
          step after the approved review and cannot change the outcome of an existing task. Run `python3 evals/run.py check-baseline` (exit 0).
@@ -477,6 +503,10 @@ phases:
       - tests/core/test_quick_playbook.py
       - tests/adapters/claude/test_structure.py
       - tests/adapters/claude/test_hooks_config.py
+      - tests/adapters/claude/test_hooks_compat.py
+      - tests/adapters/claude/test_hooks_prompt.py
+      - tests/adapters/claude/test_hook_board_gate_adapter.py
+      - tests/core/test_summary_placement.py
       - evals/tasks/quick-refuses-large/task.yaml
       - evals/stubs/quick-refuses-large.json
       - evals/baselines/default.json
@@ -486,8 +516,8 @@ phases:
       1. Create `playbooks/quick.md` with the full text of the plan's section 3.5 (the fenced markdown block), as is.
       2. Create `adapters/claude/commands/quick.md` as a copy of `adapters/claude/commands/implement.md` with: description `Do one small change end to end without a plan: create the tracking issue, refuse a large change, one worker, the final review, one fix round for the non-blocking findings, dod and one PR to the main branch`; `argument-hint: "<what to change: a prompt, an issue number, or both>"`; `model: sonnet`; the playbook path `playbooks/quick.md`; the last sentence identical to implement's. It stays under 1500 bytes.
       3. `src/tld/guard/board_gate.py:28`: add `"quick"` at the end of `RECORD_COMMANDS`.
-      4. `playbooks/policies/status-board.md`: in line 40 add `quick` to the list of playbooks that write a record, right after `implement`. In the record table, the `kind` row says `run` for implement and for a single-session prompt's worker: write `run` for implement, for quick and for a single-session prompt's worker. In the `plan_slug` row add `; quick's run is the same` after the single-session prompt's description.
-      5. Tests. `tests/core/test_contracts.py:25`: add `"quick"` to `COMMANDS`. `tests/core/test_board_record_wording.py:8`: add `"quick"` to `WRITERS`. `tests/adapters/claude/test_structure.py:64`: add `"quick"` to the tuple. `tests/adapters/claude/test_hooks_config.py:211`: add `("quick", True)`. `tests/core/test_hook_board_gate.py`: make the helper at line 40 treat `quick` like the other record commands (no mode) and add a test that `/tld:quick x` opens the state and blocks once without a write. Create `tests/core/test_quick_playbook.py` (pattern `tests/core/test_sysml_playbook.py`): `quick.md` links the five policies named in 3.5, names `tld plan summary-check` with `--findings`, names `make-plan` in its refusal step, never contains `/tld:`, names `tld board record-id` with `--run --plan-slug issue-`, contains `tld dod exempt`, contains `Too large:`, and does not contain the words `manifest` or `plan file` except in the sentence `no plan file` / `the manifest entry`; `record.COMMANDS` is unchanged (quick writes a run record).
+      4. `playbooks/policies/status-board.md`: in line 40 add `quick` to the list of playbooks that write a record, right after `implement`. In the record table, the `kind` row says `run` for implement and for a single-session prompt's worker: write `run` for implement, for quick and for a single-session prompt's worker. In the `plan_slug`, `plan_url` and `feature_branch` row add the sentence `quick's run has plan_slug issue-<n>, plan_url null and the items its playbook names.` after the single-session prompt's description (the single-session prompt's `phases: []` stays as it is).
+      5. Tests. `tests/core/test_contracts.py:25`: add `"quick"` to `COMMANDS`. `tests/core/test_board_record_wording.py:8`: add `"quick"` to `WRITERS`. `tests/adapters/claude/test_structure.py:64`: add `"quick"` to the tuple. `tests/adapters/claude/test_hooks_config.py:211`: add `("quick", True)`. `tests/core/test_hook_board_gate.py`: make the helper at line 40 treat `quick` like the other record commands (no mode) and add a test that `/tld:quick x` opens the state and blocks once without a write. Create `tests/core/test_quick_playbook.py` (pattern `tests/core/test_sysml_playbook.py`): `quick.md` links the five policies named in 3.5, names `tld plan summary-check` with `--findings`, names `make-plan` in its refusal step, never contains `/tld:`, names `tld board record-id` with `--run --plan-slug issue-`, contains `tld dod exempt`, contains `Too large:`, and does not contain the words `manifest` or `plan file` except in the sentence `no plan file` / `the manifest entry`; `record.COMMANDS` is unchanged (quick writes a run record). Further tests in the same file, on whitespace-normalised text: `quick.md` links `untrusted-text`, `status-board`, `research`, `protected-changes`, `pr-steward`, `roles`, `findings-fix` and `profile` under `policies/`; `tld guard allow-plan` appears only in the worker steps (section 2 and 3), not in Setup; `test_no_worker_starts_before_the_size_check`: the index of `## 1. The size check` is lower than the index of `Run make-plan #<n>`, which is lower than the first `start_worker(`, and step 1.3 holds `Never start a worker for a change that is not small` and `refused: too large`; `test_quick_runs_the_protected_path_check_three_times`: `--no-renames` occurs in the sections `## 2. The worker`, `## 5. The fix round` and `## 6. The pull request`, and in section 6 both the lockfile check and `tld plan summary-check` come before `github.pr_create` (pattern: `tests/core/test_implement_protected.py::test_merge_step_two_names_the_protected_change_line`); `test_quick_record_validates`: build the run record quick.md describes (items `implement`, `final-review`, `dod`, `fix-findings`, `pr`, all `pending`, `plan_slug` `issue-7`, `kind` `run`, `command` null) and check it with `tld.board.record` and with `tld board record-id --repo o/r --run --plan-slug issue-7`. In `tests/core/test_summary_placement.py` add `quick.md` to `test_every_call_passes_on_a_valid_fixture` (the placeholder after `--findings` maps to `0`; the fixture PR body already has the section after p3) and to the order check that `summary-check` comes before `github.pr_create`. In `tests/adapters/claude/test_hooks_compat.py` add `COMPAT["quick"]` with the rows (command, playbook phrase): (`git ls-remote --heads origin feature/demo`, `git ls-remote --heads origin <branch>`), (`git merge origin/main && git push origin feature/demo`, a phrase of the step that merges `origin/<main>` into `<feature>`; write it as it appears in quick.md), (`git merge --no-ff origin/feature/demo--fix-1`, `git merge --no-ff origin/<branch>`), (`git diff --name-only --no-renames origin/main...origin/feature/demo`, `git diff --name-only --no-renames origin/<main>...origin/<feature>`); the test `test_every_command_file_is_covered` needs exactly these rows. In `tests/adapters/claude/test_hooks_prompt.py` add a test that `invoked_command("/tld:quick x")` is `quick` (pattern: the existing prompt tests there) and one end-to-end `plan-gate` run for `/tld:quick x` (pattern: the existing ones). In `tests/adapters/claude/test_hook_board_gate_adapter.py` add `test_opening_commands_are_known_commands`: `set(plan_gate.OPENING) <= claude_adapter.known_commands()`.
       6. Create `evals/tasks/quick-refuses-large/task.yaml` and `evals/stubs/quick-refuses-large.json` as section 3.8 says (task pattern: `evals/tasks/implement-invalid-manifest/task.yaml`; stub pattern: `evals/stubs/make-plan-small.json` with `result_text` `quick stopped: no tracking issue could be created and nothing was changed. A change this size belongs to make-plan.`).
       7. Run `.venv/bin/python -m pytest tests -q`; then `python3 evals/run.py baseline --refresh-hashes` (message: new command; every other hash changed only through the status-board policy line) and `python3 evals/run.py run --agent stub --repeats 1 --require-pass`; then the dod playbook.
       Stop condition: if a contract test rejects a word of `quick.md`, fix the wording, never the test; if it cannot be made to pass, stop with `status=blocked`.
@@ -510,7 +540,7 @@ phases:
       Read first: docs/architecture/evals.md, evals/harness/graders.py, tests/core/test_evals_graders.py, evals/tasks/make-plan-small/task.yaml.
       Do not edit any path outside `touches`.
       1. In `evals/harness/graders.py` add the grader `findings_section_valid` (decorator `@grader("findings_section_valid")`, pattern: `sections_present`): params `glob` (default `*.md`) and `count` (integer). Take the first document of `ctx.docs(glob)` (none: `GradeResult(False, "no document")`); find the heading line `## Non-blocking findings`; the lines up to the next `## ` heading go to `tld.plan.findings.check(lines, count)` (import it inside the function with `plugin_script`'s sibling helper if one exists, else with `from tld.plan import findings`); problems give `GradeResult(False, first problem)`, none give `GradeResult(True, "section valid")`.
-      2. `tests/core/test_evals_graders.py`: add tests for a valid section, a missing section and a declined row with a short reason (pattern: the existing `sections_present` tests).
+      2. `tests/core/test_evals_graders.py`: `test_every_grader_has_cases` requires an entry in its `CASES` dict: add `CASES["findings_section_valid"]` (pattern: the existing entries). The good case is the stub body with `count: 3`; the bad cases are: no document, no `## Non-blocking findings` section, a declined row with a two-word reason, and `count: 2` with three rows.
       3. Create `evals/tasks/fix-round-body/task.yaml`: `id: fix-round-body`, description `The PR body lists every non-blocking finding as fixed or declined, in the grammar of playbooks/policies/findings-fix.md, and passes tld plan summary-check --findings.`, `prompt` (not a command): `Write pr-body.md for a pull request, following playbooks/policies/findings-fix.md ("The pull request section"). Three non-blocking findings came out of the review: F1 from the final review at notes/cli.py:12 (the --limit help text is missing), fixed in commit abc1234def; F2 from the code-reviewer role at dod at notes/store.py:30 (a variable name is unclear), fixed in commit 0123456789ab; F3 from the final review at notes/cli.py:40 (suggested: cache the note list), declined because notes are read once per run, so caching adds state for no gain. Start the body with "Closes #5", then "## Summary" with the labels the policy and tld plan summary-check expect for a pull request, then the findings section. Check the file with tld plan summary-check --kind pr --findings 3 and fix what it prints.`, fixture `builder: tiny_app`, `repeats: 3`, `timeout_s: 600`, `cost_ceiling_usd: 1.0`, `requires: [src/tld/plan/findings.py]`, graders `findings_section_valid` with `glob: pr-body.md`, `count: 3`, and `forbidden_ops_absent`.
       4. Create `evals/stubs/fix-round-body.json` (pattern: `evals/stubs/review-seeded.json` without `branch`): `files` holds `pr-body.md` with a valid body: `Closes #5`, a `## Summary` of the labels `**Deviations:** None.` and `**Review focus:** the three findings, rows below.`, then the three rows in the grammar (`- F1 · final-review · notes/cli.py:12 · the limit help text is missing · fixed abc1234def` and so on; F3 is `declined: notes are read once per run so caching adds state`).
       5. Run `.venv/bin/python -m pytest tests/core/test_evals_graders.py tests/core/test_evals_stubs.py tests/core/test_evals_tasks.py -q` and `python3 evals/run.py run --agent stub --repeats 1 --require-pass`, then the dod playbook.
@@ -541,7 +571,7 @@ phases:
       5. `docs/architecture/evals.md`: no change unless it lists the tasks by name; if it does, add `fix-round-body` and `quick-refuses-large` next to their kind.
       6. `playbooks/ask.md`, section "A change request": after the sentence that proposes `/make-plan`, add `For a change that looks small, also name `/quick <the user's words>`, which runs the whole small path in one session.` Keep the file free of the `/tld:` form.
       7. `CHANGELOG.md` under `## [Unreleased]`: a `### Added` list with: `/tld:quick runs one small change end to end without a plan: tracking issue, size check (a large change is refused and sent to /tld:make-plan), one worker, the final review, the fix round, dod and one pull request (#88).` and `tld plan summary-check --findings N checks the pull request's ## Non-blocking findings section.`; and a `### Changed` list with: `After an approving final review /tld:implement runs one fix round: one worker fixes or declines every non-blocking finding of the final review and the dod roles, and the pull request lists each as fixed or declined with its reason (#88).`. Do not add a version heading and do not change any version file.
-      8. Run `.venv/bin/python cli/tld ops docs-index check --profile .tld/toolkit.yaml`, `python3 evals/run.py check-baseline` (when it reports a stale command, run `python3 evals/run.py baseline --refresh-hashes` and say in the commit message that the change is a docs line only), `.venv/bin/python -m pytest tests -q`, then the dod playbook.
+      8. Run `.venv/bin/python cli/tld ops docs-index check --profile .tld/toolkit.yaml`, `python3 evals/run.py check-baseline` (it must exit 0: the docs and ask.md are outside the hash scope; when it does not, stop with `status=blocked` and name the stale command), `.venv/bin/python -m pytest tests -q`, then the dod playbook.
       Stop condition: if the docs-index check reports an error you did not cause, stop with `status=blocked` and quote it.
     acceptance:
       - "`.venv/bin/python cli/tld ops docs-index check --profile .tld/toolkit.yaml` exits 0"
