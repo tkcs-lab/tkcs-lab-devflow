@@ -29,6 +29,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - review: The worker could not run tld, so the orchestrator ran the security-reviewer: no blocking finding, four non-blocking (step 6.3 pushes to the PR head without the protected-path check; an outsider-only issue gives an empty ask; the branch kebab from an issue title is not validated; pr-steward branch table omits quick). Inputs for the fix round.
 - level: Phase brief pointed the worker at its manifest entry in the plan instead of pasting it verbatim, and asked for an adapter-level /tld:quick test (a p2 review follow-up).
 - final: Final review (code-reviewer, blocking): the quick playbook never pushes the fix round merge before the protected-path check and the pull request, so the pull request would open without the fixes it lists. Sent to fix-1.
+- retry: fix-1 (final review, blocking): quick.md now pushes the feature branch after each fix-branch merge once the fast checks and dod steps 1 to 4 pass, before the protected-path check; test added. The same gap remains in findings-fix.md step 4, which is plan-verbatim text, so it was left for the owner.
+- review: fix-1 security-reviewer (orchestrator-run): no blocking finding, one non-blocking (no defined recovery after a push if the protected-path re-check hits). test_board_report.py::test_report_slots failed once in a full run and passes alone three times: a timing-dependent board-server test unrelated to this branch.
 
 ## p5-fix-round-eval
 
