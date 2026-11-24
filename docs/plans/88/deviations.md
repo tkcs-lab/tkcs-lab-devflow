@@ -47,6 +47,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 ## Final review
 
 - final: Blocking: the fix round merge is not pushed before the pull request in quick (p4); fix-1 follows. Eleven non-blocking findings of the final reviewers go to the fix round.
+- final: Second final review approved: the blocking finding is fixed by fix-1. Non-blocking findings of both reviews and all role reviews are the input of the fix round.
 
 ## Finishing
 
