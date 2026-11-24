@@ -7,6 +7,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Added
 
+- /deps opens one combined pull request per run (chore/deps-<yyyymmdd>) with every green update group, security updates first; red groups are left out and named, Dependabot pull requests are never pushed to or commented on (new: tld ops deps-prepare, tld ops deps-body).
 - `tld ops release-check` judges a commit's check runs and status by the rule of the `tld-release` workflow (exit 0 green, 3 still running, 1 red).
 
 ### Fixed

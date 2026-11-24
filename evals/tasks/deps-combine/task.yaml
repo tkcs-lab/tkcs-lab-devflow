@@ -1,0 +1,23 @@
+id: deps-combine
+description: "Stub-graded only (a prompt task cannot reach the playbook): the git end state of /deps combine, one chore/deps branch from the green group with the lockfile from the lock command, the red group left out, no Dependabot branch touched."
+prompt: >-
+  Follow sections 3 to 5 of the deps playbook for this repository. Group 1 (pip /, Dependabot pull request
+  #11, branch origin/dependabot/pip/alpha-2.0.0) is to be fixed on the local branch tld-deps/1 (it does not
+  exist yet) and ends green; group 2 (pip /tools, pull request #12, branch origin/dependabot/pip/tools/gamma-2.0.0)
+  stays red after two fix attempts and is left out. GitHub's API is not reachable here: push the combined branch
+  to origin as chore/deps-20260101, open no pull request, and end with the branch name and a line starting
+  `Left out:` that names the left-out pull request.
+fixture:
+  builder: deps_combine
+model: sonnet
+repeats: 3
+timeout_s: 600
+cost_ceiling_usd: 1.5
+graders:
+  - forbidden_ops_absent
+  - {name: branch_files, ref_glob: "origin/chore/deps-*", count: 1}
+  - {name: branch_files, ref_glob: "origin/tld-deps/*", count: 0}
+  - bot_prs_untouched
+  - git_state_clean
+  - {name: result_matches, must: ["Left out:"]}
+  - {name: result_mentions, key: left_out}

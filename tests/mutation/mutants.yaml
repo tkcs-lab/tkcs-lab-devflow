@@ -73,6 +73,12 @@ tests:
   - tests/core/test_guard_trust.py
   src/tld/plan/active.py:
   - tests/core/test_plan_active.py
+  src/tld/ops/deps_checks.py:
+  - tests/core/test_ops_deps_prepare.py
+  src/tld/ops/deps_prepare.py:
+  - tests/core/test_ops_deps_prepare.py
+  src/tld/ops/deps_body.py:
+  - tests/core/test_ops_deps_body.py
 mutants:
 - id: NM1
   file: src/tld/guard/no_merge.py
@@ -711,3 +717,73 @@ mutants:
   why: the targets are not checked before the first write, so an unsafe target is found after the model was changed
   old: '    for path in (*model_paths.values(), *OUTPUTS, plan.dest):'
   new: '    for path in ():'
+- id: deps-uses-line-end-anchor
+  file: src/tld/ops/deps_checks.py
+  why: a uses line may carry anything after the ref (`@v5#x`), so a ref move is accepted with a suffix nobody reviewed
+  old: '(\s+#.*)?\s*$")'
+  new: '(\s+#.*)?")'
+- id: deps-sha-pin-replaced-by-tag
+  file: src/tld/ops/deps_checks.py
+  why: a SHA pin may be replaced by a movable tag
+  old: '            if SHA40.match(old_ref) and not SHA40.match(new_ref):'
+  new: '            if False:'
+- id: deps-bot-author-email
+  file: src/tld/ops/deps_checks.py
+  why: the author e-mail of a commit is not compared with the bot's
+  old: '    if author_name != BOT_AUTHOR[0] or author_email not in BOT_AUTHOR:'
+  new: '    if author_name != BOT_AUTHOR[0]:'
+- id: deps-bot-committer
+  file: src/tld/ops/deps_checks.py
+  why: any committer is accepted on a bot-authored commit
+  old: '    return committer_email in BOT_COMMITTER or committer_name == "GitHub"'
+  new: '    return True'
+- id: deps-protected-mcp-json
+  file: src/tld/ops/deps_checks.py
+  why: .mcp.json is not in the protected list, so a group may change the runtime's server list
+  old: '_FIXED_PROTECTED = (".tld/toolkit.yaml", ".mcp.json", '
+  new: '_FIXED_PROTECTED = (".tld/toolkit.yaml", '
+- id: deps-neutralising-skipped
+  file: src/tld/ops/deps_prepare.py
+  why: the lockfiles of a group are not put back to the merge-base blobs, so they are merged as text and conflict with main's
+  old: '            listed = git("ls-tree", "-z", mb, "--", path, cwd=root).stdout'
+  new: '            continue'
+- id: deps-work-branch-blob-equality
+  file: src/tld/ops/deps_prepare.py
+  why: a work branch may bring a workflow file that is not the bot branch's own blob (a fix commit changing a workflow)
+  old: '                    == blob for tip in bot_tips):'
+  new: '                    != blob for tip in bot_tips):'
+- id: deps-bot-check-skipped
+  file: src/tld/ops/deps_prepare.py
+  why: a branch with commits not made by the bot is combined
+  old: '    if not work and not identity_of_commits(root, mb, sha):'
+  new: '    if False:'
+- id: deps-base-is-origins-head
+  file: src/tld/ops/deps_prepare.py
+  why: a base that is not the commit origin reports for the default branch is accepted
+  old: '    if sha and t.branch and ls_remote_heads(root, head).get(head) == sha:'
+  new: '    if sha and t.branch:'
+- id: deps-merge-paths-unchecked
+  file: src/tld/ops/deps_prepare.py
+  why: the merged tree is not checked against the group's own paths, so a rename on main carries a stale group into a protected path
+  old: '    if set(raw_paths(root, head, tree)) != set(changed):'
+  new: '    if False:'
+- id: deps-protected-not-case-folded
+  file: src/tld/ops/deps_checks.py
+  why: protected paths are matched case-sensitively, so `.CLAUDE/settings.json` passes on a case-insensitive file system
+  old: '    path = fold(path)'
+  new: '    pass'
+- id: deps-body-package-regex
+  file: src/tld/ops/deps_body.py
+  why: a package name may hold a space (or a pipe or a backtick in the same way), which breaks the table
+  old: 'PACKAGE = re.compile(r"[A-Za-z0-9@][A-Za-z0-9@._/+-]{0,99}")'
+  new: 'PACKAGE = re.compile(r"[A-Za-z0-9@][A-Za-z0-9@._/+ -]{0,99}")'
+- id: deps-body-entry-limit
+  file: src/tld/ops/deps_body.py
+  why: 101 entries are accepted
+  old: 'MAX_ENTRIES = 100'
+  new: 'MAX_ENTRIES = 101'
+- id: deps-body-security-not-first
+  file: src/tld/ops/deps_body.py
+  why: security updates are not listed first
+  old: '    return (not entry["security"], entry["ecosystem"]'
+  new: '    return (False, entry["ecosystem"]'
