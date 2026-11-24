@@ -25,7 +25,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p4-quick-command
 
-- pending
+- worker: none
+- review: The worker could not run tld, so the orchestrator ran the security-reviewer: no blocking finding, four non-blocking (step 6.3 pushes to the PR head without the protected-path check; an outsider-only issue gives an empty ask; the branch kebab from an issue title is not validated; pr-steward branch table omits quick). Inputs for the fix round.
+- level: Phase brief pointed the worker at its manifest entry in the plan instead of pasting it verbatim, and asked for an adapter-level /tld:quick test (a p2 review follow-up).
 
 ## p5-fix-round-eval
 
