@@ -51,4 +51,5 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Finishing
 
-- pending
+- final: Scope disposition: no phase had an out-of-scope path, nothing to settle. dod passed (6690 tests, profile, policy, spec, sysml and docs-index checks) except the plan own broken relative link, which the owner decides.
+- final: The fix round was not run: the implement playbook this run followed predates the fix round that this plan adds. The non-blocking findings of the reviews and the dod roles are listed in the pull request body instead.
