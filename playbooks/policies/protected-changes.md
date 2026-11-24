@@ -14,6 +14,12 @@ A protected path is a path that matches the effective protect list (`hooks.prote
 (`ALWAYS_PROTECTED`) or the adapter's protected paths (`.mcp.json`, `.claude/settings*.json`, `.claude/hooks/**`),
 even when a profile lists them.
 
+**The deps exception.** The deps playbook's combined pull request may carry a dependency bot's own workflow
+version bumps: `tld ops deps-prepare` takes a change under `.github/workflows/` only when every change moves the ref
+of the same action and every commit carries the bot's identity, and leaves out any group that touches another
+protected path. The pull request body lists each action move and the owner reviews them there; no other path goes
+this way.
+
 ## The report line
 
 For each protected change a worker reports one line `protected-change: <path> - <why>`, followed by the unified
