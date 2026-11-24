@@ -29,7 +29,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p5-retire
 
-- pending
+- worker: Two spec scenarios (post-merge path-set check, case-folded protected paths) were added to the delta before archiving, because it lacked them. docs/reference/cli.md already had the two rows, so it was not touched.
+- review: Non-blocking, open: profile-reference.md says any unlisted changed lockfile keeps its group out, but the code only does so for built-in lockfile names; hooks-parsing.md says a workflow change is taken only as a bump by the bot, which overstates the identity check (a claim, not proof).
 
 ## Final review
 
