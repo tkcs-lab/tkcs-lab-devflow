@@ -691,13 +691,15 @@ phases:
          test_groups_applied_lockfiles_left_for_the_lock_command `git status --porcelain` is empty and
          `git diff --cached --quiet` exits 0 afterwards); test_nothing_applied (exit 3, JSON printed, no
          branch, the checkout unchanged); test_errors (parametrized, one case per error of 3.1 with its exact message,
-         no refs/heads/<branch>, HEAD unchanged, empty stdout; no trusted copy is made by pointing `refs/tld/trusted`
-         at another commit; an unreachable origin; an untracked file at a path the group adds; ref names `-x`, `a..b`, `a@{1}`, `x.lock`, `a//b`, `a/`;
+         no refs/heads/<branch>, HEAD unchanged, empty stdout; no trusted copy is made by calling `tld.guard.trust.trusted(repo)` once (it records a fresh
+         stamp), then `git update-ref refs/tld/trusted <another commit>`, expecting `deps: no trusted copy of the profile`; an unreachable origin; an untracked file at a path the group adds; ref names `-x`, `a..b`, `a@{1}`, `x.lock`, `a//b`, `a/`;
          a bad ref together with a dirty tree gives the ref message);
          test_prepare_leaves_remote_and_group_refs_unchanged (`git for-each-ref` without the new branch and
          `git ls-remote origin` are equal before and after; a lock entry `run: "touch ran"` never runs; a
          `.git/hooks/post-checkout` marker is never written); test_commit_order_and_no_change (commits follow the
-         `--group` order; a group already on main is `no-change`).
+         `--group` order; a group already on main is `no-change` with `file` null); in test_only_lockfiles_changed,
+         test_a_ref_without_the_bot_identity, test_a_group_that_does_not_apply and this test assert `file is None`,
+         and in one of them that every emitted `reason` is in `deps_checks.PREPARE_REASONS`).
       5. Add `src/tld/ops/deps_checks.py`, `src/tld/ops/deps_prepare.py` and `src/tld/ops/deps_body.py` to `MODULES` in
          tests/core/test_mutants_file.py. In tests/mutation/mutants.yaml add `tests:` entries mapping each of the two
          files of this phase to tests/core/test_ops_deps_prepare.py, and mutants with `id`, `file`, `why`, `old`,
@@ -713,6 +715,7 @@ phases:
     acceptance:
       - "`.venv/bin/python -m pytest tests/core/test_ops_deps_prepare.py -q` passes, and `.venv/bin/python -m pytest tests/core/test_ops_deps_prepare.py --collect-only -q` lists test_groups_applied_lockfiles_left_for_the_lock_command, test_what_counts_as_a_lockfile, test_lock_entries_from_defaults_and_explicit_values_alike, test_the_profile_comes_from_the_remote_default_branch, test_a_base_that_is_the_current_remote_head_is_accepted, test_a_lockfile_no_entry_covers, test_only_lockfiles_changed, test_a_ref_without_the_bot_identity, test_workflow_files_only_as_action_ref_moves, test_workflow_from_a_work_branch_needs_a_bot_ref, test_other_protected_paths, test_unexpected_kinds_of_change, test_a_group_that_does_not_apply, test_nothing_applied, test_errors, test_commit_order_and_no_change"
       - "`.venv/bin/python -m pytest tests/core/test_ops_deps_prepare.py::test_main_moved_with_the_same_lockfile_changed_still_applies tests/core/test_ops_deps_prepare.py::test_local_profile_does_not_choose_lock_commands tests/core/test_ops_deps_prepare.py::test_local_origin_main_moved_is_refused tests/core/test_ops_deps_prepare.py::test_prepare_leaves_remote_and_group_refs_unchanged -q` passes"
+      - "`.venv/bin/python tests/mutation/run_mutants.py --only <the ids of the new deps_checks and deps_prepare mutants, written out in the commit message>` exits 0"
       - "`.venv/bin/python cli/tld ops deps-prepare --help` exits 0"
       - "`.venv/bin/python -m pytest tests/core/test_cli_reference.py tests/core/test_contracts.py tests/core/test_mutants_file.py -q` passes"
       - "`.venv/bin/python -m pytest tests -q` passes"
@@ -762,6 +765,7 @@ phases:
       with the caps of 3.2, and report the word count.
     acceptance:
       - "`.venv/bin/python -m pytest tests/core/test_ops_deps_body.py -q` passes, and its `--collect-only -q` lists test_security_first, test_versions_not_known, test_workflow_files_and_action_moves_named, test_a_left_out_group_is_named, test_nothing_left_out, test_no_closing_keyword, test_untrusted_values_render_in_code_spans, test_untrusted_values_refused, test_body_passes_summary_check, test_every_prepare_reason_is_accepted_by_body"
+      - "`.venv/bin/python tests/mutation/run_mutants.py --only <the ids of the new deps_body mutants, written out in the commit message>` exits 0"
       - "`.venv/bin/python -m pytest tests/core/test_cli_reference.py tests/core/test_contracts.py tests/core/test_mutants_file.py -q` passes"
       - "`.venv/bin/python -m pytest tests -q` passes"
   - id: p3-deps-eval
