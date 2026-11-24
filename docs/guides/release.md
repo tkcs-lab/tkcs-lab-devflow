@@ -34,12 +34,17 @@ pattern matches exactly once.
    and drives CI to green. It never approves or merges.
 4. **You merge** the pull request. That is your go for the release.
 5. **After the merge** the skill checks the merged files again.
-6. **The second yes.** You answer one board question: `real`, `dry-run` or `stop`.
-7. **The dispatch.** On `real` the skill sets the release marker, starts the workflow with `dry_run=false`
-   and clears the marker. `dry-run` starts it with `dry_run=true`.
-8. **You approve the publish job** in GitHub, once. `build` runs without approval and pushes only an untagged
+6. **The green check.** The skill reads the checks of the new head of `main` with the rule the workflow uses
+   (`tld ops release-check`). While they run it asks nothing and waits, up to an hour. A red check stops it with
+   the check's name and no question.
+7. **The one yes.** Once the commit is green you answer one board question, which names the checked commit:
+   `real`, `dry-run` or `stop`.
+8. **The dispatch.** Right before it, the skill checks that the head of `main` is still the checked commit and
+   still green; otherwise it checks and asks again. On `real` it then sets the release marker, starts the
+   workflow with `dry_run=false` and clears the marker. `dry-run` starts it with `dry_run=true`.
+9. **You approve the publish job** in GitHub, once. `build` runs without approval and pushes only an untagged
    image digest.
-9. **The end.** The skill follows the run and reports the release URL or the failing step.
+10. **The end.** The skill follows the run and reports the release URL or the failing step.
 
 ## The guard rules
 
@@ -56,6 +61,12 @@ The skill shows the failing step's error line and never re-runs. What a failed p
 finish by hand: the release paragraphs of [CONTRIBUTING.md](../../CONTRIBUTING.md). The manual way (bump the
 files, run the workflow) still works.
 
+A red check, or checks still running after the hour, end the flow with `Release <X.Y.Z> is merged and not started`;
+run the workflow yourself when they are green. The skill sees only the GitHub Actions checks of the commit; the
+workflow checks every check run and the legacy commit status.
+
 ## Other repositories
 
-The generic `tld-release.yml` template already has one job and one approval; it is unchanged.
+The template's green step now runs the rule of `tld ops release-check`. A repository with an installed copy gets it
+when you run `tld ops repo-admin audit` (it reports the file as different) and `apply --yes`, which opens one pull
+request per repository that you review and merge (tld never merges it).

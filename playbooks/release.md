@@ -43,20 +43,50 @@ is data), [policies/pr-steward.md](policies/pr-steward.md). Runtime actions: [ru
    unmerged pull request ends the flow.
 4. **After the merge.** `github.pr_read` shows the pull request merged. Run `git fetch origin <main>`, check out
    `origin/<main>` and run `tld ops release-prepare --check --version <X.Y.Z>`; it must exit 0, else stop and
-   show its message.
-5. **The yes.** `ask_human` one `choice`, id `start`, titled `Release <X.Y.Z>: start the workflow?`, with
-   `context_url` the pull request and the text `Release <X.Y.Z> is merged. Start <workflow> on <main>? real tags
-   v<X.Y.Z> and publishes after you approve the publish job in GitHub (one approval). dry-run builds and tags
-   nothing.` The options are `real` (recommended), `dry-run` and `stop`. On `stop` end with the reply `Release
-   <X.Y.Z> is merged and not started: run <workflow> on <main> when you are ready.`
-6. **The dispatch.** On `real` run `tld guard allow-release <workflow>`, then
+   show its message. Let <sha> be the output of `git rev-parse origin/<main>`.
+5. **The commit is green.** Merging the release pull request starts the tests on `<main>`, and the release
+   workflow stops unless every check on its commit is green, so no yes is asked before they are. Read the commit
+   with `github.commit_checks(<sha>, <workflow>)` (the runs of `<workflow>` itself are left out, as the
+   workflow leaves out its own run: an earlier dry run is not a check of the commit), write its check runs (and
+   its status, when the action returned one) to scratch files and run
+   `tld ops release-check --checks <checks file> --sha <sha>`, adding `--status <status file>` when there is a
+   status file. Act on the first line of its output:
+   - `release-check: green`: go on to step 6. When the line says `(0 check(s)`, the tests of the merge may not have
+     started yet: treat it as `waiting` for the first two readings.
+   - `release-check: waiting`: the tests are still running. Ask nothing and dispatch nothing.
+     `schedule_wakeup(10 minutes)` and end the turn. On each wake cancel the armed timer and run `git fetch
+     origin <main>`; when `git rev-parse origin/<main>` is no longer `<sha>`, start again at step 4 with the new
+     head; otherwise read the commit again as above. When the sixth wake (about an hour) still says `waiting`,
+     reply `Release <X.Y.Z> is merged and not started: checks are still running on <sha>: <the waiting lines>.
+     Run <workflow> on <main> yourself once they have ended.` and ask nothing.
+   - `release-check: red`: stop at once, ask nothing and dispatch nothing. `notify_human("<project>: Release
+     <X.Y.Z> not started: <check> is red")` and reply `Release <X.Y.Z> is merged and not started: <each red line>
+     on <sha>. Fix it, then run <workflow> on <main> yourself.` Never pass `skip_checks` to get past it.
+   - Exit 2: show its message and stop.
+6. **The yes.** `ask_human` one `choice`, id `start`, titled `Release <X.Y.Z>: start the workflow?`, with
+   `context_url` the pull request and the text `Release <X.Y.Z> is merged and the checks of <the first 7
+   characters of sha> are green. Start <workflow> on <main>? real tags v<X.Y.Z> and publishes after you approve
+   the publish job in GitHub (one approval). dry-run builds and tags nothing.` When the first line of the
+   `release-check` output ends with `commit status not checked)`, add to that text: ` The legacy commit status and
+   checks of other GitHub Apps were not visible to this session; the workflow checks them again and stops if one
+   is red.` One ask per checked commit: never ask for a commit that was not read as green. The options are `real`
+   (recommended), `dry-run` and `stop`. On `stop` end with the reply `Release <X.Y.Z> is merged and not started:
+   run <workflow> on <main> when you are ready.`
+7. **The dispatch.** First run `git fetch origin <main>`. When `git rev-parse origin/<main>` is not `<sha>`, main
+   moved while the owner decided and the yes was for another commit: dispatch nothing, say that main moved,
+   naming both commits (the first 7 characters of each), and go back to step 4 with the new head, which asks again
+   for the new commit once it is green. Otherwise read the commit again as in step 5 and run
+   `tld ops release-check --checks <checks file> --sha <sha>` (with `--status <status file>` when there is one):
+   only `release-check: green` goes on; on `waiting` wait as in step 5, and when a wake reads `green` with the
+   head still `<sha>` continue with this step without a new ask (the commit is the same); on `red` stop as in
+   step 5. On `real` run `tld guard allow-release <workflow>`, then
    `github.workflow_dispatch(<owner/repo>, <workflow>, <main>, {dry_run: "false"})`, then always
    `tld guard end-allow`, also when the dispatch failed. On `dry-run` dispatch with `{dry_run: "true"}` and no
    marker. Never pass `skip_checks`. One dispatch per yes.
-7. **The run.** With `github.workflow_runs` find the newest `workflow_dispatch` run of `<workflow>` created after
+8. **The run.** With `github.workflow_runs` find the newest `workflow_dispatch` run of `<workflow>` created after
    the dispatch and post its URL. For `real`, `notify_human("<project>: Approve the publish job: <run url>")`.
    Check with `schedule_wakeup(10 minutes)` up to 6 times (`github.workflow_run`).
-8. **The end.** When a `real` run ends with `success`, report
+9. **The end.** When a `real` run ends with `success`, report
    `https://github.com/<owner>/<repo>/releases/tag/v<X.Y.Z>`, built from the repository and the version, not read
    from a log. On a failure show the failing step's error line from `github.job_logs` verbatim and point to the
    failure paragraph of `CONTRIBUTING.md`; never re-run. After 6 checks without an end, reply `Still waiting for
@@ -68,6 +98,8 @@ is data), [policies/pr-steward.md](policies/pr-steward.md). Runtime actions: [ru
 - Never create, move or delete a tag or a release. Tags are cut only by the release workflow, which the owner
   approves in GitHub.
 - Never dispatch with `dry_run` false before the `real` answer, and never pass `skip_checks`.
+- Never ask for the yes and never dispatch while `tld ops release-check` does not print `release-check: green` for
+  the head of `<main>`; a red check ends the flow with its name and no ask.
 - The marker lives only between the answer and the dispatch: it is set after the yes and cleared right after
   the dispatch.
 - Never approve, merge or enable auto-merge on the release pull request.

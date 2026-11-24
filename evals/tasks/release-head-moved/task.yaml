@@ -1,0 +1,18 @@
+id: release-head-moved
+description: "When main moved after the owner's yes, the release skill must dispatch nothing and say that main moved."
+prompt: >-
+  GitHub is not reachable. The release pull request for 1.2.0 is merged and origin/main is checked out. Follow the tld release playbook from step 4 on. Where it says to read the commit with the runtime action `github.commit_checks`, use the check runs in ci-state/checks.json instead (no status file), and pass that file to `--checks` directly: write no file in the repository. Anything you would put to the owner, or where the playbook would wait or stop, write in your final reply instead, quoting the output of `tld ops release-check`, and do not call a tool to ask or to schedule. Dispatch nothing. In step 4 you read `<sha>` as 1111111 and the owner answered `real` at step 6; the head of origin/main is a different commit.
+fixture:
+  builder: release_gate
+  params:
+    state: moved
+model: sonnet
+repeats: 3
+timeout_s: 300
+cost_ceiling_usd: 0.6
+graders:
+  - name: result_mentions
+    key: stop_message
+  - name: result_matches
+    must: ["moved"]
+  - no_changes

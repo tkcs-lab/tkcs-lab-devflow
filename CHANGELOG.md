@@ -5,6 +5,14 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+### Added
+
+- `tld ops release-check` judges a commit's check runs and status by the rule of the `tld-release` workflow (exit 0 green, 3 still running, 1 red).
+
+### Fixed
+
+- The release skill no longer asks for the go while the release commit's checks are running or red: it waits up to an hour, names a red check and asks nothing, asks once when the commit is green, and checks the head again right before the dispatch. The `tld-release.yml` template judges green with the same rule: update installed copies with repo-admin (one pull request per repository, never merged by tld).
+
 ## [1.5.0] - 2026-11-23
 
 ### Added

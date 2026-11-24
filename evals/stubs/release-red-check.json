@@ -1,0 +1,8 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "Release 1.2.0 is merged and not started. tld ops release-check printed `release-check: red` and `red: lint: completed failure`, `waiting: test: in_progress`. Fix lint, then run release.yml on main yourself. Nothing was asked or dispatched.",
+  "actions": []
+}
