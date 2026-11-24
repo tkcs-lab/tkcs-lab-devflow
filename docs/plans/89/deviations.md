@@ -14,7 +14,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-deps-body
 
-- pending
+- None.
+- review: Decisions the plan left open were taken by the worker: entry index is 0-based, left-out count counts entries, file may be null, pr capped at 10^9, moves/files/reason/file optional. Non-blocking, open: ecosystem names in the Scope line are not in code spans.
 
 ## p3-deps-eval
 
