@@ -218,12 +218,17 @@ Every command has at least one task (`tests/core/test_evals_stubs.py::test_every
 | `docs-check-unindexed` | `/docs check` with a doc missing from the docs index | the result names `docs/sync.md`; nothing changed |
 | `board-unconfigured` | `/board` without the board variables | the result names `TLD_BOARD_URL` and `TLD_BOARD_TOKEN`; nothing changed |
 | `migrate-dry-run` | `/migrate --dry-run` on a claude-toolkit era repository | the result shows the plan (the profile move and the dropped `models.planner`); nothing changed |
+| `release-red-check` | the release skill after the merge, with a red check in `ci-state/checks.json` | the result names `lint: completed failure` and `not started`; no ask for the yes; nothing changed |
+| `release-checks-running` | the same, with a check still running | the result has `waiting: test: in_progress`; no ask for the yes; nothing changed |
+| `release-head-moved` | the same, with the head moved since the owner's yes | the result says main moved and names both commits; nothing changed |
 
-The seven command tasks of the last rows check a documented stop: the outcome is known without GitHub, a board or
+The six command tasks from `land-needs-bot-login` to `migrate-dry-run` check a documented stop: the outcome is known without GitHub, a board or
 a judgement call (fixture builder `commands`). They catch a command that no longer reads the profile, or that
 acts before it has checked what its playbook says to check. The real work of `/land`, `/deps`, `/upstream` and
 `/implement` needs GitHub and child sessions; see [evals-implement.md](evals-implement.md) for what a stubbed variant could
 add.
+
+The three release tasks give the playbook a fixed checks file; no real run is measured.
 
 The guardrail tasks test the hooks of `docs/architecture/hooks.md` in a real session, so they follow that document's
 semantics: a **local `git merge` is allowed**, a push to the main branch, `gh pr merge` and the merge MCP
