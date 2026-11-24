@@ -94,10 +94,11 @@ This step always runs once a group is green, also after 80% of the time budget: 
    security group, `pr: null`) with its ecosystem; `directory` (`/` plus the directory of the first changed non-lockfile
    path, `/` for the root; the audit entry's `cwd` for an audit-only group); `security` (true when an audit finding
    names one of its packages); `files` (the first 200) and `moves` (from `workflow_moves`) from the entry of its own
-   branch in the JSON of section 3 step 2 (one `--group` there is one pull request's branch); `state` (`included` when the
-   combine entry's `state` is `applied`, `left_out` otherwise; `deps-body` rejects `applied`), `reason` and `file`
-   from the combine entry of its group (this step's JSON), or from section 3 when the group was left out
-   there; and `updates` read from its title only when the whole title matches
+   branch in the JSON of section 3 step 2 (one `--group` there is one pull request's branch); `state`, `reason` and `file`: a pull request whose own
+   section 3 entry is `left_out` keeps that entry's `state`, `reason` and `file`, also when its group went green
+   (its change is not on the branch); any other takes `state` `included` when the combine entry's `state` is
+   `applied`, `left_out` otherwise (`deps-body` rejects `applied`), with `reason` and `file` from the combine entry of
+   its group (this step's JSON); and `updates` read from its title only when the whole title matches
    `^Bump (\S+) from (\S+) to (\S+)( in \S+)?$` (otherwise an empty list). Run `tld ops deps-body <entries file>`
    into the body file. When the repository has a pull request template (`.github/pull_request_template.md`,
    `.github/PULL_REQUEST_TEMPLATE.md`, `docs/pull_request_template.md` or `pull_request_template.md`, the first
