@@ -60,7 +60,11 @@ PR_DOC = """Closes #36
 
 - [x] The check passes.
 
-**Final review:** approve. Non-blocking findings: none.
+**Final review:** approve.
+
+## Non-blocking findings
+
+None.
 
 ## Scope
 
@@ -137,7 +141,13 @@ def test_every_call_passes_on_a_valid_fixture(path, tmp_path):
         dev = tmp_path / f"dev{n}.md"
         dev.write_text(DEVIATIONS)
         files = iter([str(doc), str(dev)])
-        argv = [re.sub(r"^X$", lambda _: next(files), tok) for tok in rest.split()]
+        toks = rest.split()
+        argv = []
+        for i, tok in enumerate(toks):
+            if tok == "X" and i and toks[i - 1] == "--findings":
+                argv.append("0")  # the count of the fixture's section
+            else:
+                argv.append(re.sub(r"^X$", lambda _: next(files), tok))
         r = subprocess.run(tld_cmd("plan", "summary-check", *argv), capture_output=True, text=True, timeout=60)
         assert (r.returncode, r.stdout.startswith("summary: OK")) == (0, True), r.stdout + r.stderr
 
