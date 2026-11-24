@@ -79,6 +79,15 @@ def test_quick_runs_the_protected_path_check_three_times():
     assert six.index("tld plan summary-check") < create
 
 
+def test_quick_pushes_each_fix_merge_before_the_checks_that_read_origin():
+    four = " ".join(part("## 4. The definition of done", "## 5. The fix round").split())
+    assert "push `<feature>`" in four
+    five = " ".join(part("## 5. The fix round", "## 6. The pull request").split())
+    assert "push `<feature>`" in five and "never force" in five
+    assert five.index("push `<feature>`") < five.index("--no-renames")
+    assert FLAT.index("push `<feature>`", FLAT.index("## 5. The fix round")) < FLAT.index("github.pr_create")
+
+
 def run_record(**changes):
     items = [{"id": i, "title": i, "depends_on": [], "complexity": "S", "state": "pending", "session": None,
               "branch": None, "started_at": None, "finished_at": None}

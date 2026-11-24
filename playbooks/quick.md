@@ -98,12 +98,14 @@ blocking).` on the issue.
 ## 4. The definition of done
 
 Run the dod playbook on `<feature>` ([dod.md](dod.md)). A `FAIL` row goes to a fix worker on `<feature>--fix-<n>`
-exactly like a blocking review finding, then dod runs again.
+exactly like a blocking review finding; once its merge passes the fast checks and dod steps 1 to 4, push `<feature>`
+(never force), then dod runs again.
 
 ## 5. The fix round
 
 Run [policies/findings-fix.md](policies/findings-fix.md): the fix branch is `<feature>--fix-<n>` with the next free
-`<n>`, the merge message is `Merge <feature> fix-findings`, the item is `fix-findings`. After the merge run the
+`<n>`, the merge message is `Merge <feature> fix-findings`, the item is `fix-findings`. After the merge, once the fast checks and dod steps 1 to 4 pass, push `<feature>` (never
+force): the policy leaves the merge local. Then run the
 protected-path and lockfile check again: `git diff --name-only --no-renames origin/<main>...origin/<feature>` against
 the main profile's list and the excluded set, as step 2 does.
 
