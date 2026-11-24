@@ -187,6 +187,8 @@ def handover_errors(handover, repo: str) -> list[str]:
     """The error messages (without the `status-record: ` prefix) of a make-plan `handover` object."""
     if not isinstance(handover, dict):
         return ["'handover' must be an object"]
+    if not (isinstance(repo, str) and REPO.fullmatch(repo)):
+        return ["'repo' must look like owner/name before a 'handover' link can be checked"]
     errors: list[str] = []
     for key in HANDOVER_FIELDS:
         if key not in handover:
@@ -362,7 +364,7 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
             errors.append("'project' must match ^[a-z0-9-]+$")
         elif "--" in project:
             errors.append("'project' must not contain a double hyphen (it separates project and command)")
-    if "repo" in rec and not (isinstance(rec["repo"], str) and REPO.match(rec["repo"])):
+    if "repo" in rec and not (isinstance(rec["repo"], str) and REPO.fullmatch(rec["repo"])):
         errors.append("'repo' must look like owner/name")
     elif isinstance(project, str) and SLUG.match(project) and "--" not in project and "repo" in rec:
         if project != project_slug(rec["repo"]):
@@ -498,7 +500,7 @@ def _record_id(args: list[str]) -> int:
         a = sp.parse_args(args)
     except SystemExit as exc:
         return exc.code if isinstance(exc.code, int) else 1
-    if not REPO.match(a.repo):
+    if not REPO.fullmatch(a.repo):
         sp.error(f"'{a.repo}' does not look like owner/name")
     project = project_slug(a.repo)
     if not project:
@@ -535,7 +537,7 @@ def main(argv: list[str] | None = None) -> int:
         sp = argparse.ArgumentParser(prog="tld board project-slug", description="Print the project slug of a repository.")
         sp.add_argument("repo", help="owner/name")
         a = sp.parse_args(args[1:])
-        if not REPO.match(a.repo):
+        if not REPO.fullmatch(a.repo):
             print(f"status-record: '{a.repo}' does not look like owner/name", file=sys.stderr)
             return 1
         print(project_slug(a.repo))

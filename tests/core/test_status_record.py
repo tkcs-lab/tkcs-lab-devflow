@@ -703,3 +703,14 @@ def test_handover_rules_match_summary_check():
 def test_old_board_refuses_handover_with_one_named_error(monkeypatch):
     monkeypatch.setattr(REC, "OPTIONAL_FIELDS", ())
     assert REC.validate(good_handover()) == ["'handover' is not a known field"]
+
+
+def test_handover_refuses_a_repo_with_a_trailing_newline():
+    repo = "tkcs-lab/tkcs-lab-devflow\n"
+    rec = good_handover()
+    rec["repo"] = repo
+    rec["handover"].update(issue_url=f"https://github.com/{repo}/issues/7", plan_url=f"https://github.com/{repo}/blob/main/p.md",
+                           spec_url=None, next_command=None)
+    assert REC.validate(rec) == [
+        "'repo' must look like owner/name",
+        "'repo' must look like owner/name before a 'handover' link can be checked"]

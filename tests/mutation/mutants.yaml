@@ -744,3 +744,8 @@ mutants:
   why: a handover on a record that is not done is accepted
   old: '        if rec.get("status") != "done":'
   new: '        if False:'
+- id: REC-H7
+  file: src/tld/board/record.py
+  why: a repo with a trailing line break is accepted (fullmatch became match)
+  old: '    if "repo" in rec and not (isinstance(rec["repo"], str) and REPO.fullmatch(rec["repo"])):'
+  new: '    if "repo" in rec and not (isinstance(rec["repo"], str) and REPO.match(rec["repo"])):'
