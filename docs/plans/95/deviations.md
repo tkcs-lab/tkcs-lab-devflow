@@ -22,7 +22,10 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p4-playbook-handover
 
-- pending
+- worker: Worker reported no deviations of its own.
+- retry: Sent back twice: first because a sweep test knows only the placeholder feature_branch with an underscore, so the playbook span was reworded; then for the owner decision below.
+- gate: Owner decision (board ask): the secret scan of the Summary now runs at the end of section 4, before any commit, push or post, instead of at section 5 step 3 as plan 3.4 words it; step 3 writes the stored output. Also added: a retry cap, stop-and-rotate for published content, old-board fallback only for unknown-field errors.
+- review: Non-blocking, left for the pull request: rerun the scan if the plan changes after it; do not hand-edit the handover object after a board error; the placeholder spelling feature_branch versus feature branch (the sweep test needs the underscore form).
 
 ## p5-retire
 
