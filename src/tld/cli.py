@@ -23,6 +23,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("plan", "scope-check"): ("tld.plan.scope", (), "check | disposition | record | section: scope drift"),
     ("plan", "deviations"): ("tld.plan.deviations", (), "init | add | check: the deviations log next to a plan"),
     ("plan", "summary-check"): ("tld.plan.summary", (), "check the Summary section of a plan, an issue body or a pull request body"),
+    ("plan", "handover"): ("tld.plan.handover", (), "print the board hand-over of a finished plan: its Summary, links and the implement command"),
     ("plan", "check-url"): ("tld.plan.phases", ("check-url",), "accept a plan URL (<plan_dir>/<n>/plan.md on main or its feature branch; plan/* deprecated)"),
     ("plan", "check-commands"): ("tld.plan.phases", ("check-commands",), "which verify_after_merge commands the profile trusts"),
     ("plan", "branch-name"): ("tld.plan.phases", ("branch-name",), "print a plan, review, feature, phase or fix branch"),
