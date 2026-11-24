@@ -119,6 +119,11 @@ def test_prompt_with_sysml_init_opens_the_session(repo):
     assert write(repo, repo / "a.txt", sid="other").verdict == "deny"
 
 
+def test_prompt_with_quick_opens_the_session(repo):
+    assert prompt(repo, "/tld:quick fix the typo", "quick").context is None
+    assert write(repo, repo / "a.txt").verdict == "allow"
+
+
 def test_prompt_with_spec_init_opens_the_session(repo):
     assert prompt(repo, "/tld:spec init", "spec").context is None
     assert write(repo, repo / "a.txt").verdict == "allow"
