@@ -94,8 +94,9 @@ This step always runs once a group is green, also after 80% of the time budget: 
    security group, `pr: null`) with its ecosystem; `directory` (`/` plus the directory of the first changed non-lockfile
    path, `/` for the root; the audit entry's `cwd` for an audit-only group); `security` (true when an audit finding
    names one of its packages); `files` (the first 200) and `moves` (from `workflow_moves`) from the entry of its own
-   branch in the JSON of section 3 step 2 (one `--group` there is one pull request's branch); `state`, `reason`
-   and `file` from the combine entry of its group (this step's JSON), or from section 3 when the group was left out
+   branch in the JSON of section 3 step 2 (one `--group` there is one pull request's branch); `state` (`included` when the
+   combine entry's `state` is `applied`, `left_out` otherwise; `deps-body` rejects `applied`), `reason` and `file`
+   from the combine entry of its group (this step's JSON), or from section 3 when the group was left out
    there; and `updates` read from its title only when the whole title matches
    `^Bump (\S+) from (\S+) to (\S+)( in \S+)?$` (otherwise an empty list). Run `tld ops deps-body <entries file>`
    into the body file. When the repository has a pull request template (`.github/pull_request_template.md`,
@@ -118,7 +119,7 @@ This step always runs once a group is green, also after 80% of the time budget: 
    `<main>`, title `"chore(deps): <u> dependency updates <yyyy-mm-dd>"`, the body file), with `git.codeowners`
    request their review once (`github.pr_update`), and `github.pr_subscribe` it. An earlier combined pull request
    of step 5 is then closed with the comment `Superseded by #<new>.` (`github.issue_comment`, then `github.pr_update`
-   with state closed) only when it has no review and every commit on it is by `git.bot_login`; otherwise set
+   with state closed) only when it has no review and every commit on it is by `git.bot_login` or by `tld <tld@localhost>`; otherwise set
    `needs_you` with `Close deps PR #<old> (superseded by #<new>)`.
 7. **No pull request** (nothing green, nothing applied, or the push refused): the left-out groups keep their
    dependency-bot pull requests for the owner.
