@@ -229,7 +229,7 @@ manual_after:
     title: Look at a Plan ready card on a phone-width browser and copy its command
     why: the Playwright checks stub the clipboard and use a fixed page; only a real browser shows the layout, the tap behaviour and what lands on the clipboard
 verify_after_merge:
-  - .venv/bin/python -m pytest tests/core/test_status_record.py tests/core/test_board_rules.py tests/core/test_board.py -q
+  - .venv/bin/python -m pytest -q -k handover
 final_checks:
   - tld plan deviations check --file docs/plans/95/deviations.md --plan docs/plans/95/plan.md --all exits 0
   - the changelog has entries under "## [Unreleased]" and no new version heading
