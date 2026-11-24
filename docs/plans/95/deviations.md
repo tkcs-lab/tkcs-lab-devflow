@@ -29,7 +29,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p5-retire
 
-- pending
+- worker: Worker reported no deviations of its own.
+- review: Non-blocking, left for the pull request or the final review: the maintenance guide says a dismissed or old card moves to Done where the code and the spec say Hidden; the spec scenario for a secret in another field describes a message that the record rules pre-empt for the marker case; the changelog repeats the feature in three lines.
 
 ## Final review
 
