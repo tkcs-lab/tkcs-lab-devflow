@@ -149,6 +149,15 @@ class Ctx:
     def disabled(self, name: str) -> bool:
         return name in trusted_disable(self)
 
+    def disabled_or_on(self, name: str) -> bool:
+        """`disabled` for a gate: a malformed `hooks` or `hooks.disable` (working or trusted copy) never switches the
+        guard off. It counts as not disabled and leaves a notice."""
+        try:
+            return self.disabled(name)
+        except ProfileError as exc:
+            add_notice(self, str(exc))
+            return False
+
 
 def trusted_disable(ctx: Ctx) -> list[str]:
     """`hooks.disable` from the trusted copy only; [] when there is none (every guard on)."""

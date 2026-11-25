@@ -311,3 +311,16 @@ def test_a_non_mapping_hooks_section_does_not_switch_a_gate_off(tmp_path):
     # the trusted copy itself has a malformed hooks section: the gate is still on for a working copy with it off
     repo = make_repo_with_origin(tmp_path / "t", committed=PROFILE + "hooks: 5\n", working=PROFILE_GATES_OFF)
     assert run("plan-gate", ev(repo)).code == 2
+
+
+def test_a_malformed_disable_never_switches_plan_gate_or_board_gate_off(tmp_path, monkeypatch):
+    from tld.guard import board_gate
+    ev = lambda r: {"session_id": "s1", "cwd": str(r), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                    "tool_input": {"file_path": "a.txt", "content": "x"}}
+    for n, bad in enumerate(("hooks:\n  disable: 5\n", "hooks:\n  disable: plan-gate\n", "hooks: 5\n")):
+        # working copy malformed
+        repo = make_repo_with_origin(tmp_path / f"w{n}", committed=PROFILE, working=PROFILE + bad)
+        assert run("plan-gate", ev(repo)).code == 2, bad
+        # trusted copy malformed, working copy has the gate off
+        repo = make_repo_with_origin(tmp_path / f"t{n}", committed=PROFILE + bad, working=PROFILE_GATES_OFF)
+        assert run("plan-gate", ev(repo)).code == 2, bad

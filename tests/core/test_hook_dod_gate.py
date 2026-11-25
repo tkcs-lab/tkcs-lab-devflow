@@ -333,3 +333,11 @@ def test_both_notices_are_kept(tmp_path):
     assert _common.gate_enabled(ctx, "dod_gate") is True
     _common.dod_profile(ctx)
     assert "hooks.dod_gate.enabled" in ctx.notice and "verify.dod" in ctx.notice
+
+
+def test_a_damaged_attempt_counter_still_blocks(tmp_path):
+    from tld.dod import gate
+    repo = repo_with(tmp_path, ["exit 1"], enabled=None)
+    assert run(HOOK, stop(repo)).code == 2
+    gate._state_file(str(repo), "s1").write_text(json.dumps({"attempts": "x", "profile_attempts": "y"}))
+    assert run(HOOK, stop(repo)).code == 2

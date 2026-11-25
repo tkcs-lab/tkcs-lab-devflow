@@ -243,7 +243,7 @@ def _evaluate_locked(ctx: Ctx, a: Action, path: Path) -> str | None:
         return None
     if a.kind != "stop":
         return None
-    if ctx.disabled(NAME):
+    if ctx.disabled_or_on(NAME):
         return None
     state = _load(path)
     if state is None:

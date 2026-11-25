@@ -100,7 +100,7 @@ def _evaluate(ctx: Ctx) -> str | None:
         return None
     a = ctx.action
     if a.kind == "prompt":
-        if ctx.disabled(NAME):
+        if ctx.disabled_or_on(NAME):
             return None
         if a.invoked in OPENING and a.session_id:
             open_session(ctx.project_dir, a.session_id)
@@ -117,7 +117,7 @@ def _evaluate(ctx: Ctx) -> str | None:
     what = _target(ctx)
     if what is None:
         return None
-    if ctx.disabled(NAME):
+    if ctx.disabled_or_on(NAME):
         return None
     if not a.session_id and markers.read(ctx.project_dir, "plan-open") is None:
         return None

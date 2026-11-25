@@ -126,6 +126,14 @@ def fingerprint(project: str) -> str:
 
 # --------------------------------------------------------------------------- running the gate
 
+def _count(state: dict, key: str) -> int:
+    """A counter of the state file; a damaged value counts as 0 instead of ending the gate with an error."""
+    try:
+        return max(0, int(state.get(key, 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _dod_profile(ctx: Ctx) -> dict | None:
     """dod_profile, with any failure of the profile reads counted like a profile error (never a crash)."""
     try:
@@ -207,7 +215,7 @@ def evaluate(ctx: Ctx) -> str | None:
         now = fingerprint(project)
         if now == state.get("gave_up"):
             return None
-        attempts = int(state.get("profile_attempts", 0)) + 1
+        attempts = _count(state, "profile_attempts") + 1
         limit = _limit_for_errors(ctx)
         saved = save_state(project, sid, {"profile_attempts": attempts})
         if attempts >= limit or (ctx.action.continuing and not saved):
@@ -245,7 +253,7 @@ def _evaluate(ctx: Ctx) -> str | None:
     if not failures:
         save_state(project, sid, {"passed": now, "attempts": 0})
         return None
-    attempts = int(state.get("attempts", 0)) + 1
+    attempts = _count(state, "attempts") + 1
     names = ", ".join(f"`{run}`" for run, _ in failures)
     saved = save_state(project, sid, {"attempts": attempts})
     if attempts >= max_attempts or (ctx.action.continuing and not saved):

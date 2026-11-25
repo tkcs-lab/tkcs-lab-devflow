@@ -669,3 +669,13 @@ def test_parallel_updates_are_not_lost(board):
     for t in threads:
         t.join()
     assert state(board)["dirty_seq"] == 8
+
+
+def test_a_malformed_disable_does_not_switch_the_board_gate_off(tmp_path, monkeypatch):
+    monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
+    monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
+    for n, bad in enumerate(("hooks:\n  disable: 5\n", "hooks: 5\n")):
+        repo = make_repo_with_origin(tmp_path / f"r{n}", "feature/demo", PROFILE, working=PROFILE + bad)
+        assert prompt(repo, "docs").verdict == "allow"
+        assert has_state(repo), bad
+        assert stop(repo).verdict == "deny", bad
