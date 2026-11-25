@@ -124,7 +124,8 @@ def _read(path: str) -> str:
 
 
 def _load_profile(path: str) -> dict:
-    """The resolved profile (base and defaults applied; a base is read from the cache, never fetched)."""
+    """The resolved profile (base and defaults applied; a base is read from the cache, never fetched, and an
+    uncached base stops the run). A path also gets the trusted clamp, whose lookup may touch the network."""
     from tld.profile import resolve as rs  # imported here: keeps the module import light
     if path == "-":
         try:
@@ -137,6 +138,11 @@ def _load_profile(path: str) -> dict:
         result = rs.load(path, fetch=False)
     if result.errors:
         raise RolesError("\n".join(f"toolkit.yaml: {e}" for e in result.errors))
+    for warning in result.warnings:
+        if warning.startswith("the base ") and "is not cached" in warning:
+            # without the base the required roles would be a shorter list than the profile asks for: stop
+            raise RolesError(f"toolkit.yaml: {warning}; run `tld profile base fetch` with network access")
+        print(f"toolkit.yaml: warning: {warning}", file=sys.stderr)
     return result.profile
 
 

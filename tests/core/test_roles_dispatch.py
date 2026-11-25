@@ -242,7 +242,7 @@ def test_cli_errors(tmp_path):
     assert p.returncode == 1 and p.stderr.startswith(f"tld roles: cannot read '{tmp_path / 'missing.yaml'}'")
     p = run("required", "--profile", str(isolated(tmp_path)), "--at", "dod")
     assert p.returncode == 1
-    assert p.stderr.strip() == "tld roles: --changed is needed: roles.required has entries with 'when'"
+    assert p.stderr.strip().splitlines()[-1] == "tld roles: --changed is needed: roles.required has entries with 'when'"
     bad = tmp_path / "bad.yaml"
     bad.write_text("stacks: []\n")
     p = run("required", "--profile", str(bad), "--at", "dod")
@@ -299,3 +299,13 @@ def test_a_profile_on_standard_input_is_resolved_without_a_floor(ag, tmp_path, m
     out = ag._load_profile("-")
     assert out["land"]["max_prs"] == 10  # a built-in default was applied
     assert names(ag.required(out, "dod", [])) == ["debugger"]
+
+
+def test_an_uncached_base_stops_the_run(ag, tmp_path):
+    (tmp_path / ".tld").mkdir()
+    _git(tmp_path, "init", "-q")
+    prof = tmp_path / ".tld" / "toolkit.yaml"
+    prof.write_text(f"tld:\n  extends: acme/org/tld/base.yaml@{'b' * 40}\ngit: {{main_branch: main}}\n"
+                    "verify:\n  fast: ['x']\n  dod: ['x']\n")
+    with pytest.raises(ag.RolesError, match="is not cached; .*run `tld profile base fetch`"):
+        ag._load_profile(str(prof))
