@@ -322,12 +322,29 @@ def questions(changes: list[Change]) -> list[Change]:
 
 # --------------------------------------------------------------------------------------------- the answers
 
+class _UniqueLoader(yaml.SafeLoader):
+    """safe_load that refuses a repeated mapping key: the last one would silently win."""
+
+
+def _no_duplicates(loader, node, deep=False):
+    seen = set()
+    for key_node, _ in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if not isinstance(key, str) or key in seen:
+            raise yaml.YAMLError(f"a repeated or non-text key {str(key)[:40]!r}")
+        seen.add(key)
+    return yaml.SafeLoader.construct_mapping(loader, node, deep=deep)
+
+
+_UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_duplicates)
+
+
 def load_answers(path: str) -> dict:
     p = Path(path)
     try:
         if not p.is_file() or p.is_symlink() or p.stat().st_size > 65536:
             raise DefaultsError(f"--answers {path}: not a regular file of at most 64 KiB")
-        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        data = yaml.load(p.read_text(encoding="utf-8"), Loader=_UniqueLoader)  # noqa: S506 (a SafeLoader subclass)
     except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
         raise DefaultsError(f"--answers {path}: cannot read it: {exc}") from None
     if not isinstance(data, dict):
@@ -391,10 +408,12 @@ def _check_path(root: Path, f: str, src: str, ctx, what: str = "mentions") -> No
             or parts[-1].lower() == "skill.md"):
         raise DefaultsError(f"refused: {shown} ({what} {src}) is not a plain prose file (code, config, workflow, "
                             f"agent, hidden-directory and CODEOWNERS files are never touched); {hand}")
-    for cand in dict.fromkeys([f, f.lower()]):  # a case-insensitive filesystem reaches a protected name by its folded spelling
-        why = protect_paths.violation(ctx, str(root / cand), str(root))
-        if why:
-            raise DefaultsError(f"refused: {shown} ({what} {src}) is a protected path of this repository; {hand}")
+    why = protect_paths.violation(ctx, str(root / f), str(root))
+    # a case-insensitive filesystem reaches a protected name by another spelling: fold both sides
+    folded = any(protect_paths.matches(pat.lower(), f.lower())
+                 for pat in ctx.list_key("protect_paths", list(defaults_mod.STATIC["hooks.protect_paths"])))
+    if why or folded:
+        raise DefaultsError(f"refused: {shown} ({what} {src}) is a protected path of this repository; {hand}")
     if (root / f).exists() and (root / f).stat().st_nlink > 1:
         raise DefaultsError(f"refused: {shown} ({what} {src}) has other hard links; {hand}")
 
@@ -435,6 +454,9 @@ def _probe(root: Path, src: str, dst: str) -> list[str]:
     if planned is None:
         raise DefaultsError(f"cannot plan the move of {src} to {dst}")
     ctx = _ctx(root)
+    if getattr(ctx, "notice", None) or getattr(ctx, "problem", None):
+        raise DefaultsError("refused: this repository's profile could not be resolved completely (an uncached base?); "
+                            "run tld profile validate, then try again")
     _check_path(root, src, src, ctx, "is moved from")
     _check_path(root, dst, src, ctx, "is moved to")
     files = sorted({c["file"] for c in planned})
@@ -488,6 +510,9 @@ class Snapshot:
         problems: list[str] = []
         for p, data in self.saved.items():
             path = self.root / p
+            if unsafe(self.root, p):  # something replaced the file or a parent with a symlink: write nothing through it
+                problems.append(f"{p}: now a symbolic link or outside the repository")
+                continue
             try:
                 if data is None:
                     if path.is_file() and not path.is_symlink():
@@ -503,7 +528,9 @@ class Snapshot:
             while data is None and parent != self.root and parent.is_dir() and not any(parent.iterdir()):
                 parent.rmdir()
                 parent = parent.parent
-        _git(self.root, "reset", "-q", "HEAD", "--", *self.saved)
+        if _git(self.root, "reset", "-q", "HEAD", "--", *self.saved).returncode != 0 and \
+                _git(self.root, "rev-parse", "--is-inside-work-tree").returncode == 0:
+            problems.append("the git index (run: git reset HEAD -- " + " ".join(self.saved) + ")")
         return problems
 
 
@@ -595,10 +622,21 @@ def _rename_heading(root: Path, rel: str, found: str, snap: Snapshot) -> str:
     return f"renamed the heading '{found}' to '{HEADING_DEFAULT}' in {rel}"
 
 
-def _git_add(root: Path, *paths: str) -> None:
+def _profile_dirty(root: Path) -> bool:
+    """True when git would stage edits of the profile that are not this run's (outside a repository nothing is staged)."""
+    if _git(root, "rev-parse", "--is-inside-work-tree").returncode != 0:
+        return False
+    try:
+        _tracked_clean(root, [NEW_PROFILE])
+    except DefaultsError:
+        return True
+    return False
+
+
+def _git_add(root: Path, *paths: str) -> bool:
+    """Stage the paths; False when git refused (the caller says so)."""
     inside = _git(root, "rev-parse", "--is-inside-work-tree")
-    if inside.returncode == 0:
-        _git(root, "add", "--", *paths)
+    return inside.returncode != 0 or _git(root, "add", "--", *paths).returncode == 0
 
 
 def _prepare(root: Path, c: Change, answers: dict, changes: list[Change]) -> list[tuple[str, str]]:
@@ -696,6 +734,9 @@ def apply(root: Path, changes: list[Change], answers: dict) -> list[str]:
             if unsafe(root, NEW_PROFILE) or not profile.is_file():
                 messages.append(f"not written: {NEW_PROFILE} is missing or unsafe; add " +
                                 ", ".join(f"{k}: {v!r}" for k, v in edits) + " by hand")
+            elif not prepared and _profile_dirty(root):
+                messages.append(f"not written: {NEW_PROFILE} has uncommitted changes that staging would sweep in; commit "
+                                "or stash them, then add " + ", ".join(f"{k}: {v!r}" for k, v in edits) + " by hand")
             else:
                 text = original = profile.read_text(encoding="utf-8")
                 for key, value in edits:
@@ -716,8 +757,8 @@ def apply(root: Path, changes: list[Change], answers: dict) -> list[str]:
                          "changed was put back and nothing was written to the profile"
                          + (f" (could not restore: {'; '.join(problems)})" if problems else "")) from None
     staged = [p for p in dict.fromkeys(staged) if (root / p).exists() or (root / p).is_symlink()]
-    if staged:
-        _git_add(root, *staged)
+    if staged and not _git_add(root, *staged):
+        messages.append("not staged: git refused to stage " + ", ".join(staged) + "; stage them by hand (git add)")
     return messages
 
 

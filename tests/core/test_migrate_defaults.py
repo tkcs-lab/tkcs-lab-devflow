@@ -545,3 +545,23 @@ def test_any_exception_after_a_write_rolls_back_and_the_profile_is_covered(tmp_p
     (root / ".tld/toolkit.yaml").write_text((root / ".tld/toolkit.yaml").read_text() + "# edit\n")
     r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.adr_dir": "rename"}))
     assert r.returncode == 1 and "uncommitted" in r.stdout and (root / "docs/adrs").exists()
+
+
+def test_duplicate_answer_keys_and_a_dirty_profile_are_refused(tmp_path):
+    root = fixture_with(tmp_path, "dup", {"docs/index.md": "# I\n"})
+    path = tmp_path / "dup.json"
+    path.write_text('{"docs.index": "keep", "docs.index": "rename"}')
+    r = migrate(root, "--write", "--answers", str(path))
+    assert r.returncode == 2 and "repeated" in r.stderr and (root / "docs/index.md").exists()
+    # a keep-only run does not sweep an edited profile into the index
+    (root / ".tld/toolkit.yaml").write_text((root / ".tld/toolkit.yaml").read_text() + "# edit\n")
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.index": "keep"}))
+    assert r.returncode == 1 and "not written" in r.stdout and "uncommitted" in r.stdout
+    assert "docs/index.md" not in (root / ".tld/toolkit.yaml").read_text()
+
+
+def test_a_protect_pattern_is_matched_case_folded(tmp_path):
+    profile = PROFILE + "hooks:\n  protect_paths: ['docs/SECURITY.md']\n"
+    root = fixture_with(tmp_path, "cf", {"CHANGES.md": "# C\n", "docs/security.md": "see CHANGES.md\n"}, profile)
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+    assert r.returncode == 1 and "protected path" in r.stdout and (root / "CHANGES.md").exists()
