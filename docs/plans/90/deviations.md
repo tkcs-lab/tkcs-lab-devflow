@@ -62,7 +62,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p11-migrate
 
-- pending
+- worker: touches: tests/core/test_evals_graders.py (orchestrator-approved) for the negative test of the dry-run eval
+- retry: sent back three times by the security review: the rename rewrote command and workflow files, protected files and agent command files; repository text could forge the ask; the dry-run eval allowed asks; a failed move left a staged half-moved directory; all fixed with a protect check, a snapshot with rollback and escaped output
+- review: open for the fix round: SIGTERM during a move leaves a half-moved tree; an unrelated change already staged is committed by the playbook; plugin command files without front matter can be rewritten; a dead attribute in the profile resolution check
 
 ## p12-admin-profile
 
