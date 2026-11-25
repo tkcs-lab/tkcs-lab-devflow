@@ -5,6 +5,8 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-25
+
 ### Added
 
 - Board cards link the run's tracking issue (`issue #<n>`) for make-plan, implement, quick and a single-session prompt's worker; new optional `tracking_issue` field of a status record, and one rule for a board that does not know an optional field (#100).
