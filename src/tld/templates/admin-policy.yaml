@@ -73,15 +73,15 @@ release:                           # the environment tld-release: default branch
   reviewer_login: your-owner-account   # REQUIRED in this section; TLD_RELEASE_TOKEN (an owner token) is its secret
   environment: tld-release
 
-# profile:                         # the org base profile (tld.extends): audited in every repository that has .tld/toolkit.yaml
-#   base: your-org/.github/tld/profile-base.yaml   # REQUIRED in this section: <owner>/<repo>/<path>, no pin
-#   pin: latest-tag                # latest-tag (newest version tag of the base repository) | a full 40-hex commit; never a tag name
-#   guarded_overrides: report      # report | ignore: list the guarded keys a repository overrides (information)
+profile:                           # the org base profile (tld.extends): audited in every repository that has .tld/toolkit.yaml
+  base: your-org/.github/tld/profile-base.yaml   # REQUIRED in this section: <owner>/<repo>/<path>, no pin
+  pin: latest-tag                # latest-tag (newest version tag of the base repository) | a full 40-hex commit; never a tag name
+  guarded_overrides: report      # report | ignore: list the guarded keys a repository overrides (information)
 
-# git_ops:                         # the central git-ops repository
-#   repo: your-org/git-ops
-#   workflow: tld-git-ops.yml
-#   allowlist: allowlist.yml       # the file in the central repository that names every audited repository
+git_ops:                         # the central git-ops repository
+  repo: your-org/git-ops
+  workflow: tld-git-ops.yml
+  allowlist: allowlist.yml       # the file in the central repository that names every audited repository
 
 secrets:
   required: []                     # e.g. ["SOME_TOKEN"]: a repository without it, own or from the organisation, is reported

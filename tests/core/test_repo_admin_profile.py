@@ -142,11 +142,9 @@ def test_policy_with_profile_and_git_ops_sections_validates(ra):
     assert any("profile" in e for e in ra.validate_policy({"org": "acme", "profile": {"pin": "latest-tag"}}))
     assert any("guarded_overrides" in e for e in ra.validate_policy({"org": "acme", "profile": {"base": BASE_FILE, "guarded_overrides": "all"}}))
     assert any("git_ops" in e for e in ra.validate_policy({"org": "acme", "git_ops": {"repository": "x"}}))
-    lines = (TLD / "templates" / "admin-policy.yaml").read_text().splitlines()
-    block = lines[next(i for i, l in enumerate(lines) if l.startswith("# profile:")):next(i for i, l in enumerate(lines) if l.startswith("secrets:"))]
-    example = {k: v for k, v in yaml.safe_load("\n".join(l[2:] if l.startswith("# ") else l for l in block)).items()}
-    assert set(example) == {"profile", "git_ops"}
-    assert ra.validate_policy({"org": "acme", **example}) == []
+    starter = yaml.safe_load((TLD / "templates" / "admin-policy.yaml").read_text())
+    assert {"profile", "git_ops"} <= set(starter)
+    assert ra.validate_policy(starter) == []
 
 
 @pytest.mark.parametrize("pin", ["v1.2.0", "main", "latest", "ABCDEF" * 6 + "abcd", "a" * 39, "a" * 41])

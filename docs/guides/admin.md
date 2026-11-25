@@ -97,6 +97,7 @@ must see every repository.
 | `branches` | Branches whose every commit is already in the default branch, not protected, not the head or base of an open pull request, last activity older than `branches.min_age_days` | deletes when `branches.delete_merged` (irreversible, though the commits stay in the default branch) |
 | `files` | `config_dirs.forbid` paths that exist; `config_dirs.require` files that are missing; top-level dot directories outside `config_dirs.known`; `workflows` missing or different from their template | pull requests (a missing required file is only reported) |
 | `lint` | `workflow_lint`: actions not pinned to a commit SHA, workflows without top-level `permissions`, `pull_request_target` | nothing: read only |
+| `profile` | `profile`: a repository without `tld.extends`, an invalid or foreign pin, a pin that is not the wanted one, guarded keys a repository overrides, a merge style its settings do not allow (added by plan 90, p14 rewrites) | a pull request that bumps only the `extends:` line |
 
 How "unused" is decided, and where it can be wrong:
 
@@ -154,6 +155,12 @@ Every key is optional except `org`. The schema is the exact source of truth.
 | `deploy_keys.max_unused_days`, `deploy_keys.delete_unused` | |
 | `config_dirs.forbid`, `config_dirs.require`, `config_dirs.known` | `forbid`: root-relative paths or globs with at least two literal characters (not the root, `.git` or a bare wildcard); `*` matches within one path segment, so `*.bak` is a top-level file only. `require`: root-relative files that must exist (for example `SECURITY.md`, `.github/CODEOWNERS`, `LICENSE`). `known`: more top-level dot directories to expect, added to the built-in `.github .claude .devcontainer .vscode .husky .config .changeset .githooks`; any other is reported |
 | `workflow_lint.pin_actions`, `workflow_lint.require_permissions`, `workflow_lint.forbid_pull_request_target` | `pin_actions`: `third_party` (leaves `actions/*` and `github/*`) or `all` |
+| `profile.base` | The base file as `<owner>/<repo>/<path>` (added by plan 90, p14 rewrites) |
+| `profile.pin` | `latest-tag` (default) or a 40-hex commit; a tag name is rejected (added by plan 90, p14 rewrites) |
+| `profile.guarded_overrides` | `report` (default) or `ignore` (added by plan 90, p14 rewrites) |
+| `git_ops.repo` | The central repository as `<owner>/<repo>` (added by plan 90, p14 rewrites) |
+| `git_ops.workflow` | The workflow file name in the central repository (added by plan 90, p14 rewrites) |
+| `git_ops.allowlist` | The file in the central repository naming every audited repository (added by plan 90, p14 rewrites) |
 | `workflows` | List of workflow entries, below |
 
 A `workflows` entry has exactly one of `template` (`release` or `land`) or `path` (your own template, below the directory of
