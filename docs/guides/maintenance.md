@@ -202,6 +202,7 @@ A "Needs you" card always means something you can still act on.
   (up to 10 minutes, or when you write in its chat) and reads the answer. If you cancel the ask instead, the
   record's card comes back until the session wakes.
 - **Plan ready.** When /tld:make-plan finishes, its card shows under "Plan ready" with the plan's Summary, links to the issue, the plan and the spec change, and the implement command with a Copy button (over plain http, except on localhost, the button selects the text instead). The card moves to "Done" once /tld:implement of that plan writes its record, and to "Hidden" when you dismiss it or after 7 days. A board older than this release refuses the hand-over; make-plan then writes the record without it and says so: update the board.
+- **Issue link.** A card whose run has a tracking issue (make-plan, implement with a plan that names its issue, quick, a single-session prompt's worker) shows `issue #<n>` first in its links when you open it. A board older than this release refuses the field; the session then writes its records without it and says so: update the board.
 - **Dismiss and Restore.** Every card outside "Hidden" has a `Dismiss` button in its details: a stuck "Needs you"
   card, or a "PR open" card whose pull requests are already merged. The card moves to "Hidden" with the badge
   `dismissed`, and `Restore` brings it back. The board keeps the dismissal next to the record. When the session
