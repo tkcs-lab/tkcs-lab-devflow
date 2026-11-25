@@ -31,6 +31,8 @@ Rules:
 |---|---|---|
 | `tld` | no | Holds `version` |
 | `tld.version` | no | A version specifier such as `>=1.0,<2` (clauses `==`, `!=`, `>=`, `<=`, `>`, `<`, joined by commas). `tld profile validate` fails when the running tld does not satisfy it; a development build (`1.0.0.dev0`) counts as the release it leads to. `/setup` writes `>=<major>.<minor>,<<major+1>` |
+| `tld.extends` | no | The base profile this repository extends, `<owner>/<repo>/<path>@<40-hex commit>` (added by plan 90, p14 rewrites) |
+| `tld.allow_override` | no | Base profile only: guarded keys a repository that extends it may weaken (added by plan 90, p14 rewrites) |
 | `project.name` | no | Name used in prose; default is the repository name |
 | `docs.must_read` | **yes** (may be `[]`) | Files the planner reads first, every worker brief names, and the final reviewer reads |
 | `docs.plan_dir` | no (default `docs/plans/`) | Plans are `<plan_dir>/<n>/plan.md` on the feature branch (`<n>` = the tracking issue number) and stay after the merge; reviews are `<plan_dir>/<slug>-review.md` |

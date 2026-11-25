@@ -52,17 +52,21 @@ def _ref(schema: dict, root: dict) -> dict:
     return {**node, **{k: v for k, v in schema.items() if k != "$ref"}}
 
 
-def check(value, schema: dict, root: dict, path: str, errors: list[str]) -> None:
-    """Validate the JSON Schema subset the profile schema uses."""
+def check(value, schema: dict, root: dict, path: str, errors: list[str], *, required: bool = True) -> None:
+    """Validate the JSON Schema subset the profile schema uses. With required=False a missing required key is not
+    an error (types, enums and unknown keys still are): the raw repository profile may lean on a base and defaults."""
     schema = _ref(schema, root)
     if "oneOf" in schema:
-        if any(_errs(value, s, root, path) == [] for s in schema["oneOf"]):
+        if any(_errs(value, s, root, path, required) == [] for s in schema["oneOf"]):
             return
         typed = [s for s in schema["oneOf"] if "type" in s and _is(value, s["type"])]
         if typed:  # right kind of value, wrong content: report that option's own errors
-            check(value, typed[0], root, path, errors)
+            check(value, typed[0], root, path, errors, required=required)
         else:
             errors.append(f"'{path}': {_describe(schema['oneOf'])}")
+        return
+    if "const" in schema and not (value == schema["const"] and type(value) is type(schema["const"])):
+        errors.append(f"'{path}': must be {json.dumps(schema['const'])} (got {value!r})")
         return
     if "enum" in schema and value not in schema["enum"]:
         errors.append(f"'{path}': must be one of {', '.join(map(str, schema['enum']))} (got {value!r})")
@@ -84,22 +88,23 @@ def check(value, schema: dict, root: dict, path: str, errors: list[str]) -> None
         if len(value) < schema.get("minItems", 0):
             errors.append(f"'{path}': needs at least {schema['minItems']} item(s)")
         for i, item in enumerate(value):
-            check(item, schema.get("items", {}), root, f"{path}[{i}]", errors)
+            check(item, schema.get("items", {}), root, f"{path}[{i}]", errors, required=required)
     if t == "object":
         props = schema.get("properties", {})
-        for key in schema.get("required", []):
-            if key not in value:
-                errors.append(f"missing required key '{_join(path, key)}'")
+        if required:
+            for key in schema.get("required", []):
+                if key not in value:
+                    errors.append(f"missing required key '{_join(path, key)}'")
         for key, sub in value.items():
             if key in props:
-                check(sub, props[key], root, _join(path, key), errors)
+                check(sub, props[key], root, _join(path, key), errors, required=required)
             elif schema.get("additionalProperties") is False:
                 errors.append(f"unknown key '{_join(path, key)}' (typo? {HELP})")
 
 
-def _errs(value, schema, root, path) -> list[str]:
+def _errs(value, schema, root, path, required: bool = True) -> list[str]:
     out: list[str] = []
-    check(value, schema, root, path, out)
+    check(value, schema, root, path, out, required=required)
     return out
 
 
@@ -113,7 +118,39 @@ def _article(t: str) -> str:
 
 def _describe(options: list[dict]) -> str:
     names = [_article(o["type"]) for o in options if "type" in o]
+    names += [json.dumps(o["const"]) for o in options if "const" in o]
     return "must be " + " or ".join(names)
+
+
+OPTIONAL_SECTIONS = ("deps", "spec", "sysml")
+# Keys that `false` switches off (the schema allows oneOf [<type>, {const: false}] there).
+OFF_SWITCHES = ("docs.index", "docs.adr_dir", "docs.changelog", "docs.website", "admin", "git_ops", "land.max_prs")
+# Temporary: what an empty section gets until the resolver (tld.profile.defaults) applies SECTION_DEFAULTS.
+_EMPTY_SECTION = {"deps": {"cooldown_days": 3, "time_budget_minutes": 90}, "spec": {"version": "2.1.0"},
+                  "sysml": {"subset": 1}}
+
+
+def normalise(profile: dict) -> dict:
+    """A copy where an empty `deps:`, `spec:` or `sysml:` block (YAML null) is the empty mapping: an empty block
+    means "on"."""
+    out = dict(profile)
+    for key in OPTIONAL_SECTIONS:
+        if key in out and out[key] is None:
+            out[key] = {}
+    return out
+
+
+def _drop_off_switches(profile: dict) -> dict:
+    """Temporary (the resolver replaces it): a `false` off switch is an absent key."""
+    out = json.loads(json.dumps(profile))
+    for dotted in OFF_SWITCHES:
+        *parents, leaf = dotted.split(".")
+        node = out
+        for part in parents:
+            node = node.get(part) if isinstance(node, dict) else None
+        if isinstance(node, dict) and node.get(leaf) is False:
+            del node[leaf]
+    return out
 
 
 def apply_defaults(value: dict, schema: dict, root: dict) -> dict:
@@ -250,10 +287,14 @@ def validate(profile, root_dir: Path | None = None) -> tuple[list[str], list[str
     if "agents" in profile:
         return (["'agents' was renamed to 'roles' (and each entry's 'agent' to 'role'): "
                  "rename the section"], [], {})
+    profile = normalise(profile)
+    for key, default in _EMPTY_SECTION.items():
+        if profile.get(key) == {}:
+            profile[key] = dict(default)
     check(profile, schema, schema, "", errors)
     if errors:
         return errors, [], {}
-    resolved = apply_defaults(profile, schema, schema)
+    resolved = apply_defaults(_drop_off_switches(profile), schema, schema)
     resolved["docs"]["plan_dir"] = resolved["docs"]["plan_dir"].rstrip("/")
     sem_errors, warnings = semantic_checks(resolved, root_dir)
     return sem_errors, warnings, resolved
