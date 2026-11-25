@@ -374,7 +374,10 @@ When every phase is `merged`, merge `origin/<main>` into the feature branch once
 > End with `REVIEW-REPORT verdict=<approve|changes>` on its own line, then one numbered finding per line:
 > `blocking|non-blocking`, `path:line`, the phase id it belongs to, what is wrong and the fix. A diff that
 > touches a protected path (playbooks/policies/protected-changes.md; its effective list and excluded set) is a blocking finding. `BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of `GUARDED_WORKFLOWS`, `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow pattern matches them.
-> A lockfile in the diff is a blocking finding whoever produced it; lockfile changes are made outside implement (the deps playbook or by the owner). `changes` means
+> A lockfile in the diff is a blocking finding whoever produced it; lockfile changes are made outside implement (the deps playbook or by the owner).
+> A diff that touches `.github/workflows/**`, `.tld/toolkit.yaml` or a guarded workflow is a trust-boundary change
+> that the security reviewer checks at `implement_final`: a weakened guarded key, a new `pull_request_target`, a
+> secret reference or a new `permissions: write` is a blocking finding. `changes` means
 > at least one blocking finding. Only something you would refuse to merge is blocking.
 
 A blocking finding that the deviations file lacks an entry is fixed by you, not by a worker: `tld plan
@@ -447,11 +450,14 @@ text>`; exit 1 counts as `changes`. Then:
    worker, reviewer or issue text, no "safe to merge", no hidden markup. `**Deviations:**` is the focus; spend
    the 175 words in this priority order: design changes, accepted scope drift, owner decisions taken during the
    run, declined non-blocking findings. `**Review focus:**` or `**Security:**` must name every deviation that
-   touches a protected path or came from the security-reviewer. The full `## Deviations` section stays as it
+   touches a protected path or came from the security-reviewer. `**Security:**` must also name every file under
+   `.github/workflows/` and the profile `.tld/toolkit.yaml` that the diff changes (the check reads the changed
+   list and says which one is missing). The full `## Deviations` section stays as it
    is.
 
-   **The check.** Run `tld plan summary-check <body file> --kind pr --deviations <deviations path> --findings <N>` on the
-   scratch file; it must exit 0 before you call `github.pr_create` with that body. Exit 1 prints `summary: <problem>` lines: fix them,
+   **The check.** Write the paths the pull request changes (`git diff --name-only --no-renames origin/<main>...HEAD`)
+   to a scratch file, then run `tld plan summary-check <body file> --kind pr --deviations <deviations path> --findings <N> --changed <changed list>` on the
+   body file; it must exit 0 before you call `github.pr_create` with that body. Exit 1 prints `summary: <problem>` lines: fix them,
    never skip the check. A later rewrite of the body (`github.pr_update`) keeps the Summary and runs the check
    again. Do not check the plan's own Summary here: older plans have none. Then post `PR opened: <url>.` (with
    `tracking_issue`).

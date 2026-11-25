@@ -147,6 +147,10 @@ def test_every_call_passes_on_a_valid_fixture(path, tmp_path):
         for i, tok in enumerate(toks):
             if tok == "X" and i and toks[i - 1] == "--findings":
                 argv.append("0")  # the count of the fixture's section
+            elif tok == "X" and i and toks[i - 1] == "--changed":
+                lst = tmp_path / f"changed{n}.txt"
+                lst.write_text("")  # an empty list: the fixture changes no workflow or profile file
+                argv.append(str(lst))
             else:
                 argv.append(re.sub(r"^X$", lambda _: next(files), tok))
         r = subprocess.run(tld_cmd("plan", "summary-check", *argv), capture_output=True, text=True, timeout=60)

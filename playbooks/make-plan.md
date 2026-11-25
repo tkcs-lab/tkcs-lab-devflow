@@ -371,7 +371,9 @@ here so the worker only has to execute. Every phase passes all of these:
   without a question; any other command is put to the owner before implement runs it (S14).
 
 - **A phase never lists a protected path in `touches`**; its brief says: do not edit <path>, report
-  protected-change: <path> - <why> with the diff (policies/protected-changes.md).
+  protected-change: <path> - <why> with the diff (policies/protected-changes.md). The profile and ordinary
+  workflows are not protected by default and may be listed; the brief then says the pull request names them
+  under Security.
 - **`worker_level: fast`** is allowed only for a phase that is complexity `S`, whose brief gives the literal text
   or the literal edit for every change (docs, strings, config values, renames, fixture or baseline refreshes),
   contains no new control flow or function, and whose acceptance is a named test or a grep. The default is the

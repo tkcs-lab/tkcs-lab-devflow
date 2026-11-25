@@ -646,6 +646,7 @@ def test_cli_help_lists_the_options():
     r = subprocess.run(tld_cmd("plan", "summary-check", "--help"), capture_output=True, text=True)
     assert r.returncode == 0
     assert "--kind" in r.stdout and "{plan,issue,pr}" in r.stdout and "--deviations" in r.stdout
+    assert "--changed" in r.stdout
 
 
 def test_the_command_is_registered_in_the_cli():
@@ -728,3 +729,85 @@ def test_a_fenced_findings_heading_is_ignored(tmp_path, capsys):
     assert run(tmp_path, capsys, text, kind="pr")[0] == 0
     code, out, _ = run(tmp_path, capsys, text, "--findings", "1", kind="pr")
     assert code == 1 and "no '## Non-blocking findings' section" in out
+
+
+# --- --changed: workflow and profile files must be named under Security ------------------------------------------
+
+def pr_with_security(security):
+    body = "**Deviations:** None.\n"
+    if security is not None:
+        body += f"**Security:** {security}\n"
+    return f"Closes #1\n\n## Summary\n\n{body}**Review focus:** a b c\n"
+
+
+def changed_probs(security, changed):
+    return summary.check(pr_with_security(security), "pr", None, None, changed)[0]
+
+
+def test_changed_workflow_or_profile_not_named():
+    probs_ = changed_probs("the release path is untouched here", [".github/workflows/ci.yml", ".tld/toolkit.yaml"])
+    assert probs_ == ["**Security:** must name every workflow and profile file this pull request changes; "
+                      "not named: .github/workflows/ci.yml, .tld/toolkit.yaml"]
+
+
+def test_changed_missing_security_label():
+    probs_ = changed_probs(None, ["src/a.py", ".github/workflows/ci.yml", ".tld/toolkit.yaml"])
+    assert probs_ == ["**Security:** is missing or None. but the pull request changes "
+                      ".github/workflows/ci.yml, .tld/toolkit.yaml"]
+
+
+def test_changed_none_security():
+    assert changed_probs("None.", [".tld/toolkit.yaml"]) == [
+        "**Security:** is missing or None. but the pull request changes .tld/toolkit.yaml"]
+
+
+def test_changed_named_by_full_path():
+    assert changed_probs("edits .github/workflows/ci.yml and .tld/toolkit.yaml only",
+                         [".github/workflows/ci.yml", ".tld/toolkit.yaml"]) == []
+
+
+def test_changed_named_by_file_name():
+    assert changed_probs("edits ci.yml, and toolkit.yaml.", [".github/workflows/ci.yml", ".tld/toolkit.yaml"]) == []
+
+
+def test_changed_substring_does_not_count():
+    assert changed_probs("edits aci.yml and old-toolkit.yaml only", [".github/workflows/ci.yml", ".tld/toolkit.yaml"]) == [
+        "**Security:** must name every workflow and profile file this pull request changes; "
+        "not named: .github/workflows/ci.yml, .tld/toolkit.yaml"]
+
+
+def test_changed_workflows_old_dir_is_not_a_workflow():
+    assert changed_probs(None, [".github/workflows-old/x.yml", ".tld/toolkit.yaml.bak", "docs/.tld/toolkit.yaml"]) == []
+    assert changed_probs(None, ["src/a.py", "README.md"]) == []
+    assert summary.check(pr_with_security(None), "pr")[0] == []
+
+
+def test_changed_blank_and_crlf_lines(tmp_path, capsys):
+    path = tmp_path / "doc.md"
+    path.write_text(pr_with_security("edits ci.yml and toolkit.yaml now"))
+    lst = tmp_path / "changed.txt"
+    lst.write_bytes(b"src/a.py\r\n\r\n.github/workflows/ci.yml\r\n  \n.tld/toolkit.yaml\r\n")
+    assert summary.main([str(path), "--kind", "pr", "--changed", str(lst)]) == 0
+    capsys.readouterr()
+    path.write_text(pr_with_security(None))
+    assert summary.main([str(path), "--kind", "pr", "--changed", str(lst)]) == 1
+    assert capsys.readouterr().out == ("summary: **Security:** is missing or None. but the pull request changes "
+                                       ".github/workflows/ci.yml, .tld/toolkit.yaml\n")
+
+
+def test_changed_unreadable_file(tmp_path, capsys):
+    path = tmp_path / "doc.md"
+    path.write_text(pr_with_security(None))
+    gone = tmp_path / "gone.txt"
+    assert summary.main([str(path), "--kind", "pr", "--changed", str(gone)]) == 1
+    assert capsys.readouterr().out == f"summary: cannot read '{gone}': No such file or directory\n"
+
+
+def test_changed_with_kind_plan_exits_2(tmp_path):
+    path = tmp_path / "plan.md"
+    path.write_text(plan_doc())
+    lst = tmp_path / "changed.txt"
+    lst.write_text("")
+    r = subprocess.run(tld_cmd("plan", "summary-check", str(path), "--kind", "plan", "--changed", str(lst)),
+                       capture_output=True, text=True)
+    assert r.returncode == 2 and r.stdout == "" and "Traceback" not in r.stderr

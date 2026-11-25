@@ -111,3 +111,10 @@ def test_quick_record_validates(tmp_path):
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
     assert record.validate({**rec, "project": "r", "repo": "o/r"}, doc.stdout.strip()) == []
+
+
+def test_quick_pr_step_passes_changed():
+    calls = re.findall(r"tld plan summary-check [^`]*", TEXT)
+    assert len(calls) == 1 and "--changed" in calls[0]
+    six = " ".join(part("## 6. The pull request").split())
+    assert "changes a workflow or the profile" in six and "Security" in six
