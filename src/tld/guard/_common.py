@@ -188,7 +188,9 @@ def gate_enabled(ctx: Ctx, key: str) -> bool:
     """Whether the gate `hooks.<key>.enabled` is on: the resolved value unless it is false, and a gate the trusted
     copy turns on stays on (trusted OR working copy). With no profile at all every gate is off."""
     if ctx.profile is None:
-        return False
+        # no profile file at all: off. A profile that is there but cannot be read (broken YAML, not a mapping) is not
+        # "no profile": a branch could write one to switch every gate off, so the gate stays on.
+        return (Path(ctx.project_dir) / PROFILE).is_file()
     gate = ctx.hooks_section().get(key)
     if gate is not None and not isinstance(gate, dict):
         raise ProfileError(f"toolkit.yaml: 'hooks.{key}' must be a mapping")
@@ -199,7 +201,7 @@ def gate_enabled(ctx: Ctx, key: str) -> bool:
         return True
     trusted, available = ctx.trusted()  # looked up only for a gate the working copy switches off
     t_gate = _hooks(trusted).get(key) if available else None
-    if isinstance(t_gate, dict) and t_gate.get("enabled", True) is True:
+    if available and (t_gate is None or (isinstance(t_gate, dict) and t_gate.get("enabled", True) is True)):
         branch = ctx.trust().branch or "the default branch"
         ctx.notice = (f"toolkit.yaml: warning: 'hooks.{key}.enabled' is weaker here than on {branch} (the remote "
                       f"default branch); the {branch} value applies until this change is merged")

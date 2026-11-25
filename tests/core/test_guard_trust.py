@@ -255,3 +255,11 @@ def test_for_hook_ignores_an_at_sha_with_a_trailing_newline(tmp_path):
     sha = git(repo, "rev-parse", "HEAD").strip()
     profile, _ = resolve.for_hook({"git": {"main_branch": "main"}}, str(repo), at_sha=sha + "\n")
     assert profile is not None and profile["hooks"]["dod_gate"]["enabled"] is True
+
+
+def test_a_broken_profile_does_not_switch_the_gates_off(tmp_path):
+    ev = lambda r: {"session_id": "s1", "cwd": str(r), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                    "tool_input": {"file_path": "a.txt", "content": "x"}}
+    for broken in ("a: [\n", "- just\n- a list\n"):
+        repo = make_repo_with_origin(tmp_path / ("r%d" % len(broken)), committed=PROFILE, working=broken)
+        assert run("plan-gate", ev(repo)).code == 2, broken
