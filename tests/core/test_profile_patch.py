@@ -349,6 +349,6 @@ def test_set_block_writes_tld_extends(tmp_path):
 
 def test_set_block_rejects_a_bad_tld_extends():
     from tld.profile import patch as pp
-    for bad in ("o/r/p@main", "o/r/p@" + "a" * 40 + "  # x\rgit: {bot_login: evil}", "o/r/p@" + "a" * 40 + "\n"):
+    for bad in ("o/r/p@main", "o/r/../x@" + "a" * 40, "o/r/p@" + "a" * 40 + "  # x\rgit: {bot_login: evil}", "o/r/p@" + "a" * 40 + "\n"):
         with pytest.raises(pp.PatchError):
             pp.set_block("tld:\n  version: x\n", "tld.extends", bad)

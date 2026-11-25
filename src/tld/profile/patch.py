@@ -162,7 +162,8 @@ def _set_extends(text: str, lines: list[str], value) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"[\x20-\x7e]+", value):
         raise PatchError("'tld.extends' must be one line of printable ASCII")
     scalar, _, comment = value.partition("  # ")
-    if not EXTENDS.fullmatch(scalar.strip()):
+    if not EXTENDS.fullmatch(scalar.strip()) or ".." in scalar.split("@")[0].split("/") \
+            or "//" in scalar.split("@")[0]:
         raise PatchError("'tld.extends' must be <owner>/<repo>/<path>@<40-hex commit sha>")
     new = render("extends", scalar.strip(), 2)
     if comment.strip():

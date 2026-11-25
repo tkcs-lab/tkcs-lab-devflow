@@ -97,3 +97,11 @@ def test_symlinked_directory_outside_the_tree_is_not_read(tmp_path):
     (repo / ".github").symlink_to(outside, target_is_directory=True)
     (repo / "CODEOWNERS").symlink_to(outside / "CODEOWNERS")
     assert sr.scan(repo)["codeowners"] == []
+
+
+def test_long_heading_line_is_fast(tmp_path):
+    import time
+    put(tmp_path, "CONTRIBUTING.md", "# a" + " " * 190000 + "x\n")
+    start = time.time()
+    sr.scan(tmp_path)
+    assert time.time() - start < 2

@@ -38,16 +38,16 @@ LOGIN = re.compile(r"^@([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))$")
 PYPROJECT_VERSION = r'^version = "([^"]+)"'
 PACKAGE_VERSION = r'^[ \t]*"version": "([^"]+)"'
 CARGO_VERSION = r'^version = "([^"]+)"'
-LOCK_REQUIREMENTS = re.compile(r"^requirements/.+\.lock\.txt$|^requirements[^/]*\.txt$")
+LOCK_REQUIREMENTS = re.compile(r"requirements/.+\.lock\.txt|requirements[^/]*\.txt")
 ADR_HEADING = re.compile(r"\b(adrs?|decisions?)\b", re.I)
 
 
-SAFE_PATH = re.compile(r"^(?!-)[A-Za-z0-9._/-]+$")
+SAFE_PATH = re.compile(r"(?!-)[A-Za-z0-9._/-]+")
 
 
 def _safe(rel: str) -> bool:
     """A repository path that may appear in a command: plain characters, no `..`, no leading `-`."""
-    return bool(SAFE_PATH.match(rel)) and ".." not in rel.split("/") and "/-" not in rel
+    return bool(SAFE_PATH.fullmatch(rel)) and ".." not in rel.split("/") and "/-" not in rel
 
 
 def _read(path: Path, root: Path | None = None) -> str | None:
@@ -135,7 +135,7 @@ def _version_files(root: Path) -> list[dict]:
 
 def _deps_audit(root: Path, files: list[str]) -> list[dict]:
     out: list[dict] = []
-    locks = sorted(f for f in files if LOCK_REQUIREMENTS.match(f))
+    locks = sorted(f for f in files if LOCK_REQUIREMENTS.fullmatch(f))
     if locks:
         preferred = [f for f in locks if f.endswith(".lock.txt")] or locks
         runtime = next((f for f in preferred if "dev" not in Path(f).name), None)
@@ -158,15 +158,15 @@ def _deps_audit(root: Path, files: list[str]) -> list[dict]:
 
 
 MANIFESTS = ("pyproject.toml", "package.json", "go.mod", "Cargo.toml")
-LOCKFILES = re.compile(r"^(requirements/.+\.lock\.txt|requirements[^/]*\.lock|poetry\.lock|uv\.lock|"
-                       r"package-lock\.json|go\.sum|Cargo\.lock)$")
+LOCKFILES = re.compile(r"(requirements/.+\.lock\.txt|requirements[^/]*\.lock|poetry\.lock|uv\.lock|"
+                       r"package-lock\.json|go\.sum|Cargo\.lock)")
 
 
 def _lock_freshness(files: list[str]) -> list[dict]:
     """One entry when a `scripts/*lock*.sh` exists and the manifests and lockfiles it concerns are known."""
-    scripts = sorted(f for f in files if re.match(r"^scripts/[^/]*lock[^/]*\.sh$", f))
+    scripts = sorted(f for f in files if re.fullmatch(r"scripts/[^/]*lock[^/]*\.sh", f))
     when = [m for m in MANIFESTS if m in files]
-    lockfiles = sorted(f for f in files if LOCKFILES.match(f))
+    lockfiles = sorted(f for f in files if LOCKFILES.fullmatch(f))
     if not scripts or not when or not lockfiles:
         return []
     return [{"when": when, "run": f"bash {scripts[0]}", "lockfiles": lockfiles}]
@@ -182,9 +182,13 @@ def _adr_bar(root: Path) -> str | None:
     if text is None:
         return None
     for line in text.splitlines():
-        m = re.match(r"^#{1,6}\s+(.+?)\s*#*\s*$", line)
-        if m and ADR_HEADING.search(m.group(1)):
-            return f"CONTRIBUTING.md#{_anchor(m.group(1))}"
+        line = line.strip()
+        if len(line) > 300:
+            continue
+        m = re.match(r"#{1,6}[ \t]+(.*)", line)
+        title = m.group(1).rstrip("# \t") if m else ""
+        if title and ADR_HEADING.search(title):
+            return f"CONTRIBUTING.md#{_anchor(title)}"
     return None
 
 
