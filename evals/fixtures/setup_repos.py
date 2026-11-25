@@ -224,8 +224,6 @@ def build(dest: Path, repo: str = "security_heavy", with_profile: bool = False, 
     if with_base or repo in BASE_REPOS:
         if repo in BASE_REPOS:
             expected["profile_roles"] = None  # the written profile repeats none of the base's roles
-        if repo == "base_no_tests":  # the owner's answers the harness simulates for the single ask
-            expected["answer_fast"] = expected["answer_dod"] = ["python3 -m unittest -q"]
         expected["extends"] = BASE_EXTENDS
         expected["extends_tag"] = BASE_TAG
     if unconfirmed and (expected["roles"] or {}).get("required"):

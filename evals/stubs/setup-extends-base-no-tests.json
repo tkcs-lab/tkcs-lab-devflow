@@ -4,7 +4,7 @@
   "cost_usd": 0.0,
   "branch": "chore/toolkit-profile",
   "commit_message": "chore: add .tld/toolkit.yaml",
-  "result_text": "Profile written; the owner answered verify_fast and verify_dod.",
+  "result_text": "Profile written without verify.fast and verify.dod. Not verified: verify.fast, verify.dod (no test command was found; the ask is open and nobody has answered).",
   "actions": [
     {
       "id": "a1",
@@ -19,6 +19,6 @@
     }
   ],
   "files": {
-    ".tld/toolkit.yaml": "tld:\n  extends: example-org/.github/tld/profile-base.yaml@0123456789abcdef0123456789abcdef01234567  # v1\n  version: \">=1.6,<2\"\ngit:\n  main_branch: main\ndocs:\n  must_read:\n  - README.md\nverify:\n  fast:\n  - python3 -m unittest -q\n  dod:\n  - python3 -m unittest -q\nstacks: []\n"
+    ".tld/toolkit.yaml": "tld:\n  extends: example-org/.github/tld/profile-base.yaml@0123456789abcdef0123456789abcdef01234567  # v1\n  version: \">=1.6,<2\"\ngit:\n  main_branch: main\ndocs:\n  must_read:\n  - README.md\nstacks: []\n"
   }
 }

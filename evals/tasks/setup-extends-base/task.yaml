@@ -1,7 +1,7 @@
 id: setup-extends-base
-description: /setup on a repository with a Makefile test target and an org base must write a valid profile that extends the base, with no ask at all.
+description: "/setup on a repository with a Makefile test target and an org base must write a valid profile that extends the base, with no ask: the fixture proposes deps.audit, which --accept-proposals lists as a proposed command and does not write."
 command: /tld:setup
-arguments: create --base example-org/.github/tld/profile-base.yaml@0123456789abcdef0123456789abcdef01234567
+arguments: create --accept-proposals --base example-org/.github/tld/profile-base.yaml@0123456789abcdef0123456789abcdef01234567
 fixture:
   builder: setup_repos
   params:
@@ -23,3 +23,5 @@ graders:
   - name: profile_key_absent
     keys: [deps.audit, deps.lock_freshness]
     blocking_true_roles: true
+  - name: result_matches
+    must: [not written]

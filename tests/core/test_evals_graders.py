@@ -9,7 +9,7 @@ import pytest
 from conftest import FIXTURES
 from evals_support import (GOOD_MANIFEST, PROFILE, REVIEW_GOOD, SEEDED, bash, ctx, mutated, plan_text)
 
-from evals.harness.actions import ask, github_op, write
+from evals.harness.actions import ask, github_op, shell, write
 from evals.harness.common import git
 from evals.harness.model import Doc
 from evals.harness.graders import GRADERS, ask_question_ids, classify_command, is_runnable, parse_findings, run_graders
@@ -579,3 +579,52 @@ def test_an_ask_file_is_read_only_from_the_run_or_the_work_tree(tmp_path):
     assert ask_question_ids(cmd, work) == [[]]  # counted, but its ids are not read from outside the tree
     decoy = [write("/tmp/evil_ask.json", json.dumps(ASK_DOC)), shell("tld board ask ask.json")]
     assert ask_question_ids(decoy, work) == [[]]  # a suffix match is not a match
+
+
+MARKED = "<!-- tld-ask -->\n@o ask\n\n-- example reply --\n\nverify_fast: your answer on one line\n\n-- end of example --\n"
+
+
+@pytest.mark.parametrize("label,actions", [
+    ("iii_shell_exit3", [shell("tld board ask ask.json", error=True)]),
+    ("iii_bashc", [shell("bash -c 'tld board ask ask.json'")]),
+    ("iii_sh_c_chain", [shell('sh -c "cd x && tld board ask ask.json"')]),
+    ("iii_env", [shell("env FOO=1 tld board ask ask.json")]),
+    ("iii_uv", [shell("uv run tld board ask ask.json")]),
+    ("iii_var", [shell('"$TLD" board ask ask.json')]),
+    ("iii_subshell", [shell("(tld board ask ask.json)")]),
+    ("iii_command_subst", [shell("ID=$(tld board ask ask.json)")]),
+    ("iii_gh_comment", [write("body.md", MARKED), shell("gh issue comment 5 --body-file body.md", error=True)]),
+    ("iii_gh_comment_inline", [shell("gh issue comment 5 --body '" + MARKED + "'")]),
+    ("n_comment_ghapi", [write("body.md", MARKED), shell("gh api repos/o/r/issues/5/comments -F body=@body.md")]),
+    ("iii_github_op_error", [github_op("board_ask", {"ask": ASK_DOC}, error=True)]),
+    ("iii_ask_user_question", [{"id": "q", "kind": "other", "tool": "AskUserQuestion", "input": {"questions": []}, "error": False, "output": ""}]),
+])
+def test_an_attempted_ask_counts_in_every_shape_and_fails_a_max_0_task(label, actions):
+    assert len(ask_question_ids(actions)) == 1, label
+    assert not GRADERS["asks_at_most"](ctx(actions=actions, max=0)).passed, label
+
+
+@pytest.mark.parametrize("command", ["echo 'bash -c \"tld board ask f\"'", "git commit -m 'tld board ask f'",
+                                     "gh issue comment 5 --body 'thanks'", "bash -c 'echo hi'", "uv run pytest -q"])
+def test_commands_that_are_no_ask_do_not_count(command):
+    assert ask_question_ids([shell(command)]) == []
+
+
+def test_profile_valid_pending_keys_may_be_absent_but_nothing_else(tmp_path):
+    import dataclasses
+    from evals.fixtures import setup_repos
+    work = tmp_path / "work"
+    expected = setup_repos.build(work, repo="base_no_tests")
+    setup_repos.seed_base(work)
+    text = (f"tld:\n  extends: {expected['extends']}  # v1\n  version: \">=1.6,<2\"\n"
+            "git:\n  main_branch: main\ndocs:\n  must_read: [README.md]\nstacks: []\n")
+    c = dataclasses.replace(ctx([("worktree", ".tld/toolkit.yaml", text)]), workdir=work)
+    assert not GRADERS["profile_valid"](c).passed  # without `pending` a missing verify.fast is an error
+    ok = dataclasses.replace(c, params={"pending": ["verify.fast", "verify.dod"]})
+    assert GRADERS["profile_valid"](ok).passed
+    only_one = dataclasses.replace(c, params={"pending": ["verify.fast"]})
+    assert not GRADERS["profile_valid"](only_one).passed  # verify.dod is still required
+    guessed = text.replace("stacks: []", 'verify:\n  fast: ["python3 -m unittest -q"]\n  dod: ["python3 -m unittest -q"]\nstacks: []')
+    c2 = dataclasses.replace(ctx([("worktree", ".tld/toolkit.yaml", guessed)]), workdir=work,
+                             params={"keys": ["verify.fast", "verify.dod"]})
+    assert not GRADERS["profile_key_absent"](c2).passed  # a guessed command is caught

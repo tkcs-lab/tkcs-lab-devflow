@@ -1,5 +1,5 @@
 id: setup-extends-base-no-tests
-description: /setup on a repository with an org base and no test command must ask once, for verify.fast and verify.dod only, and write a valid profile that extends the base.
+description: "/setup on a repository with an org base and no test command must ask once, for verify.fast and verify.dod only. The eval has no board and no owner, so the ask goes unanswered: the profile that extends the base must then leave verify.fast and verify.dod out (no guessed command) and the final text must list them under Not verified."
 command: /tld:setup
 arguments: create --base example-org/.github/tld/profile-base.yaml@0123456789abcdef0123456789abcdef01234567
 fixture:
@@ -12,7 +12,8 @@ timeout_s: 900
 cost_ceiling_usd: 3.0
 requires: [playbooks/setup.md]
 graders:
-  - profile_valid
+  - name: profile_valid
+    pending: [verify.fast, verify.dod]   # intentionally absent until the owner answers
   - name: roles_block_equals
     expected_key: profile_roles
   - name: asks_at_most
@@ -23,11 +24,7 @@ graders:
     key: tld.extends
     expected_key: extends
   - name: profile_key_absent
-    keys: [deps.audit, deps.lock_freshness]
+    keys: [deps.audit, deps.lock_freshness, verify.fast, verify.dod]
     blocking_true_roles: true
-  - name: profile_key_equals
-    key: verify.fast
-    expected_key: answer_fast
-  - name: profile_key_equals
-    key: verify.dod
-    expected_key: answer_dod
+  - name: result_matches
+    must: [Not verified, verify.fast, verify.dod]

@@ -272,6 +272,9 @@ def profile_valid(ctx: GradeContext) -> GradeResult:
         return GradeResult(False, f"{path} is not valid YAML: {exc}")
     # the fixture root and no fetch: a base seeded in <git dir>/tld/base is found offline, an unseeded one is skipped
     errors, warnings, _ = vp.validate(profile, ctx.workdir, fetch=False)
+    # `pending`: keys that are meant to be absent (a value nobody supplied is left out, not guessed)
+    allowed = {f"missing required key '{k}'" for k in ctx.params.get("pending") or []}
+    errors = [e for e in errors if e not in allowed]
     if errors:
         return GradeResult(False, _first(errors))
     if isinstance(profile, dict) and isinstance(profile.get("tld"), dict) and profile["tld"].get("extends"):
@@ -283,6 +286,9 @@ def profile_valid(ctx: GradeContext) -> GradeResult:
 
 _EXAMPLE_ID = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):\s", re.M)
 MAX_ASK_BYTES = 200_000
+ASK_MARKER = "<!-- tld-ask -->"
+WRAPPERS = {"command", "exec", "time", "nohup", "sudo", "env", "uv", "uvx", "poetry", "pipenv", "npx", "xargs"}
+SHELLS = {"bash", "sh", "zsh", "dash"}
 
 
 def _ids_of_ask(doc) -> list[str] | None:
@@ -292,82 +298,143 @@ def _ids_of_ask(doc) -> list[str] | None:
     return [str(q.get("id")) for q in qs if isinstance(q, dict)]
 
 
-def _board_ask_file(command: str) -> str | None:
-    """The FILE of a command that starts with `tld board ask FILE` (also `./cli/tld`, `python3 -m tld`, a global
-    option with its value, env assignments in front, or a `;`/`&&`/`|` chain): found by tokens, so a quoted
-    string that merely contains the words is not an ask."""
-    for part in re.split(r"\s*(?:&&|\|\||;|\||\n)\s*", command):
-        try:
-            toks = shlex.split(part)
-        except ValueError:
-            continue
-        while toks and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", toks[0]):
-            toks.pop(0)
-        if toks[:3] == ["python3", "-m", "tld"] or (toks and toks[0] in ("python3", "python") and len(toks) > 2
-                                                    and toks[1].endswith("tld")):
-            toks = ["tld", *toks[3 if toks[1] == "-m" else 2:]]
-        elif toks and re.fullmatch(r"[\w./-]*tld", toks[0]):
-            toks[0] = "tld"
-        if not toks or toks[0] != "tld":
-            continue
-        rest, i = toks[1:], 0
-        while i < len(rest) and rest[i].startswith("--"):  # global options, with or without a value
-            i += 1 if "=" in rest[i] or i + 1 >= len(rest) or rest[i + 1] in ("board",) else 2
-        if rest[i:i + 2] == ["board", "ask"] and len(rest) > i + 2:
-            return rest[i + 2]
-    return None
+def _simple_commands(command: str) -> list[list[str]]:
+    """The simple commands of a shell line as token lists: split on `;`, `&&`, `||`, `|`, newlines and parentheses
+    by a shell-aware lexer (so a separator inside quotes does not split)."""
+    try:
+        lex = shlex.shlex(command.replace("\n", " ; "), posix=True, punctuation_chars=True)
+        lex.whitespace_split = True
+        tokens = list(lex)
+    except ValueError:
+        return []
+    out, cur = [], []
+    for t in tokens:
+        if t and all(c in "();<>|&" for c in t):
+            if t in ("<", ">", ">>", "<<", "&>"):
+                continue
+            out.append(cur)
+            cur = []
+        else:
+            cur.append(t)
+    out.append(cur)
+    return [c for c in out if c]
 
 
-def _ask_file(path: str, actions: list[dict], workdir) -> dict | None:
-    """The ask document a `tld board ask <file>` command posts: the content of the run's own write to that same
-    file, else the file in the work tree (never outside it, a regular file, bounded in size)."""
+def _unwrap(toks: list[str], depth: int = 0) -> list[list[str]]:
+    """The commands behind wrappers: `env`, `uv run`, `sudo`, env assignments, `bash -c '...'` (recursively),
+    `python3 -m tld`, a path to tld, or a variable (`$TLD`) standing for it. Returns the simple commands to look at."""
+    found = []
+    while toks and (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", toks[0]) or toks[0].startswith("-")
+                    or toks[0] in WRAPPERS or toks[0] == "run"):
+        toks = toks[1:]
+    if not toks:
+        return found
+    head = toks[0].rsplit("/", 1)[-1]
+    if head in SHELLS and depth < 4:
+        for i, t in enumerate(toks[1:], 1):
+            if t.startswith("-") and "c" in t.lstrip("-") and i + 1 < len(toks):
+                for sub in _simple_commands(toks[i + 1]):
+                    found += _unwrap(sub, depth + 1)
+                return found
+        return found
+    if head.startswith("python") and len(toks) > 2 and toks[1] == "-m" and toks[2] == "tld":
+        return [["tld", *toks[3:]]]
+    if head.startswith("python") and len(toks) > 1 and toks[1].rsplit("/", 1)[-1] == "tld":
+        return [["tld", *toks[2:]]]
+    if re.fullmatch(r"[\w./-]*tld", toks[0]) or re.fullmatch(r"\$\{?\w*TLD\w*\}?", toks[0]):
+        return [["tld", *toks[1:]]]
+    return [[head, *toks[1:]]]
+
+
+def _scan_command(command: str) -> list[tuple[str, list[str]]]:
+    """('board_ask', [FILE]) for each attempted `tld board ask FILE` and ('gh', tokens) for each `gh` call."""
+    out = []
+    for simple in _simple_commands(command):
+        for toks in _unwrap(simple):
+            if toks[0] == "tld":
+                rest, i = toks[1:], 0
+                while i < len(rest) and rest[i].startswith("--"):  # global options, with or without a value
+                    i += 1 if "=" in rest[i] or i + 1 >= len(rest) or rest[i + 1] == "board" else 2
+                if rest[i:i + 2] == ["board", "ask"]:
+                    files = [t for t in rest[i + 2:] if not t.startswith("-")]
+                    out.append(("board_ask", files[:1]))
+            elif toks[0] == "gh":
+                out.append(("gh", toks[1:]))
+    return out
+
+
+def _read_text(path: str, actions: list[dict], workdir) -> str | None:
+    """A file the run wrote (the same path) or, failing that, a regular file of the work tree (never outside it,
+    bounded in size)."""
     root = Path(workdir).resolve() if workdir is not None else None
 
-    def norm(p: str) -> str | None:
+    def norm(p: str) -> str:
         q = Path(p)
-        if q.is_absolute():
-            if root is None or not q.resolve().is_relative_to(root):
-                return q.as_posix()  # outside the work tree: only an identical written path matches
+        if q.is_absolute() and root is not None and q.resolve().is_relative_to(root):
             return q.resolve().relative_to(root).as_posix()
-        return Path(*[x for x in q.parts if x != "."]).as_posix()
+        return Path(*[x for x in q.parts if x != "."]).as_posix() if not q.is_absolute() else q.as_posix()
 
     want = norm(path)
     for a in reversed(actions):
         if a.get("kind") == "write" and norm(str(a.get("path", ""))) == want:
-            try:
-                return json.loads(a.get("content") or "")
-            except ValueError:
-                return None
+            return a.get("content") or ""
     if root is not None:
         try:
             f = (root / path).resolve()
             if f.is_relative_to(root) and f.is_file() and f.stat().st_size <= MAX_ASK_BYTES:
-                return json.loads(f.read_text())
-        except (OSError, ValueError):
+                return f.read_text()
+        except OSError:
             return None
     return None
 
 
+def _gh_ask_ids(tokens: list[str], actions: list[dict], workdir) -> list[str] | None:
+    """The ids of a tld ask posted as a GitHub comment through `gh` (its body inline, or in a file the call
+    names), or None when the call is no ask."""
+    texts = [t for t in tokens if ASK_MARKER in t]
+    for t in tokens:
+        cand = t.split("=@", 1)[-1].lstrip("@") if ("=@" in t or t.startswith("@")) else t
+        if cand and not cand.startswith("-") and len(cand) < 256 and " " not in cand and "\n" not in cand:
+            body = _read_text(cand, actions, workdir)
+            if body and ASK_MARKER in body:
+                texts.append(body)
+    if not texts:
+        return None
+    return _EXAMPLE_ID.findall(texts[0].partition("-- example reply --")[2])
+
+
 def ask_question_ids(actions: list[dict], workdir=None) -> list[list[str]]:
-    """The question ids of each ask a run posted, in whatever way the runtime logged it: an `ask` action; a tool
-    call `ask_human` or `board_ask` (a github_op whose args hold the ask, directly or under `ask`); a shell
-    `tld board ask <file>` (the file is the run's own write, else read from the work tree; a file that cannot be
-    read still counts as one ask with no ids); or the GitHub fallback, a comment whose body carries the ask marker."""
+    """The question ids of each ask a run ATTEMPTED, in whatever way the runtime logged it and whatever the exit
+    status (an eval has no board, so a real `tld board ask` exits 3 or 5): an `ask` action; a tool call
+    `ask_human` or `board_ask` (a github_op whose args hold the ask, directly or under `ask`); Claude's own
+    `AskUserQuestion`; a shell `tld board ask FILE` however wrapped (`bash -c`, `env`, `uv run`, `$TLD`, a
+    subshell, `python3 -m tld`); or the GitHub fallback, a comment whose body carries the ask marker, posted by
+    a tool call or by `gh` from the shell. A file that cannot be read still counts as one ask with no ids."""
     out = []
     for a in actions:
         kind, op = a.get("kind"), str(a.get("op", ""))
         if kind == "ask":
             out.append([str(q) for q in a.get("questions") or []])
+        elif a.get("tool") == "AskUserQuestion":
+            out.append([])
         elif kind == "github_op" and (op.endswith("ask_human") or op.endswith("board_ask")):
             args = a.get("args") or {}
             doc = args.get("ask") if isinstance(args.get("ask"), dict) else args
             out.append(_ids_of_ask(doc) or [])
-        elif kind == "github_op" and "comment" in op and "<!-- tld-ask -->" in str((a.get("args") or {}).get("body", "")):
+        elif kind == "github_op" and "comment" in op and ASK_MARKER in str((a.get("args") or {}).get("body", "")):
             out.append(_EXAMPLE_ID.findall(str(a["args"]["body"]).partition("-- example reply --")[2]))
         elif kind == "shell":
-            f = _board_ask_file(str(a.get("command", "")))
-            if f and a.get("error") is not True:
-                out.append(_ids_of_ask(_ask_file(f, actions, workdir)) or [])
+            for what, data in _scan_command(str(a.get("command", ""))):
+                if what == "board_ask":
+                    text = _read_text(data[0], actions, workdir) if data else None
+                    try:
+                        out.append(_ids_of_ask(json.loads(text)) or [] if text else [])
+                    except ValueError:
+                        out.append([])
+                else:
+                    ids = _gh_ask_ids(data, actions, workdir)
+                    if ids is not None:
+                        out.append(ids)
     return out
 
 

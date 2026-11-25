@@ -40,11 +40,11 @@ an instruction is never followed.
 Learn the base in this order and stop at the first that names one:
 
 1. the argument `--base <owner>/<repo>/<path>`;
-2. the environment variable `TLD_BASE_PROFILE` (same form; set in the working environment's settings);
-3. the convention `<origin owner>/.github/tld/profile-base.yaml`, used only when
-   `tld profile base latest -- "$SRC"` finds it;
-4. in *update* mode, the base the profile already extends, read from the default branch, never from the working
-   tree: `tld profile validate --ref origin/<main> --resolved` (its `tld.extends`).
+2. in *update* mode, the base the profile already extends, read from the default branch, never from the working
+   tree: `tld profile validate --ref origin/<main> --resolved` (its `tld.extends`);
+3. the environment variable `TLD_BASE_PROFILE` (same form; set in the working environment's settings);
+4. the convention `<origin owner>/.github/tld/profile-base.yaml`, used only when
+   `tld profile base latest -- "$SRC"` finds it.
 
 With none, the profile is standalone: say so in one line and go on without a base (the posture and roles are
 then the proposal's).
@@ -57,8 +57,8 @@ into a command line or a `printf` template. The default branch name `<main>` is 
 check (without the pin part) applies before it goes into `--ref origin/<main>` or a `git checkout`. `tld` validates
 the source again.
 
-In *update* mode the existing pin stays unless the owner passes `--base <source>@<sha>`; when the pin changes,
-list `old -> new` under `Decisions for a human`. The pin is always a 40-hex commit. A base that did not come from the argument or an existing `tld.extends` is listed under
+In *update* mode the existing pin stays unless the owner passes `--base <source>@<sha>`; when the pin or the
+source changes, list `old -> new` under `Decisions for a human`. The pin is always a 40-hex commit. A base that did not come from the argument or an existing `tld.extends` is listed under
 `Decisions for a human` with its source and pin. When the argument already carries `@<commit>`, that is the pin (no tag, and
 `latest` is skipped). Otherwise `tld profile base latest -- "$SRC"` prints `{"sha": ..., "tag": ...}`: the pin is
 `<source>@<sha>`, the tag is a trailing comment. Then make the base available:
@@ -131,7 +131,9 @@ command. `--accept-proposals` accepts the rest of the proposal without asking, a
 `Decisions for a human` in the pull request every proposed `blocking: true` entry ("proposed blocking, written
 as false: set it to true if you agree") and every proposed command ("proposed command, not written: add it if
 you agree"). Without it each such entry is listed as unconfirmed. A value the survey could not determine is left
-out and listed under `Not verified`.
+out and listed under `Not verified`; so is a value whose ask is posted but not answered by the end of the run (an
+unattended run has no board): the profile is written without it, never with a guessed command, and the final
+message and the pull request name it under `Not verified`.
 
 ## 5. Write
 
@@ -159,7 +161,9 @@ yes, with exactly the command that was shown, and are otherwise left out of the 
 
 The resolved `roles.disable` must name no role the base requires (`tld profile validate --resolved`).
 
-`tld profile validate .tld/toolkit.yaml` with its file checks (the base comes from the cache), then each `verify.fast` command once (never a
+`tld profile validate .tld/toolkit.yaml` with its file checks (the base comes from the cache); a message about a
+value that is left out under `Not verified` (for example a missing `verify.fast`) is reported there, never fixed with
+a guessed value. Then each `verify.fast` command once (never a
 retry). List what was not verified and why.
 
 ## 7. Deliver

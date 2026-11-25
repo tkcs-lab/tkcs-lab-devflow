@@ -15,8 +15,7 @@ MD_COUNTS = {"docs_website": 11, "security_heavy": 3, "ios_ui_app": 1, "bare": 1
 @pytest.mark.parametrize("repo", setup_repos.REPOS)
 def test_build_has_files_and_keys(repo, tmp_path):
     expected = setup_repos.build(tmp_path / "r", repo=repo)
-    got = set(expected) - {"answer_fast", "answer_dod"}
-    assert got == (BASE_KEYS if repo in setup_repos.BASE_REPOS else KEYS) and expected["repo"] == repo and expected["main_branch"] == "main"
+    assert set(expected) == (BASE_KEYS if repo in setup_repos.BASE_REPOS else KEYS) and expected["repo"] == repo and expected["main_branch"] == "main"
     for rel in setup_repos.FILES[repo]:
         assert (tmp_path / "r" / rel).is_file(), rel
     assert len(list((tmp_path / "r").rglob("*.md"))) == MD_COUNTS[repo]
@@ -124,3 +123,9 @@ def test_setup_playbook_never_pastes_a_repository_supplied_base_source():
     assert 'tld profile base latest -- "$SRC"' in flat
     assert "never from the working tree" in flat and "origin/<main> --resolved" in flat
     assert "the existing pin stays unless the owner passes" in flat
+
+
+def test_setup_playbook_leaves_an_unanswered_value_out_and_lists_it():
+    flat = " ".join(SETUP.split())
+    assert "never with a guessed command" in flat and "posted but not answered" in flat
+    assert "in *update* mode, the base the profile already extends, read from the default branch" in flat
