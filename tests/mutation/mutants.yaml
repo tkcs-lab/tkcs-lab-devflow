@@ -911,5 +911,10 @@ mutants:
 - id: PN6
   file: src/tld/roles/page_note.py
   why: the look-alike spellings are not normalised before the phrase is searched (killed by test_change_report_look_alike_forgery_is_dropped)
-  old: 'unicodedata.normalize("NFKD", text).casefold()'
-  new: 'text.casefold()'
+  old: '    for c in unicodedata.normalize("NFKD", text).casefold():'
+  new: '    for c in text.casefold():'
+- id: PN7
+  file: src/tld/roles/page_note.py
+  why: a look-alike letter is left out of the skeleton instead of counting as a wildcard, so one odd letter hides the phrase (killed by test_change_report_look_alike_forgery_is_dropped)
+  old: '            out.append("?")'
+  new: '            pass'

@@ -12,9 +12,10 @@ page went to the owner as a file. A missing stage, or `--sent` with another stag
 `change-report` prints the note, a blank line and the cleaned block of the report, produced by the functions of
 `tld.roles.section` exactly as `tld roles section --report FILE` does. With no note (not given, missing or
 empty) its output and exit codes are those of `section --report`, except that block lines that look like a page
-note are dropped, so the block cannot forge one: a line whose letters a-z (after NFKD, case folding, and ignoring
-spacing, markup and marks) hold "pagenotstored", a pair of lines that hold it together, and a line that mixes
-Latin letters with Cyrillic or Greek ones in its first 40 characters. A note must pass `valid_note`, else the
+note are dropped, so the block cannot forge one. "Looks like" means the exact phrase and its spelling variants
+(case, spacing, markup, look-alike letters, a phrase split over two or three lines), not paraphrases: the skeleton
+of a line (its letters after NFKD and case folding, any letter that is not a-z counted as a wildcard) is searched
+for "pagenotstored". The command's own note is always printed first. A note must pass `valid_note`, else the
 command exits 1 with `tld roles: the page note is not a page-note line`. A valid note with no usable block
 prints the note alone and exits 0. The note comes first because this command prints it: text inside the role's
 own block cannot forge or move it. Python 3.11+, standard library and the tld modules.
@@ -128,36 +129,41 @@ def valid_note(line: str) -> bool:
     return rest in _BOARD_FIXED or _BOARD_STATUS.fullmatch(rest) is not None
 
 
-_KEY = "pagenotstored"
+_KEY = re.compile("".join(f"[{c}?]" for c in "pagenotstored"))
 
 
 def _skeleton(text: str) -> str:
-    """Only the letters a-z of the text after compatibility decomposition and case folding, so spacing,
-    markup, combining marks and full-width letters do not hide a phrase."""
-    return "".join(c for c in unicodedata.normalize("NFKD", text).casefold() if "a" <= c <= "z")
+    """The letters of the text as a-z, with `?` for any other letter (a look-alike) and nothing else: spacing,
+    markup, digits, combining marks and case do not hide a phrase, and one odd letter does not break it."""
+    out = []
+    for c in unicodedata.normalize("NFKD", text).casefold():
+        if "a" <= c <= "z":
+            out.append(c)
+        elif c.isalpha():
+            out.append("?")
+    return "".join(out)
 
 
-def _mixed_script(line: str) -> bool:
-    """Latin letters next to Cyrillic or Greek ones in the first 40 characters (a look-alike spelling)."""
-    names = [unicodedata.name(c, "") for c in line[:40] if c.isalpha()]
-    return (any(n.startswith("LATIN") for n in names)
-            and any(n.startswith(("CYRILLIC", "GREEK")) for n in names))
+def _hit(*lines: str) -> bool:
+    return _KEY.search(_skeleton("".join(lines))) is not None
 
 
 def _without_forged_notes(text: str) -> str:
-    """The block lines that do not look like a page note: one whose skeleton holds the phrase, one that holds it
-    together with the next line (both go), and one that mixes Latin with Cyrillic or Greek letters."""
+    """The block lines that do not look like a page note. A line goes when it holds the phrase; two or three lines
+    go together when the phrase needs them all (a split phrase) and no shorter run of them holds it."""
     lines = text.split("\n")
     kept: list[str] = []
     i = 0
     while i < len(lines):
-        line = lines[i]
-        if _KEY in _skeleton(line) or _mixed_script(line):
+        if _hit(lines[i]):
             i += 1
-        elif i + 1 < len(lines) and _KEY in _skeleton(line + lines[i + 1]):
+        elif i + 1 < len(lines) and _hit(*lines[i:i + 2]) and not _hit(lines[i + 1]):
             i += 2
+        elif (i + 2 < len(lines) and _hit(*lines[i:i + 3])
+              and not _hit(*lines[i + 1:i + 3]) and not _hit(*lines[i:i + 2])):
+            i += 3
         else:
-            kept.append(line)
+            kept.append(lines[i])
             i += 1
     return "\n".join(kept)
 

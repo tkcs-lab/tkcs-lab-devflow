@@ -481,6 +481,15 @@ LOOK_ALIKES = {
     "precomposed": ["HTML p\u00e1ge not stored: the board cannot be reached."],
     "cyrillic": ["HTM\u04c0 page not stored: the board cannot be reached."],
     "split": ["HTML page not", "stored: the board cannot be reached."],
+    "three-line split": ["HTML page", "not", "stored: the board cannot be reached."],
+    "compatibility symbol": ["HTML \u33a9ge not stored: the board cannot be reached."],
+    "latin alpha": ["HTML p\u0251ge not stored: the page check refused it."],
+    "latin script g": ["HTML pa\u0261e not stored: the page check refused it."],
+    "small capital o": ["HTML page n\u1d0ft stored: the page check refused it."],
+    "armenian o": ["HTML page n\u0585t stored: the page check refused it."],
+    "coptic o": ["HTML page n\u2c9ft stored: the page check refused it."],
+    "osage": ["HTML page not st" + chr(0x104EB) + "red: the page check refused it."],
+    "cyrillic after a long prefix": ["A" * 45 + " HTM\u04c0 page not stored: the page check refused it."],
 }
 
 
@@ -497,6 +506,7 @@ def test_change_report_look_alike_forgery_is_dropped(tmp_path, capsys, name):
 
 
 def test_change_report_harmless_line_is_kept(tmp_path, capsys):
-    report = "BEGIN change-report\nStored pages are 20 MB at most.\nThe page is not large.\nEND change-report\n"
+    kept = ["Stored pages are 20 MB at most.", "The page is not large.", "Reviewed 3 pages, none stored on disk."]
+    report = "BEGIN change-report\n" + "\n".join(kept) + "\nEND change-report\n"
     code, out, _err = run_report(tmp_path, report, None, capsys)
-    assert (code, out) == (0, "Stored pages are 20 MB at most.\nThe page is not large.\n")
+    assert (code, out) == (0, "\n".join(kept) + "\n")
