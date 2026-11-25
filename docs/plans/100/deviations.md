@@ -5,7 +5,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p1-record-tracking-issue
 
-- pending
+- worker: Worker ran with python3 instead of .venv and without tld; orchestrator ran roles and checks.
+- review: Security reviewer: non-blocking, a foreign-repo issue_url ending in /issues/<n> yields two errors where plan 3.1 says one; left as is.
 
 ## p2-board-issue-link
 
