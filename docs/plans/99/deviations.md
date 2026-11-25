@@ -39,4 +39,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Finishing
 
-- pending
+- final: scope disposition: the scope check ran after the merges for most phases (results: p1 and p3 not checked, merged before the check); the diff holds no path outside a phase touches list except the fix-round files named in the fix worker briefs
+- final: fix round: 12 fixed, 2 declined
+- final: the reflektor role could not store its HTML page for this branch: the installed tld still has the old check that refuses a page quoting the allow mark, which is the bug this plan fixes; the change report text section is in the pull request body
+- final: fix-round security check found one non-blocking note, not fixed (no second round): counting unassigned code points as a wildcard lets a single unassigned code point inserted between letters of a forged note line miss the filter; the note printed first is the real defence
