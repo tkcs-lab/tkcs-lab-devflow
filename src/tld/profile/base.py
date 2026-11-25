@@ -43,7 +43,7 @@ FETCH_TIMEOUT = 20.0
 MAX_BYTES = 65536
 MAX_DEPTH = 8
 MAX_TAGS_TRIED = 20
-SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}\Z")
+SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}\Z")
 REPO_RE = re.compile(r"^[A-Za-z0-9._-]{1,100}\Z")
 SOURCE_RE = re.compile(r"^(?P<owner>[A-Za-z0-9][A-Za-z0-9-]{0,38})/(?P<repo>[A-Za-z0-9._-]{1,100})/(?P<path>[A-Za-z0-9._/-]{1,256})\Z")
@@ -113,7 +113,7 @@ def parse_extends(value: object) -> BaseRef:
     parts = _split_source(source)
     if parts is None or not ref:
         raise shape
-    if not SHA40_RE.match(ref):
+    if not SHA40_RE.fullmatch(ref):
         raise BaseError(f"toolkit.yaml: 'tld.extends': '@{_show(ref)}' is not a commit SHA; pin the base by its full "
                         f"40-hex commit (a tag can move): run tld profile base latest {parts[0]}/{parts[1]}/{parts[2]}")
     return BaseRef(*parts, ref.lower())
@@ -364,7 +364,7 @@ def _remote_tags(out: str) -> dict[str, str]:
     tags: dict[str, str] = {}
     for line in out.splitlines():
         sha, _, name = line.partition("\t")
-        if not name.startswith("refs/tags/") or not SHA40_RE.match(sha):
+        if not name.startswith("refs/tags/") or not SHA40_RE.fullmatch(sha):
             continue
         tag = name[len("refs/tags/"):]
         peeled = tag.endswith("^{}")
@@ -377,7 +377,7 @@ def _remote_tags(out: str) -> dict[str, str]:
 def _remote_head(out: str) -> str:
     for line in out.splitlines():
         sha, _, name = line.partition("\t")
-        if name.strip() == "HEAD" and SHA40_RE.match(sha):
+        if name.strip() == "HEAD" and SHA40_RE.fullmatch(sha):
             return sha.lower()
     return ""
 
