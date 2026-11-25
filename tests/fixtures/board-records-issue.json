@@ -1,0 +1,222 @@
+[
+ {
+  "id": "tkcs-lab-devflow--run--demo-plan",
+  "data": {
+   "schema": 1,
+   "kind": "run",
+   "command": null,
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": "demo-plan",
+   "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/demo-plan/docs/plans/42/plan.md",
+   "feature_branch": "feature/demo-plan",
+   "orchestrator_session": "session_0123456789abcdef",
+   "attended": true,
+   "status": "running",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "running",
+   "next_check_at": null,
+   "finished_at": null,
+   "updated_at": "2026-11-20T11:50:00Z",
+   "tracking_issue": 42
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--run--issue-7",
+  "data": {
+   "schema": 1,
+   "kind": "run",
+   "command": null,
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": "issue-7",
+   "plan_url": null,
+   "feature_branch": "fix/issue-7",
+   "orchestrator_session": "session_0123456789abcdef",
+   "attended": true,
+   "status": "running",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "running",
+   "next_check_at": null,
+   "finished_at": null,
+   "updated_at": "2026-11-20T11:50:00Z",
+   "tracking_issue": 7
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--make-plan--76543210",
+  "data": {
+   "schema": 1,
+   "kind": "command",
+   "command": "make-plan",
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": null,
+   "plan_url": null,
+   "feature_branch": null,
+   "orchestrator_session": "session_fedcba9876543210",
+   "attended": true,
+   "status": "running",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [
+    {
+     "id": "research",
+     "title": "Research",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": null,
+     "finished_at": null,
+     "pr": null
+    },
+    {
+     "id": "decide",
+     "title": "Decide",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": null,
+     "finished_at": null,
+     "pr": null
+    },
+    {
+     "id": "write",
+     "title": "Write",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": null,
+     "finished_at": null,
+     "pr": null
+    },
+    {
+     "id": "review",
+     "title": "Review",
+     "depends_on": [],
+     "complexity": null,
+     "state": "pending",
+     "session": null,
+     "branch": null,
+     "started_at": null,
+     "finished_at": null,
+     "pr": null
+    },
+    {
+     "id": "hand-over",
+     "title": "Hand over",
+     "depends_on": [],
+     "complexity": null,
+     "state": "pending",
+     "session": null,
+     "branch": null,
+     "started_at": null,
+     "finished_at": null,
+     "pr": null
+    }
+   ],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "running",
+   "next_check_at": null,
+   "finished_at": null,
+   "updated_at": "2026-11-20T11:50:00Z",
+   "tracking_issue": 100
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--run--no-issue",
+  "data": {
+   "schema": 1,
+   "kind": "run",
+   "command": null,
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": "no-issue",
+   "plan_url": null,
+   "feature_branch": "feature/no-issue",
+   "orchestrator_session": "session_0123456789abcdef",
+   "attended": true,
+   "status": "running",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "running",
+   "next_check_at": null,
+   "finished_at": null,
+   "updated_at": "2026-11-20T11:50:00Z"
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--run--null-issue",
+  "data": {
+   "schema": 1,
+   "kind": "run",
+   "command": null,
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": "null-issue",
+   "plan_url": null,
+   "feature_branch": "feature/null-issue",
+   "orchestrator_session": "session_0123456789abcdef",
+   "attended": true,
+   "status": "running",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "running",
+   "next_check_at": null,
+   "finished_at": null,
+   "updated_at": "2026-11-20T11:50:00Z",
+   "tracking_issue": null
+  }
+ }
+]

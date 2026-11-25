@@ -251,7 +251,8 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
   function detail(rec, now, entry) {
     var box = el("div", "detail");
     var links = el("div", "links");
-    add(links, link(rec.plan_url, "plan"), sessionLink(rec),
+    var issue = issueUrl(rec);
+    add(links, issue ? link(issue, "issue #" + rec.tracking_issue) : null, link(rec.plan_url, "plan"), sessionLink(rec),
       rec.pr && rec.pr.url ? link(rec.pr.url, "PR #" + rec.pr.number) : null, reportLink(entry));
     if (links.childNodes.length) box.appendChild(links);
     box.appendChild(el("div", "meta", itemWord(rec) + " · " + (rec.last_event || "")));
