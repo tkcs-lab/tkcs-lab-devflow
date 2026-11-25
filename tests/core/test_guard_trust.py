@@ -285,10 +285,18 @@ def test_malformed_gate_on_a_branch_stays_on(tmp_path):
         assert run("plan-gate", ev(repo)).code == 2, bad
 
 
-def test_a_repository_that_never_had_a_profile_does_no_trust_lookup(tmp_path, monkeypatch):
-    from tld.guard import _common
-    from tld.guard.action import Action
-    repo = make_repo_with_origin(tmp_path / "r", committed=None)
-    ctx = _common.make_ctx(Action("shell", str(repo), str(repo), command="ls"), _common.Settings())
-    monkeypatch.setattr(trust, "trusted", lambda *a, **k: (_ for _ in ()).throw(AssertionError("looked up")))
-    assert _common.gate_enabled(ctx, "plan_gate") is False
+def test_a_committed_deletion_of_the_profile_does_not_switch_the_gates_off(tmp_path):
+    ev = lambda r: {"session_id": "s1", "cwd": str(r), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                    "tool_input": {"file_path": "a.txt", "content": "x"}}
+    repo = make_repo_with_origin(tmp_path / "r", committed=PROFILE)
+    git(repo, "rm", "-q", ".tld/toolkit.yaml")
+    git(repo, "commit", "-qm", "drop the profile")
+    assert run("plan-gate", ev(repo)).code == 2
+
+
+def test_a_repository_without_a_profile_or_an_origin_has_the_gates_off(tmp_path):
+    from hooks_helpers import make_repo
+    repo = make_repo(tmp_path / "r", "feature/demo", None)
+    ev = {"session_id": "s1", "cwd": str(repo), "hook_event_name": "PreToolUse", "tool_name": "Write",
+          "tool_input": {"file_path": "a.txt", "content": "x"}}
+    assert run("plan-gate", ev).code == 0

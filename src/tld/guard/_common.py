@@ -190,12 +190,6 @@ def _gate_on(gate: object) -> bool:
     return not (isinstance(gate, dict) and gate.get("enabled", True) is False)
 
 
-def _profile_tracked(project: str) -> bool:
-    """True when HEAD has the profile (so a deleted working copy is a change, not a repository without one)."""
-    r = trust._git(project, "cat-file", "-e", f"HEAD:{trust.PROFILE_PATH}")
-    return r is not None and r.returncode == 0
-
-
 def gate_enabled(ctx: Ctx, key: str) -> bool:
     """Whether the gate `hooks.<key>.enabled` is on: the resolved value unless it is false, and a gate the trusted
     copy turns on stays on (trusted OR working copy). A malformed value counts as on and never raises. With no profile
@@ -206,8 +200,8 @@ def gate_enabled(ctx: Ctx, key: str) -> bool:
         path = Path(ctx.project_dir) / PROFILE
         if os.path.lexists(path):
             return True
-        if not _profile_tracked(ctx.project_dir):
-            return False  # a repository that never had a profile: no trust lookup
+        # (not decided from HEAD: a commit that deletes the profile, or a branch that predates it, would pass.
+        # The lookup is cached, and with no origin it is cheap and unavailable, so the gate is off.)
         trusted, available = ctx.trusted()
         return bool(available and isinstance(trusted, dict) and _gate_on(_hooks(trusted).get(key)))
     if _gate_on(ctx.hooks_section().get(key)):
