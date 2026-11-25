@@ -15,6 +15,8 @@ judgement, so the task checks the command still reads the profile and stops wher
   starts a worker.
 - `migrate`: a claude-toolkit era profile in `.claude/toolkit.yaml` (model names, `models.planner`, no
   `tld.version`); `migrate --dry-run` shows the plan and changes nothing.
+- `migrate-off-default-paths`: a repository already on tld whose changelog is `CHANGES.md` and whose ADRs are in
+  `docs/adrs`; `migrate --defaults` names both and asks, and a dry run changes nothing.
 No real project names, no secrets, no network.
 """
 from __future__ import annotations
@@ -95,6 +97,11 @@ def build(dest: Path, command: str = "land") -> dict:
         files.pop(".tld/toolkit.yaml", None)
         files[".claude/toolkit.yaml"] = legacy + "\nmodels:\n  planner: opus\n  worker: sonnet\n"
         expected["stop_message"] = [".tld/toolkit.yaml", "models.planner"]
+    elif command == "migrate-off-default-paths":
+        files[".tld/toolkit.yaml"] = _profile()
+        files["CHANGES.md"] = "# Changes\n\n## [Unreleased]\n\n- Notes can be tagged.\n"
+        files["docs/adrs/0001-json-store.md"] = "# 1. Keep notes in a JSON file\n\nAccepted.\n"
+        expected["stop_message"] = ["CHANGES.md", "docs/adrs"]
     else:
         raise ValueError(f"no fixture for command {command!r}")
     init_repo(dest, files)
