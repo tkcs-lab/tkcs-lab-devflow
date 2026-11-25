@@ -125,16 +125,25 @@ out and listed under `Not verified`.
 
 ## 5. Write
 
+Write only from the table of step 3 after step 4's answers are applied, never straight from the survey's
+proposal. Before any write, neutralise it: every `roles.required` entry has `blocking: false` unless the human
+answered yes to its `role_<role>` confirm (an unanswered or "no" confirm is `false`); an entry for a role the base
+already requires is removed; `deps.audit` and `deps.lock_freshness` are written only for a `deps_*` confirm answered
+yes, with exactly the command that was shown, and are otherwise left out of the table.
+
 - *create*: copy `<tld root>/src/tld/templates/toolkit.yaml` to `.tld/toolkit.yaml` (replacing the one-line
-  file of step 1) and fill it in from the table, uncommenting only the blocks that have a value, with
+  file of step 1) and fill it in from the neutralised table, uncommenting only the blocks that have a value, with
   `extends: <source>@<sha>  # <tag>` and `version: ">=<major>.<minor>,<<major + 1>"` under `tld`. Replace nothing else.
 - *update*: `tld profile patch diff .tld/toolkit.yaml survey.json` first, and show the new, changed and stale
-  keys. Then, for `roles` and for `docs.website`:
-  `tld profile patch set-block .tld/toolkit.yaml roles survey.json --answers answers.json --write`.
-  It merges the answers into the proposal (C1). When the profile already has a block that differs (a hand-tuned
-  block) it prints the diff, writes nothing and exits 4: `ask_human` one `confirm` question with that diff, and
-  repeat with `--yes` only on a yes. A survey that found no website is a no-op. Single other keys are edited by
-  hand.
+  keys (the survey still lists base roles and unconfirmed commands: they are not to be written). Under a base, write
+  the `roles` block by hand from the neutralised table; never run `set-block roles`, because it copies the
+  proposal's `blocking: true`. Without a base,
+  `tld profile patch set-block .tld/toolkit.yaml roles survey.json --answers answers.json --write`
+  merges the answers into the proposal (C1) and `answers.json` must hold `"blocking": false` for every entry the
+  human did not confirm. For `docs.website`, run it with that key. When the profile already has a block that differs
+  (a hand-tuned block) it prints the diff, writes nothing and exits 4: `ask_human` one `confirm` question with that
+  diff of the neutralised value, and repeat with `--yes` only on a yes; that yes never stands for a `role_<role>`
+  or `deps_*` confirm. A survey that found no website is a no-op. Single other keys are edited by hand.
 
 ## 6. Check
 

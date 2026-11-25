@@ -109,3 +109,10 @@ def test_setup_playbook_keeps_the_bot_and_the_base_roles_out_of_the_profile():
     assert "The bot login is never a code owner" in flat
     assert "never write `roles.disable` for a role the base requires" in flat
     assert "the posture is not asked" in flat.lower()
+
+
+def test_setup_playbook_neutralises_the_proposal_before_writing():
+    flat = " ".join(SETUP.split())
+    assert "never straight from the survey's proposal" in flat
+    assert "never run `set-block roles`" in flat
+    assert "only for a `deps_*` confirm answered yes" in flat
