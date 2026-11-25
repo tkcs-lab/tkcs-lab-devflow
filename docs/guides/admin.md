@@ -98,6 +98,7 @@ must see every repository.
 | `files` | `config_dirs.forbid` paths that exist; `config_dirs.require` files that are missing; top-level dot directories outside `config_dirs.known`; `workflows` missing or different from their template | pull requests (a missing required file is only reported) |
 | `lint` | `workflow_lint`: actions not pinned to a commit SHA, workflows without top-level `permissions`, `pull_request_target` | nothing: read only |
 | `profile` | `profile`: a repository without `tld.extends`, an invalid or foreign pin, a pin that is not the wanted one, guarded keys a repository overrides, a merge style its settings do not allow (added by plan 90, p14 rewrites) | a pull request that bumps only the `extends:` line |
+| `git_ops` | `git-ops-workflow` and `git-ops-allowlist` (the shipped workflow and an allowlist of every audited repository are missing or differ in the central repository), `git-ops-environment` and `git-ops-token` (the `git-ops` environment and the `GIT_OPS_TOKEN` secret, reported only), `secrets_scope` (an Actions secret not held in an environment limited to the default branch) (added by plan 90, p14 rewrites) | a pull request into the central repository for the workflow and the allowlist; the rest is manual |
 
 How "unused" is decided, and where it can be wrong:
 
