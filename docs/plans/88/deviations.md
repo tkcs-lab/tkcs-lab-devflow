@@ -53,3 +53,4 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - final: Scope disposition: no phase had an out-of-scope path, nothing to settle. dod passed (6690 tests, profile, policy, spec, sysml and docs-index checks) except the plan own broken relative link, which the owner decides.
 - final: The fix round was not run: the implement playbook this run followed predates the fix round that this plan adds. The non-blocking findings of the reviews and the dod roles are listed in the pull request body instead.
+- final: At the owner request after the pull request opened, the one relative link in docs/plans/88/plan.md (Finishing 1b step) was changed to ../../../playbooks/policies/findings-fix.md so test_docs_links resolves it; main was merged in and its conflicts in CHANGELOG, cli.md, test_mutants_file.py, test_evals_graders.py and the eval baseline were resolved by keeping both sides and refreshing the baseline hashes.
