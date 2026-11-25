@@ -154,6 +154,18 @@ def _usual(glob: str) -> bool:
     return USUAL_GLOB.fullmatch(glob) is not None
 
 
+def _covers(glob: str, name: str) -> bool:
+    """Whether the entry allows the repository. The dispatcher chooses the case of the repository input and GitHub
+    finds a repository whatever the case, so the comparison ignores case."""
+    return fnmatch.fnmatchcase(name.lower(), glob.lower()) or fnmatch.fnmatchcase(name, glob)
+
+
+def _places(positions: list[int]) -> str:
+    """Where in repos[] the entries are, in words of our own: a lookalike or zero-width character cannot be seen."""
+    shown = ", ".join(f"repos[{i}]" for i in positions[:MAX_SHOWN])
+    return shown + (f" and {len(positions) - MAX_SHOWN} more" if len(positions) > MAX_SHOWN else "")
+
+
 def _broad(glob: str) -> bool:
     """A repos entry that matches every repository: only wildcards, or one the audit cannot reason about."""
     return not _usual(glob) or not glob.replace("*", "").replace("?", "")
@@ -195,31 +207,38 @@ def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
     else:
         existing = list(data["repos"])
         # every existing entry is kept as it is; entries that are too wide are reported, never silently changed
-        unusual = [g for g in existing if not _usual(g)]
-        broad = [g for g in existing if _broad(g) and _usual(g)]
+        unusual = [i for i, g in enumerate(existing) if not _usual(g)]
+        broad = [i for i, g in enumerate(existing) if _broad(g) and _usual(g)]
         in_scope = {r["name"] for r in ctx.repos}
         outside = sorted({r["name"] for r in ctx.all_repos if r["name"] not in in_scope
-                          and any(fnmatch.fnmatchcase(r["name"], g) for g in existing if not _broad(g))})
+                          and any(_covers(g, r["name"]) for g in existing if not _broad(g))})
         if unusual:
             out.append(ra.Finding("git-ops-allowlist", central, "allowlist:unusual", f"{ALLOWLIST_PATH} has {len(unusual)} "
-                                  "repos entry with characters beyond letters, digits, . _ - * ?, which the workflow's "
-                                  "bash matching may read as matching every repository", "warn",
+                                  f"repos entry with characters beyond letters, digits, . _ - * ? ({_places(unusual)}), "
+                                  "which the workflow's bash matching may read as matching every repository", "warn",
                                   manual="replace each by plain repository names or simple globs"))
         if broad:
             out.append(ra.Finding("git-ops-allowlist", central, "allowlist:broad", f"{ALLOWLIST_PATH} has {len(broad)} "
-                                  "entry made only of wildcards in repos, which matches every repository", "warn",
+                                  f"entry made only of wildcards ({_places(broad)}), which matches every repository", "warn",
                                   manual="replace it by the names or globs of the repositories the workflow may act on"))
         if outside:
             out.append(ra.Finding("git-ops-allowlist", central, "allowlist:outside", f"{ALLOWLIST_PATH} also covers "
                                   f"repositories outside this audit: {_names(outside)}", "warn",
                                   manual="narrow the entries, or add those repositories to the audit's scope"))
         owner_ok = data["owner"].lower() == owner.lower()
+        if not owner_ok and (unusual or broad):
+            # a wrong owner makes the workflow refuse every run, so these entries do nothing yet; fixing the owner
+            # would switch them on
+            return out + [ra.Finding("git-ops-allowlist", central, "allowlist:owner", f"{ALLOWLIST_PATH} names the owner "
+                                     f"'{_shown(data['owner'])}', not {owner}, and has entries that match every "
+                                     "repository; the owner is not changed while they are there", "warn",
+                                     manual=f"replace those entries first (see the other findings), then set the owner to {owner}")]
         have_protected = [b for b in data.get("protected_branches", []) if isinstance(b, str)]
         if not have_protected:
             out.append(ra.Finding("git-ops-allowlist", central, "allowlist:protected", f"{ALLOWLIST_PATH} protects "
                                   "no branch (protected_branches is missing or empty)", "warn",
                                   manual="list the branch globs the workflow must never delete"))
-        missing = [n for n in audited if not any(fnmatch.fnmatchcase(n, g) for g in existing if _usual(g))]
+        missing = [n for n in audited if not any(_covers(g, n) for g in existing if _usual(g))]
         if owner_ok and not missing and have_protected:
             return out
         repos = existing + missing

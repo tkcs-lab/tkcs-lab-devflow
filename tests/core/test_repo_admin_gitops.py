@@ -273,15 +273,40 @@ def test_central_repository_spelled_in_another_case(ra):
     assert len(fixes) == 2 and all(f.action.repo == "acme/git-ops" and f.scope == "acme/git-ops" for f in fixes)
 
 
-@pytest.mark.parametrize("entry", ["@(*)", "+(?)", "!(zzz)", "zz\n*", "[^x]*", "app\n", "*(x)*", "a\\*"])
+UNUSUAL = ["@(*)", "+(?)", "!(zzz)", "zz\n*", "[^x]*", "app\n", "*(x)*", "a\\*", "?(*)", "*([a-z])", "\uff0a",
+           "app\u200b", "x" * 101]
+
+
+@pytest.mark.parametrize("entry", UNUSUAL)
 def test_entries_bash_reads_differently_are_reported_and_kept(ra, entry):
     policy = {**POLICY, "repos": {"exclude": ["secret"]}}
+    found, _, _ = audit(ra, allow_files(repos=["git-ops", entry]), policy=policy, names=("app", "git-ops", "secret"))
+    rows = by_check(found, "git-ops-allowlist")
+    (unusual,) = [f for f in rows if f.subject == "allowlist:unusual"]
+    assert unusual.severity == "warn" and unusual.manual and "repos[1]" in unusual.message
+    (fix,) = [f for f in rows if f.severity == "fix"]  # app is not covered by the entry, so it is added
+    assert json.loads(fix.action.changes[0]["content"])["repos"] == ["git-ops", entry, "app"]
+
+
+@pytest.mark.parametrize("entry", ["S*", "SECRET", "Sec?et"])
+def test_globs_are_matched_without_regard_to_case(ra, entry):
+    policy = {**POLICY, "repos": {"exclude": ["secret"]}}
     found, _, _ = audit(ra, allow_files(repos=["app", "git-ops", entry]), policy=policy, names=("app", "git-ops", "secret"))
-    unusual = [f for f in by_check(found, "git-ops-allowlist") if f.subject == "allowlist:unusual"]
-    assert len(unusual) == 1 and unusual[0].severity == "warn" and unusual[0].manual
-    fixes = [f for f in by_check(found, "git-ops-allowlist") if f.severity == "fix"]
-    for f in fixes:  # a rewrite keeps the entry verbatim
-        assert entry in json.loads(f.action.changes[0]["content"])["repos"]
+    (outside,) = [f for f in by_check(found, "git-ops-allowlist") if f.subject == "allowlist:outside"]
+    assert "secret" in outside.message
+
+
+@pytest.mark.parametrize("entry", ["@(*)", "*", "!(x)", "?*"])
+def test_a_wrong_owner_is_not_fixed_while_a_match_everything_entry_is_there(ra, entry):
+    files = complete()
+    files["git-ops-allowlist.json"] = json.dumps({"owner": "other", "repos": ["app", "git-ops", entry], "protected_branches": ["main"]})
+    found, _, _ = audit(ra, files)
+    rows = by_check(found, "git-ops-allowlist")
+    assert [f for f in rows if f.action] == [] and any(f.subject == "allowlist:owner" and f.severity == "warn" for f in rows)
+    # without such an entry the owner is fixed
+    files["git-ops-allowlist.json"] = json.dumps({"owner": "other", "repos": ["app", "git-ops"], "protected_branches": ["main"]})
+    (fix,) = [f for f in by_check(audit(ra, files)[0], "git-ops-allowlist") if f.action]
+    assert json.loads(fix.action.changes[0]["content"])["owner"] == "acme"
 
 
 def test_an_update_that_the_audit_would_refuse_is_not_written(ra):
