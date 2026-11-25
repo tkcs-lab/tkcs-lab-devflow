@@ -59,7 +59,7 @@ same turn as every ask.
 2. The change is small only when every rule of "Sizing" in [make-plan.md](make-plan.md) holds for one phase:
    complexity S or M, one coherent change, one pull request, no open decision left, every acceptance item
    mechanical. It is also not small when it needs a `manual_before` or `manual_after` step, touches a protected path
-   (the effective protect list; the profile and ordinary workflows are not on it by default) or a lockfile or adds a dependency, or, with a `spec` or `sysml` profile block, changes observable behaviour or
+   (the effective protect list or the excluded set of [policies/protected-changes.md](policies/protected-changes.md); the profile and ordinary workflows are not on the list by default) or a lockfile or adds a dependency, or, with a `spec` or `sysml` profile block, changes observable behaviour or
    the architecture model.
 3. When it is not small: write nothing else. Post `Implementation stopped: too large for quick: <one line>. Run
    make-plan #<n>.` on the issue, write the record `done` with `last_event` `refused: too large`, and end with a

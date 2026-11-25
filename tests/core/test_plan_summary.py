@@ -801,6 +801,27 @@ def test_changed_quoted_path_still_counts(tmp_path):
         ".github/workflows/\\303\\251.yml"]
 
 
+@pytest.mark.parametrize("security", [
+    "touches [ok](https://e.x/ci.yml) only",
+    "touches [x] only\n\n[x]: .github/workflows/ci.yml",
+    "touches <span hidden>ci.yml</span> only",
+    "touches ![ci.yml](x.png) only",
+])
+def test_changed_hidden_forms_do_not_name(security):
+    assert changed_probs(security, [".github/workflows/ci.yml"]) != []
+
+
+def test_changed_plain_text_and_code_span_name():
+    assert changed_probs("touches `.github/workflows/ci.yml` and [the toolkit.yaml file](https://e.x/y)",
+                         [".github/workflows/ci.yml", ".tld/toolkit.yaml"]) == []
+
+
+def test_changed_other_directory_does_not_name():
+    for sec, path in (("edits docs/examples/ci.yml only", ".github/workflows/ci.yml"),
+                      ("edits other/toolkit.yaml only", ".tld/toolkit.yaml")):
+        assert changed_probs(sec, [path]) != []
+
+
 def test_changed_unreadable_file(tmp_path, capsys):
     path = tmp_path / "doc.md"
     path.write_text(pr_with_security(None))
