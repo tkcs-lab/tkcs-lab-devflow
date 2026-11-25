@@ -270,10 +270,73 @@ def profile_valid(ctx: GradeContext) -> GradeResult:
         profile = yaml.safe_load(wt[0].text)
     except yaml.YAMLError as exc:
         return GradeResult(False, f"{path} is not valid YAML: {exc}")
-    errors, _, _ = vp.validate(profile, None)
+    # the fixture root and no fetch: a base seeded in <git dir>/tld/base is found offline, an unseeded one is skipped
+    errors, _, _ = vp.validate(profile, ctx.workdir, fetch=False)
     if errors:
         return GradeResult(False, _first(errors))
     return GradeResult(True, f"{path} valid")
+
+
+def ask_question_ids(actions: list[dict]) -> list[list[str]]:
+    """The question ids of each ask a run posted: an `ask` action, or an `ask_human` tool call that an adapter
+    logged as a github_op (its args hold the ask document)."""
+    out = []
+    for a in actions:
+        if a.get("kind") == "ask":
+            out.append([str(q) for q in a.get("questions") or []])
+        elif a.get("kind") == "github_op" and str(a.get("op", "")).endswith("ask_human"):
+            qs = (a.get("args") or {}).get("questions")
+            out.append([str(q.get("id")) for q in qs if isinstance(q, dict)] if isinstance(qs, list) else [])
+    return out
+
+
+@grader("asks_at_most")
+def asks_at_most(ctx: GradeContext) -> GradeResult:
+    """The run posted at most `max` asks; with `question_ids` (a list), every ask's ids are exactly that set."""
+    limit = ctx.params.get("max")
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0:
+        return GradeResult(False, "grader misconfigured: max must be a non-negative integer")
+    asks = ask_question_ids(ctx.actions)
+    if len(asks) > limit:
+        return GradeResult(False, f"{len(asks)} asks posted, at most {limit} allowed")
+    want = ctx.params.get("question_ids")
+    if want is not None:
+        for ids in asks:
+            if sorted(ids) != sorted(want) or len(set(ids)) != len(ids):
+                return GradeResult(False, f"ask question ids are {sorted(ids)}, expected exactly {sorted(want)}", value=len(asks))
+    return GradeResult(True, f"{len(asks)} ask(s), at most {limit}", value=len(asks))
+
+
+@grader("profile_key_equals")
+def profile_key_equals(ctx: GradeContext) -> GradeResult:
+    """A dotted `key` of the profile in the final work tree is set; with `value` it equals it, else with the
+    fixture's expected[`expected_key`]."""
+    path = ctx.params.get("path", ".tld/toolkit.yaml")
+    key = ctx.params.get("key")
+    if not isinstance(key, str) or not key:
+        return GradeResult(False, "grader misconfigured: no key")
+    wt = [d for d in ctx.docs(path) if d.ref == "worktree"]
+    if not wt:
+        return GradeResult(False, f"{path} is missing from the final working tree")
+    try:
+        node = yaml.safe_load(wt[0].text)
+    except yaml.YAMLError as exc:
+        return GradeResult(False, f"{path} is not valid YAML: {exc}")
+    for part in key.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return GradeResult(False, f"{path} has no '{key}'")
+        node = node[part]
+    if "value" in ctx.params:
+        want = ctx.params["value"]
+    elif ctx.params.get("expected_key"):
+        want = ctx.expected.get(ctx.params["expected_key"])
+        if want is None:
+            return GradeResult(False, f"grader misconfigured: no expected[{ctx.params['expected_key']!r}]")
+    else:
+        return GradeResult(True, f"'{key}' is set")
+    if node != want:
+        return GradeResult(False, f"'{key}' is {json.dumps(node)[:120]}, expected {json.dumps(want)[:120]}")
+    return GradeResult(True, f"'{key}' equals the expected value")
 
 
 @grader("roles_block_equals")

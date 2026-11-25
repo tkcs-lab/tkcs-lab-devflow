@@ -9,7 +9,7 @@ import pytest
 from conftest import FIXTURES
 from evals_support import (GOOD_MANIFEST, PROFILE, REVIEW_GOOD, SEEDED, bash, ctx, mutated, plan_text)
 
-from evals.harness.actions import github_op, write
+from evals.harness.actions import ask, github_op, write
 from evals.harness.common import git
 from evals.harness.model import Doc
 from evals.harness.graders import GRADERS, classify_command, is_runnable, parse_findings, run_graders
@@ -40,6 +40,9 @@ def body(text, **params):
 
 DOCS_OK = [("origin/chore/deps-x", "requirements.in", "alpha==2.0.0\n"), ("origin/chore/deps-x", "requirements.lock", "# lock\nalpha==2.0.0\n")]
 BF_EXPECTED = {"branch_files": {"equals": {"requirements.in": "alpha==2.0.0\n", "requirements.lock": "# lock\nalpha==2.0.0\n"}, "absent": ["gamma==2.0.0"]}}
+
+EXTENDS = "example-org/.github/tld/profile-base.yaml@" + "0" * 40
+EXTENDS_PROFILE = PROFILE + f"tld:\n  extends: {EXTENDS}  # v1\n"
 
 # name -> (good ctx, [(label, bad ctx), ...])
 CASES = {
@@ -99,6 +102,20 @@ CASES = {
          ("no roles key", ctx(PROFILE_OK, expected=AGENTS_EXPECTED)),
          ("only on a branch", ctx([("chore/x", ".tld/toolkit.yaml", AGENTS_PROFILE)], expected=AGENTS_EXPECTED)),
          ("no expectation", ctx([("worktree", ".tld/toolkit.yaml", AGENTS_PROFILE)]))],
+    ),
+    "asks_at_most": (
+        ctx(actions=[ask(["verify_fast", "verify_dod"])], max=1, question_ids=["verify_fast", "verify_dod"]),
+        [("two asks", ctx(actions=[ask(["verify_fast"]), ask(["verify_dod"], call_id="a2")], max=1)),
+         ("an ask where none is allowed", ctx(actions=[ask(["verify_fast"])], max=0)),
+         ("other question ids", ctx(actions=[ask(["posture"])], max=1, question_ids=["verify_fast", "verify_dod"])),
+         ("no max", ctx(actions=[]))],
+    ),
+    "profile_key_equals": (
+        ctx([("worktree", ".tld/toolkit.yaml", EXTENDS_PROFILE)], key="tld.extends", value=EXTENDS),
+        [("no profile", ctx([], key="tld.extends")),
+         ("no extends", ctx(PROFILE_OK, key="tld.extends")),
+         ("other value", ctx([("worktree", ".tld/toolkit.yaml", EXTENDS_PROFILE)], key="tld.extends", value="x/y/z.yaml@" + "1" * 40)),
+         ("no key", ctx([("worktree", ".tld/toolkit.yaml", EXTENDS_PROFILE)]))],
     ),
     "result_matches": (
         ctx(result_text="AGENT-REPORT security-reviewer at=dod verdict=pass\n## Threat model", must=["AGENT-REPORT security-reviewer at=dod"],
@@ -452,3 +469,46 @@ def test_seeded_finding_found_by_module_reference():
 def test_bare_word_auth_is_not_the_seeded_file():
     c = ctx([("r", "docs/x-review.md", _review("The auth flow has no test", "missing: tests/"))], expected=ALIASED)
     assert not GRADERS["seeded_finding_found"](c).passed
+
+
+def test_asks_at_most_fails_on_two_asks():
+    two = ctx(actions=[ask(["verify_fast"]), ask(["verify_dod"], call_id="a2")], max=1)
+    assert not GRADERS["asks_at_most"](two).passed
+    assert GRADERS["asks_at_most"](ctx(actions=[ask(["verify_fast"])], max=1)).passed
+
+
+def test_asks_at_most_counts_an_ask_human_call_logged_as_a_github_op():
+    call = github_op("ask_human", {"questions": [{"id": "verify_fast"}, {"id": "verify_dod"}]})
+    assert GRADERS["asks_at_most"](ctx(actions=[call], max=1, question_ids=["verify_dod", "verify_fast"])).passed
+    assert not GRADERS["asks_at_most"](ctx(actions=[call, call], max=1)).passed
+
+
+def test_profile_key_equals_fails_without_extends():
+    assert not GRADERS["profile_key_equals"](ctx(PROFILE_OK, key="tld.extends")).passed
+    assert GRADERS["profile_key_equals"](ctx([("worktree", ".tld/toolkit.yaml", EXTENDS_PROFILE)], key="tld.extends")).passed
+
+
+def test_profile_key_equals_reads_the_fixture_expectation():
+    docs = [("worktree", ".tld/toolkit.yaml", EXTENDS_PROFILE)]
+    assert GRADERS["profile_key_equals"](ctx(docs, expected={"extends": EXTENDS}, key="tld.extends", expected_key="extends")).passed
+    assert not GRADERS["profile_key_equals"](ctx(docs, key="tld.extends", expected_key="extends")).passed
+
+
+def test_profile_valid_reads_the_seeded_base_offline(tmp_path):
+    """A profile that extends a base is valid when the base is seeded in the git directory, with no network access."""
+    import dataclasses
+    from evals.fixtures import setup_repos
+    work, expected = tmp_path / "work", None
+    expected = setup_repos.build(work, repo="base_with_tests")
+    text = (f"tld:\n  extends: {expected['extends']}  # v1\n  version: \">=1.6,<2\"\n"
+            "git:\n  main_branch: main\ndocs:\n  must_read: [README.md]\nverify:\n  fast: [\"make test\"]\n"
+            "  dod: [\"make test\"]\nstacks: []\n")
+    c = dataclasses.replace(ctx([("worktree", ".tld/toolkit.yaml", text)]), workdir=work)
+    assert GRADERS["profile_valid"](c).passed  # not cached and fetch=False: the base is skipped, no network is tried
+    setup_repos.seed_base(work)
+    assert GRADERS["profile_valid"](c).passed
+    # a repository that drops a role the seeded base requires is refused only once the base is read
+    dropped = text + "roles:\n  disable: [security-reviewer]\n"
+    c2 = dataclasses.replace(ctx([("worktree", ".tld/toolkit.yaml", dropped)]), workdir=work)
+    res = GRADERS["profile_valid"](c2)
+    assert not res.passed and "security-reviewer" in res.reason

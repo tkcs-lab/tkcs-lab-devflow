@@ -1,12 +1,12 @@
 id: setup-security-heavy
-description: /setup on a security-heavy repository must write a valid profile whose roles block matches the expected proposal.
+description: /setup on a security-heavy repository that extends the org base must write a valid profile whose roles block holds only the repository's own roles (the base's are not repeated).
 command: /tld:setup
-arguments: create --accept-proposals
+arguments: create --accept-proposals --base example-org/.github/tld/profile-base.yaml@0123456789abcdef0123456789abcdef01234567
 fixture:
   builder: setup_repos
   params:
     repo: security_heavy
-    unconfirmed: true   # no board in the eval: --accept-proposals still writes blocking: false
+    with_base: true   # the base is seeded in the clone's git directory; no network access is needed
 model: sonnet
 repeats: 3
 timeout_s: 900
@@ -15,3 +15,6 @@ requires: [playbooks/setup.md]
 graders:
   - profile_valid
   - roles_block_equals
+  - name: profile_key_equals
+    key: tld.extends
+    expected_key: extends

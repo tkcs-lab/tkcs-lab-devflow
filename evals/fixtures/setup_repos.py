@@ -1,15 +1,50 @@
-"""Four synthetic repositories for the /setup survey: security_heavy, ios_ui_app, docs_website, bare.
+"""Synthetic repositories for the /setup survey: security_heavy, ios_ui_app, docs_website, bare, and the two
+that extend an org base, base_with_tests and base_no_tests.
 
 build(dest, repo="security_heavy", with_profile=False) returns the expected survey outcome (Design D12).
+The two base repositories also get a base profile seeded in the work clone's git directory (`post_clone`), where
+`tld profile base fetch` would have cached it, so a run needs no network access.
 No real project names, no secrets, no network.
 """
 from __future__ import annotations
 
+import hashlib
+import subprocess
+import sys
 from pathlib import Path
 
 from . import init_repo
 
-REPOS = ("security_heavy", "ios_ui_app", "docs_website", "bare")
+REPOS = ("security_heavy", "ios_ui_app", "docs_website", "bare", "base_with_tests", "base_no_tests")
+BASE_REPOS = ("base_with_tests", "base_no_tests")
+
+# The base the two repositories extend: the shape of the plan's section 3.8 with neutral names.
+BASE_SOURCE = "example-org/.github/tld/profile-base.yaml"
+BASE_SHA = "0123456789abcdef0123456789abcdef01234567"
+BASE_TAG = "v1"
+BASE_EXTENDS = f"{BASE_SOURCE}@{BASE_SHA}"
+BASE_TEXT = """\
+tld:
+  version: ">=1.7,<2"
+git:
+  bot_login: example-bot
+  codeowners: [example-owner]
+  branch_pattern: "<type>/<kebab-case>"
+roles:
+  posture: {security: critical}
+  required:
+    - {role: security-reviewer, at: [implement_phase, implement_final], blocking: true}
+    - {role: test-architect, at: [make_plan]}
+hooks:
+  dod_gate: {enabled: true, max_attempts: 3}
+  plan_gate: {enabled: true}
+  board_gate: {enabled: true}
+models: {worker: standard, reviewer: strong}
+runtime: {environments: [TLD]}
+verify:
+  dod_manual:
+    - "A user-visible change needs a changelog line under ## [Unreleased]."
+"""
 
 PROFILE = """\
 project:
@@ -90,7 +125,20 @@ BARE = {
     ".gitignore": "*.log\n",
 }
 
-FILES = {"security_heavy": SECURITY_HEAVY, "ios_ui_app": IOS_UI_APP, "docs_website": DOCS_WEBSITE, "bare": BARE}
+BASE_WITH_TESTS = {
+    "README.md": "# tally\n\nA tiny counter library.\n",
+    "Makefile": "test:\n\tpython3 -m unittest discover -s tests -q\n",
+    "tally.py": '"""Count things."""\n\n\ndef add(a: int, b: int) -> int:\n    return a + b\n',
+    "tests/test_tally.py": "import unittest\n\nimport tally\n\n\nclass AddTest(unittest.TestCase):\n    def test_add(self):\n        self.assertEqual(tally.add(1, 2), 3)\n",
+}
+
+BASE_NO_TESTS = {
+    "README.md": "# scratchpad\n\nNotes and small scripts; nothing here runs tests yet.\n",
+    "notes.py": '"""A note."""\n\nNOTE = "hello"\n',
+}
+
+FILES = {"security_heavy": SECURITY_HEAVY, "ios_ui_app": IOS_UI_APP, "docs_website": DOCS_WEBSITE, "bare": BARE,
+         "base_with_tests": BASE_WITH_TESTS, "base_no_tests": BASE_NO_TESTS}
 
 EXPECTED = {
     "security_heavy": {
@@ -138,12 +186,18 @@ EXPECTED = {
         "dispatchable": [],
         "roles": {"posture": {"security": "standard"}, "disable": ["website-maintainer"]},
     },
+    # roles come from the base: the repository's profile writes no roles block
+    "base_with_tests": {"stacks": [], "website": None, "dispatchable": [], "roles": None},
+    "base_no_tests": {"stacks": [], "website": None, "dispatchable": [], "roles": None},
 }
 
 
-def build(dest: Path, repo: str = "security_heavy", with_profile: bool = False, unconfirmed: bool = False) -> dict:
+def build(dest: Path, repo: str = "security_heavy", with_profile: bool = False, unconfirmed: bool = False,
+          with_base: bool = False) -> dict:
     """`unconfirmed`: the expectation of a run nobody could answer (setup --accept-proposals without a board):
-    every `blocking` is written as false."""
+    every `blocking` is written as false. `with_base`: the repository extends the seeded org base (always so for
+    the two base repositories), whose roles the profile does not repeat: the expected roles block keeps only the
+    repository's own `disable`."""
     if repo not in FILES:
         raise ValueError(f"unknown repo {repo!r}; expected one of {REPOS}")
     files = dict(FILES[repo])
@@ -152,7 +206,13 @@ def build(dest: Path, repo: str = "security_heavy", with_profile: bool = False, 
     init_repo(dest, files)
     docs = repo == "docs_website"
     expected = {**EXPECTED[repo]}
-    if unconfirmed and expected["roles"].get("required"):
+    if with_base and repo not in BASE_REPOS:
+        disable = (expected["roles"] or {}).get("disable")
+        expected["roles"] = {"disable": disable} if disable else None
+    if with_base or repo in BASE_REPOS:
+        expected["extends"] = BASE_EXTENDS
+        expected["extends_tag"] = BASE_TAG
+    if unconfirmed and (expected["roles"] or {}).get("required"):
         expected["roles"] = {**expected["roles"],
                              "required": [{**e, "blocking": False} for e in expected["roles"]["required"]]}
     return {
@@ -163,3 +223,26 @@ def build(dest: Path, repo: str = "security_heavy", with_profile: bool = False, 
         "adr_index": "docs/adr/README.md" if docs else None,
         "changelog": {"file": "CHANGELOG.md", "section": "## [Unreleased]"} if docs else None,
     }
+
+
+def _blob_id(data: bytes) -> str:
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()  # noqa: S324 - git's own object id
+
+
+def seed_base(work: Path, text: str = BASE_TEXT, extends: str = BASE_EXTENDS) -> None:
+    """Store `text` as the cached base of `extends` in the git common directory of `work`, exactly as `tld profile
+    base fetch` would have, so the base is found without network access."""
+    src = str(Path(__file__).resolve().parents[2] / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from tld.profile import base
+    git_dir = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=work, capture_output=True, text=True,
+                             check=True).stdout.strip()
+    git_dir = Path(git_dir) if Path(git_dir).is_absolute() else work / git_dir
+    data = text.encode()
+    base._store(git_dir, base.parse_extends(extends), data, _blob_id(data))
+
+
+def post_clone(work: Path, expected: dict) -> None:
+    if expected.get("extends"):
+        seed_base(work)
