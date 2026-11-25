@@ -401,14 +401,19 @@ def test_reflektor_card_markers_match_the_code():
     from tld.roles import section
 
     card = (ROOT / "roles" / "reflektor.md").read_text()
-    for token in (section.BEGIN, section.END, "REPORT-HTML <"):
+    for token in (section.BEGIN, section.END, "REPORT-HTML <", "never edit"):
         assert token in card, token
     dod = (PLAYBOOKS / "dod.md").read_text()
     for token in ("REPORT-HTML <path>", "tld roles reflektor-html --send", "tld roles section --report-line",
-                  "tld board client put-report", "n/a (worker)"):
+                  "tld board client put-report", "n/a (worker)",
+                  "tld roles page-note --stage role", "--stage check", "--stage board", "--stage send",
+                  "tld roles change-report", "HTML page not stored",
+                  "Never edit, rebuild, re-hash or rewrite the page"):
         assert token in dod, token
     implement = (PLAYBOOKS / "implement.md").read_text()
-    between(implement, "## Branches left on origin", "tld roles section --report")
+    between(implement, "## Branches left on origin", "tld roles change-report --report")
+    for token in ("the saved reflektor answer file of dod step 5", "the page note file of dod step 5"):
+        assert token in implement, token
 
 
 def test_change_report_section_needs_the_saved_answer_not_the_dod_subsection(tmp_path, capsys):
