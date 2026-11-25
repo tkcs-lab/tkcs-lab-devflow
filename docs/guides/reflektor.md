@@ -17,7 +17,8 @@ section `## Change report` plus a standalone HTML page. The design and its decis
   database and its backups. Copies also remain in the role's scratch directory and the dod scratch directory (the page
   and `diff.json`, with full file contents; delete them when done). A session can remove a stored page early with
   `DELETE /api/records/<id>/report` (session token only; it does not reach existing backups).
-- A failed upload or send is noted in the dod report, never a failure.
+- A page that is refused or cannot be stored is never silent. These are rules of the dod and implement playbooks, not a code check: the dod row reads `needs attention (... ; HTML page not stored)` (a row that is already `FAIL` stays `FAIL`) and the `## Change report` section starts with the line `HTML page not stored: <reason>`. The reason is one of: the reflektor role built no checked page, the page check refused it, the page is too large to upload, the board answered an error or could not be reached, the file could not be sent. A page the check refused is not edited or rebuilt to get past it (also a playbook rule).
+- A branch that quotes the secret-scan allow mark still gets its page: the mark is shown as `[secret-scan mark removed]` in the page (the count is shown only in the role's run, as a non-blocking finding quoting the `removed <n> secret-scan allow marks` line of `reflektor-html --file`; the dod's `--send` finds no marks left and prints nothing).
 
 ## Turn it on
 
@@ -69,9 +70,9 @@ into the pull request.
   `O_NOFOLLOW`, and runs the page check; the board runs the same check (`src/tld/board/report_check.py`) and answers 422
   otherwise. The page must be the pinned viewer, byte for byte in its four fixed parts, plus the exact
   Content-Security-Policy meta, a plain title (no `<`, no `&`, no control, format or line-separator character, at most 200
-  characters) and a one-line JSON payload. `verify_html` also refuses a page or data carrying the secret-scan allow mark or
-  a line-splitting character, and any secret hit. The secret scan runs only in `reflektor-html` (the board image has no `tld.guard`), so the
+  characters) and a one-line JSON payload. `verify_html` only checks: it scans every line of the original page and of every decoded string with the allow mark's skip turned off (a credential on a line that ends in the mark is found and refuses the page). Then `prepare_page` replaces each literal mark in the title and the data by `[secret-scan mark removed]` and runs the whole check again on the swapped page (the swap can create a word boundary next to a credential); a mark that survives as an escaped form is refused, and a page with a line-splitting character is refused. The secret scan runs only in `reflektor-html` (the board image has no `tld.guard`), so the
   board's check is the page rule only.
+- The page note (`tld roles page-note`) is built only from fixed text, a known reason and an HTTP status, and `tld roles change-report` prints it as the first line of the section, so text inside the role's own block cannot forge or move it. The command also replaces any block line that looks like a page note by the fixed line `(a line that looked like a page note was removed)`; paraphrases of the note are not caught.
 - The Content-Security-Policy stops requests and subresources, not navigation. What keeps the page safe is the check
   against the pinned viewer and the rule that its data holds no link target (`url`, `web`, `branch.pr`, `avatar.image`,
   `coverage`, `agent` and the like must be null). The board serves it only to the logged-in owner under `sandbox`

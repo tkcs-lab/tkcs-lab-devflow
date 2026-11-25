@@ -14,7 +14,13 @@ tests:
   - tests/core/test_guard_corpus.py
   src/tld/guard/secret_scan.py:
   - tests/core/test_hook_secret_scan.py
+  - tests/core/test_roles_reflektor_page.py
   - tests/core/test_guard_mutations.py
+  src/tld/roles/reflektor.py:
+  - tests/core/test_roles_reflektor_page.py
+  - tests/core/test_roles_reflektor.py
+  src/tld/roles/page_note.py:
+  - tests/core/test_roles_page_note.py
   src/tld/guard/protect_paths.py:
   - tests/core/test_hook_protect_paths.py
   - tests/core/test_hook_protect_paths_setup.py
@@ -28,6 +34,8 @@ tests:
   - tests/core/test_validate_manifest.py
   src/tld/plan/summary.py:
   - tests/core/test_plan_summary.py
+  src/tld/plan/findings.py:
+  - tests/core/test_plan_findings.py
   src/tld/guard/markers.py:
   - tests/core/test_guard_markers.py
   - tests/core/test_guard_mutations.py
@@ -73,6 +81,15 @@ tests:
   - tests/core/test_guard_trust.py
   src/tld/plan/active.py:
   - tests/core/test_plan_active.py
+  src/tld/board/record.py:
+  - tests/core/test_status_record.py
+  - tests/core/test_board_store.py
+  src/tld/ops/deps_checks.py:
+  - tests/core/test_ops_deps_prepare.py
+  src/tld/ops/deps_prepare.py:
+  - tests/core/test_ops_deps_prepare.py
+  src/tld/ops/deps_body.py:
+  - tests/core/test_ops_deps_body.py
 mutants:
 - id: NM1
   file: src/tld/guard/no_merge.py
@@ -152,8 +169,8 @@ mutants:
 - id: SS1
   file: src/tld/guard/secret_scan.py
   why: allow mark anywhere
-  old: 'if line.rstrip().endswith(ALLOW_MARK):'
-  new: 'if ALLOW_MARK in line:'
+  old: 'skip_marked and line.rstrip().endswith(ALLOW_MARK):'
+  new: 'skip_marked and ALLOW_MARK in line:'
 - id: SS2
   file: src/tld/guard/secret_scan.py
   why: entropy threshold 4.5
@@ -184,6 +201,41 @@ mutants:
   why: jwt dropped
   old: \.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}
   new: \.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{800,}
+- id: SS12
+  file: src/tld/guard/secret_scan.py
+  why: the allow mark is honoured when the flag says not to
+  old: 'skip_marked and line.rstrip().endswith(ALLOW_MARK):'
+  new: 'line.rstrip().endswith(ALLOW_MARK):'
+- id: RF1
+  file: src/tld/roles/reflektor.py
+  why: the raw page scan honours the mark
+  old: 'hits = secret_scan.scan_text(text, skip_marked=False)'
+  new: 'hits = secret_scan.scan_text(text)'
+- id: RF2
+  file: src/tld/roles/reflektor.py
+  why: the decoded string scan honours the mark
+  old: 'hits = secret_scan.scan_text(s, skip_marked=False)'
+  new: 'hits = secret_scan.scan_text(s)'
+- id: RF3
+  file: src/tld/roles/reflektor.py
+  why: the mark is not replaced
+  old: 'return s.replace(ALLOW_MARK, REDACTED_MARK), s.count(ALLOW_MARK)'
+  new: 'return s, 0'
+- id: RF4
+  file: src/tld/roles/reflektor.py
+  why: an escaped mark is not found in the decoded data
+  old: 'if ALLOW_MARK in s:'
+  new: 'if False:'
+- id: RF5
+  file: src/tld/roles/reflektor.py
+  why: a mark left in the raw text is not found
+  old: 'if ALLOW_MARK in text:'
+  new: 'if False:'
+- id: RF6
+  file: src/tld/roles/reflektor.py
+  why: the page written is not scanned again after the mark is replaced
+  old: 'reasons = verify_html(neutral) or marks_left(neutral)'
+  new: 'reasons = report_check.check(neutral) or marks_left(neutral)'
 - id: PP1
   file: src/tld/guard/protect_paths.py
   why: profile always allowed
@@ -581,6 +633,21 @@ mutants:
   why: problems exit 0 (killed by every exit-1 test)
   old: "        print(f\"summary: {problem}\")\n    return 1"
   new: "        print(f\"summary: {problem}\")\n    return 0"
+- id: FI1
+  file: src/tld/plan/findings.py
+  why: the row count may differ from the count given (killed by test_n_with_a_different_row_count_is_a_problem)
+  old: "len(rows) != n"
+  new: "len(rows) == n"
+- id: FI2
+  file: src/tld/plan/findings.py
+  why: a two-word text is accepted (killed by test_a_two_word_text_is_a_problem)
+  old: "MIN_VALUE_WORDS = 3"
+  new: "MIN_VALUE_WORDS = 2"
+- id: FI3
+  file: src/tld/plan/findings.py
+  why: a mention is no longer rejected (killed by test_a_mention_is_a_problem)
+  old: "or MENTION.search(line)"
+  new: "or False"
 - id: VP13
   file: src/tld/profile/validate.py
   why: release pattern regex error ok
@@ -711,3 +778,193 @@ mutants:
   why: the targets are not checked before the first write, so an unsafe target is found after the model was changed
   old: '    for path in (*model_paths.values(), *OUTPUTS, plan.dest):'
   new: '    for path in ():'
+- id: REC-H1
+  file: src/tld/board/record.py
+  why: a handover link with a trailing line break is accepted (fullmatch became match)
+  old: '    if len(value) > HANDOVER_URL_MAX or not re.fullmatch(pattern, value):'
+  new: '    if len(value) > HANDOVER_URL_MAX or not re.match(pattern, value):'
+- id: REC-H2
+  file: src/tld/board/record.py
+  why: a link with an empty, dot or dot-dot segment is accepted
+  old: '    return all(seg not in ("", ".", "..") for seg in value[len(GITHUB):].split("/"))'
+  new: '    return True'
+- id: REC-H3
+  file: src/tld/board/record.py
+  why: a summary of exactly 350 words is refused
+  old: '            if words > HANDOVER_MAX_WORDS:'
+  new: '            if words >= HANDOVER_MAX_WORDS:'
+- id: REC-H4
+  file: src/tld/board/record.py
+  why: a next_command that only starts with the prefix and plan link is accepted
+  old: 'any(command == p + " " + plan_url for p in NEXT_COMMAND_PREFIXES)'
+  new: 'any(command.startswith(p + " " + plan_url) for p in NEXT_COMMAND_PREFIXES)'
+- id: REC-H5
+  file: src/tld/board/record.py
+  why: the repository name is used as a pattern, so a dot matches any character
+  old: '    base = re.escape(GITHUB + repo)'
+  new: '    base = re.escape(GITHUB) + repo'
+- id: REC-H6
+  file: src/tld/board/record.py
+  why: a handover on a record that is not done is accepted
+  old: '        if rec.get("status") != "done":'
+  new: '        if False:'
+- id: REC-H7
+  file: src/tld/board/record.py
+  why: a repo with a trailing line break is accepted (fullmatch became match)
+  old: '    if "repo" in rec and not (isinstance(rec["repo"], str) and REPO.fullmatch(rec["repo"])):'
+  new: '    if "repo" in rec and not (isinstance(rec["repo"], str) and REPO.match(rec["repo"])):'
+- id: REC-T1
+  file: src/tld/board/record.py
+  why: a boolean tracking_issue is accepted
+  old: '_is_int(ti)'
+  new: 'isinstance(ti, int)'
+- id: REC-T2
+  file: src/tld/board/record.py
+  why: tracking_issue 0 is accepted
+  old: '1 <= ti <= ISSUE_MAX'
+  new: '0 <= ti <= ISSUE_MAX'
+- id: REC-T3
+  file: src/tld/board/record.py
+  why: an eleven digit tracking_issue is accepted
+  old: 'ti <= ISSUE_MAX'
+  new: 'ti <= ISSUE_MAX * 10'
+- id: REC-T4
+  file: src/tld/board/record.py
+  why: a tracking_issue that disagrees with the hand-over issue is accepted
+  old: 'if m and int(m.group(1)) != ti:'
+  new: 'if False:'
+- id: REC-T5
+  file: src/tld/board/record.py
+  why: a tracking_issue that disagrees with an issue-<n> plan slug is accepted
+  old: 'if s and int(s.group(1)) != ti:'
+  new: 'if False:'
+- id: REC-T6
+  file: src/tld/board/record.py
+  why: the agreement rules also run on a malformed tracking_issue
+  old: "        else:\n            ho = rec.get(\"handover\")"
+  new: "        if True:\n            ho = rec.get(\"handover\")"
+- id: deps-uses-line-end-anchor
+  file: src/tld/ops/deps_checks.py
+  why: a uses line may carry anything after the ref (`@v5#x`), so a ref move is accepted with a suffix nobody reviewed
+  old: '(\s+#.*)?\s*$")'
+  new: '(\s+#.*)?")'
+- id: deps-sha-pin-replaced-by-tag
+  file: src/tld/ops/deps_checks.py
+  why: a SHA pin may be replaced by a movable tag
+  old: '            if SHA40.match(old_ref) and not SHA40.match(new_ref):'
+  new: '            if False:'
+- id: deps-bot-author-email
+  file: src/tld/ops/deps_checks.py
+  why: the author e-mail of a commit is not compared with the bot's
+  old: '    if author_name != BOT_AUTHOR[0] or author_email not in BOT_AUTHOR:'
+  new: '    if author_name != BOT_AUTHOR[0]:'
+- id: deps-bot-committer
+  file: src/tld/ops/deps_checks.py
+  why: any committer is accepted on a bot-authored commit
+  old: '    return committer_email in BOT_COMMITTER or committer_name == "GitHub"'
+  new: '    return True'
+- id: deps-protected-mcp-json
+  file: src/tld/ops/deps_checks.py
+  why: .mcp.json is not in the protected list, so a group may change the runtime's server list
+  old: '_FIXED_PROTECTED = (".tld/toolkit.yaml", ".mcp.json", '
+  new: '_FIXED_PROTECTED = (".tld/toolkit.yaml", '
+- id: deps-neutralising-skipped
+  file: src/tld/ops/deps_prepare.py
+  why: the lockfiles of a group are not put back to the merge-base blobs, so they are merged as text and conflict with main's
+  old: '            listed = git("ls-tree", "-z", mb, "--", path, cwd=root).stdout'
+  new: '            continue'
+- id: deps-work-branch-blob-equality
+  file: src/tld/ops/deps_prepare.py
+  why: a work branch may bring a workflow file that is not the bot branch's own blob (a fix commit changing a workflow)
+  old: '                    == blob for tip in bot_tips):'
+  new: '                    != blob for tip in bot_tips):'
+- id: deps-bot-check-skipped
+  file: src/tld/ops/deps_prepare.py
+  why: a branch with commits not made by the bot is combined
+  old: '    if not work and not identity_of_commits(root, mb, sha):'
+  new: '    if False:'
+- id: deps-base-is-origins-head
+  file: src/tld/ops/deps_prepare.py
+  why: a base that is not the commit origin reports for the default branch is accepted
+  old: '    if sha and t.branch and ls_remote_heads(root, head).get(head) == sha:'
+  new: '    if sha and t.branch:'
+- id: deps-merge-paths-unchecked
+  file: src/tld/ops/deps_prepare.py
+  why: the merged tree is not checked against the group's own paths, so a rename on main carries a stale group into a protected path
+  old: '    if set(raw_paths(root, head, tree)) != set(changed):'
+  new: '    if False:'
+- id: deps-protected-not-case-folded
+  file: src/tld/ops/deps_checks.py
+  why: protected paths are matched case-sensitively, so `.CLAUDE/settings.json` passes on a case-insensitive file system
+  old: '    path = fold(path)'
+  new: '    pass'
+- id: deps-body-package-regex
+  file: src/tld/ops/deps_body.py
+  why: a package name may hold a space (or a pipe or a backtick in the same way), which breaks the table
+  old: 'PACKAGE = re.compile(r"[A-Za-z0-9@][A-Za-z0-9@._/+-]{0,99}")'
+  new: 'PACKAGE = re.compile(r"[A-Za-z0-9@][A-Za-z0-9@._/+ -]{0,99}")'
+- id: deps-body-entry-limit
+  file: src/tld/ops/deps_body.py
+  why: 101 entries are accepted
+  old: 'MAX_ENTRIES = 100'
+  new: 'MAX_ENTRIES = 101'
+- id: deps-body-security-not-first
+  file: src/tld/ops/deps_body.py
+  why: security updates are not listed first
+  old: '    return (not entry["security"], entry["ecosystem"]'
+  new: '    return (False, entry["ecosystem"]'
+- id: PN1
+  file: src/tld/roles/page_note.py
+  why: the check line prints a reason that known_reason does not accept (killed by test_note_line_check_without_a_known_reason)
+  old: '            if known_reason(reason):'
+  new: '            if True:'
+- id: PN2
+  file: src/tld/roles/page_note.py
+  why: the board line never says the page was sent as a file (killed by test_note_line_sent_suffix_on_board_only)
+  old: '(SENT if sent else "")'
+  new: '(SENT if False else "")'
+- id: PN3
+  file: src/tld/roles/page_note.py
+  why: a note with another prefix is accepted (killed by test_invalid_notes)
+  old: '    if not line.startswith(NOTE):'
+  new: '    if False:'
+- id: PN4
+  file: src/tld/roles/page_note.py
+  why: a valid note with no usable block exits 3 instead of printing the note alone (killed by test_change_report_note_and_no_block)
+  old: "        print(note)\n        return 0"
+  new: "        print(note)\n        return 3"
+- id: PN5
+  file: src/tld/roles/page_note.py
+  why: a block line that looks like a page note is kept, so the block can forge a note (killed by test_change_report_block_only_forgery_is_dropped)
+  old: '    return _without_forged_notes(cleaned).strip(), ""'
+  new: '    return cleaned.strip(), ""'
+- id: PN6
+  file: src/tld/roles/page_note.py
+  why: the look-alike spellings are not normalised before the phrase is searched (killed by test_change_report_look_alike_forgery_is_dropped)
+  old: '    for c in unicodedata.normalize("NFKD", text).casefold():'
+  new: '    for c in text.casefold():'
+- id: PN7
+  file: src/tld/roles/page_note.py
+  why: a look-alike letter is left out of the skeleton instead of counting as a wildcard, so one odd letter hides the phrase (killed by test_change_report_look_alike_forgery_is_dropped)
+  old: '            out.append("?")'
+  new: '            pass'
+- id: PN8
+  file: src/tld/roles/page_note.py
+  why: the cleaned text is not trimmed before the empty check, so a block of only blanks is no longer "no change-report block" (killed by test_change_report_note_and_no_block)
+  old: 'cleaned = clean(raw).strip() if raw is not None else ""'
+  new: 'cleaned = clean(raw) if raw is not None else ""'
+- id: PN9
+  file: src/tld/roles/page_note.py
+  why: a line of non-Latin letters only is taken for the page-note phrase (killed by test_change_report_non_latin_line_is_kept)
+  old: 'sum(w != "?" for w in window) >= MIN_REAL'
+  new: 'sum(w != "?" for w in window) >= 0'
+- id: PN10
+  file: src/tld/roles/page_note.py
+  why: a line that looks like a page note is removed before the secret check, so a block section refuses is printed (killed by test_change_report_refusal_comes_before_forged_note_removal)
+  old: '    if _suspect(raw) or _suspect(cleaned):'
+  new: "    cleaned = _without_forged_notes(cleaned)\n    if _suspect(raw) or _suspect(cleaned):"
+- id: PN11
+  file: src/tld/roles/page_note.py
+  why: the raw block is not scanned for the allow mark and secrets, only the cleaned text (killed by test_change_report_equals_section)
+  old: '_suspect(raw) or _suspect(cleaned)'
+  new: '_suspect(cleaned)'

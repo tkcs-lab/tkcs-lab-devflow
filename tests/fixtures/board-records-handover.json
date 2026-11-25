@@ -1,0 +1,880 @@
+[
+ {
+  "id": "tkcs-lab-devflow--make-plan--01abcdef",
+  "data": {
+   "schema": 1,
+   "kind": "command",
+   "command": "make-plan",
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": null,
+   "plan_url": null,
+   "feature_branch": null,
+   "orchestrator_session": "session_plan0001abcdef",
+   "attended": true,
+   "status": "done",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [
+    {
+     "id": "survey",
+     "title": "Survey the repository",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T11:00:00Z",
+     "finished_at": "2026-11-09T11:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "design",
+     "title": "Write the design",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T11:00:00Z",
+     "finished_at": "2026-11-09T11:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "manifest",
+     "title": "Write the manifest",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T11:00:00Z",
+     "finished_at": "2026-11-09T11:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "check",
+     "title": "Check the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T11:00:00Z",
+     "finished_at": "2026-11-09T11:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "publish",
+     "title": "Publish the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T11:00:00Z",
+     "finished_at": "2026-11-09T11:00:00Z",
+     "pr": null
+    }
+   ],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "plan demo-plan ready",
+   "next_check_at": null,
+   "finished_at": "2026-11-09T11:00:00Z",
+   "updated_at": "2026-11-09T11:00:00Z",
+   "handover": {
+    "summary": "**Use it:** Run the command below to build the demo plan in four phases.\n**Scope:** <img src=x onerror=\"window.__xss=1\"><a href=\"https://evil.example\">x</a> see https://example.com/page\n**Review focus:** Check the validation rules and their error texts.",
+    "plan_slug": "demo-plan",
+    "issue_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/issues/7",
+    "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/demo-plan/docs/plans/7/plan.md",
+    "spec_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/tree/feature/demo-plan/openspec/changes/demo-plan",
+    "next_command": "/tld:implement https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/demo-plan/docs/plans/7/plan.md"
+   }
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--make-plan--02abcdef",
+  "data": {
+   "schema": 1,
+   "kind": "command",
+   "command": "make-plan",
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": null,
+   "plan_url": null,
+   "feature_branch": null,
+   "orchestrator_session": "session_plan0002abcdef",
+   "attended": true,
+   "status": "done",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [
+    {
+     "id": "survey",
+     "title": "Survey the repository",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:30:00Z",
+     "finished_at": "2026-11-09T10:30:00Z",
+     "pr": null
+    },
+    {
+     "id": "design",
+     "title": "Write the design",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:30:00Z",
+     "finished_at": "2026-11-09T10:30:00Z",
+     "pr": null
+    },
+    {
+     "id": "manifest",
+     "title": "Write the manifest",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:30:00Z",
+     "finished_at": "2026-11-09T10:30:00Z",
+     "pr": null
+    },
+    {
+     "id": "check",
+     "title": "Check the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:30:00Z",
+     "finished_at": "2026-11-09T10:30:00Z",
+     "pr": null
+    },
+    {
+     "id": "publish",
+     "title": "Publish the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:30:00Z",
+     "finished_at": "2026-11-09T10:30:00Z",
+     "pr": null
+    }
+   ],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "plan re-planned ready",
+   "next_check_at": null,
+   "finished_at": "2026-11-09T10:30:00Z",
+   "updated_at": "2026-11-09T10:30:00Z",
+   "handover": {
+    "summary": "**Use it:** Run the command below to build the plan.\n**Scope:** One module and its tests.\n**Review focus:** The record rules.",
+    "plan_slug": "re-planned",
+    "issue_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/issues/8",
+    "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/re-planned/docs/plans/8/plan.md",
+    "spec_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/tree/feature/re-planned/openspec/changes/re-planned",
+    "next_command": "/tld:implement https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/re-planned/docs/plans/8/plan.md"
+   }
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--make-plan--03abcdef",
+  "data": {
+   "schema": 1,
+   "kind": "command",
+   "command": "make-plan",
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": null,
+   "plan_url": null,
+   "feature_branch": null,
+   "orchestrator_session": "session_plan0003abcdef",
+   "attended": true,
+   "status": "done",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [
+    {
+     "id": "survey",
+     "title": "Survey the repository",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:00:00Z",
+     "finished_at": "2026-11-09T10:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "design",
+     "title": "Write the design",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:00:00Z",
+     "finished_at": "2026-11-09T10:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "manifest",
+     "title": "Write the manifest",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:00:00Z",
+     "finished_at": "2026-11-09T10:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "check",
+     "title": "Check the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:00:00Z",
+     "finished_at": "2026-11-09T10:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "publish",
+     "title": "Publish the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:00:00Z",
+     "finished_at": "2026-11-09T10:00:00Z",
+     "pr": null
+    }
+   ],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "prompt ready",
+   "next_check_at": null,
+   "finished_at": "2026-11-09T10:00:00Z",
+   "updated_at": "2026-11-09T10:00:00Z",
+   "handover": {
+    "summary": "**Use it:** Use the prompt in the issue.\n**Scope:** One small change.",
+    "plan_slug": "issue-12",
+    "issue_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/issues/12",
+    "plan_url": null,
+    "spec_url": null,
+    "next_command": null
+   }
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--make-plan--04abcdef",
+  "data": {
+   "schema": 1,
+   "kind": "command",
+   "command": "make-plan",
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": null,
+   "plan_url": null,
+   "feature_branch": null,
+   "orchestrator_session": "session_plan0004abcdef",
+   "attended": true,
+   "status": "done",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [
+    {
+     "id": "survey",
+     "title": "Survey the repository",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T09:00:00Z",
+     "finished_at": "2026-11-09T09:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "design",
+     "title": "Write the design",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T09:00:00Z",
+     "finished_at": "2026-11-09T09:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "manifest",
+     "title": "Write the manifest",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T09:00:00Z",
+     "finished_at": "2026-11-09T09:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "check",
+     "title": "Check the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T09:00:00Z",
+     "finished_at": "2026-11-09T09:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "publish",
+     "title": "Publish the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T09:00:00Z",
+     "finished_at": "2026-11-09T09:00:00Z",
+     "pr": null
+    }
+   ],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "plan other-plan ready",
+   "next_check_at": null,
+   "finished_at": "2026-11-09T09:00:00Z",
+   "updated_at": "2026-11-09T09:00:00Z",
+   "handover": {
+    "summary": "**Use it:** Run the command below to build the plan.\n**Scope:** One module and its tests.\n**Review focus:** The record rules.",
+    "plan_slug": "other-plan",
+    "issue_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/issues/9",
+    "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/other-plan/docs/plans/9/plan.md",
+    "spec_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/tree/feature/other-plan/openspec/changes/other-plan",
+    "next_command": "/tld:implement https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/other-plan/docs/plans/9/plan.md"
+   }
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--run--other-plan",
+  "data": {
+   "schema": 1,
+   "kind": "run",
+   "command": null,
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": "other-plan",
+   "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/other-plan/docs/plans/1/plan.md",
+   "feature_branch": "feature/other-plan",
+   "orchestrator_session": "session_run0123456789",
+   "attended": true,
+   "status": "running",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "running",
+   "next_check_at": null,
+   "finished_at": null,
+   "updated_at": "2026-11-09T11:00:00Z"
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--make-plan--05abcdef",
+  "data": {
+   "schema": 1,
+   "kind": "command",
+   "command": "make-plan",
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": null,
+   "plan_url": null,
+   "feature_branch": null,
+   "orchestrator_session": "session_plan0005abcdef",
+   "attended": true,
+   "status": "done",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [
+    {
+     "id": "survey",
+     "title": "Survey the repository",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-01T12:00:00Z",
+     "finished_at": "2026-11-01T12:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "design",
+     "title": "Write the design",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-01T12:00:00Z",
+     "finished_at": "2026-11-01T12:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "manifest",
+     "title": "Write the manifest",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-01T12:00:00Z",
+     "finished_at": "2026-11-01T12:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "check",
+     "title": "Check the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-01T12:00:00Z",
+     "finished_at": "2026-11-01T12:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "publish",
+     "title": "Publish the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-01T12:00:00Z",
+     "finished_at": "2026-11-01T12:00:00Z",
+     "pr": null
+    }
+   ],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "plan old-plan ready",
+   "next_check_at": null,
+   "finished_at": "2026-11-01T12:00:00Z",
+   "updated_at": "2026-11-01T12:00:00Z",
+   "handover": {
+    "summary": "**Use it:** Run the command below to build the plan.\n**Scope:** One module and its tests.\n**Review focus:** The record rules.",
+    "plan_slug": "old-plan",
+    "issue_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/issues/10",
+    "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/old-plan/docs/plans/10/plan.md",
+    "spec_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/tree/feature/old-plan/openspec/changes/old-plan",
+    "next_command": "/tld:implement https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/old-plan/docs/plans/10/plan.md"
+   }
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--make-plan--06abcdef",
+  "data": {
+   "schema": 1,
+   "kind": "command",
+   "command": "make-plan",
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": null,
+   "plan_url": null,
+   "feature_branch": null,
+   "orchestrator_session": "session_plan0006abcdef",
+   "attended": true,
+   "status": "done",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [
+    {
+     "id": "survey",
+     "title": "Survey the repository",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T11:00:00Z",
+     "finished_at": "2026-11-09T11:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "design",
+     "title": "Write the design",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T11:00:00Z",
+     "finished_at": "2026-11-09T11:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "manifest",
+     "title": "Write the manifest",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T11:00:00Z",
+     "finished_at": "2026-11-09T11:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "check",
+     "title": "Check the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T11:00:00Z",
+     "finished_at": "2026-11-09T11:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "publish",
+     "title": "Publish the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T11:00:00Z",
+     "finished_at": "2026-11-09T11:00:00Z",
+     "pr": null
+    }
+   ],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "plan done",
+   "next_check_at": null,
+   "finished_at": "2026-11-09T11:00:00Z",
+   "updated_at": "2026-11-09T11:00:00Z"
+  }
+ },
+ {
+  "id": "other-project--run--demo-plan",
+  "data": {
+   "schema": 1,
+   "kind": "run",
+   "command": null,
+   "project": "other-project",
+   "repo": "tkcs-lab/other-project",
+   "plan_slug": "demo-plan",
+   "plan_url": "https://github.com/tkcs-lab/other-project/blob/feature/demo-plan/docs/plans/1/plan.md",
+   "feature_branch": "feature/demo-plan",
+   "orchestrator_session": "session_run0123456789",
+   "attended": true,
+   "status": "running",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "running",
+   "next_check_at": null,
+   "finished_at": null,
+   "updated_at": "2026-11-09T11:40:00Z"
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--run--unrelated",
+  "data": {
+   "schema": 1,
+   "kind": "run",
+   "command": null,
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": "unrelated",
+   "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/unrelated/docs/plans/1/plan.md",
+   "feature_branch": "feature/unrelated",
+   "orchestrator_session": "session_run0123456789",
+   "attended": true,
+   "status": "running",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "running",
+   "next_check_at": null,
+   "finished_at": null,
+   "updated_at": "2026-11-09T11:50:00Z"
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--run--re-planned",
+  "data": {
+   "schema": 1,
+   "kind": "run",
+   "command": null,
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": "re-planned",
+   "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/re-planned/docs/plans/1/plan.md",
+   "feature_branch": "feature/re-planned",
+   "orchestrator_session": "session_run0123456789",
+   "attended": true,
+   "status": "failed",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "failed",
+   "next_check_at": null,
+   "finished_at": "2026-11-09T07:00:00Z",
+   "updated_at": "2026-11-09T07:00:00Z"
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--make-plan--07abcdef",
+  "data": {
+   "schema": 1,
+   "kind": "command",
+   "command": "make-plan",
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": null,
+   "plan_url": null,
+   "feature_branch": null,
+   "orchestrator_session": "session_plan0007abcdef",
+   "attended": true,
+   "status": "done",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [
+    {
+     "id": "survey",
+     "title": "Survey the repository",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:00:00Z",
+     "finished_at": "2026-11-09T10:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "design",
+     "title": "Write the design",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:00:00Z",
+     "finished_at": "2026-11-09T10:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "manifest",
+     "title": "Write the manifest",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:00:00Z",
+     "finished_at": "2026-11-09T10:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "check",
+     "title": "Check the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:00:00Z",
+     "finished_at": "2026-11-09T10:00:00Z",
+     "pr": null
+    },
+    {
+     "id": "publish",
+     "title": "Publish the plan",
+     "depends_on": [],
+     "complexity": null,
+     "state": "done",
+     "session": null,
+     "branch": null,
+     "started_at": "2026-11-09T10:00:00Z",
+     "finished_at": "2026-11-09T10:00:00Z",
+     "pr": null
+    }
+   ],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "plan same-time ready",
+   "next_check_at": null,
+   "finished_at": "2026-11-09T10:00:00Z",
+   "updated_at": "2026-11-09T10:00:00Z",
+   "handover": {
+    "summary": "**Use it:** Run the command below to build the plan.\n**Scope:** One module and its tests.\n**Review focus:** The record rules.",
+    "plan_slug": "same-time",
+    "issue_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/issues/11",
+    "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/same-time/docs/plans/11/plan.md",
+    "spec_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/tree/feature/same-time/openspec/changes/same-time",
+    "next_command": "/tld:implement https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/same-time/docs/plans/11/plan.md"
+   }
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--run--same-time",
+  "data": {
+   "schema": 1,
+   "kind": "run",
+   "command": null,
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": "same-time",
+   "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/same-time/docs/plans/1/plan.md",
+   "feature_branch": "feature/same-time",
+   "orchestrator_session": "session_run0123456789",
+   "attended": true,
+   "status": "running",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [],
+   "pr": {
+    "number": null,
+    "url": null,
+    "state": null,
+    "ci": null,
+    "awaiting": null
+   },
+   "last_event": "running",
+   "next_check_at": null,
+   "finished_at": null,
+   "updated_at": "2026-11-09T10:00:00Z"
+  }
+ },
+ {
+  "id": "tkcs-lab-devflow--run--pr-plan",
+  "data": {
+   "schema": 1,
+   "kind": "run",
+   "command": null,
+   "project": "tkcs-lab-devflow",
+   "repo": "tkcs-lab/tkcs-lab-devflow",
+   "plan_slug": "pr-plan",
+   "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/pr-plan/docs/plans/1/plan.md",
+   "feature_branch": "feature/pr-plan",
+   "orchestrator_session": "session_run0123456789",
+   "attended": true,
+   "status": "pr_open",
+   "needs_you": false,
+   "needs_you_reason": "",
+   "needs_you_since": null,
+   "phases": [],
+   "pr": {
+    "number": 5,
+    "url": "https://github.com/tkcs-lab/tkcs-lab-devflow/pull/5",
+    "state": "open",
+    "ci": "pending",
+    "awaiting": "codeowner"
+   },
+   "last_event": "pr_open",
+   "next_check_at": null,
+   "finished_at": null,
+   "updated_at": "2026-11-09T11:30:00Z"
+  }
+ }
+]

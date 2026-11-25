@@ -74,8 +74,78 @@ function answerReceived(entry, asks) {
   return null;
 }
 
-// Where an entry is drawn: {section, badge, ask}. section adds "linked" (no record card: the open ask is the card).
-function place(entry, asks, nowMs) {
+// Hand-over of a finished make-plan record (the same rules as tld.board.record.handover_errors).
+var HANDOVER_REF_PATH = "[A-Za-z0-9._/-]+";
+var HANDOVER_URL_MAX = 300;
+var HANDOVER_PREFIXES = ["/tld:implement", "implement"];
+
+function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+// The links of a record's hand-over that are set and pass the rules: [{name, url}] in the order issue, plan, spec.
+function handoverLinks(rec) {
+  var h = rec && rec.handover;
+  if (!h || typeof h !== "object" || typeof rec.repo !== "string") return [];
+  var base = "^https://github\\.com/" + escapeRe(rec.repo);
+  var slug = typeof h.plan_slug === "string" && /^[a-z0-9][a-z0-9-]{0,79}$/.test(h.plan_slug) ? escapeRe(h.plan_slug) : null;
+  var shapes = [
+    ["issue", h.issue_url, new RegExp(base + "/issues/[1-9][0-9]{0,9}$")],
+    ["plan", h.plan_url, new RegExp(base + "/blob/" + HANDOVER_REF_PATH + "\\.md$")],
+    ["spec", h.spec_url, new RegExp(base + "/tree/" + HANDOVER_REF_PATH + "/openspec/changes/" + (slug === null ? HANDOVER_REF_PATH : slug) + "$")],
+  ];
+  var out = [];
+  shapes.forEach(function (sh) {
+    var url = sh[1];
+    if (typeof url !== "string" || url.length > HANDOVER_URL_MAX || !sh[2].test(url)) return;
+    var bad = url.slice("https://github.com/".length).split("/").some(function (seg) {
+      return seg === "" || seg === "." || seg === "..";
+    });
+    if (!bad) out.push({ name: sh[0], url: url });
+  });
+  return out;
+}
+
+// The command to copy: only a fixed prefix plus a plan link that handoverLinks accepted, else null.
+function handoverCommand(rec) {
+  var h = rec && rec.handover;
+  if (!h || typeof h.next_command !== "string") return null;
+  var plan = handoverLinks(rec).filter(function (l) { return l.name === "plan"; })[0];
+  if (!plan) return null;
+  for (var i = 0; i < HANDOVER_PREFIXES.length; i++) {
+    if (h.next_command === HANDOVER_PREFIXES[i] + " " + plan.url) return h.next_command;
+  }
+  return null;
+}
+
+// The Summary as parts [{label, text}]; a label line is "**Label:** text" (optionally after "- ").
+function summaryParts(text) {
+  var parts = [];
+  String(text).split("\n").forEach(function (line) {
+    if (line.trim() === "") return;
+    var m = /^(?:- )?\*\*([A-Za-z ]{1,30}):\*\*\s?(.*)$/.exec(line);
+    if (m) parts.push({ label: m[1], text: m[2] });
+    else if (parts.length) parts[parts.length - 1].text += "\n" + line;
+    else parts.push({ label: null, text: line });
+  });
+  return parts;
+}
+
+// A done make-plan record with a hand-over, in "Done", that no run of the same project and plan slug has overtaken.
+function planReady(entry, entries, nowMs) {
+  var rec = entry.data;
+  if (rec.kind !== "command" || rec.command !== "make-plan" || rec.status !== "done") return false;
+  if (!rec.handover || typeof rec.handover !== "object" || typeof rec.handover.plan_slug !== "string") return false;
+  if (section(rec, nowMs) !== "done") return false;
+  var finished = Date.parse(rec.finished_at);
+  return !(entries || []).some(function (other) {
+    var d = other.data;
+    return d && d.kind === "run" && d.project === rec.project && d.plan_slug === rec.handover.plan_slug &&
+      Date.parse(d.updated_at) >= finished;
+  });
+}
+
+// Where an entry is drawn: {section, badge, ask}. section adds "linked" (no record card: the open ask is the card)
+// and "ready" (a plan ready card, a sub-state of "done"). entries is the whole board, for planReady.
+function place(entry, asks, nowMs, entries) {
   var rec = entry.data;
   if (isDismissed(entry)) return { section: "hidden", badge: "dismissed", ask: null };
   if (rec.needs_you === true) {
@@ -84,7 +154,9 @@ function place(entry, asks, nowMs) {
     var answered = answerReceived(entry, asks);
     if (answered) return { section: "running", badge: "answer_received", ask: answered };
   }
-  return { section: section(rec, nowMs), badge: null, ask: null };
+  var s = section(rec, nowMs);
+  if (s === "done" && planReady(entry, entries || [], nowMs)) s = "ready";
+  return { section: s, badge: null, ask: null };
 }
 
 // Usage page. A bar is drawn to 100% at most; above 100% of the limit it is marked over.
@@ -140,8 +212,20 @@ function usageVerdict(windows, kind, nowSec) {
   return result;
 }
 
+// The issue page of a record's tracking issue (the same rules as tld.board.record), else null.
+var ISSUE_MAX = 9999999999;
+var ISSUE_REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+function issueUrl(rec) {
+  if (!rec || typeof rec.repo !== "string" || !ISSUE_REPO.test(rec.repo)) return null;
+  if (rec.repo.split("/").some(function (s) { return s === "." || s === ".."; })) return null;
+  var n = rec.tracking_issue;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > ISSUE_MAX) return null;
+  return "https://github.com/" + rec.repo + "/issues/" + n;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { elapsed: elapsed, isHidden: isHidden, isSilent: isSilent, section: section, drift: drift,
     isDismissed: isDismissed, linksTo: linksTo, linkedAsks: linkedAsks, answerReceived: answerReceived, place: place,
-    usageBar: usageBar, usageNow: usageNow, usageAgo: usageAgo, usageVerdict: usageVerdict };
+    escapeRe: escapeRe, handoverLinks: handoverLinks, handoverCommand: handoverCommand, summaryParts: summaryParts, planReady: planReady,
+    usageBar: usageBar, usageNow: usageNow, usageAgo: usageAgo, usageVerdict: usageVerdict, issueUrl: issueUrl };
 }

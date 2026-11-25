@@ -1,0 +1,191 @@
+[
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "issue_url",
+  "url": "https://github.com/o/r/issues/7",
+  "ok": true
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/main/docs/plans/7/plan.md",
+  "ok": true
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "spec_url",
+  "url": "https://github.com/o/r/tree/main/openspec/changes/demo",
+  "ok": true
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/feature/demo/docs/plans/7/plan.md",
+  "ok": true
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "issue_url",
+  "url": "https://github.com/other/r/issues/7",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "issue_url",
+  "url": "http://github.com/o/r/issues/7",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "issue_url",
+  "url": "https://github.com.evil.com/o/r/issues/7",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "issue_url",
+  "url": "https://github.com/o/r/issues/0",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "issue_url",
+  "url": "https://github.com/o/r/issues/7\n",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/main/plan.md\n",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "spec_url",
+  "url": "https://github.com/o/r/tree/main/openspec/changes/demo\n",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/main/../x/plan.md",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/main/./plan.md",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/main//plan.md",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "issue_url",
+  "url": "https://github.com/o/r/issues/7?x=1",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "issue_url",
+  "url": "https://github.com/o/r/issues/7#a",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/main/plan.txt",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/main/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.md",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/main/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.md",
+  "ok": true
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "spec_url",
+  "url": "https://github.com/o/r/tree/main/openspec/changes/other",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/main/my plan.md",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/main/%2e%2e/plan.md",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/main/a@b/plan.md",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "plan_url",
+  "url": "https://github.com/o/r/blob/café/plan.md",
+  "ok": false
+ },
+ {
+  "repo": "o/r",
+  "plan_slug": "demo",
+  "key": "issue_url",
+  "url": "HTTPS://GitHub.com/o/r/issues/7",
+  "ok": false
+ },
+ {
+  "repo": "o/r.x",
+  "plan_slug": "demo",
+  "key": "issue_url",
+  "url": "https://github.com/o/rAx/issues/1",
+  "ok": false
+ },
+ {
+  "repo": "o/r.x",
+  "plan_slug": "demo",
+  "key": "issue_url",
+  "url": "https://github.com/o/r.x/issues/1",
+  "ok": true
+ }
+]

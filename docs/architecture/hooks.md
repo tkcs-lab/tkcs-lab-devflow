@@ -138,7 +138,7 @@ It also matches GitLab tokens (`glpat-`), Stripe restricted keys (`rk_live_`), a
 is a whole token rather than the ending — `API_KEY_1`, `SECRET_KEY_BASE` — while leaving a label such as
 `secret_name` and any `public` / `pubkey` name alone (S16).
 
-For a test fixture or a documented example, build the value at run time, or end the line with `secret-scan:allow`; the mark must be the last thing on the line.
+For a test fixture or a documented example, build the value at run time, or end the line with `secret-scan:allow`; the mark must be the last thing on the line. `scan_text(text, skip_marked=False)` scans every line and ignores the mark; `tld roles reflektor-html` uses it.
 A line of more than a million characters is not checked for generic assignments. A secret a Bash command writes to
 a file is now scanned too (S16): the hook reads the heredoc / herestring body and the words of a command that
 redirects to a file or pipes to `tee` (`echo ghp_… > f`, `cat <<EOF > .env`). A secret that only passes through a
@@ -263,7 +263,7 @@ while a session has no plan, a write into the repository is denied and the agent
 to propose `/tld:make-plan` (the `ask` skill, `/tld:ask`, says how).
 
 - **Opens per session, from the prompt hook.** A prompt that starts with `make-plan`, `implement`, `review`, `setup`,
-  `migrate`, `release`, `land`, `deps`, `upstream`, `questions`, `docs`, `spec`, `sysml` or `repo-admin` (`/tld:<name>` or `/<name>`) opens that session id. Other
+  `migrate`, `release`, `land`, `deps`, `upstream`, `questions`, `docs`, `spec`, `sysml`, `quick` or `repo-admin` (`/tld:<name>` or `/<name>`) opens that session id. Other
   known commands (`/tld:dod`, `/tld:ask`) neither open it nor add context. A skill the model starts itself does not pass
   through `UserPromptSubmit`, so it cannot open the gate. The prompt may also arrive expanded
   (`<command-name>/tld:<name></command-name>` after any leading `<system-reminder>` blocks), which opens it too; a
@@ -280,7 +280,7 @@ to propose `/tld:make-plan` (the `ask` skill, `/tld:ask`, says how).
 - **Workers.** An `/implement` worker's first prompt is a brief, so its brief tells it to run `tld guard allow-plan`,
   which writes `plan-gate-open.json` into `<git dir>/tld/` (per checkout, 8 hours; `tld guard end-allow` keeps it). A
   prompt containing `tld guard allow-plan` gets no context, and a prompt with a line starting `tld-worker: ` (no slash
-  command, with a session id) also opens the session.
+  command, with a session id) also opens the session. A quick session opens like any other command; its workers open through the tld-worker: line and rule 0.
 - **Lifetime.** The session record (`<git dir>/tld/plan-gate/`, named by a hash of the session id) lapses 24 hours after
   last use; every use refreshes it. No session id and no marker: the gate allows. `enabled` is read from the working
   tree (like `dod-gate`), `hooks.disable` from the trusted copy; a malformed `hooks.plan_gate` fails open with a notice.
@@ -293,7 +293,7 @@ the working tree, `disable` from the trusted copy.
 ### `board-gate`
 
 Opt-in, off by default: set `hooks.board_gate.enabled` to `true`. The gate covers the commands that always write a status
-record (`make-plan`, `implement`, `review`, `setup`, `migrate`, `land`, `deps`, `upstream`, `ci`, `questions`), `docs` only in its
+record (`make-plan`, `implement`, `quick`, `review`, `setup`, `migrate`, `land`, `deps`, `upstream`, `ci`, `questions`), `docs` only in its
 `init` and `tidy` modes and `spec` and `sysml` only in their `init` mode (`/tld:docs` and `/tld:docs check` write none, so they neither open the state nor block). A
 session that one of them started must write its status record to the board once before it ends a turn. The gate also
 blocks once per ask that got no timer, and once per change (an ask, a worker start or stop, a pull request, a push) that

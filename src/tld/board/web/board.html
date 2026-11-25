@@ -38,6 +38,10 @@ h2 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: v
 .row.pr { border-left: 6px solid var(--pr); }
 .row.run { border-left: 6px solid var(--run); }
 .row.done { border-left: 6px solid var(--ok); }
+.row.ready { border-left: 6px solid var(--ok); }
+.handover { white-space: pre-wrap; margin-top: 6px; }
+.copy { display: flex; gap: 6px; margin-top: 6px; }
+.copy input.cmd { flex: 1 1 auto; min-width: 0; font: 13px ui-monospace, monospace; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
 .row.hid { border-left: 6px solid var(--line); }
 details > summary { cursor: pointer; list-style: none; }
 details > summary::-webkit-details-marker { display: none; }
@@ -247,7 +251,8 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
   function detail(rec, now, entry) {
     var box = el("div", "detail");
     var links = el("div", "links");
-    add(links, link(rec.plan_url, "plan"), sessionLink(rec),
+    var issue = issueUrl(rec);
+    add(links, issue ? link(issue, "issue #" + rec.tracking_issue) : null, link(rec.plan_url, "plan"), sessionLink(rec),
       rec.pr && rec.pr.url ? link(rec.pr.url, "PR #" + rec.pr.number) : null, reportLink(entry));
     if (links.childNodes.length) box.appendChild(links);
     box.appendChild(el("div", "meta", itemWord(rec) + " · " + (rec.last_event || "")));
@@ -376,6 +381,67 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
       add(sum, headLine(rec, mark), span("finished " + ago(rec.finished_at, now)));
     }, dismissButton);
   }
+  // iOS ignores select() on a read-only input, so set the range too.
+  function selectAll(input) {
+    function run() {
+      input.focus();
+      input.select();
+      input.setSelectionRange(0, input.value.length);
+    }
+    run();
+    // A click on text that is already selected collapses it after the click handler: select again then.
+    setTimeout(run, 0);
+  }
+  // Copy the command: the clipboard in a secure context, else select the text so the owner can copy it by hand.
+  function copy(text, input, button) {
+    function select() { selectAll(input); button.textContent = "Selected: copy it"; }
+    if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
+      var done;
+      try { done = navigator.clipboard.writeText(text); } catch (err) { select(); return; }
+      Promise.resolve(done).then(function () { button.textContent = "Copied"; }, select);
+    } else select();
+  }
+  function readyRow(entry, now) {
+    return row(entry, "ready", now, function (sum, rec) {
+      add(sum, headLine(rec, span("✓ plan ready", "badge")), span("finished " + ago(rec.finished_at, now)));
+      var box = el("div", "handover");
+      summaryParts(rec.handover.summary).forEach(function (part) {
+        var line = el("div", "hpart");
+        if (part.label !== null) {
+          line.appendChild(el("strong", null, part.label + ":"));
+          line.appendChild(document.createTextNode(" " + part.text));
+        } else line.appendChild(document.createTextNode(part.text));
+        box.appendChild(line);
+      });
+      sum.appendChild(box);
+      var links = el("div", "links");
+      handoverLinks(rec).forEach(function (l) { links.appendChild(link(l.url, l.name)); });
+      if (links.childNodes.length) sum.appendChild(links);
+      var command = handoverCommand(rec);
+      if (command !== null) {
+        sum.appendChild(span("for " + rec.repo));
+        var wrap = el("div", "copy");
+        var input = el("input", "cmd");
+        input.type = "text";
+        input.readOnly = true;
+        input.value = command;
+        input.setAttribute("aria-label", "Command to start the implementation");
+        var button = el("button", null, "Copy");
+        button.type = "button";
+        button.setAttribute("data-action", "copy");
+        button.setAttribute("aria-label", "Copy the command");
+        // Controls inside <summary> must not toggle the card.
+        function stop(ev) { ev.preventDefault(); ev.stopPropagation(); }
+        input.addEventListener("click", function (ev) { stop(ev); selectAll(input); });
+        input.addEventListener("keydown", function (ev) {
+          if (ev.key === "Enter" || ev.key === " ") { stop(ev); selectAll(input); }
+        });
+        button.addEventListener("click", function (ev) { stop(ev); copy(command, input, button); });
+        add(wrap, input, button);
+        sum.appendChild(wrap);
+      }
+    }, dismissButton);
+  }
   function answeredRow(entry, placed, now) {
     return row(entry, "run", now, function (sum, rec) {
       add(sum, headLine(rec, span("✓ answer received", "badge")),
@@ -423,12 +489,12 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     var openAsks = asks.filter(function (a) { return a.state === "open"; });
     var closedAsks = asks.filter(function (a) { return a.state !== "open"; });
     var now = nowMs();
-    var groups = { needs_you: [], pr_open: [], running: [], done: [], hidden: [] };
+    var groups = { needs_you: [], pr_open: [], ready: [], running: [], done: [], hidden: [] };
     var placed = {};
     entries.forEach(function (e) {
       var p;
       // A bad item must not stop the whole board: fall back to the plain rule.
-      try { p = place(e, asks, now); } catch (err) { p = { section: section(e.data, now), badge: null, ask: null }; }
+      try { p = place(e, asks, now, entries); } catch (err) { p = { section: section(e.data, now), badge: null, ask: null }; }
       placed[e.id] = p;
       if (p.section !== "linked") groups[p.section].push(e);
     });
@@ -437,6 +503,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     });
     groups.pr_open.sort(newestFirst("updated_at"));
     groups.running.sort(newestFirst("updated_at"));
+    groups.ready.sort(newestFirst("finished_at"));
     groups.done.sort(newestFirst("finished_at"));
 
     document.getElementById("title").textContent = document.title;
@@ -444,7 +511,7 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
     document.getElementById("updated").textContent = newest ? "Newest update " + ago(new Date(newest).toISOString(), now) : "No records yet";
     var counts = document.getElementById("counts");
     counts.textContent = "";
-    [["? asks", openAsks], ["⚑ needs you", groups.needs_you], ["▶ running", groups.running], ["⇄ PR open", groups.pr_open], ["✓ done", groups.done]]
+    [["? asks", openAsks], ["⚑ needs you", groups.needs_you], ["▶ running", groups.running], ["⇄ PR open", groups.pr_open], ["✓ plan ready", groups.ready], ["✓ done", groups.done]]
       .forEach(function (c) { counts.appendChild(el("span", "count", c[0] + " " + c[1].length)); });
 
     var main = document.getElementById("main");
@@ -460,6 +527,11 @@ label.field { display: block; margin: 0 0 6px; color: var(--muted); font-size: 1
       var pr = sect("pr_open", "PR open", groups.pr_open.length);
       groups.pr_open.forEach(function (e) { pr.appendChild(prRow(e, now)); });
       main.appendChild(pr);
+    }
+    if (groups.ready.length) {
+      var ready = sect("ready", "Plan ready", groups.ready.length);
+      groups.ready.forEach(function (e) { ready.appendChild(readyRow(e, now)); });
+      main.appendChild(ready);
     }
     var run = sect("running", "Running", groups.running.length);
     var answered = groups.running.filter(function (e) { return placed[e.id].badge === "answer_received"; });

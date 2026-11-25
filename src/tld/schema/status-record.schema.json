@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "tld status record",
-  "description": "One database document per run or session (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an implement orchestration or a single-session prompt run (make-plan's small scope), keyed '<project>--run--<plan>'; an attended command record (kind 'command') is keyed '<project>--<command>--<session tail>' and an unattended one '<project>--<command>'. tld board record-id builds the id; the old keys (the project slug for a run, '<project>--<command>' for an attended command) are still accepted until tld 1.2.0. The project slug is derived from the repository name (tld board project-slug). 'attended' says whether a person started the command and can answer; the final states are done, failed and pr_open. Schema version 1 gained the optional phase field 'scope' without a bump. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, the project slug) are checked by src/tld/board/record.py. No secrets, file contents or commit messages belong in a record.",
+  "description": "One database document per run or session (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an implement orchestration or a single-session prompt run (make-plan's small scope), keyed '<project>--run--<plan>'; an attended command record (kind 'command') is keyed '<project>--<command>--<session tail>' and an unattended one '<project>--<command>'. tld board record-id builds the id; the old keys (the project slug for a run, '<project>--<command>' for an attended command) are still accepted until tld 1.2.0. The project slug is derived from the repository name (tld board project-slug). 'attended' says whether a person started the command and can answer; the final states are done, failed and pr_open. Schema version 1 gained the optional phase field 'scope' without a bump. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, the project slug) are checked by src/tld/board/record.py. No secrets, file contents or commit messages belong in a record. The optional 'handover' object of a done make-plan command record (the Summary, the plan slug, links bound to the record's repo and the command that starts implement) is checked by handover_errors in src/tld/board/record.py. The optional 'tracking_issue' (any record) is the number of the run's tracking issue in 'repo'; it must agree with 'handover.issue_url' and with an 'issue-<n>' plan_slug.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -183,6 +183,60 @@
           "description": "What happened to the drift: accepted (merged as is), or reverted by a later commit (decided from the feature branch's final diff). null when there is no drift or the check was unavailable."
         }
       }
+    },
+    "handover": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "plan_slug",
+        "issue_url",
+        "plan_url",
+        "spec_url",
+        "next_command"
+      ],
+      "description": "Only allowed when kind is command, command is make-plan and status is done.",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "The plan Summary: non-empty, at most 350 words and 4000 characters, no control, format, surrogate, private-use or separator character except a line break."
+        },
+        "plan_slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,79}$",
+          "description": "Must match ^[a-z0-9][a-z0-9-]{0,79}$."
+        },
+        "issue_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "null or https://github.com/<repo>/issues/<n> on github.com for the record's repo; at most 300 characters, no empty, . or .. segment."
+        },
+        "plan_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "null or https://github.com/<repo>/blob/<branch>/<path>.md on github.com for the record's repo; at most 300 characters, no empty, . or .. segment."
+        },
+        "spec_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "null or https://github.com/<repo>/tree/<branch>/openspec/changes/<plan_slug> on github.com for the record's repo; at most 300 characters, no empty, . or .. segment."
+        },
+        "next_command": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "null, or '<prefix> <plan_url>' with a prefix of /tld:implement or implement; must be null when plan_url is null."
+        }
+      }
     }
   },
   "properties": {
@@ -350,6 +404,18 @@
     },
     "updated_at": {
       "$ref": "#/$defs/timestamp"
+    },
+    "handover": {
+      "$ref": "#/$defs/handover"
+    },
+    "tracking_issue": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 9999999999,
+      "description": "Optional, any record: the number of the run's tracking issue in 'repo'. It must equal the issue of handover.issue_url and the <n> of a plan_slug 'issue-<n>'. The board links it as 'issue #<n>'."
     }
   },
   "examples": [
@@ -392,6 +458,132 @@
       "next_check_at": "2026-11-08T20:30:00Z",
       "finished_at": null,
       "updated_at": "2026-11-08T20:06:40Z"
+    },
+    {
+      "schema": 1,
+      "kind": "command",
+      "command": "make-plan",
+      "project": "tkcs-lab-devflow",
+      "repo": "tkcs-lab/tkcs-lab-devflow",
+      "plan_slug": null,
+      "plan_url": null,
+      "feature_branch": null,
+      "orchestrator_session": "session_0123456789abcdef",
+      "attended": true,
+      "status": "done",
+      "needs_you": false,
+      "needs_you_reason": "",
+      "needs_you_since": null,
+      "phases": [
+        {
+          "id": "survey",
+          "title": "Survey the repository",
+          "depends_on": [],
+          "complexity": null,
+          "state": "done",
+          "session": null,
+          "branch": null,
+          "started_at": "2026-11-09T10:00:00Z",
+          "finished_at": "2026-11-09T10:20:00Z",
+          "pr": null
+        },
+        {
+          "id": "design",
+          "title": "Write the design",
+          "depends_on": [],
+          "complexity": null,
+          "state": "done",
+          "session": null,
+          "branch": null,
+          "started_at": "2026-11-09T10:00:00Z",
+          "finished_at": "2026-11-09T10:20:00Z",
+          "pr": null
+        },
+        {
+          "id": "manifest",
+          "title": "Write the manifest",
+          "depends_on": [],
+          "complexity": null,
+          "state": "done",
+          "session": null,
+          "branch": null,
+          "started_at": "2026-11-09T10:00:00Z",
+          "finished_at": "2026-11-09T10:20:00Z",
+          "pr": null
+        },
+        {
+          "id": "check",
+          "title": "Check the plan",
+          "depends_on": [],
+          "complexity": null,
+          "state": "done",
+          "session": null,
+          "branch": null,
+          "started_at": "2026-11-09T10:00:00Z",
+          "finished_at": "2026-11-09T10:20:00Z",
+          "pr": null
+        },
+        {
+          "id": "publish",
+          "title": "Publish the plan",
+          "depends_on": [],
+          "complexity": null,
+          "state": "done",
+          "session": null,
+          "branch": null,
+          "started_at": "2026-11-09T10:00:00Z",
+          "finished_at": "2026-11-09T10:20:00Z",
+          "pr": null
+        }
+      ],
+      "pr": {
+        "number": null,
+        "url": null,
+        "state": null,
+        "ci": null,
+        "awaiting": null
+      },
+      "last_event": "plan demo-plan ready",
+      "next_check_at": null,
+      "finished_at": "2026-11-09T10:30:00Z",
+      "updated_at": "2026-11-09T10:30:00Z",
+      "handover": {
+        "summary": "**Use it:** Run the next command to start implementing the demo plan in four phases.\n**Scope:** One new module, its tests and one documentation page. Nothing else changes.\n**Review focus:** Check the validation rules and their error texts, because the board shows them to the owner.",
+        "plan_slug": "demo-plan",
+        "issue_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/issues/7",
+        "plan_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/demo-plan/docs/plans/7/plan.md",
+        "spec_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/tree/feature/demo-plan/openspec/changes/demo-plan",
+        "next_command": "/tld:implement https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/demo-plan/docs/plans/7/plan.md"
+      }
+    },
+    {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "tkcs-lab-devflow",
+      "repo": "tkcs-lab/tkcs-lab-devflow",
+      "tracking_issue": 42,
+      "plan_slug": "issue-42",
+      "plan_url": null,
+      "feature_branch": "feature/prompt-run-record",
+      "orchestrator_session": "session_01...",
+      "attended": true,
+      "status": "pr_open",
+      "needs_you": true,
+      "needs_you_reason": "Review PR #12",
+      "needs_you_since": "2026-11-09T11:00:00Z",
+      "phases": [],
+      "pr": {
+        "number": 12,
+        "url": "https://github.com/tkcs-lab/tkcs-lab-devflow/pull/12",
+        "state": "open",
+        "ci": "pending",
+        "awaiting": "codeowner"
+      },
+      "last_event": "PR #12 opened",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-09T11:00:00Z"
     }
   ]
 }

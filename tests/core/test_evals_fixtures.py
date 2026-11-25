@@ -9,7 +9,7 @@ from evals.harness.common import git
 from evals.harness.runner import build_fixture
 from evals.harness.taskspec import discover
 
-BUILDERS = ["tiny_app", "review_seeded", "guardrail", "setup_repos", "commands"]
+BUILDERS = ["tiny_app", "review_seeded", "guardrail", "setup_repos", "commands", "release_gate", "deps_combine"]
 
 
 @pytest.mark.parametrize("name", BUILDERS)
@@ -127,3 +127,57 @@ def test_implement_fixture_plan_passes_check_url_and_fails_validation(tmp_path):
     bad = subprocess.run([*tld_cmd("plan", "validate-manifest", str(plan), "--profile", str(r / ".tld" / "toolkit.yaml"))],
                          cwd=r, capture_output=True, text=True)
     assert bad.returncode == 1 and expected["stop_message"] in bad.stdout + bad.stderr
+
+
+@pytest.mark.parametrize("state,code,line", [("red", 1, "red: lint: completed failure"), ("running", 3, "waiting: test: in_progress"),
+                                              ("moved", 0, "release-check: green")])
+def test_release_gate_fixture_reaches_the_green_check(tmp_path, vp, state, code, line):
+    import subprocess
+    import sys
+    import yaml
+    from conftest import BIN
+    repo = tmp_path / "r"
+    builder("release_gate").build(repo, state=state)
+    errors, _, _ = vp.validate(yaml.safe_load((repo / ".tld/toolkit.yaml").read_text()), repo)
+    assert errors == []
+    prep = subprocess.run([sys.executable, str(BIN), "ops", "release-prepare", "--check", "--version", "1.2.0"], cwd=repo,
+                          capture_output=True, text=True)
+    assert prep.returncode == 0, prep.stdout + prep.stderr
+    check = subprocess.run([sys.executable, str(BIN), "ops", "release-check", "--checks", "ci-state/checks.json"], cwd=repo,
+                           capture_output=True, text=True)
+    assert check.returncode == code and line in check.stdout, check.stdout + check.stderr
+
+
+def test_deps_combine_profile_is_valid_and_the_bot_branches_carry_the_bot_identity(tmp_path, vp):
+    import yaml
+    builder("deps_combine").build(tmp_path / "r")
+    r = tmp_path / "r"
+    assert vp.validate(yaml.safe_load((r / ".tld" / "toolkit.yaml").read_text()), r)[0] == []
+    for branch in ("dependabot/pip/alpha-2.0.0", "dependabot/pip/tools/gamma-2.0.0"):
+        assert git("log", "-1", "--format=%ae%x00%ce", branch, cwd=r).strip() == \
+            "49699333+dependabot[bot]@users.noreply.github.com\x00noreply@github.com"
+
+
+def test_deps_combine_fixture_matches_the_real_prepare_and_lock(tmp_path):
+    import json
+    from conftest import tld_cmd
+    task = [t for t in discover() if t.id == "deps-combine"][0]
+    work, expected = build_fixture(task, tmp_path)
+    stub = json.loads((ROOT / "evals" / "stubs" / "deps-combine.json").read_text())
+    prepares = [a["command"].split("/cli/tld\" ", 1)[1].split() for a in stub["actions"] if "deps-prepare" in a["command"]]
+    assert len(prepares) == 2
+    env = {**__import__("os").environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"}
+
+    def run(argv, **kw):
+        p = subprocess.run(argv, cwd=work, capture_output=True, text=True, env=env, **kw)
+        assert p.returncode == 0, p.stderr + p.stdout
+        return p
+
+    for words in prepares:
+        run([*tld_cmd(*words)])
+        run(["python3", "tools/lock.py"])
+        run(["git", "add", "-A"])
+        run(["git", "commit", "-q", "--allow-empty", "-m", "chore(deps): regenerate lockfiles"])
+    for path, text in expected["branch_files"]["equals"].items():
+        assert git("show", f"tld-deps/combined-1:{path}", cwd=work) == text, path

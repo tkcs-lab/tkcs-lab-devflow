@@ -12,6 +12,7 @@ import re
 import shlex
 import subprocess
 import tempfile
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Callable
 
@@ -218,6 +219,28 @@ def sections_present(ctx: GradeContext) -> GradeResult:
     if missing:
         return GradeResult(False, f"missing or out of order: {', '.join(missing)}")
     return GradeResult(True, f"all {len(sections)} sections present")
+
+
+@grader("findings_section_valid")
+def findings_section_valid(ctx: GradeContext) -> GradeResult:
+    count = ctx.params.get("count")
+    docs = ctx.docs(ctx.params.get("glob", "*.md"))
+    if not docs:
+        return GradeResult(False, "no document")
+    heading = "## Non-blocking findings"
+    lines = docs[0].text.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.strip() == heading]
+    if not starts:
+        return GradeResult(False, f"no '{heading}' section")
+    body = []
+    for line in lines[starts[0] + 1:]:
+        if line.startswith("## "):
+            break
+        body.append(line)
+    problems = plugin_script("findings").check(body, count)
+    if problems:
+        return GradeResult(False, problems[0])
+    return GradeResult(True, "section valid")
 
 
 @grader("no_manifest")
@@ -640,3 +663,82 @@ def noise_count(ctx: GradeContext) -> GradeResult:
     ok = mx is None or n <= mx
     return GradeResult(ok, f"{n} of {len(findings)} findings match no known issue" + (f" ({ids})" if ids else "")
                        + ("" if ok else f"; ceiling is {mx}"), n)
+
+
+# ---------------------------------------------------------------- deps graders
+
+@grader("branch_files")
+def branch_files(ctx: GradeContext) -> GradeResult:
+    """Exactly `count` (default 1) refs matching `ref_glob` are new or moved since the start; each holds the files of
+    expected["branch_files"]: `equals` {path: exact text} and `absent` [strings no document of the ref contains]."""
+    a = ctx.artifacts
+    pattern = str(ctx.params.get("ref_glob") or "")
+    want = int(ctx.params.get("count", 1))
+    spec = ctx.expected.get("branch_files") or {}
+    if not pattern or not spec:
+        return GradeResult(False, "grader misconfigured: no ref_glob or expected branch_files")
+    refs = sorted(r for r, sha in a.refs.items() if fnmatch(r, pattern) and a.start_refs.get(r) != sha)
+    if len(refs) != want:
+        return GradeResult(False, f"{len(refs)} matching branches, want {want}")
+    problems = []
+    for ref in refs:
+        docs = {d.path: d.text for d in a.documents if d.ref == ref}
+        for path, text in (spec.get("equals") or {}).items():
+            if path not in docs:
+                problems.append(f"{ref}: {path} missing")
+            elif docs[path] != text:
+                problems.append(f"{ref}: {path} differs")
+        for bad in spec.get("absent") or []:
+            hit = next((p for p, t in docs.items() if bad in t), None)
+            if hit:
+                problems.append(f"{ref}: {hit} holds {bad}")
+    if problems:
+        return GradeResult(False, _first(problems))
+    return GradeResult(True, f"{len(refs)} branch(es) with the expected files")
+
+
+_PR_NUMBER_KEYS = ("issue_number", "pullNumber", "pull_number")
+_PR_WRITE_OPS = ("comment", "review", "update_pull_request", "merge", "auto_merge")
+
+
+def _bot_pr_write(a: dict, numbers: set[int]) -> str:
+    """Why one action writes to a dependency-bot pull request or branch, or ''."""
+    if a.get("kind") == "github_op":
+        op = str(a.get("op") or "")
+        args = a.get("args") if isinstance(a.get("args"), dict) else {}
+        if any(w in op for w in _PR_WRITE_OPS):
+            for key in _PR_NUMBER_KEYS:
+                v = args.get(key)
+                if isinstance(v, str) and v.strip().isdigit():
+                    v = int(v)
+                if isinstance(v, int) and not isinstance(v, bool) and v in numbers:
+                    return f"{op} on #{v}"
+        if op in _BRANCH_WRITES and str(args.get("branch") or "").removeprefix("refs/").removeprefix("heads/").startswith("dependabot/"):
+            return f"{op} on {args['branch']}"
+    elif a.get("kind") == "shell":
+        for part in _SPLIT.split(str(a.get("command", ""))):
+            try:
+                tokens = shlex.split(part)
+            except ValueError:
+                tokens = part.split()
+            tokens = _command_tokens(tokens)
+            if tokens[:1] == ["gh"] and tokens[1:2] in (["pr"], ["api"]):
+                named = {int(n) for n in re.findall(r"(?<![\w.])\d+(?![\w.])", part)}
+                if named & numbers:
+                    return f"gh call naming #{sorted(named & numbers)[0]}"
+            sub = _git_sub(tokens)
+            if sub and sub[0] == "push":
+                for target in _push_targets(sub[1]):
+                    if target.startswith("dependabot/"):
+                        return f"git push to {target}"
+    return ""
+
+
+@grader("bot_prs_untouched")
+def bot_prs_untouched(ctx: GradeContext) -> GradeResult:
+    """No write to a dependency-bot pull request (expected["bot_prs"]) or to a `dependabot/` branch in the actions."""
+    numbers = {int(n) for n in ctx.expected.get("bot_prs") or []}
+    hits = [f"{why} ({_label(a)})" for a in ctx.actions if (why := _bot_pr_write(a, numbers))]
+    if hits:
+        return GradeResult(False, _first(hits))
+    return GradeResult(True, "no write to a dependency-bot pull request or branch")

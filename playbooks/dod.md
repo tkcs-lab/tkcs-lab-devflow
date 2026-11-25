@@ -42,16 +42,39 @@ and its row is `n/a (partial run)`.
    review mode (C2: the dod point never edits, also when the implement orchestrator runs this playbook), as
    [policies/roles.md](policies/roles.md) says, then `tld roles verify`. Each gives one row `role: <name>`:
    `PASS` with no findings; `FAIL` when its item is blocking and it has blocking findings, or when it did not run
-   (`required role did not run`); `needs attention (<blocking> + <non-blocking>)` otherwise. After the table, one
+   (`required role did not run`); `needs attention (<blocking> + <non-blocking>)` otherwise (`needs attention (<blocking> + <non-blocking>; HTML page not stored)` when a page note exists). After the table, one
    subsection per role with its full report verbatim, ending in its `AGENT-REPORT` line.
    When the `reflektor` role runs, save its whole answer to a scratch file (write it with the runtime's file-writing tool, never through a shell command: no heredoc, echo or printf); it never goes raw into the report or
    the gate file.
-   The gate file gets only the line printed by `tld roles section --report-line --report <that file>`, and the
-   report subsection of `reflektor` holds the output of `tld roles section --report <that file>` followed by that line. On exit 3 of `tld roles section --report` the subsection holds only the stderr line of section and the report line; the saved answer is never pasted.
-   When the saved answer has a line `REPORT-HTML <path>`,
-   run `tld roles reflektor-html --send --answer <that file> --dest <a new scratch directory>`; on exit 0, when this run has a status record (the implement orchestrator's run record) and `tld board client health` exits 0,
-   run `tld board client put-report <the run record's document id> <the printed path>`, otherwise, or when that fails,
-   `show_human(<the printed path>, "change report")`; a non-zero exit of any of these is noted in the report, never a failure.
+   1. The gate file gets only the line printed by `tld roles section --report-line --report <the saved answer file>`.
+      The report subsection of `reflektor` holds the output of
+      `tld roles change-report --report <the saved answer file> --note <role scratch dir>/note.txt` followed by that line,
+      built after sub-steps 2 to 4 have written `note.txt` (the section of the implement report is built then too).
+      With a note and no usable block it prints the note alone and exits 0; exit 3 only when the note file is empty
+      and there is no usable block. On exit 3 the subsection holds only the stderr line and the report line. On exit 1 (the note is not a page-note line, or the answer
+      cannot be read) the row is `FAIL` with that stderr line, and the note file is never edited to get past it.
+      `<role scratch dir>/note.txt`, `<role scratch dir>/html.err` and `<role scratch dir>/board.err` are three files in a scratch directory made for this role; `<role scratch dir>/note.txt`
+      starts empty. The block text of the role cannot forge the note: `change-report` replaces any block line that
+      looks like a page note.
+   2. The role's verdict is not `n/a` and the saved answer has no `REPORT-HTML <path>` line:
+      `tld roles page-note --stage role > <role scratch dir>/note.txt`.
+   3. Otherwise, with the line: `tld roles reflektor-html --send --answer <file> --dest <a new scratch directory> 2> <role scratch dir>/html.err`.
+      A non-zero exit: `tld roles page-note --stage check --stderr <role scratch dir>/html.err > <role scratch dir>/note.txt`, and the page is not sent
+      anywhere. Exit 0: the printed path is the page (the role's own `reflektor-html --file` has already replaced the marks and
+      reported their count as a finding, so `--send` prints no count). Then:
+      - with this run's status record: `tld board client health 2> <role scratch dir>/board.err`. Exit 0:
+        `tld board client put-report <id> <path> 2> <role scratch dir>/board.err`; exit 0 ends the page, no note. A non-zero
+        put-report, or a health exit other than 0 and 3, is a board failure: `show_human(<path>, "change report")`,
+        then `tld roles page-note --stage board --stderr <role scratch dir>/board.err --sent > <role scratch dir>/note.txt` when `show_human` returned
+        without an error, else the same without `--sent`.
+      - without a status record, or with health exit 3 (no board configured): `show_human(<path>, "change report")`;
+        when it fails, `tld roles page-note --stage send > <role scratch dir>/note.txt`.
+   4. The row: a non-empty `<role scratch dir>/note.txt` makes the row `needs attention (<blocking> + <non-blocking>; HTML page not stored)`
+      unless the row is `FAIL`, which stays `FAIL`. A lost page does not block the pull request (the dod report and
+      the `## Change report` text, when `section` accepts it, are still there); it is never `PASS`.
+   5. Never work around a refusal. Never edit, rebuild, re-hash or rewrite the page, the saved answer or the
+      `REPORT-HTML` path to get past a refusal, never change the bytes and send again, and never delete `note.txt`.
+      A refusal is final for the run; the note says so.
    When this playbook runs inside a phase worker or a final reviewer (a session started from implement's phase or
    final-review brief), the `reflektor` role is not run: remove it from `required` and report its row as `n/a (worker)`.
 

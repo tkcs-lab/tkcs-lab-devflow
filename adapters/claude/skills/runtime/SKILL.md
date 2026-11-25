@@ -143,6 +143,7 @@ for Claude Code on the web set it to `https://claude.ai/code/` (the session id i
 | `github.workflow_runs` | `actions_list` with `method: "list_workflow_runs"`, `resource_id` the workflow file name |
 | `github.workflow_run` | `actions_get` with `method: "get_workflow_run"` |
 | `github.job_logs` | `get_job_logs` (`run_id`, `return_content: true`) |
+| `github.commit_checks` | `actions_list` with `method: "list_workflow_runs"`, `workflow_runs_filter` `{branch: <main>}` and `perPage: 100` (more pages while the sha is not yet found, or the last run of the page has this sha), keeping the runs whose `head_sha` is the sha and whose `path` does not end with `/<workflow>`; for each, `actions_list` with `method: "list_workflow_jobs"`, `resource_id` the run id, `workflow_jobs_filter` `{filter: "latest"}`: every job is one check run `{name, status, conclusion}`; a run without a job is one check run named by the run, with the run's status and conclusion. Write the list as JSON (`[]` when there is none). There is no combined status here: write no status file. Checks of other GitHub Apps are not seen. |
 | `github.collaborator_permission` | `list_repository_collaborators` (the login's `role_name`/permissions) |
 | `github.attach_repo` | `add_repo` with `access` `read` or `push`; on a refusal quote it and read `read_documentation` topic `github.access` |
 | `identity()` | `get_me` (`login`) |

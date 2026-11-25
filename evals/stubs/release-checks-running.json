@@ -1,0 +1,8 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "tld ops release-check printed `release-check: waiting` and `waiting: test: in_progress`: the tests are still running. Nothing is asked and nothing dispatched; I wait ten minutes and read the commit again.",
+  "actions": []
+}

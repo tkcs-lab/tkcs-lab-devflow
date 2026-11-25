@@ -5,6 +5,29 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-25
+
+### Added
+
+- Board cards link the run's tracking issue (`issue #<n>`) for make-plan, implement, quick and a single-session prompt's worker; new optional `tracking_issue` field of a status record, and one rule for a board that does not know an optional field (#100).
+- `tld roles page-note` and `tld roles change-report` print the page note and the change-report section with it as first line.
+- `/tld:quick` runs one small change end to end without a plan: tracking issue, size check (a large change is refused and sent to `/tld:make-plan`), one worker, the final review, the fix round, dod and one pull request (#88).
+- `tld plan summary-check --findings N` checks the pull request's `## Non-blocking findings` section.
+- /deps opens one combined pull request per run (chore/deps-<yyyymmdd>) with every green update group, security updates first; red groups are left out and named, Dependabot pull requests are never pushed to or commented on (new: tld ops deps-prepare, tld ops deps-body).
+- `tld ops release-check` judges a commit's check runs and status by the rule of the `tld-release` workflow (exit 0 green, 3 still running, 1 red).
+- A done make-plan status record may carry an optional `handover` object (the plan Summary, the plan slug, links bound to the record's repository and the `/tld:implement <plan URL>` command). The record validator, and so the board server, checks it; records without it validate as before.
+- `tld plan handover` prints the board hand-over of a finished plan or tracking-issue body as JSON: the `## Summary` word for word, the slug, the links and the implement command, checked by the status-record rules and the secret scan (#95).
+- When /tld:make-plan finishes, the board shows a "Plan ready" card with the plan's Summary, links to the issue, the plan and the spec change, and the implement command ready to copy; new `tld plan handover` and the optional `handover` field of a make-plan status record (#95).
+
+### Changed
+
+- After an approving final review `/tld:implement` runs one fix round: one worker fixes or declines every non-blocking finding of the final review and the dod roles, and the pull request lists each as fixed or declined with its reason (#88).
+
+### Fixed
+
+- The Reflektor change report page is no longer lost when the branch quotes the secret-scan allow mark: the page check scans every line with the mark's skip turned off and then shows each quoted mark as `[secret-scan mark removed]`. When the page is refused or cannot be stored the dod row says `needs attention (... ; HTML page not stored)` and the `## Change report` section starts with `HTML page not stored: <reason>` (#99).
+- The release skill no longer asks for the go while the release commit's checks are running or red: it waits up to an hour, names a red check and asks nothing, asks once when the commit is green, and checks the head again right before the dispatch. The `tld-release.yml` template judges green with the same rule: update installed copies with repo-admin (one pull request per repository, never merged by tld).
+
 ## [1.5.0] - 2026-11-23
 
 ### Added
