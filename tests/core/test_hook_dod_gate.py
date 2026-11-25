@@ -294,3 +294,13 @@ def test_script_contract(tmp_path):
                        text=True, env={**os.environ, "CLAUDE_PROJECT_DIR": str(repo)})
     assert r.returncode == 2 and "broken tests" in r.stderr and r.stdout == ""
     assert subprocess.run([sys.executable, str(HOOKS / "dod_gate.py"), "--bogus"], capture_output=True).returncode == 2
+
+
+def test_verify_dod_is_read_from_the_trusted_copy(tmp_path):
+    flag = tmp_path / "PWNED"
+    committed = profile(["exit 0"], enabled=None)
+    working = profile([f"touch {flag}; exit 1"], enabled=None)
+    repo = hh.make_repo_with_origin(tmp_path / "r", committed=committed, working=working)
+    (repo / "work.txt").write_text("new work\n")
+    r = run(HOOK, stop(repo))
+    assert r.code == 0 and not flag.exists(), "the working copy's verify.dod must not run"

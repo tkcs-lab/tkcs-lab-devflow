@@ -317,3 +317,10 @@ def test_release_workflow_guard_uses_trusted_value(tmp_path):
                                  working=RELEASE_PROFILE.replace("release.yml", "other.yml"))
     assert run(HOOK, event("Write", repo, file_path=".github/workflows/release.yml", content="x")).code == 2
     assert run(HOOK, event("Write", repo, file_path=".github/workflows/other.yml", content="x")).code == 0
+
+
+def test_the_trusted_git_ops_workflow_is_denied(tmp_path):
+    committed = "git:\n  main_branch: main\ngit_ops:\n  repo: o/ops\n  workflow: ops.yml\n"
+    repo = make_repo_with_origin(tmp_path / "r", committed=committed)
+    assert run(HOOK, event("Write", repo, file_path=".github/workflows/ops.yml", content="x")).code == 2
+    assert run(HOOK, event("Write", repo, file_path=".github/workflows/ci.yml", content="x")).code == 0

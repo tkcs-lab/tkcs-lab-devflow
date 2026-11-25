@@ -23,6 +23,7 @@ tests:
   - tests/core/test_roles_page_note.py
   src/tld/guard/protect_paths.py:
   - tests/core/test_hook_protect_paths.py
+  - tests/core/test_hook_dod_gate.py
   - tests/core/test_hook_protect_paths_setup.py
   - tests/core/test_guard_mutations.py
   - tests/core/test_guard_corpus.py
@@ -51,6 +52,7 @@ tests:
   - tests/core/test_hook_protect_paths_setup.py
   src/tld/guard/_common.py:
   - tests/core/test_guard_trust.py
+  - tests/core/test_hook_dod_gate.py
   - tests/core/test_hook_protect_paths.py
   - tests/adapters/claude/test_hooks_config.py
   - tests/core/test_guard_corpus.py
@@ -1026,5 +1028,10 @@ mutants:
 - id: CL2
   file: src/tld/guard/_common.py
   why: the gate clamp uses the working copy only, so a branch can switch off a gate the default branch has on (killed by test_gate_switched_off_on_a_branch_stays_on)
-  old: '    if available and (not isinstance(t_gate, dict) or t_gate.get("enabled", True) is not False):'
+  old: '    if available and _gate_on(_hooks(trusted).get(key)):'
   new: '    if False:'
+- id: CL3
+  file: src/tld/guard/_common.py
+  why: the dod-gate runs verify.dod of the working profile even when a trusted copy exists (killed by test_verify_dod_is_read_from_the_trusted_copy)
+  old: '    if not (available and isinstance(trusted, dict)):'
+  new: '    if True:'

@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 from tld.guard import _common
-from tld.guard._common import DEFAULT_MAX_ATTEMPTS, Ctx, ProfileError, gate_enabled
+from tld.guard._common import DEFAULT_MAX_ATTEMPTS, Ctx, ProfileError, dod_profile, gate_enabled
 
 NAME = "dod-gate"
 MARKER_TTL_SECONDS = 24 * 3600   # an exemption lapses a day after the exempt session last stopped
@@ -127,7 +127,7 @@ def fingerprint(project: str) -> str:
 # --------------------------------------------------------------------------- running the gate
 
 def dod_commands(ctx: Ctx) -> list[tuple[str, str | None]]:
-    verify = (ctx.profile or {}).get("verify")
+    verify = (dod_profile(ctx) or {}).get("verify")
     entries = verify.get("dod") if isinstance(verify, dict) else None
     if not isinstance(entries, list) or not entries:
         raise ProfileError("toolkit.yaml: missing required key 'verify.dod' (the dod-gate runs it)")
@@ -177,8 +177,8 @@ MAX_ATTEMPTS_LIMIT = 10
 def _limit_for_errors(ctx: Ctx) -> int:
     """The attempt limit to use when the profile itself is broken: the configured one if it is valid, else the default."""
     try:
-        gate = ctx.hooks_section().get("dod_gate")
-    except ProfileError:
+        gate = ((dod_profile(ctx) or {}).get("hooks") or {}).get("dod_gate")
+    except (ProfileError, AttributeError):
         return DEFAULT_MAX_ATTEMPTS
     value = gate.get("max_attempts") if isinstance(gate, dict) else None
     if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= MAX_ATTEMPTS_LIMIT:
@@ -212,7 +212,8 @@ def evaluate(ctx: Ctx) -> str | None:
 def _evaluate(ctx: Ctx) -> str | None:
     if not gate_enabled(ctx, "dod_gate"):
         return None
-    gate = ctx.hooks_section().get("dod_gate") or {}
+    gate = ((dod_profile(ctx) or {}).get("hooks") or {}).get("dod_gate") or {}
+    gate = gate if isinstance(gate, dict) else {}
     if ctx.disable_error:
         raise ctx.disable_error
     max_attempts = gate.get("max_attempts", DEFAULT_MAX_ATTEMPTS)

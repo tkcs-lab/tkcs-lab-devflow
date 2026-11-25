@@ -177,42 +177,65 @@ def guarded_workflows(ctx: Ctx) -> list[str]:
     out = list(GUARDED_WORKFLOWS) + [GIT_OPS_WORKFLOW]
     trusted, available = ctx.trusted()
     for profile in ([trusted] if available else [ctx.profile]):
-        release = (profile or {}).get("release")
-        name = release.get("workflow") if isinstance(release, dict) else None
-        if isinstance(name, str) and name and "/" not in name and name not in ("", ".", ".."):
-            out.append(f".github/workflows/{name}")
+        for section, key in (("release", "workflow"), ("git_ops", "workflow")):
+            block = (profile or {}).get(section)
+            name = block.get(key) if isinstance(block, dict) else None
+            if isinstance(name, str) and name and "/" not in name and "\\" not in name and name not in (".", ".."):
+                out.append(f".github/workflows/{name}")
     return list(dict.fromkeys(out))
+
+
+def _gate_on(gate: object) -> bool:
+    """A gate entry is on unless it is a mapping whose `enabled` is exactly false: a malformed entry counts as on."""
+    return not (isinstance(gate, dict) and gate.get("enabled", True) is False)
+
+
+def _profile_tracked(project: str) -> bool:
+    """True when HEAD has the profile (so a deleted working copy is a change, not a repository without one)."""
+    r = trust._git(project, "cat-file", "-e", f"HEAD:{trust.PROFILE_PATH}")
+    return r is not None and r.returncode == 0
 
 
 def gate_enabled(ctx: Ctx, key: str) -> bool:
     """Whether the gate `hooks.<key>.enabled` is on: the resolved value unless it is false, and a gate the trusted
-    copy turns on stays on (trusted OR working copy). With no profile at all every gate is off."""
+    copy turns on stays on (trusted OR working copy). A malformed value counts as on and never raises. With no profile
+    at all (none in the working tree and none tracked) every gate is off."""
     if ctx.profile is None:
-        # no profile file at all: off. A profile that is there but cannot be read (broken YAML, not a mapping) is not
-        # "no profile": a branch could write one to switch every gate off, so the gate stays on.
-        if (Path(ctx.project_dir) / PROFILE).is_file() or os.path.lexists(Path(ctx.project_dir) / PROFILE):
+        # A profile that is there but cannot be read (broken YAML, not a mapping) or was deleted is not "no profile":
+        # a branch could use that to switch every gate off, so the gate stays on.
+        path = Path(ctx.project_dir) / PROFILE
+        if os.path.lexists(path):
             return True
-        # a deleted profile is not "no profile" either while the default branch has the gate on
+        if not _profile_tracked(ctx.project_dir):
+            return False  # a repository that never had a profile: no trust lookup
         trusted, available = ctx.trusted()
-        t_gate = _hooks(trusted).get(key) if available else None
-        return bool(available and (t_gate is None or not isinstance(t_gate, dict) or t_gate.get("enabled", True) is not False)
-                    and isinstance(trusted, dict))
-    gate = ctx.hooks_section().get(key)
-    if gate is not None and not isinstance(gate, dict):
-        raise ProfileError(f"toolkit.yaml: 'hooks.{key}' must be a mapping")
-    value = True if gate is None else gate.get("enabled", True)
-    if not isinstance(value, bool):
-        raise ProfileError(f"toolkit.yaml: 'hooks.{key}.enabled' must be true or false")
-    if value:
+        return bool(available and isinstance(trusted, dict) and _gate_on(_hooks(trusted).get(key)))
+    if _gate_on(ctx.hooks_section().get(key)):
         return True
     trusted, available = ctx.trusted()  # looked up only for a gate the working copy switches off
-    t_gate = _hooks(trusted).get(key) if available else None
-    if available and (not isinstance(t_gate, dict) or t_gate.get("enabled", True) is not False):
+    if available and _gate_on(_hooks(trusted).get(key)):
         branch = ctx.trust().branch or "the default branch"
         ctx.notice = (f"toolkit.yaml: warning: 'hooks.{key}.enabled' is weaker here than on {branch} (the remote "
                       f"default branch); the {branch} value applies until this change is merged")
         return True
     return False
+
+
+def dod_profile(ctx: Ctx) -> dict | None:
+    """The profile whose `verify.dod` and `hooks.dod_gate.max_attempts` the dod-gate runs: the trusted copy when there
+    is one (the working tree is not protected, and the commands run with no prompt), else the working copy. The
+    clamp notice is shown when the working copy differs."""
+    trusted, available = ctx.trusted()
+    if not (available and isinstance(trusted, dict)):
+        return ctx.profile
+
+    def keys(p):
+        return ((p or {}).get("verify") or {}).get("dod"), (_hooks(p).get("dod_gate") or {}).get("max_attempts")
+    if ctx.profile is not None and keys(ctx.profile) != keys(trusted):
+        branch = ctx.trust().branch or "the default branch"
+        ctx.notice = (f"toolkit.yaml: warning: 'verify.dod' or 'hooks.dod_gate.max_attempts' differs here from {branch} "
+                      f"(the remote default branch); the {branch} value applies until this change is merged")
+    return trusted
 
 
 def find_project(cwd: str, hint: str | None = None) -> tuple[str, dict | None, str | None]:

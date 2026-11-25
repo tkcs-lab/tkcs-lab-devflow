@@ -275,3 +275,20 @@ def test_a_deleted_or_dangling_profile_does_not_switch_the_gates_off(tmp_path):
     (dangling / ".tld" / "toolkit.yaml").unlink()
     (dangling / ".tld" / "toolkit.yaml").symlink_to("/nonexistent/profile.yaml")
     assert run("plan-gate", ev(dangling)).code == 2
+
+
+def test_malformed_gate_on_a_branch_stays_on(tmp_path):
+    ev = lambda r: {"session_id": "s1", "cwd": str(r), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                    "tool_input": {"file_path": "a.txt", "content": "x"}}
+    for n, bad in enumerate(("  plan_gate:\n    enabled: 0\n", "  plan_gate:\n    enabled: 'no'\n", "  plan_gate: no\n")):
+        repo = make_repo_with_origin(tmp_path / f"r{n}", committed=PROFILE, working=PROFILE + "hooks:\n" + bad)
+        assert run("plan-gate", ev(repo)).code == 2, bad
+
+
+def test_a_repository_that_never_had_a_profile_does_no_trust_lookup(tmp_path, monkeypatch):
+    from tld.guard import _common
+    from tld.guard.action import Action
+    repo = make_repo_with_origin(tmp_path / "r", committed=None)
+    ctx = _common.make_ctx(Action("shell", str(repo), str(repo), command="ls"), _common.Settings())
+    monkeypatch.setattr(trust, "trusted", lambda *a, **k: (_ for _ in ()).throw(AssertionError("looked up")))
+    assert _common.gate_enabled(ctx, "plan_gate") is False

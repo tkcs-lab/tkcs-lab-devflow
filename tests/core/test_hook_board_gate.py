@@ -295,12 +295,12 @@ def test_hooks_disable_in_the_committed_profile_never_blocks(tmp_path, monkeypat
     assert stop(repo).verdict == "allow"
 
 
-def test_a_malformed_board_gate_section_notes_and_allows(tmp_path, monkeypatch):
+def test_a_malformed_board_gate_section_counts_as_on(tmp_path, monkeypatch):
     monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
     monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
     repo = make_repo_with_origin(tmp_path / "r", "feature/demo", PROFILE + "hooks:\n  board_gate:\n    enabled: yes please\n")
-    d = stop(repo)
-    assert d.verdict == "allow" and "hooks.board_gate.enabled" in (d.notice or "")
+    prompt(repo, "docs")
+    assert has_state(repo)
 
 
 def test_an_invalid_json_state_file_never_blocks(board):
