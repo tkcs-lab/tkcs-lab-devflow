@@ -263,3 +263,15 @@ def test_a_broken_profile_does_not_switch_the_gates_off(tmp_path):
     for broken in ("a: [\n", "- just\n- a list\n"):
         repo = make_repo_with_origin(tmp_path / ("r%d" % len(broken)), committed=PROFILE, working=broken)
         assert run("plan-gate", ev(repo)).code == 2, broken
+
+
+def test_a_deleted_or_dangling_profile_does_not_switch_the_gates_off(tmp_path):
+    ev = lambda r: {"session_id": "s1", "cwd": str(r), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                    "tool_input": {"file_path": "a.txt", "content": "x"}}
+    deleted = make_repo_with_origin(tmp_path / "d", committed=PROFILE)
+    (deleted / ".tld" / "toolkit.yaml").unlink()
+    assert run("plan-gate", ev(deleted)).code == 2
+    dangling = make_repo_with_origin(tmp_path / "l", committed=PROFILE)
+    (dangling / ".tld" / "toolkit.yaml").unlink()
+    (dangling / ".tld" / "toolkit.yaml").symlink_to("/nonexistent/profile.yaml")
+    assert run("plan-gate", ev(dangling)).code == 2

@@ -1026,5 +1026,5 @@ mutants:
 - id: CL2
   file: src/tld/guard/_common.py
   why: the gate clamp uses the working copy only, so a branch can switch off a gate the default branch has on (killed by test_gate_switched_off_on_a_branch_stays_on)
-  old: '    if available and (t_gate is None or (isinstance(t_gate, dict) and t_gate.get("enabled", True) is True)):'
+  old: '    if available and (not isinstance(t_gate, dict) or t_gate.get("enabled", True) is not False):'
   new: '    if False:'
