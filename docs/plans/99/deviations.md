@@ -17,6 +17,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - retry: phase sent back four times for security findings (forged-note filter: raw match, then a skeleton match, then one look-alike letter, then invisible fillers); the forged lines are now replaced by one fixed marker line
 - gate: owner answered ask a-dda2e75dcd79c654 with fix_then_merge: after the last fix round the orchestrator checked it with tests and its own probes and merged without a fifth security review, so the last security-reviewer report (one blocking finding, since fixed) was not re-run; accepted residual risk: paraphrases of the note, a phrase split mid-word over four or more lines, and look-alikes with fewer than 6 real letters
 - review: the p2 scope check was not run before the merge; verify_after_merge used the existing test files only until p3 adds its own
+- final: final security review found that deleting invisible fillers after clean in change-report rejoined mentions, closing keywords, team mentions and headings into live markdown; fix-1 deletes the fillers (also entity-spelled) before clean, so the output equals tld roles section on the same block without the fillers; mutant PN10 added
+- review: that regression came from the last p2 fix round, which the owner let merge without a fifth full security review (ask a-dda2e75dcd79c654); the final review roles caught it
 
 ## p3-playbooks
 
