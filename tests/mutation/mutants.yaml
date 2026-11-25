@@ -931,5 +931,10 @@ mutants:
 - id: PN10
   file: src/tld/roles/page_note.py
   why: the fillers are no longer deleted before the block is cleaned, so a mention, closing keyword, team or heading split by one joins into live markdown afterwards (killed by test_change_report_split_by_a_filler_equals_section_without_it)
-  old: 'block = _joined(block)'
-  new: 'block = block'
+  old: 'joined = _joined(raw) if raw is not None else None'
+  new: 'joined = raw'
+- id: PN11
+  file: src/tld/roles/page_note.py
+  why: the secret scan no longer sees the block as written, so a secret that only its written form shows (an entity inside a quoted value) passes once a filler makes the joined text unescape it (killed by test_change_report_secret_as_written_is_refused_like_section)
+  old: 'if _suspect(raw) or _suspect(joined) or _suspect(cleaned):'
+  new: 'if _suspect(joined) or _suspect(cleaned):'

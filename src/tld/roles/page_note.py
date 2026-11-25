@@ -148,7 +148,10 @@ def _strip_invisible(text: str) -> str:
 def _joined(text: str) -> str:
     """The text with the invisible fillers deleted before `clean` sees it, also those that an entity spells (one
     unescape step at a time, as `clean` does), so `clean` works on the joined text: a mention, a closing keyword,
-    a team or a heading split by a filler is neutralised as it is in `tld roles section`."""
+    a team or a heading split by a filler is neutralised as `tld roles section` does it. The fillers are removed
+    after one unescape step: once a filler is present, every other entity is unescaped one extra time too, so the
+    output is neutralised but need not equal section's output byte for byte (`&amp;lt;` shows as `<`). The secret
+    check therefore never relies on this text alone: `_usable` also scans the block as written."""
     while True:
         unescaped = html.unescape(text)
         stripped = _strip_invisible(unescaped)
@@ -217,14 +220,13 @@ def _without_forged_notes(text: str) -> str:
 
 def _usable(report: str) -> tuple[str | None, str]:
     """The cleaned block, or None and the reason `tld roles section` gives."""
-    block = extract(report)
-    if block is not None:
-        block = _joined(block)
-    cleaned = clean(block).strip() if block is not None else ""
+    raw = extract(report)
+    joined = _joined(raw) if raw is not None else None
+    cleaned = clean(joined).strip() if joined is not None else ""
     cleaned = _without_forged_notes(cleaned).strip()
     if not cleaned:
         return None, "tld roles: no change-report block"
-    if _suspect(block) or _suspect(cleaned):
+    if _suspect(raw) or _suspect(joined) or _suspect(cleaned):
         return None, "tld roles: the change-report block looks like it holds a secret"
     return cleaned, ""
 

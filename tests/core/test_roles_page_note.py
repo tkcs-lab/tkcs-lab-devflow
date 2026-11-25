@@ -604,3 +604,22 @@ def test_joined_deletes_fillers_also_from_nested_entities():
     assert page_note._joined("a&amp;#x3164;b") == "a&amp;#x3164;b"
     assert page_note._joined("a&#x3164;&amp;#x3164;b") == "ab"
     assert page_note._joined("Fixes #&#x3164;7") == "Fixes #7"
+
+
+SECRETS_IN_ENTITY_FORM = ['token="AbCd&quot;EfGh1234567890XyZ"', "password='Zq9&#39;xK2mP7vL4nR8'"]
+
+
+@pytest.mark.parametrize("filler", ["", chr(0x3164), chr(0x2800), "&#x3164;", "&#10240;"], ids=["none", "raw3164", "raw2800", "hex", "dec"])
+@pytest.mark.parametrize("secret", SECRETS_IN_ENTITY_FORM)
+def test_change_report_secret_as_written_is_refused_like_section(tmp_path, capsys, secret, filler):
+    report = f"BEGIN change-report\n{secret} {filler}\nEND change-report\n"
+    want = run_section(tmp_path, report, capsys)
+    assert want[0] == 3 and want[1] == ""
+    got = run_report(tmp_path, report, None, capsys)
+    assert got == want
+
+
+def test_change_report_plain_token_still_exits_3(tmp_path, capsys):
+    report = f"BEGIN change-report\nkey {TOKEN}\nEND change-report\n"
+    assert run_report(tmp_path, report, None, capsys) == run_section(tmp_path, report, capsys)
+    assert run_report(tmp_path, report, None, capsys)[0] == 3
