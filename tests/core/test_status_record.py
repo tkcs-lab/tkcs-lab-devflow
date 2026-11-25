@@ -762,6 +762,14 @@ def test_tracking_issue_malformed_issue_url_reports_once():
     assert not any("tracking_issue" in e for e in REC.validate(rec))
 
 
+def test_tracking_issue_cross_repo_issue_url_reports_once():
+    rec = with_ti("good-command-handover", 8)
+    rec["handover"]["issue_url"] = "https://github.com/other/repo/issues/7"
+    errors = REC.validate(rec)
+    assert errors == REC.handover_errors(rec["handover"], rec["repo"])
+    assert not any("tracking_issue" in e for e in errors)
+
+
 @pytest.mark.parametrize("name, value", [
     ("good-run-prompt", "42"), ("good-run-prompt", 0), ("good-command-handover", 0),
 ])

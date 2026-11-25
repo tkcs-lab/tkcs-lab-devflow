@@ -417,7 +417,12 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
             errors.append("'tracking_issue' must be null or a positive integer of at most 10 digits")
         else:
             ho = rec.get("handover")
-            m = ISSUE_IN_URL.search(ho["issue_url"]) if isinstance(ho, dict) and isinstance(ho.get("issue_url"), str) else None
+            url = ho.get("issue_url") if isinstance(ho, dict) else None
+            repo = rec.get("repo")
+            m = None
+            if isinstance(url, str) and isinstance(repo, str) and REPO.fullmatch(repo) \
+                    and _link_ok(re.escape(GITHUB + repo) + "/issues/[1-9][0-9]{0,9}", url):
+                m = ISSUE_IN_URL.search(url)
             if m and int(m.group(1)) != ti:
                 errors.append("'tracking_issue' must agree with 'handover.issue_url'")
             s = ISSUE_SLUG.fullmatch(rec["plan_slug"]) if isinstance(rec.get("plan_slug"), str) else None
