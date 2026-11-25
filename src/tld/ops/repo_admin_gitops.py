@@ -32,7 +32,6 @@ ALLOWLIST_PATH = "git-ops-allowlist.json"  # the only path the shipped workflow 
 WORKFLOW_TEMPLATE = "tld-git-ops.yml"
 ALLOWLIST_TEMPLATE = "git-ops-allowlist.json"
 SAFE_REPO = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
-SAFE_GLOB = re.compile(r"^[A-Za-z0-9._*?-]{1,100}$")
 SAFE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,99}$")
 MAX_WORKFLOW_BYTES = 1_000_000
 MAX_ALLOWLIST_BYTES = 256_000
@@ -90,7 +89,7 @@ def parse_allowlist(text: str | None) -> dict | None:
         return None
     try:
         data = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):  # a deeply nested file must not stop the audit
         return None
     if not isinstance(data, dict) or not isinstance(data.get("owner"), str) or not data["owner"]:
         return None
@@ -139,6 +138,11 @@ def _workflow_finding(ctx, central: str, snap, workflow: str) -> list:
                        ra.Action("files", repo=central, changes=[change]))]
 
 
+def _broad(glob: str) -> bool:
+    """A repos entry made only of wildcards: it matches every repository."""
+    return not glob.replace("*", "").replace("?", "")
+
+
 def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
     ra = _ra()
     wanted_path = cfg.get("allowlist", ALLOWLIST_PATH)
@@ -152,11 +156,13 @@ def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
         name = repo["name"]
         if repo["full_name"].split("/", 1)[0].lower() != owner.lower():
             continue
-        (audited if SAFE_REPO.match(name) else skipped).append(name)
+        # a name that starts with - or . is never added: the workflow's globs would read it as an option or a hidden path
+        (audited if SAFE_REPO.match(name) and name[0] not in "-." else skipped).append(name)
     audited = sorted(set(audited))
     text = _read(ctx, central, snap.commit, ALLOWLIST_PATH)
     data = parse_allowlist(text)
     notes = f" ({len(skipped)} repository name(s) with unusual characters are left out)" if skipped else ""
+    out: list = []
     if data is None:
         if not audited:
             return [ra.Finding("git-ops-allowlist", central, "allowlist", f"{ALLOWLIST_PATH} is "
@@ -165,29 +171,45 @@ def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
         repos, protected = audited, default_protected_branches()
         why = "is missing" if text is None else "is not a valid allowlist (owner, repos, protected_branches)"
     else:
+        existing = list(data["repos"])
+        # every existing entry is kept as it is; entries that are too wide are reported, never silently changed
+        broad = [g for g in existing if _broad(g)]
+        in_scope = {r["name"] for r in ctx.repos}
+        outside = sorted({r["name"] for r in ctx.all_repos if r["name"] not in in_scope
+                          and any(fnmatch.fnmatchcase(r["name"], g) for g in existing if not _broad(g))})
+        if broad:
+            out.append(ra.Finding("git-ops-allowlist", central, "allowlist:broad", f"{ALLOWLIST_PATH} has {len(broad)} "
+                                  "entry made only of wildcards in repos, which matches every repository", "warn",
+                                  manual="replace it by the names or globs of the repositories the workflow may act on"))
+        if outside:
+            out.append(ra.Finding("git-ops-allowlist", central, "allowlist:outside", f"{ALLOWLIST_PATH} also covers "
+                                  f"repositories outside this audit: {_names(outside)}", "warn",
+                                  manual="narrow the entries, or add those repositories to the audit's scope"))
         owner_ok = data["owner"].lower() == owner.lower()
-        existing = [r for r in data["repos"] if SAFE_GLOB.match(r)]
+        have_protected = [b for b in data.get("protected_branches", []) if isinstance(b, str)]
+        if not have_protected:
+            out.append(ra.Finding("git-ops-allowlist", central, "allowlist:protected", f"{ALLOWLIST_PATH} protects "
+                                  "no branch (protected_branches is missing or empty)", "warn",
+                                  manual="list the branch globs the workflow must never delete"))
         missing = [n for n in audited if not any(fnmatch.fnmatchcase(n, g) for g in existing)]
-        if owner_ok and not missing and len(existing) == len(data["repos"]):
-            return []
+        if owner_ok and not missing and have_protected:
+            return out
         repos = existing + missing
-        protected = [b for b in data.get("protected_branches", []) if isinstance(b, str) and re.match(r"^[A-Za-z0-9._*?/-]{1,100}$", b)]
+        protected = have_protected + ([b for b in default_protected_branches() if b not in have_protected]
+                                      if not have_protected else [])
         parts = []
         if not owner_ok:
             parts.append(f"names the owner '{_shown(data['owner'])}', not {owner}")
         if missing:
             parts.append(f"does not list {_names(missing)}")
-        if len(existing) != len(data["repos"]):
-            parts.append("holds entries with unusual characters")
+        if not have_protected:
+            parts.append("has no protected branches (the shipped defaults are added)")
         why = " and ".join(parts)
-        if not repos:
-            return [ra.Finding("git-ops-allowlist", central, "allowlist", f"{ALLOWLIST_PATH} {why}", "warn",
-                               manual=f"add the repositories the workflow may act on to {ALLOWLIST_PATH}")]
     change = {"op": "put", "path": ALLOWLIST_PATH, "content": build_allowlist(owner, repos, protected),
               "mode": _mode(snap, ALLOWLIST_PATH)}
-    return [ra.Finding("git-ops-allowlist", central, "allowlist", f"{ALLOWLIST_PATH} {why}{notes}; update it with a "
-                       "pull request into the default branch of the central repository", "fix",
-                       ra.Action("files", repo=central, changes=[change]))]
+    return out + [ra.Finding("git-ops-allowlist", central, "allowlist", f"{ALLOWLIST_PATH} {why}{notes}; update it with a "
+                             "pull request into the default branch of the central repository", "fix",
+                             ra.Action("files", repo=central, changes=[change]))]
 
 
 def _open_items(ctx, central_repo: dict) -> list:
@@ -195,6 +217,7 @@ def _open_items(ctx, central_repo: dict) -> list:
     ra = _ra()
     fn = central_repo["full_name"]
     default = ctx.repo(central_repo)["default_branch"]
+    shown = _shown(default)
     found: list = []
     out: list = []
     ra._env_and_secret(ctx, "git-ops-environment", fn, central_repo, found, ENV_NAME, SECRET_NAME, "the git-ops workflow")
@@ -203,12 +226,13 @@ def _open_items(ctx, central_repo: dict) -> list:
             out.append(f)
         elif f.subject.startswith("secret:"):
             manual = f.manual or ("set it in the environment (value from the token the owner created; never paste it into chat)")
-            out.append(dataclasses.replace(f, check="git-ops-token", severity="warn", action=None, manual=manual))
+            out.append(dataclasses.replace(f, check="git-ops-token", severity="warn", action=None,
+                                           message=f.message.replace(default, shown), manual=manual))
         else:
             out.append(dataclasses.replace(
-                f, check="git-ops-environment", severity="warn", action=None,
+                f, check="git-ops-environment", severity="warn", action=None, message=f.message.replace(default, shown),
                 manual=f"in https://github.com/{fn}/settings/environments create `{ENV_NAME}` with deployment branches "
-                       f"limited to the selected branch `{default}` only"))
+                       f"limited to the selected branch `{shown}` only"))
     return out
 
 
@@ -224,6 +248,7 @@ def check_central(ctx, cfg: dict) -> list:
     if repo.get("archived"):
         return [ra.Finding("git-ops-workflow", central, "repository", f"the central repository {central} is archived",
                            "warn", manual="unarchive it, or point `git_ops.repo` at another repository")]
+    central = repo["full_name"]  # the spelling GitHub uses: apply finds the repository by it
     out: list = []
     snap = ctx.snapshot(repo)
     if snap.empty:

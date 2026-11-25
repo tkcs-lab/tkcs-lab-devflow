@@ -180,3 +180,76 @@ def test_section_absent_means_nothing_is_checked(ra):
     ctx, fake = world(ra, {}, routes={})
     assert ra.run_checks(ctx, ["git_ops"]) == [] and fake.reads == []
     assert "git_ops" in ra.CHECKS
+
+
+def allow_files(**allow):
+    files = complete()
+    files["git-ops-allowlist.json"] = json.dumps({"owner": "acme", "repos": ["app", "git-ops"], "protected_branches": ["main"], **allow})
+    return files
+
+
+def test_existing_protected_branches_are_kept_verbatim(ra):
+    hostile = ["main", "hotfix/[0-9]*", "x" * 150, "--delete", "*"]
+    found, _, _ = audit(ra, allow_files(protected_branches=hostile, repos=["app"]))
+    (one,) = by_check(found, "git-ops-allowlist")
+    assert one.severity == "fix" and json.loads(one.action.changes[0]["content"])["protected_branches"] == hostile
+
+
+def test_broad_or_outside_repos_entries_are_reported(ra):
+    found, _, _ = audit(ra, allow_files(repos=["*", "app"]))
+    (broad,) = [f for f in by_check(found, "git-ops-allowlist") if f.subject == "allowlist:broad"]
+    assert broad.severity == "warn" and "wildcards" in broad.message
+    found, _, _ = audit(ra, allow_files(repos=["?*", "app", "git-ops"]))
+    assert any(f.subject == "allowlist:broad" for f in found)
+    # a glob that reaches a repository the audit does not cover (here an excluded one)
+    policy = {**POLICY, "repos": {"exclude": ["secret"]}}
+    found, _, _ = audit(ra, allow_files(repos=["app", "git-ops", "sec*"]), policy=policy, names=("app", "git-ops", "secret"))
+    (outside,) = [f for f in by_check(found, "git-ops-allowlist") if f.subject == "allowlist:outside"]
+    assert "secret" in outside.message and outside.severity == "warn"
+
+
+def test_names_starting_with_dash_or_dot_are_never_added(ra):
+    found, _, _ = audit(ra, {}, names=("app", "git-ops", ".github", "-x"))
+    (one,) = by_check(found, "git-ops-allowlist")
+    assert json.loads(one.action.changes[0]["content"])["repos"] == ["app", "git-ops"] and "unusual" in one.message
+
+
+def test_missing_or_empty_protected_branches_start_from_the_defaults(ra):
+    files = allow_files(protected_branches=[], repos=["app"])
+    found, _, _ = audit(ra, files)
+    assert any(f.subject == "allowlist:protected" and f.severity == "warn" for f in by_check(found, "git-ops-allowlist"))
+    (fix,) = [f for f in by_check(found, "git-ops-allowlist") if f.severity == "fix"]
+    assert {"main", "release/*"} <= set(json.loads(fix.action.changes[0]["content"])["protected_branches"])
+    files["git-ops-allowlist.json"] = json.dumps({"owner": "acme", "repos": ["app", "git-ops"]})
+    found, _, _ = audit(ra, files)
+    assert any(f.severity == "fix" and "no protected branches" in f.message for f in by_check(found, "git-ops-allowlist"))
+
+
+def test_deeply_nested_allowlist_does_not_stop_the_audit(ra):
+    files = complete()
+    files["git-ops-allowlist.json"] = "[" * 100_000
+    found, _, _ = audit(ra, files)
+    (one,) = by_check(found, "git-ops-allowlist")
+    assert one.severity == "fix" and "not a valid allowlist" in one.message
+    assert by_check(found, "secrets_scope") == []
+
+
+def test_default_branch_name_is_shown_safely(ra):
+    import urllib.parse
+    evil = "main-**[x](http--e)@everyone"
+    ctx, fake = world(ra, POLICY, names=("app", "git-ops"), routes=routes(env=None, token=False), files={"git-ops": complete()})
+    fake.routes[("GET", "/repos/acme/git-ops")]["default_branch"] = evil
+    quoted = urllib.parse.quote(evil, safe="/")
+    fake.routes[("GET", f"/repos/acme/git-ops/branches/{quoted}")] = fake.routes[("GET", "/repos/acme/git-ops/branches/main")]
+    found = ra.run_checks(ctx, ["git_ops"])
+    items = by_check(found, "git-ops-environment") + by_check(found, "git-ops-token")
+    assert items
+    for f in items:
+        assert "@" not in f.manual + f.message and "[" not in f.manual + f.message and "**" not in f.manual + f.message
+
+
+def test_central_repository_spelled_in_another_case(ra):
+    policy = {"git_ops": {"repo": "acme/Git-Ops"}}
+    found, _, _ = audit(ra, policy=policy)
+    fixes = [f for f in found if f.severity == "fix"]
+    assert len(fixes) == 2 and all(f.action.repo == "acme/git-ops" and f.scope == "acme/git-ops" for f in fixes)
