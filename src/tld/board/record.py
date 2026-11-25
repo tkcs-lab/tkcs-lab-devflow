@@ -14,7 +14,8 @@ The record model (C7): `attended` says whether a person started the command and 
 `orchestrator_session` is the session id, or null when the session cannot read its own id; the final
 states are `done`, `failed` and `pr_open`. A done make-plan command record may carry the optional
 `handover` object (the Summary, the plan slug, links bound to the record's repo and the command to start
-implement), checked by `handover_errors`. Python 3.11+, stdlib only.
+implement), checked by `handover_errors`. The optional `tracking_issue` names the run's tracking issue by
+number; the page builds its link from `repo`. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
 
@@ -40,7 +41,10 @@ SCOPE_PATHS_MAX = 20
 SCOPE_PATH_MAX_LEN = 300
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 PR_FIELDS = ("number", "url", "state", "ci", "awaiting")
-OPTIONAL_FIELDS = ("handover",)
+OPTIONAL_FIELDS = ("handover", "tracking_issue")
+ISSUE_MAX = 9_999_999_999
+ISSUE_SLUG = re.compile(r"^issue-([1-9][0-9]{0,9})$")
+ISSUE_IN_URL = re.compile(r"/issues/([1-9][0-9]{0,9})\Z")
 HANDOVER_FIELDS = ("summary", "plan_slug", "issue_url", "plan_url", "spec_url", "next_command")
 HANDOVER_UNSAFE = ("Cc", "Cf", "Cs", "Co", "Zl", "Zp")
 HANDOVER_MAX_WORDS = 350
@@ -406,6 +410,24 @@ def validate(rec, doc_id: str | None = None) -> list[str]:
         if rec.get("status") != "done":
             errors.append("'handover' is only allowed when 'status' is 'done'")
         errors += handover_errors(rec["handover"], rec["repo"] if isinstance(rec.get("repo"), str) else "")
+
+    if "tracking_issue" in rec and rec["tracking_issue"] is not None:
+        ti = rec["tracking_issue"]
+        if not (_is_int(ti) and 1 <= ti <= ISSUE_MAX):
+            errors.append("'tracking_issue' must be null or a positive integer of at most 10 digits")
+        else:
+            ho = rec.get("handover")
+            url = ho.get("issue_url") if isinstance(ho, dict) else None
+            repo = rec.get("repo")
+            m = None
+            if isinstance(url, str) and isinstance(repo, str) and REPO.fullmatch(repo) \
+                    and _link_ok(re.escape(GITHUB + repo) + "/issues/[1-9][0-9]{0,9}", url):
+                m = ISSUE_IN_URL.search(url)
+            if m and int(m.group(1)) != ti:
+                errors.append("'tracking_issue' must agree with 'handover.issue_url'")
+            s = ISSUE_SLUG.fullmatch(rec["plan_slug"]) if isinstance(rec.get("plan_slug"), str) else None
+            if s and int(s.group(1)) != ti:
+                errors.append(f"'tracking_issue' must be {int(s.group(1))}, the number in 'plan_slug'")
 
     # Rule 3: enums.
     status = rec.get("status")

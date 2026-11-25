@@ -113,3 +113,18 @@ def test_make_plan_timer_sentence_once_and_step_3_writes_the_record():
     t = _text(PLAYBOOKS / "make-plan.md")
     assert t.count("except that this check writes no record") == 1
     assert "Write the record with `needs_you` and arm the ask timer in the same turn (Board upkeep, rule 5)." in t
+
+
+OLDER_BOARD = (
+    "**An older board.** `handover` and `tracking_issue` are optional fields that a board older than this release does not know. "
+    "On `invalid`, when every listed error is `'handover' is not a known field` or `'tracking_issue' is not a known field`, "
+    "write the record once more without the fields those errors name (this write is not the one retry above), "
+    "leave those fields out of every later write of this run, and put "
+    "`The board is older than this release: update it to see the issue link and the plan card.` once in the final reply."
+)
+
+
+def test_status_board_policy_has_the_older_board_rule():
+    assert _text(POLICY).count(OLDER_BOARD) == 1
+    lines = [ln for ln in _text(PLAYBOOKS / "make-plan.md").splitlines() if "An older board" in ln]
+    assert lines and any("[policies/status-board.md](policies/status-board.md)" in ln for ln in lines)

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "tld status record",
-  "description": "One database document per run or session (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an implement orchestration or a single-session prompt run (make-plan's small scope), keyed '<project>--run--<plan>'; an attended command record (kind 'command') is keyed '<project>--<command>--<session tail>' and an unattended one '<project>--<command>'. tld board record-id builds the id; the old keys (the project slug for a run, '<project>--<command>' for an attended command) are still accepted until tld 1.2.0. The project slug is derived from the repository name (tld board project-slug). 'attended' says whether a person started the command and can answer; the final states are done, failed and pr_open. Schema version 1 gained the optional phase field 'scope' without a bump. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, the project slug) are checked by src/tld/board/record.py. No secrets, file contents or commit messages belong in a record. The optional 'handover' object of a done make-plan command record (the Summary, the plan slug, links bound to the record's repo and the command that starts implement) is checked by handover_errors in src/tld/board/record.py.",
+  "description": "One database document per run or session (collection 'projects'). Written whole, only by the session that owns the run. A run (kind 'run') is an implement orchestration or a single-session prompt run (make-plan's small scope), keyed '<project>--run--<plan>'; an attended command record (kind 'command') is keyed '<project>--<command>--<session tail>' and an unattended one '<project>--<command>'. tld board record-id builds the id; the old keys (the project slug for a run, '<project>--<command>' for an attended command) are still accepted until tld 1.2.0. The project slug is derived from the repository name (tld board project-slug). 'attended' says whether a person started the command and can answer; the final states are done, failed and pr_open. Schema version 1 gained the optional phase field 'scope' without a bump. The rules that a schema cannot express (kind/command agreement, needs_you pairing, finished_at and next_check_at versus status, the project slug) are checked by src/tld/board/record.py. No secrets, file contents or commit messages belong in a record. The optional 'handover' object of a done make-plan command record (the Summary, the plan slug, links bound to the record's repo and the command that starts implement) is checked by handover_errors in src/tld/board/record.py. The optional 'tracking_issue' (any record) is the number of the run's tracking issue in 'repo'; it must agree with 'handover.issue_url' and with an 'issue-<n>' plan_slug.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -407,6 +407,15 @@
     },
     "handover": {
       "$ref": "#/$defs/handover"
+    },
+    "tracking_issue": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 9999999999,
+      "description": "Optional, any record: the number of the run's tracking issue in 'repo'. It must equal the issue of handover.issue_url and the <n> of a plan_slug 'issue-<n>'. The board links it as 'issue #<n>'."
     }
   },
   "examples": [
@@ -546,6 +555,35 @@
         "spec_url": "https://github.com/tkcs-lab/tkcs-lab-devflow/tree/feature/demo-plan/openspec/changes/demo-plan",
         "next_command": "/tld:implement https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/demo-plan/docs/plans/7/plan.md"
       }
+    },
+    {
+      "schema": 1,
+      "kind": "run",
+      "command": null,
+      "project": "tkcs-lab-devflow",
+      "repo": "tkcs-lab/tkcs-lab-devflow",
+      "tracking_issue": 42,
+      "plan_slug": "issue-42",
+      "plan_url": null,
+      "feature_branch": "feature/prompt-run-record",
+      "orchestrator_session": "session_01...",
+      "attended": true,
+      "status": "pr_open",
+      "needs_you": true,
+      "needs_you_reason": "Review PR #12",
+      "needs_you_since": "2026-11-09T11:00:00Z",
+      "phases": [],
+      "pr": {
+        "number": 12,
+        "url": "https://github.com/tkcs-lab/tkcs-lab-devflow/pull/12",
+        "state": "open",
+        "ci": "pending",
+        "awaiting": "codeowner"
+      },
+      "last_event": "PR #12 opened",
+      "next_check_at": null,
+      "finished_at": null,
+      "updated_at": "2026-11-09T11:00:00Z"
     }
   ]
 }

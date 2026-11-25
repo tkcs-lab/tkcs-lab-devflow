@@ -49,6 +49,7 @@ never a reason to skip the record.
 | `needs_you`, `needs_you_reason`, `needs_you_since` | true exactly while the owner is asked something or the run stopped on something only they can fix; the reason is one line starting with the verb the owner must do |
 | `next_check_at` | the armed check-in time, or `null`; always `null` while the status is `waiting_user` and in every command record (the ask timer's time goes into `last_event`, Board upkeep, rule 5) |
 | `handover` | optional, a make-plan record in `done` only: the plan's Summary, its slug, the issue, plan and spec links and the command to copy, printed by `tld plan handover`; the board shows it under "Plan ready" until a run of that plan slug is on the board, the owner dismisses it or 7 days pass |
+| `tracking_issue` | optional, any record: the number of the run's tracking issue in `repo` (make-plan once its issue exists, implement with a manifest `tracking_issue`, quick, a single-session prompt's worker), else left out; it must equal the issue of `handover.issue_url` and the `<n>` of a `plan_slug` `issue-<n>`; the board links it on the card as `issue #<n>` |
 
 ## Keys and a record that already exists
 
@@ -63,6 +64,8 @@ the version you last read; omit `--if-version` only on the very first write. The
 record: on `invalid`, fix the listed errors and retry once. On `version_conflict`, re-read with
 `tld board client get <id>`, merge in the fields this session owns, and retry once. A `version_conflict` on the
 very first write means a record of an earlier run exists: read it and write over it with its version.
+
+**An older board.** `handover` and `tracking_issue` are optional fields that a board older than this release does not know. On `invalid`, when every listed error is `'handover' is not a known field` or `'tracking_issue' is not a known field`, write the record once more without the fields those errors name (this write is not the one retry above), leave those fields out of every later write of this run, and put `The board is older than this release: update it to see the issue link and the plan card.` once in the final reply.
 
 ## Asks, alerts and the owner's cards
 
