@@ -33,7 +33,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: blocking (security-reviewer): deleting invisible fillers after clean in change-report rejoined mentions, closing keywords and headings; fixed by fix-1 (fillers deleted before clean)
+- final: blocking (security-reviewer, second review): with a filler present change-report scanned unescaped text, and deleting a filler removed a word boundary that the secret scan needs, so blocks that tld roles section refuses were printed (about 80 of 30,000 fuzzed blocks, some with a token); fix-2 (a scan of the raw block) was not merged because it did not close the class; fix-3 removed the filler deletion, so change-report now refuses exactly what section refuses, in section order, and replaces forg
+- review: the final reviewer worker could not run tld or the roles; the orchestrator ran the roles security-reviewer (four runs, the last passing with one non-blocking note) and code-reviewer (no blocking findings), and the second and later reviews were the security role on the fix diffs, not a full second review worker
 
 ## Finishing
 
