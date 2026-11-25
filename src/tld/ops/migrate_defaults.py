@@ -56,9 +56,9 @@ MAX_BYTES = 1_000_000      # one file read
 SAFE_PATH = re.compile(r"[A-Za-z0-9._][A-Za-z0-9._/-]*")
 SAFE_TYPE = re.compile(r"[a-z][a-z0-9-]{0,30}")
 FEATURE_BRANCH = re.compile(r"^[ \t]*feature_branch:\s*[\"']?([A-Za-z0-9._-]+)/", re.M)
-SAFE_SHOWN = re.compile(r"[\x21-\x7e]{1,200}")       # a repository-derived value we print: no space, no control character
+SAFE_SHOWN = re.compile(r"[\x21-\x5a\x5c\x5e-\x7e]{1,200}")  # printable ASCII, no space, no brackets       # a repository-derived value we print: no space, no control character
 SAFE_KEY = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,100}")
-PROSE_SUFFIXES = (".md", ".markdown", ".rst", ".txt")
+PROSE_SUFFIXES = (".md", ".markdown", ".rst")
 MISSING = object()
 
 
@@ -364,12 +364,23 @@ def _probe(root: Path, src: str, dst: str) -> list[str]:
         raise DefaultsError(f"cannot plan the move of {src} to {dst}")
     files = sorted({c["file"] for c in planned})
     for f in files:
+        shown = f if SAFE_SHOWN.fullmatch(f) else "a file with unsafe characters in its name"
         if unsafe(root, f):
-            raise DefaultsError(f"refused: {f} would be rewritten but {unsafe(root, f)}")
+            raise DefaultsError(f"refused: {shown} would be rewritten but it is a symbolic link or outside the repository")
         low = f.lower()
         if not low.endswith(PROSE_SUFFIXES) or low.startswith((".github/", ".tld/")) or "codeowners" in low:
-            raise DefaultsError(f"refused: {f} mentions {src} and is not a prose file; "
+            raise DefaultsError(f"refused: {shown} mentions {src} and is not a prose file; "
                                 "answer keep, or move the file by hand and update that mention yourself")
+        try:
+            text = (root / f).read_bytes()
+            text.decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            raise DefaultsError(f"refused: {shown} is not readable UTF-8, the rewrite would damage it") from None
+        if b"\r" in text:
+            raise DefaultsError(f"refused: {shown} has CRLF line ends, the rewrite would change every line")
+        if subprocess.run(["git", "-C", str(root), "diff", "--quiet", "HEAD", "--", f],
+                          capture_output=True).returncode == 1:
+            raise DefaultsError(f"refused: {shown} has uncommitted changes that staging would sweep in; commit them first")
     return files
 
 
@@ -380,8 +391,11 @@ def _move(root: Path, src: str, dst: str) -> tuple[str, list[str]]:
     files = _probe(root, src, dst)
     args = ap.Namespace(root=str(root), src=src, dst=dst, profile=None, apply=True, exclude=[], json=False)
     out, err = io.StringIO(), io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        rc = docs_index.run_move(args)
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = docs_index.run_move(args)
+    except OSError as exc:
+        raise DefaultsError(f"cannot move {src} to {dst}: {type(exc).__name__}") from None
     if rc != 0:
         raise DefaultsError(f"cannot move {src} to {dst}: {(err.getvalue() or out.getvalue()).strip()}")
     lines = [ln for ln in out.getvalue().splitlines() if ln.strip()]
@@ -619,7 +633,7 @@ def run(root: Path, write: bool, answers_path: str | None) -> int:
     try:
         raw = yaml.safe_load(profile.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
-        print(f"tld migrate: {NEW_PROFILE}: cannot read it: {exc}", file=sys.stderr)
+        print(f"tld migrate: {NEW_PROFILE}: cannot read it: {str(exc)!r}", file=sys.stderr)
         return 1
     if not isinstance(raw, dict):
         print(f"tld migrate: {NEW_PROFILE}: the profile must be a YAML mapping", file=sys.stderr)

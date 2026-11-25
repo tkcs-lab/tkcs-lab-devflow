@@ -365,3 +365,31 @@ def test_repository_text_is_not_printed_verbatim(tmp_path):
     assert "\x1b" not in r.stdout and "evil.sh" not in r.stdout
     assert "1 entry(ies) with unsafe characters, not shown" in r.stdout and "docs/old.md" in r.stdout
     assert [ln for ln in r.stdout.splitlines() if ln.lstrip().startswith("[docs.")] == []
+
+
+def test_rename_refuses_files_it_would_damage(tmp_path):
+    for name, data in (("crlf.md", b"see CHANGES.md\r\nx\r\n"), ("latin.md", b"caf\xe9 CHANGES.md\n")):
+        root = repo(tmp_path / name, tracked=True, files={"CHANGES.md": "# C\n"})
+        (root / name).write_bytes(data)
+        git(root, "add", "-A")
+        git(root, "commit", "-q", "-m", "x")
+        r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+        assert r.returncode == 1 and "not done: docs.changelog" in r.stdout and (root / "CHANGES.md").exists()
+        assert (root / name).read_bytes() == data
+    root = repo(tmp_path / "dirty", tracked=True, files={"CHANGES.md": "# C\n", "notes.md": "see CHANGES.md\n"})
+    (root / "notes.md").write_text("see CHANGES.md\nunrelated edit\n")
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+    assert r.returncode == 1 and "uncommitted changes" in r.stdout and (root / "CHANGES.md").exists()
+
+
+def test_a_file_name_with_control_characters_is_not_printed(tmp_path):
+    root = repo(tmp_path, tracked=True, files={"CHANGES.md": "# C\n"})
+    (root / "bad\x1b[2Jname.py").write_text("open('CHANGES.md')\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "x")
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+    assert r.returncode == 1 and "\x1b" not in r.stdout and "unsafe characters in its name" in r.stdout
+    # a bracketed allow entry cannot pose as a question line
+    profile = PROFILE + "hooks:\n  protect_paths_allow: ['[docs.index]']\n"
+    r = migrate(repo(tmp_path / "b", profile=profile))
+    assert "[docs.index]" not in r.stdout and "unsafe characters" in r.stdout
