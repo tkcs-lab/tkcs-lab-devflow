@@ -1,4 +1,5 @@
 """implement and make-plan use the preamble, the fallback and the protected-change flow."""
+import re
 from pathlib import Path
 
 from tld.guard import plan_gate
@@ -16,7 +17,7 @@ IMPLEMENT = "playbooks/implement.md"
 ALLOW_SENTENCE = (
     "`BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the "
     "effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of "
-    "`GUARDED_WORKFLOWS`, `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow "
+    "any workflow `guarded_workflows` returns (the land and release workflows, `tld-git-ops.yml` and the profile's `release.workflow` and `git_ops.workflow`), `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow "
     "pattern matches them.")
 
 
@@ -73,3 +74,11 @@ def test_merge_step_three_starts_with_the_unavailable_exception():
 
 def test_rule_zero_keeps_allow_plan():
     assert (ROOT / IMPLEMENT).read_text().count("allow-plan") >= 2
+
+
+def test_implement_pr_step_passes_changed():
+    text = " ".join((ROOT / IMPLEMENT).read_text().split())
+    assert "git diff --name-only --no-renames origin/<main>...HEAD" in text
+    assert re.search(r"tld plan summary-check <body file> --kind pr --deviations <deviations path> --findings <N> --changed <changed list>", text)
+    final = " ".join(slice_of(IMPLEMENT, "> You are the final reviewer", "at least one blocking finding.").split())
+    assert "trust-boundary change" in final and "pull_request_target" in final and "permissions: write" in final

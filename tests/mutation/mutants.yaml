@@ -645,6 +645,16 @@ mutants:
   why: problems exit 0 (killed by every exit-1 test)
   old: "        print(f\"summary: {problem}\")\n    return 1"
   new: "        print(f\"summary: {problem}\")\n    return 0"
+- id: SC1
+  file: src/tld/plan/summary.py
+  why: the workflow prefix loses its trailing slash, so a sibling directory counts (killed by test_changed_workflows_old_dir_is_not_a_workflow)
+  old: "p.startswith(SECURITY_PATHS[0])"
+  new: "p.startswith(SECURITY_PATHS[0][:-1])"
+- id: SC2
+  file: src/tld/plan/summary.py
+  why: a file name no longer names a changed file, only its full path does (killed by test_changed_named_by_file_name)
+  old: "for cand in (path, path.rsplit(\"/\", 1)[-1]):"
+  new: "for cand in (path,):"
 - id: FI1
   file: src/tld/plan/findings.py
   why: the row count may differ from the count given (killed by test_n_with_a_different_row_count_is_a_problem)
