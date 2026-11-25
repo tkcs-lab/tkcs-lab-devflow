@@ -537,6 +537,10 @@ def test_change_report_entity_form_of_a_filler_is_dropped(tmp_path, capsys, enti
     assert _only_block(tmp_path, capsys, forged, "real line")[:2] == (0, MARKER + "\nreal line\n")
 
 
+def test_skeleton_counts_unassigned_and_private_use_as_a_look_alike():
+    assert page_note._skeleton("a\u0378b\ue000c") == "a?b?c"
+
+
 @pytest.mark.parametrize("cp", INVISIBLE, ids=lambda cp: f"U+{cp:04X}")
 def test_skeleton_skips_invisible_characters(cp):
     assert page_note._skeleton(f"a{chr(cp)}b") == "ab"
@@ -544,6 +548,7 @@ def test_skeleton_skips_invisible_characters(cp):
 
 @pytest.mark.parametrize("text", [
     "HTML page n0t stored: x", "HTML page not st0red: x", "HTML page n\u2070t stored: x", "HTML page n\u00b0t stored: x",
+    "HTML page n\u0378t stored: x",
 ])
 def test_change_report_digit_or_symbol_look_alike_is_dropped(tmp_path, capsys, text):
     assert _only_block(tmp_path, capsys, text, "real line")[:2] == (0, MARKER + "\nreal line\n")

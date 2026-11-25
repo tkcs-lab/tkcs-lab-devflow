@@ -34,7 +34,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("roles", "verify"): ("tld.roles.dispatch", ("verify",), "check a report against `tld roles required`"),
     ("roles", "reflektor-prepare"): ("tld.roles.reflektor", ("prepare",), "download the pinned Reflektor release, check it and unpack it"),
     ("roles", "reflektor-check"): ("tld.roles.reflektor", ("check",), "check the paths of an agent-written Reflektor report"),
-    ("roles", "reflektor-html"): ("tld.roles.reflektor", ("html",), "add a Content-Security-Policy to a Reflektor page and check it against the pinned viewer"),
+    ("roles", "reflektor-html"): ("tld.roles.reflektor", ("html",), "add a Content-Security-Policy to a Reflektor page, check it against the pinned viewer and replace each secret-scan allow mark by [secret-scan mark removed]"),
     ("roles", "section"): ("tld.roles.section", (), "print the cleaned change-report block of a role report"),
     ("roles", "page-note"): ("tld.roles.page_note", ("note",), "print the one line that says the HTML change report page was not stored, and why"),
     ("roles", "change-report"): ("tld.roles.page_note", ("report",), "print the change-report block of a role report with the page note as its first line"),

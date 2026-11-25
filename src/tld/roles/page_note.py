@@ -142,7 +142,8 @@ _INVISIBLE = frozenset(map(chr, (0x115F, 0x1160, 0x3164, 0xFFA0, 0x034F, 0x17B4,
 
 
 def _skeleton(text: str) -> str:
-    """The letters of the text as a-z, with `?` for any other letter, digit or symbol (a look-alike) and nothing
+    """The letters of the text as a-z, with `?` for any other letter, digit, symbol, unassigned or private-use
+    character (a look-alike) and nothing
     else: spacing, markup, combining marks, invisible characters and case do not hide a phrase, and one odd
     character does not break it."""
     out = []
@@ -151,7 +152,7 @@ def _skeleton(text: str) -> str:
             continue
         if "a" <= c <= "z":
             out.append(c)
-        elif c.isalpha() or unicodedata.category(c) in ("Nd", "Nl", "No", "So"):
+        elif c.isalpha() or unicodedata.category(c) in ("Nd", "Nl", "No", "So", "Cn", "Co"):
             out.append("?")
     return "".join(out)
 

@@ -200,7 +200,7 @@ The system SHALL, in `tld roles change-report --report FILE [--note FILE]`, prin
 
 #### Scenario: No note
 - **WHEN** the note file is missing, empty or not given
-- **THEN** the output and exit codes are those of `tld roles section --report FILE`
+- **THEN** the output and exit codes are those of `tld roles section --report FILE`, except that page-note-like lines are replaced as above
 
 #### Scenario: Invalid note
 - **WHEN** the note file holds anything but one line of the shape `tld roles page-note` prints, or is unreadable, not a regular file or longer than 1000 bytes

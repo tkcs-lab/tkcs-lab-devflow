@@ -139,7 +139,8 @@ def test_page_renders_in_a_browser(real):
 
 
 def test_page_that_quotes_the_allow_mark_is_built_and_stored(real, tmp_path):
-    clone = real["clone"]
+    clone = tmp_path / "clone-copy"  # the shared clone stays on its branch for the other tests
+    shutil.copytree(real["clone"], clone, symlinks=True)
     git(clone, "checkout", "-q", "-b", "feature/quote")
     (clone / "NOTES.md").write_text(f"The guard skips a line that ends in {reflektor.ALLOW_MARK} in prose.\n")
     git(clone, "add", "-A")

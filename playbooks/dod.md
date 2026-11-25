@@ -48,27 +48,28 @@ and its row is `n/a (partial run)`.
    the gate file.
    1. The gate file gets only the line printed by `tld roles section --report-line --report <the saved answer file>`.
       The report subsection of `reflektor` holds the output of
-      `tld roles change-report --report <the saved answer file> --note <note.txt>` followed by that line. On exit 3
-      it holds only the stderr line and the report line. On exit 1 (the note is not a page-note line, or the answer
+      `tld roles change-report --report <the saved answer file> --note <role scratch dir>/note.txt` followed by that line,
+      built after sub-steps 2 to 4 have written `note.txt` (the section of the implement report is built then too).
+      With a note and no usable block it prints the note alone and exits 0; exit 3 only when the note file is empty
+      and there is no usable block. On exit 3 the subsection holds only the stderr line and the report line. On exit 1 (the note is not a page-note line, or the answer
       cannot be read) the row is `FAIL` with that stderr line, and the note file is never edited to get past it.
-      `note.txt`, `html.err` and `board.err` are three files in a scratch directory made for this role; `note.txt`
+      `<role scratch dir>/note.txt`, `<role scratch dir>/html.err` and `<role scratch dir>/board.err` are three files in a scratch directory made for this role; `<role scratch dir>/note.txt`
       starts empty. The block text of the role cannot forge the note: `change-report` replaces any block line that
       looks like a page note.
    2. The role's verdict is not `n/a` and the saved answer has no `REPORT-HTML <path>` line:
-      `tld roles page-note --stage role > note.txt`.
-   3. Otherwise, with the line: `tld roles reflektor-html --send --answer <file> --dest <a new scratch directory> 2> html.err`.
-      A non-zero exit: `tld roles page-note --stage check --stderr html.err > note.txt`, and the page is not sent
-      anywhere. Exit 0: the printed path is the page; when `html.err` has a line
-      `tld roles: reflektor: removed <n> secret-scan allow marks from the page`, add it as a plain line after the
-      `change-report` output. Then:
-      - with this run's status record: `tld board client health 2> board.err`. Exit 0:
-        `tld board client put-report <id> <path> 2> board.err`; exit 0 ends the page, no note. A non-zero
+      `tld roles page-note --stage role > <role scratch dir>/note.txt`.
+   3. Otherwise, with the line: `tld roles reflektor-html --send --answer <file> --dest <a new scratch directory> 2> <role scratch dir>/html.err`.
+      A non-zero exit: `tld roles page-note --stage check --stderr <role scratch dir>/html.err > <role scratch dir>/note.txt`, and the page is not sent
+      anywhere. Exit 0: the printed path is the page (the role's own `reflektor-html --file` has already replaced the marks and
+      reported their count as a finding, so `--send` prints no count). Then:
+      - with this run's status record: `tld board client health 2> <role scratch dir>/board.err`. Exit 0:
+        `tld board client put-report <id> <path> 2> <role scratch dir>/board.err`; exit 0 ends the page, no note. A non-zero
         put-report, or a health exit other than 0 and 3, is a board failure: `show_human(<path>, "change report")`,
-        then `tld roles page-note --stage board --stderr board.err --sent > note.txt` when `show_human` returned
+        then `tld roles page-note --stage board --stderr <role scratch dir>/board.err --sent > <role scratch dir>/note.txt` when `show_human` returned
         without an error, else the same without `--sent`.
       - without a status record, or with health exit 3 (no board configured): `show_human(<path>, "change report")`;
-        when it fails, `tld roles page-note --stage send > note.txt`.
-   4. The row: a non-empty `note.txt` makes the row `needs attention (<blocking> + <non-blocking>; HTML page not stored)`
+        when it fails, `tld roles page-note --stage send > <role scratch dir>/note.txt`.
+   4. The row: a non-empty `<role scratch dir>/note.txt` makes the row `needs attention (<blocking> + <non-blocking>; HTML page not stored)`
       unless the row is `FAIL`, which stays `FAIL`. A lost page does not block the pull request (the dod report and
       the `## Change report` text, when `section` accepts it, are still there); it is never `PASS`.
    5. Never work around a refusal. Never edit, rebuild, re-hash or rewrite the page, the saved answer or the
