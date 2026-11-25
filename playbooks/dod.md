@@ -48,8 +48,10 @@ and its row is `n/a (partial run)`.
    the gate file.
    1. The gate file gets only the line printed by `tld roles section --report-line --report <the saved answer file>`.
       The report subsection of `reflektor` holds the output of
-      `tld roles change-report --report <the saved answer file> --note <role scratch dir>/note.txt` followed by that line. On exit 3
-      it holds only the stderr line and the report line. On exit 1 (the note is not a page-note line, or the answer
+      `tld roles change-report --report <the saved answer file> --note <role scratch dir>/note.txt` followed by that line,
+      built after sub-steps 2 to 4 have written `note.txt` (the section of the implement report is built then too).
+      With a note and no usable block it prints the note alone and exits 0; exit 3 only when the note file is empty
+      and there is no usable block. On exit 3 the subsection holds only the stderr line and the report line. On exit 1 (the note is not a page-note line, or the answer
       cannot be read) the row is `FAIL` with that stderr line, and the note file is never edited to get past it.
       `<role scratch dir>/note.txt`, `<role scratch dir>/html.err` and `<role scratch dir>/board.err` are three files in a scratch directory made for this role; `<role scratch dir>/note.txt`
       starts empty. The block text of the role cannot forge the note: `change-report` replaces any block line that
