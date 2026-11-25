@@ -253,7 +253,53 @@ def test_resolved_at_a_ref(tmp_path):
     working = json.loads(validate_cli(repo, "--resolved").stdout)
     assert committed["git"]["merge_style"] == "merge-commit" and working["git"]["merge_style"] == "squash"
     out = validate_cli(repo, "--ref", "no-such-ref")
-    assert out.returncode == 1 and "no profile at 'no-such-ref:" in out.stderr
+    assert out.returncode == 1 and "no profile at 'no-such-ref': it is not a commit of this repository" in out.stderr
+
+
+def test_a_ref_that_looks_like_an_option_is_refused_and_writes_nothing(tmp_path):
+    repo = make_repo(tmp_path, MINIMAL)
+    for ref in ("--output=x", "--output=../x", "-p"):
+        out = validate_cli(repo, f"--ref={ref}", "--root", ".")
+        assert out.returncode == 1 and "is not a git ref" in out.stderr, ref
+    assert not (repo / "x").exists() and not (tmp_path / "x").exists()
+    assert not any(p.name.startswith("--") for p in repo.iterdir())
+
+
+def test_a_ref_resolves_once_and_only_the_sha_reaches_git(tmp_path, monkeypatch):
+    repo = make_repo(tmp_path, MINIMAL)
+    seen = []
+    real = rs._git
+    monkeypatch.setattr(rs, "_git", lambda root, *a: (seen.append(a), real(root, *a))[1])
+    out = rs.load(repo / ".tld" / "toolkit.yaml", ref="HEAD", root=repo, trusted=False)
+    assert out.errors == []
+    sha = git(repo, "rev-parse", "HEAD")
+    assert ("show", f"{sha}:.tld/toolkit.yaml") in seen and ("ls-tree", "-r", "--name-only", sha) in seen
+    assert not any("HEAD" in a and a[0] in ("show", "ls-tree") for a in seen)
+
+
+def test_a_profile_path_outside_the_repository_at_a_ref_is_a_clean_error(tmp_path):
+    repo = make_repo(tmp_path, MINIMAL)
+    outside = tmp_path / "other.yaml"
+    outside.write_text("x: 1\n")
+    out = validate_cli(repo, str(outside), "--ref", "HEAD", "--root", ".")
+    assert out.returncode == 1 and "is outside the repository" in out.stderr and "Traceback" not in out.stderr
+    out = validate_cli(repo, "../other.yaml", "--ref", "HEAD", "--root", ".")
+    assert out.returncode == 1 and "must be a path inside the repository" in out.stderr
+    inside = validate_cli(repo, str(repo / ".tld" / "toolkit.yaml"), "--ref", "HEAD", "--root", ".")
+    assert inside.returncode == 0, inside.stderr
+
+
+def test_a_bad_raw_profile_never_fetches_the_base(tmp_path, monkeypatch):
+    repo = make_repo(tmp_path, MINIMAL)
+    write_profile(repo, {**with_extends(MINIMAL, REF_A), "tld": {"extends": f"{REF_A.source}@{REF_A.sha}",
+                                                                 "allow_override": ["hooks.protect_paths"]}})
+
+    def no_fetch(*a, **kw):
+        raise AssertionError("fetched")
+
+    monkeypatch.setattr(base_mod, "fetch", no_fetch)
+    out = rs.load(repo / ".tld" / "toolkit.yaml", root=repo, trusted=False)
+    assert out.errors == ["'tld.allow_override': only a base profile may set it"]
 
 
 def test_resolved_output_plan_dir_default(tmp_path):
@@ -390,6 +436,17 @@ def test_for_hook_does_not_read_the_schema(tmp_path, monkeypatch):
     monkeypatch.setattr(pv, "SCHEMA", tmp_path / "no-such-schema.json")
     resolved, notice = rs.for_hook(MINIMAL, tmp_path)
     assert resolved["git"]["main_branch"] == "main" and notice is None
+
+
+def test_for_hook_reads_files_at_a_commit_only_for_a_real_sha(tmp_path):
+    repo = make_repo(tmp_path, MINIMAL)
+    (repo / "docs").mkdir()
+    (repo / "docs" / "README.md").write_text("i\n")  # in the working tree only
+    sha = git(repo, "rev-parse", "HEAD")
+    assert "index" not in rs.for_hook(MINIMAL, repo, at_sha=sha)[0]["docs"]
+    for bad in ("--output=x", "HEAD", "main", sha[:10], "../x"):
+        assert rs.for_hook(MINIMAL, repo, at_sha=bad)[0]["docs"]["index"] == "docs/README.md", bad
+    assert not (repo / "x").exists()
 
 
 def test_for_hook_never_raises(tmp_path, monkeypatch):

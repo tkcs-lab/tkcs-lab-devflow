@@ -183,30 +183,39 @@ def _source_of(r: Resolved, key: str) -> str | None:
     return None
 
 
-def resolve(raw, *, base: dict | None = None, base_ref: BaseRef | None = None, trusted: dict | None = None,
-            trusted_branch: str | None = None, env: Env | None = None, root_dir: Path | None = None) -> Resolved:
-    """The pure resolver. `trusted` is the default branch's already resolved profile, or None."""
+def check_raw(raw, base_ref: BaseRef | None = None):
+    """The checks that need only the repository's own profile (run before any base is read or fetched): the removed
+    sections, the pin, the shape without required keys, and no `tld.allow_override`.
+    Returns (normalised raw, the pin, errors)."""
     if not isinstance(raw, dict):
-        return Resolved(errors=["the profile must be a YAML mapping"])
+        return raw, base_ref, ["the profile must be a YAML mapping"]
     if "toolkit" in raw:
-        return Resolved(errors=["'toolkit' was removed: the toolkit is delivered only as plugins "
-                                "(docs/guides/delivery.md); delete the 'toolkit' section"])
+        return raw, base_ref, ["'toolkit' was removed: the toolkit is delivered only as plugins "
+                               "(docs/guides/delivery.md); delete the 'toolkit' section"]
     if "agents" in raw:
-        return Resolved(errors=["'agents' was renamed to 'roles' (and each entry's 'agent' to 'role'): "
-                                "rename the section"])
+        return raw, base_ref, ["'agents' was renamed to 'roles' (and each entry's 'agent' to 'role'): "
+                               "rename the section"]
     raw = pv.normalise(raw)
     if _extends(raw) is not None:
         try:
             base_ref = base_ref or parse_pin(_extends(raw))
         except BaseError as exc:
-            return Resolved(errors=[_plain(str(exc))])
+            return raw, base_ref, [_plain(str(exc))]
     schema = json.loads(pv.SCHEMA.read_text())
     errors: list[str] = []
     pv.check(raw, schema, schema, "", errors, required=False)
     if isinstance(raw.get("tld"), dict) and "allow_override" in raw["tld"]:
         errors.append("'tld.allow_override': only a base profile may set it")
+    return raw, base_ref, errors
+
+
+def resolve(raw, *, base: dict | None = None, base_ref: BaseRef | None = None, trusted: dict | None = None,
+            trusted_branch: str | None = None, env: Env | None = None, root_dir: Path | None = None) -> Resolved:
+    """The pure resolver. `trusted` is the default branch's already resolved profile, or None."""
+    raw, base_ref, errors = check_raw(raw, base_ref)
     if errors:
         return Resolved(errors=errors, base=base_ref)
+    schema = json.loads(pv.SCHEMA.read_text())
 
     allow = list(((base or {}).get("tld") or {}).get("allow_override") or [])
     merged, sources, warnings = merge_mod.merge_with_warnings(base or {}, raw, allow)
@@ -261,11 +270,39 @@ def resolve_dict(raw, root_dir: Path | None = None, *, fetch: bool = True) -> Re
 
 # -------------------------------------------------------------------------------------------------- load
 
-def _read_profile(path: Path, root: Path, ref: str | None):
-    """(parsed YAML, error)."""
-    if ref:
-        rel = str(path if not path.is_absolute() else path.relative_to(root))
-        r = _git(root, "show", f"{ref}:{rel}")
+def resolve_ref(root: Path, ref: str) -> tuple[str | None, str | None]:
+    """(full commit SHA, error). Only the SHA ever reaches git as a revision: a ref is never an option."""
+    from tld.guard.trust import SHA_RE
+    if not ref or ref.startswith("-") or "\x00" in ref:
+        return None, f"'{ref[:80]}' is not a git ref"
+    r = _git(root, "rev-parse", "--verify", "--quiet", "--end-of-options", f"{ref}^{{commit}}")
+    sha = r.stdout.strip() if r is not None and r.returncode == 0 else ""
+    if not SHA_RE.match(sha):
+        return None, f"no profile at '{ref[:80]}': it is not a commit of this repository"
+    return sha, None
+
+
+def _rel_path(path: Path, root: Path) -> tuple[str | None, str | None]:
+    """The repository-relative path of the profile for `git show`, or an error."""
+    if path.is_absolute():
+        top = _git(root, "rev-parse", "--show-toplevel")
+        base = Path(top.stdout.strip()) if top is not None and top.returncode == 0 and top.stdout.strip() else root
+        try:
+            path = path.resolve().relative_to(base.resolve())
+        except ValueError:
+            return None, f"'{path}' is outside the repository; give a path inside it"
+    if ".." in path.parts or not path.parts:
+        return None, f"'{path}' must be a path inside the repository"
+    return path.as_posix(), None
+
+
+def _read_profile(path: Path, root: Path, sha: str | None, ref: str | None = None):
+    """(parsed YAML, error). `sha` is the resolved commit of --ref, or None for the working tree."""
+    if sha:
+        rel, err = _rel_path(path, root)
+        if err:
+            return None, err
+        r = _git(root, "show", f"{sha}:{rel}")
         if r is None or r.returncode != 0:
             return None, f"no profile at '{ref}:{rel}'. Check the ref and that it has {rel} ({pv.HELP})."
         text = r.stdout
@@ -305,11 +342,17 @@ def load(path, *, ref: str | None = None, root=None, fetch: bool = True, trusted
     default branch's profile is resolved on its own and clamps the guarded keys. File checks are skipped at a ref."""
     path = Path(path)
     root = Path(root) if root is not None else path.resolve().parent.parent
-    raw, problem = _read_profile(path, root, ref)
+    sha = None
+    if ref is not None:
+        sha, problem = resolve_ref(root, ref)
+        if problem:
+            return Resolved(errors=[problem])
+    raw, problem = _read_profile(path, root, sha, ref)
     if problem:
         return Resolved(errors=[problem])
-    if not isinstance(raw, dict):
-        return Resolved(errors=["the profile must be a YAML mapping"])
+    raw, _, errors = check_raw(raw)  # raw-only checks first: a bad profile never causes a fetch
+    if errors:
+        return Resolved(errors=errors)
     base_ref, base, errors, warnings = base_for(raw, root, fetch)
     if errors:
         return Resolved(errors=errors, base=base_ref)
@@ -323,9 +366,9 @@ def load(path, *, ref: str | None = None, root=None, fetch: bool = True, trusted
     elif trusted:
         warnings.append("no trusted copy of the profile (no origin remote); guarded keys are taken from this "
                         "working tree")
-    env = tree_env(root, ref, owner, branch) if ref else fs_env(root, owner, branch)
+    env = tree_env(root, sha, owner, branch) if sha else fs_env(root, owner, branch)
     out = resolve(raw, base=base, base_ref=base_ref, trusted=trusted_profile, trusted_branch=trusted_branch, env=env,
-                  root_dir=root if file_checks and not ref else None)
+                  root_dir=root if file_checks and not sha else None)
     out.warnings = warnings + out.warnings
     return out
 
@@ -347,7 +390,9 @@ def for_hook(raw, project, *, at_sha: str | None = None) -> tuple[dict | None, s
                 notice = f"the base {ref.label} is not cached here; run tld profile validate to fetch it"
         allow = list(((base or {}).get("tld") or {}).get("allow_override") or [])
         merged, _, _ = merge_mod.merge_with_warnings(base or {}, raw, allow)
-        env = tree_env(project, at_sha) if at_sha else fs_env(project, None, _head_branch(project))
+        from tld.guard.trust import SHA_RE
+        valid = isinstance(at_sha, str) and SHA_RE.match(at_sha)  # anything else falls back to the working tree
+        env = tree_env(project, at_sha) if valid else fs_env(project, None, _head_branch(project))
         resolved, _ = defaults.apply(merged, env)
         if isinstance(resolved.get("docs"), dict) and isinstance(resolved["docs"].get("plan_dir"), str):
             resolved["docs"]["plan_dir"] = resolved["docs"]["plan_dir"].rstrip("/")
