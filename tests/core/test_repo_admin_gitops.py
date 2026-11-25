@@ -271,3 +271,32 @@ def test_central_repository_spelled_in_another_case(ra):
     found, _, _ = audit(ra, policy=policy)
     fixes = [f for f in found if f.severity == "fix"]
     assert len(fixes) == 2 and all(f.action.repo == "acme/git-ops" and f.scope == "acme/git-ops" for f in fixes)
+
+
+@pytest.mark.parametrize("entry", ["@(*)", "+(?)", "!(zzz)", "zz\n*", "[^x]*", "app\n", "*(x)*", "a\\*"])
+def test_entries_bash_reads_differently_are_reported_and_kept(ra, entry):
+    policy = {**POLICY, "repos": {"exclude": ["secret"]}}
+    found, _, _ = audit(ra, allow_files(repos=["app", "git-ops", entry]), policy=policy, names=("app", "git-ops", "secret"))
+    unusual = [f for f in by_check(found, "git-ops-allowlist") if f.subject == "allowlist:unusual"]
+    assert len(unusual) == 1 and unusual[0].severity == "warn" and unusual[0].manual
+    fixes = [f for f in by_check(found, "git-ops-allowlist") if f.severity == "fix"]
+    for f in fixes:  # a rewrite keeps the entry verbatim
+        assert entry in json.loads(f.action.changes[0]["content"])["repos"]
+
+
+def test_an_update_that_the_audit_would_refuse_is_not_written(ra):
+    repos = [f"r{i:04d}" + "x" * 119 for i in range(1990)]
+    files = allow_files(repos=repos)
+    assert len(files["git-ops-allowlist.json"].encode()) < 256_000
+    found, _, _ = audit(ra, files, names=("app", "git-ops", "new-repo"))
+    rows = {f.subject: f for f in by_check(found, "git-ops-allowlist")}
+    assert set(rows) == {"allowlist:unusual", "allowlist:size"}  # entries over 100 characters are unusual too
+    assert rows["allowlist:size"].severity == "warn" and rows["allowlist:size"].action is None
+
+
+def test_fixed_guidance_is_not_defaced(ra):
+    found, _, _ = audit(ra, complete(), token=False, env=None)
+    (tok,) = by_check(found, "git-ops-token")
+    assert "`gh secret set GIT_OPS_TOKEN --env git-ops --repo acme/git-ops`" in tok.manual
+    env = next(f for f in by_check(found, "git-ops-environment") if f.subject == "environment:git-ops")
+    assert "https://github.com/acme/git-ops/settings/environments" in env.manual

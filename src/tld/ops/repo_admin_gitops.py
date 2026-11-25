@@ -84,8 +84,9 @@ def _norm(text: str) -> str:
 
 
 def build_allowlist(owner: str, repos: list[str], protected: list[str]) -> str:
-    """The allowlist file from validated values only: the organisation, repository names and branch globs."""
-    return json.dumps({"owner": owner, "repos": repos, "protected_branches": protected}, indent=2) + "\n"
+    """The allowlist file: the organisation and the audited repository names come from validated values; entries
+    that were already in the file are carried over unchanged (json.dumps escapes them, they cannot inject)."""
+    return json.dumps({"owner": owner, "repos": repos, "protected_branches": protected}, indent=2, ensure_ascii=False) + "\n"
 
 
 def parse_allowlist(text: str | None) -> dict | None:
@@ -144,9 +145,18 @@ def _workflow_finding(ctx, central: str, snap, workflow: str) -> list:
                        ra.Action("files", repo=central, changes=[change]))]
 
 
+USUAL_GLOB = re.compile(r"[A-Za-z0-9._*?-]{1,100}")
+
+
+def _usual(glob: str) -> bool:
+    """A repos entry the audit can reason about. The workflow matches with bash `[[ == ]]` (extglob on), so an entry
+    with [ ] ( ) @ ! + \\ ^ or a newline can match more than fnmatch says: it is reported and counted as broad."""
+    return USUAL_GLOB.fullmatch(glob) is not None
+
+
 def _broad(glob: str) -> bool:
-    """A repos entry made only of wildcards: it matches every repository."""
-    return not glob.replace("*", "").replace("?", "")
+    """A repos entry that matches every repository: only wildcards, or one the audit cannot reason about."""
+    return not _usual(glob) or not glob.replace("*", "").replace("?", "")
 
 
 def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
@@ -185,10 +195,16 @@ def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
     else:
         existing = list(data["repos"])
         # every existing entry is kept as it is; entries that are too wide are reported, never silently changed
-        broad = [g for g in existing if _broad(g)]
+        unusual = [g for g in existing if not _usual(g)]
+        broad = [g for g in existing if _broad(g) and _usual(g)]
         in_scope = {r["name"] for r in ctx.repos}
         outside = sorted({r["name"] for r in ctx.all_repos if r["name"] not in in_scope
                           and any(fnmatch.fnmatchcase(r["name"], g) for g in existing if not _broad(g))})
+        if unusual:
+            out.append(ra.Finding("git-ops-allowlist", central, "allowlist:unusual", f"{ALLOWLIST_PATH} has {len(unusual)} "
+                                  "repos entry with characters beyond letters, digits, . _ - * ?, which the workflow's "
+                                  "bash matching may read as matching every repository", "warn",
+                                  manual="replace each by plain repository names or simple globs"))
         if broad:
             out.append(ra.Finding("git-ops-allowlist", central, "allowlist:broad", f"{ALLOWLIST_PATH} has {len(broad)} "
                                   "entry made only of wildcards in repos, which matches every repository", "warn",
@@ -203,7 +219,7 @@ def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
             out.append(ra.Finding("git-ops-allowlist", central, "allowlist:protected", f"{ALLOWLIST_PATH} protects "
                                   "no branch (protected_branches is missing or empty)", "warn",
                                   manual="list the branch globs the workflow must never delete"))
-        missing = [n for n in audited if not any(fnmatch.fnmatchcase(n, g) for g in existing)]
+        missing = [n for n in audited if not any(fnmatch.fnmatchcase(n, g) for g in existing if _usual(g))]
         if owner_ok and not missing and have_protected:
             return out
         repos = existing + missing
@@ -217,8 +233,12 @@ def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
         if not have_protected:
             parts.append("has no protected branches (the shipped defaults are added)")
         why = " and ".join(parts)
-    change = {"op": "put", "path": ALLOWLIST_PATH, "content": build_allowlist(owner, repos, protected),
-              "mode": _mode(snap, ALLOWLIST_PATH)}
+    content = build_allowlist(owner, repos, protected)
+    if parse_allowlist(content) is None:  # a file this audit would refuse next time: do not write it
+        return out + [ra.Finding("git-ops-allowlist", central, "allowlist:size", f"{ALLOWLIST_PATH} {why}, but the updated "
+                                 "file would be too large or have too many entries to keep", "warn",
+                                 manual="shorten the lists by hand (use globs for groups of repositories)")]
+    change = {"op": "put", "path": ALLOWLIST_PATH, "content": content, "mode": _mode(snap, ALLOWLIST_PATH)}
     return out + [ra.Finding("git-ops-allowlist", central, "allowlist", f"{ALLOWLIST_PATH} {why}{notes}; update it with a "
                              "pull request into the default branch of the central repository", "fix",
                              ra.Action("files", repo=central, changes=[change]))]
@@ -238,8 +258,7 @@ def _open_items(ctx, central_repo: dict) -> list:
             out.append(f)
         elif f.subject.startswith("secret:"):
             manual = f.manual or ("set it in the environment (value from the token the owner created; never paste it into chat)")
-            out.append(dataclasses.replace(f, check="git-ops-token", severity="warn", action=None,
-                                           message=_text(f.message), manual=_text(manual, 400)))
+            out.append(dataclasses.replace(f, check="git-ops-token", severity="warn", action=None, manual=manual))
         else:
             out.append(dataclasses.replace(
                 f, check="git-ops-environment", severity="warn", action=None, message=_text(f.message),
