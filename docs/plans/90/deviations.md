@@ -44,7 +44,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p8-defaults-playbooks
 
-- pending
+- worker: none reported by the worker
+- review: open for the fix round: the git-ops, land and repo-admin playbooks do not say what to do when the resolved profile lacks git_ops.repo, land.max_prs or admin.policy because the off switch false is removed from the resolved profile; the starter template comments and one fixture docstring still describe missing-key stops
 
 ## p9-survey
 
