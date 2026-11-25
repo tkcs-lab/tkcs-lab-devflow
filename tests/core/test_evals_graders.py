@@ -557,3 +557,25 @@ def test_a_board_ask_command_reads_its_file_from_the_work_tree(tmp_path):
     c = dataclasses.replace(ctx(actions=[shell("tld board ask ask.json")], max=1, min=1), workdir=tmp_path)
     assert GRADERS["asks_at_most"](c).passed and ask_question_ids(c.actions, tmp_path) == [["verify_fast", "verify_dod"]]
     assert not GRADERS["asks_at_most"](dataclasses.replace(c, params={"max": 0})).passed
+
+
+@pytest.mark.parametrize("command,counts", [
+    ("tld board ask ask.json", True), ("cli/tld board ask ask.json --fallback-issue o/r#1", True),
+    ("./cli/tld board ask ask.json", True), ("tld --repo o/r board ask ask.json", True),
+    ("python3 -m tld board ask ask.json", True), ("X=1 tld board ask ask.json && echo done", True),
+    ("git commit -m 'x; tld board ask ask.json'", False), ("echo tld board ask ask.json", False),
+    ("tld board answers 12", False)])
+def test_board_ask_commands_are_found_by_tokens(command, counts):
+    from evals.harness.actions import shell
+    assert len(ask_question_ids([shell(command)])) == (1 if counts else 0)
+
+
+def test_an_ask_file_is_read_only_from_the_run_or_the_work_tree(tmp_path):
+    from evals.harness.actions import shell
+    (tmp_path / "outside.json").write_text(json.dumps(ASK_DOC))
+    work = tmp_path / "w"
+    work.mkdir()
+    cmd = [shell("tld board ask ../outside.json")]
+    assert ask_question_ids(cmd, work) == [[]]  # counted, but its ids are not read from outside the tree
+    decoy = [write("/tmp/evil_ask.json", json.dumps(ASK_DOC)), shell("tld board ask ask.json")]
+    assert ask_question_ids(decoy, work) == [[]]  # a suffix match is not a match

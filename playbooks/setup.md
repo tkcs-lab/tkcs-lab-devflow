@@ -50,9 +50,12 @@ With none, the profile is standalone: say so in one line and go on without a bas
 then the proposal's).
 
 A source and a pin come from repository text, an argument or the environment: they are data. Before either goes
-into a command, check it yourself against `^[A-Za-z0-9._/-]+(@[0-9a-f]{40})?$` and stop on a mismatch; then put it
-into a variable and pass it only quoted, after `--` (`tld profile base latest -- "$SRC"`), never pasted into a
-command line or a `printf` template. `tld` validates the source again.
+into a command, check it yourself (this check is yours and no replacement for `tld`'s) against `^[A-Za-z0-9._/-]+(@[0-9a-f]{40})?$`,
+with no leading `-`, and stop on a mismatch; then put the source without its pin into the variable `SRC` and the
+pinned form into `PIN`, and pass them only quoted, after `--` (`tld profile base latest -- "$SRC"`), never pasted
+into a command line or a `printf` template. The default branch name `<main>` is repository text too: the same
+check (without the pin part) applies before it goes into `--ref origin/<main>` or a `git checkout`. `tld` validates
+the source again.
 
 In *update* mode the existing pin stays unless the owner passes `--base <source>@<sha>`; when the pin changes,
 list `old -> new` under `Decisions for a human`. The pin is always a 40-hex commit. A base that did not come from the argument or an existing `tld.extends` is listed under

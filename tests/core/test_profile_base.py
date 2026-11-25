@@ -448,3 +448,10 @@ def test_shell_metacharacters_are_refused_in_the_path(path):
         base.parse_source(f"acme/.github/{path}")
     with pytest.raises(base.BaseError):
         base.parse_extends(f"acme/.github/{path}@{SHA}")
+
+
+def test_a_trailing_newline_is_refused_in_a_source_or_a_pin():
+    with pytest.raises(base.BaseError):
+        base.parse_extends(f"{SOURCE}@{SHA}\n")
+    with pytest.raises(base.BaseError):
+        base.parse_source(SOURCE + "\n")

@@ -43,10 +43,10 @@ FETCH_TIMEOUT = 20.0
 MAX_BYTES = 65536
 MAX_DEPTH = 8
 MAX_TAGS_TRIED = 20
-SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
-OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$")
-REPO_RE = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
-SOURCE_RE = re.compile(r"^(?P<owner>[A-Za-z0-9][A-Za-z0-9-]{0,38})/(?P<repo>[A-Za-z0-9._-]{1,100})/(?P<path>[A-Za-z0-9._/-]{1,256})$")
+SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}\Z")
+OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}\Z")
+REPO_RE = re.compile(r"^[A-Za-z0-9._-]{1,100}\Z")
+SOURCE_RE = re.compile(r"^(?P<owner>[A-Za-z0-9][A-Za-z0-9-]{0,38})/(?P<repo>[A-Za-z0-9._-]{1,100})/(?P<path>[A-Za-z0-9._/-]{1,256})\Z")
 TAG_RE = re.compile(r"^v?[0-9]{1,9}(\.[0-9]{1,9}){0,5}$", re.ASCII)
 
 # The keys a base may set, as dotted paths; a path allows everything below it.

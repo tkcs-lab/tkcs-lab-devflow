@@ -281,8 +281,8 @@ def profile_valid(ctx: GradeContext) -> GradeResult:
     return GradeResult(True, f"{path} valid")
 
 
-_BOARD_ASK = re.compile(r"(?:^|[;&|(]\s*|\s)tld(?:\s+--\S+)*\s+board\s+ask\s+(?P<file>[^\s;&|]+)")
 _EXAMPLE_ID = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):\s", re.M)
+MAX_ASK_BYTES = 200_000
 
 
 def _ids_of_ask(doc) -> list[str] | None:
@@ -292,18 +292,57 @@ def _ids_of_ask(doc) -> list[str] | None:
     return [str(q.get("id")) for q in qs if isinstance(q, dict)]
 
 
+def _board_ask_file(command: str) -> str | None:
+    """The FILE of a command that starts with `tld board ask FILE` (also `./cli/tld`, `python3 -m tld`, a global
+    option with its value, env assignments in front, or a `;`/`&&`/`|` chain): found by tokens, so a quoted
+    string that merely contains the words is not an ask."""
+    for part in re.split(r"\s*(?:&&|\|\||;|\||\n)\s*", command):
+        try:
+            toks = shlex.split(part)
+        except ValueError:
+            continue
+        while toks and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", toks[0]):
+            toks.pop(0)
+        if toks[:3] == ["python3", "-m", "tld"] or (toks and toks[0] in ("python3", "python") and len(toks) > 2
+                                                    and toks[1].endswith("tld")):
+            toks = ["tld", *toks[3 if toks[1] == "-m" else 2:]]
+        elif toks and re.fullmatch(r"[\w./-]*tld", toks[0]):
+            toks[0] = "tld"
+        if not toks or toks[0] != "tld":
+            continue
+        rest, i = toks[1:], 0
+        while i < len(rest) and rest[i].startswith("--"):  # global options, with or without a value
+            i += 1 if "=" in rest[i] or i + 1 >= len(rest) or rest[i + 1] in ("board",) else 2
+        if rest[i:i + 2] == ["board", "ask"] and len(rest) > i + 2:
+            return rest[i + 2]
+    return None
+
+
 def _ask_file(path: str, actions: list[dict], workdir) -> dict | None:
-    """The ask document a `tld board ask <file>` command posts: the content of the run's own write to that path,
-    else the file in the work tree."""
+    """The ask document a `tld board ask <file>` command posts: the content of the run's own write to that same
+    file, else the file in the work tree (never outside it, a regular file, bounded in size)."""
+    root = Path(workdir).resolve() if workdir is not None else None
+
+    def norm(p: str) -> str | None:
+        q = Path(p)
+        if q.is_absolute():
+            if root is None or not q.resolve().is_relative_to(root):
+                return q.as_posix()  # outside the work tree: only an identical written path matches
+            return q.resolve().relative_to(root).as_posix()
+        return Path(*[x for x in q.parts if x != "."]).as_posix()
+
+    want = norm(path)
     for a in reversed(actions):
-        if a.get("kind") == "write" and str(a.get("path", "")).endswith(path.lstrip("./")):
+        if a.get("kind") == "write" and norm(str(a.get("path", ""))) == want:
             try:
                 return json.loads(a.get("content") or "")
             except ValueError:
                 return None
-    if workdir is not None:
+    if root is not None:
         try:
-            return json.loads((Path(workdir) / path).read_text())
+            f = (root / path).resolve()
+            if f.is_relative_to(root) and f.is_file() and f.stat().st_size <= MAX_ASK_BYTES:
+                return json.loads(f.read_text())
         except (OSError, ValueError):
             return None
     return None
@@ -326,9 +365,9 @@ def ask_question_ids(actions: list[dict], workdir=None) -> list[list[str]]:
         elif kind == "github_op" and "comment" in op and "<!-- tld-ask -->" in str((a.get("args") or {}).get("body", "")):
             out.append(_EXAMPLE_ID.findall(str(a["args"]["body"]).partition("-- example reply --")[2]))
         elif kind == "shell":
-            m = _BOARD_ASK.search(str(a.get("command", "")))
-            if m and a.get("error") is not True:
-                out.append(_ids_of_ask(_ask_file(m.group("file"), actions, workdir)) or [])
+            f = _board_ask_file(str(a.get("command", "")))
+            if f and a.get("error") is not True:
+                out.append(_ids_of_ask(_ask_file(f, actions, workdir)) or [])
     return out
 
 
