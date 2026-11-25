@@ -53,7 +53,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p12-admin-profile
 
-- pending
+- worker: touches: docs/guides/admin.md got minimal rows for the new policy keys and check (orchestrator-approved, p14 rewrites); three existing admin tests needed them
+- review: reviewer notes the starter admin policy has the profile and git_ops sections active with placeholder org names, where the plan asks for commented examples; left for the fix round or the final review
 
 ## p13-admin-gitops-secrets
 
