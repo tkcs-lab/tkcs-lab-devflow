@@ -127,11 +127,10 @@ def fingerprint(project: str) -> str:
 # --------------------------------------------------------------------------- running the gate
 
 def _count(state: dict, key: str) -> int:
-    """A counter of the state file; a damaged value counts as 0 instead of ending the gate with an error."""
-    try:
-        return max(0, int(state.get(key, 0)))
-    except (TypeError, ValueError):
-        return 0
+    """A counter of the state file; a damaged value (text, a float, infinity, a bool, a negative) counts as 0 instead
+    of ending the gate with an error."""
+    value = state.get(key, 0)
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
 
 
 def _dod_profile(ctx: Ctx) -> dict | None:
@@ -181,7 +180,7 @@ def run_gate(project: str, commands: list[tuple[str, str | None]]) -> list[tuple
         except subprocess.TimeoutExpired:
             failures.append((run, "timed out"))
             continue
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError: a NUL byte in the command or the directory
             failures.append((run, f"could not start: {exc}"))
             continue
         if r.returncode != 0:

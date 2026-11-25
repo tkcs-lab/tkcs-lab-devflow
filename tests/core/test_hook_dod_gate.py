@@ -341,3 +341,19 @@ def test_a_damaged_attempt_counter_still_blocks(tmp_path):
     assert run(HOOK, stop(repo)).code == 2
     gate._state_file(str(repo), "s1").write_text(json.dumps({"attempts": "x", "profile_attempts": "y"}))
     assert run(HOOK, stop(repo)).code == 2
+
+
+def test_infinity_and_booleans_in_the_state_file_count_as_zero(tmp_path):
+    from tld.dod import gate
+    assert gate._count({"k": float("inf")}, "k") == 0 and gate._count({"k": True}, "k") == 0
+    assert gate._count({"k": -3}, "k") == 0 and gate._count({"k": 2}, "k") == 2
+    repo = repo_with(tmp_path, ["exit 1"], enabled=None)
+    assert run(HOOK, stop(repo)).code == 2
+    gate._state_file(str(repo), "s1").write_text('{"attempts": Infinity, "profile_attempts": 1e999}')
+    assert run(HOOK, stop(repo)).code == 2
+
+
+def test_a_nul_byte_in_a_dod_command_is_a_failed_attempt(tmp_path):
+    repo = repo_with(tmp_path, ["echo a\u0000b"], enabled=None)
+    r = run(HOOK, stop(repo))
+    assert r.code == 2 and "could not start" in r.stderr, r.stderr
