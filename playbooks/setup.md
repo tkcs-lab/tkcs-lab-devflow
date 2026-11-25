@@ -111,11 +111,11 @@ The posture is not asked. When nothing is missing and nothing needs a confirm, p
 answers as `ask_human` says for an attended session.
 
 Turn the answers into `answers.json`, keyed like `tld profile patch set-block` reads it:
-`{"roles": {"required": [{"role": "<role>", "blocking": <true|false>}]}}` (only what the human answered).
+`{"roles": {"required": [{"role": "<role>", "blocking": <true|false>}]}}` (what the human answered, plus an explicit `"blocking": false` for every proposed `blocking: true` role without a yes).
 
 When no ask can be posted or answered (no board and no tracking issue to fall back on), with or without
-`--accept-proposals`: every `blocking` is written as `false` (*create*: `false` in the table; *update*: an
-`answers.json` with `"blocking": false` for every proposed `blocking: true` entry, applied with `--answers`), and a `deps.audit` or `deps.lock_freshness`
+`--accept-proposals`: every `blocking` is written as `false` (*create*: `false` in the table; *update* without a base: an
+`answers.json` with `"blocking": false` for every proposed `blocking: true` entry, applied with `--answers`; under a base the roles block is written by hand with `blocking: false`), and a `deps.audit` or `deps.lock_freshness`
 command is **not written**, because only the human confirms `blocking: true` and only the human confirms a
 command. `--accept-proposals` accepts the rest of the proposal without asking, and lists under
 `Decisions for a human` in the pull request every proposed `blocking: true` entry ("proposed blocking, written
@@ -132,7 +132,7 @@ already requires is removed; `deps.audit` and `deps.lock_freshness` are written 
 yes, with exactly the command that was shown, and are otherwise left out of the table.
 
 - *create*: copy `<tld root>/src/tld/templates/toolkit.yaml` to `.tld/toolkit.yaml` (replacing the one-line
-  file of step 1) and fill it in from the neutralised table, uncommenting only the blocks that have a value, with
+  file of step 1) and fill it in from the neutralised table, uncommenting only the blocks that have a value (the template's example lines are never uncommented as they stand: `roles.required` comes only from the neutralised table), with
   `extends: <source>@<sha>  # <tag>` and `version: ">=<major>.<minor>,<<major + 1>"` under `tld`. Replace nothing else.
 - *update*: `tld profile patch diff .tld/toolkit.yaml survey.json` first, and show the new, changed and stale
   keys (the survey still lists base roles and unconfirmed commands: they are not to be written). Under a base, write
