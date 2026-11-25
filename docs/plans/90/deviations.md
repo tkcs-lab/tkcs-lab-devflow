@@ -38,7 +38,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p7-cli-readers
 
-- pending
+- worker: touches extended (orchestrator-approved): spec and sysml call and playbook tests, playbooks/spec.md and sysml.md stop-message lines, two eval stubs, evals/fixtures/commands.py, baseline hashes, resolve.py (base-missing flags), base.py (tld profile base fetch --ref) and test_profile_resolve.py
+- retry: sent back once: with the default branch base uncached, tld roles required silently dropped the roles the base requires; fixed with structured base_missing and trusted_base_missing flags that stop the run, plus a fetch --ref remedy
+- review: open for the final review: roles required has no trusted floor when no default-branch copy is reachable; the stop hint names origin/<branch> rather than the trusted ref; deps_prepare and release_prepare still use the current directory or ignore a missing base; resolver error text is not escaped; one flaky board listener test
 
 ## p8-defaults-playbooks
 
