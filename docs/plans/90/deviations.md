@@ -44,7 +44,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p9-survey
 
-- pending
+- worker: touches: src/tld/profile/validate.py and tests/core/test_validate_profile.py (orchestrator-approved): the bot-versus-code-owner check is now case-insensitive
+- retry: sent back once: the survey could propose the bot login as a code owner when no base supplied it; fixed with the repository own profile as a second source, case-insensitive filtering, a cap of 50 owners and a verified tld.extends edit
+- review: open for p10 and the final review: deps.audit and deps.lock_freshness proposals must stay owner-confirmed items; the base bot login is ignored when the own profile sets another; a leading @ in bot_login is not normalised
 
 ## p10-setup-playbook-evals
 
