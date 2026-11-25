@@ -29,7 +29,7 @@ same turn as every ask.
 3. DoD gate: this session writes no code; mark it exempt once with `tld dod exempt`.
 4. Status record: `kind: run`, `command: null`, `attended: true`, document id from `tld board record-id --repo
    <owner>/<repo> --run --plan-slug issue-<n>`, `plan_slug` `issue-<n>`, `plan_url: null`, `feature_branch` the
-   branch, `orchestrator_session` this session's id, items `implement`, `final-review`, `dod`, `fix-findings`, `pr`
+   branch, `orchestrator_session` this session's id, `tracking_issue` `<n>` (the tracking issue), items `implement`, `final-review`, `dod`, `fix-findings`, `pr`
    (all in the first write; states `pending`, `running`, `merged`, `failed`, `gate`). Check each write with
    `tld board validate-record <file> --doc-id <id>`. It is written `starting` in step 0.5, before any worker or ask.
    `needs_you` reasons: `Answer: <question>`, `Fix quick #<n>`, `Resolve review findings`, `Review PR #<n>`.

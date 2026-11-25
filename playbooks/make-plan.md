@@ -39,7 +39,7 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
    - "The reviewer level" is `models.reviewer`; "the worker level" is `models.worker` (C9).
 2. **DoD gate.** This playbook writes a plan, not code: mark the session exempt once with `tld dod exempt`.
 3. **Status record**: `kind: command`, `command: make-plan`, `attended: true`, document id from `tld board record-id --repo <owner>/<repo> --command make-plan --session <this session's id>`, items `research`, `decide`,
-   `write`, `review`, `hand-over`. Write it first (`starting`), but after the check of section 0 step 1 when the
+   `write`, `review`, `hand-over`. With a tracking issue every write from the moment it exists carries `tracking_issue` `<n>` (the first `starting` write comes before section 0 step 1 when the ask names no issue, so it may lack it); without one leave the field out. Write it first (`starting`), but after the check of section 0 step 1 when the
    ask names a tracking issue; then at every step and at the end (`done`, or `failed` with the reason). At
    `failed`, and when you stop for any reason other than a `stop` answered at "Is it already being planned?",
    post `Planning stopped: <short cause>.` on the tracking issue (if there is one). While an ask is open:
@@ -166,7 +166,7 @@ the pull request in one go. In this order:
    `tld board record-id --repo <owner>/<repo> --run --plan-slug <slug>` where `<slug>` is `issue-<n>` (the tracking
    issue; without one, the part of the branch name after the first `/`), `plan_slug` that slug, `plan_url: null`,
    `feature_branch` the branch, `orchestrator_session` the worker's session id, `phases: []`,
-   `next_check_at: null`; written `starting` before the first change, `running` after the first commit, `pr_open`
+   `next_check_at: null`; `tracking_issue` the tracking issue's number (left out without one); written `starting` before the first change, `running` after the first commit, `pr_open`
    once the pull request is open (with `pr` filled and `needs_you` true, `needs_you_since` set and the reason
    `Review PR #<n>`), and on a stop `waiting_user` with `needs_you` true, `needs_you_since` and the reason
    `Answer: <question>` (a stop condition) or `failed` with `finished_at`, `needs_you` true, `needs_you_since` and
@@ -443,7 +443,7 @@ never push a plan it rejects.
    (that prefix is the only change). Write the new body to a scratch file and run
    `tld plan summary-check <issue body file> --kind issue`; it must exit 0 before you rewrite the body
    (`github.issue_update`) from that file. A revision updates the body the same way, with the check. Then post `Plan ready: <plan URL>. Next: implement <plan URL>.`
-3. **The hand-over.** Write the record `done` with the stdout of section 4's hand-over scan as its `handover`, every item done, `finished_at` set and `last_event` `plan ready: <plan URL>`. When the board answers `invalid` and every listed error says `handover` is an unknown or unexpected field, write the record once more without `handover` and put `The board is older than this release: update it to see the plan card.` in the final reply. Any other `invalid` that names `handover`: fix and write once more, and name the error in the final reply; any other `invalid` follows the record rules. Then `notify_human("<project>: plan ready: <plan slug>")` once; it never carries the Summary.
+3. **The hand-over.** Write the record `done` with the stdout of section 4's hand-over scan as its `handover`, every item done, `finished_at` set and `last_event` `plan ready: <plan URL>`. When the board refuses `handover` or `tracking_issue` as unknown fields, follow "An older board" in [policies/status-board.md](policies/status-board.md). Any other `invalid` that names `handover`: fix and write once more, and name the error in the final reply; any other `invalid` follows the record rules. Then `notify_human("<project>: plan ready: <plan slug>")` once; it never carries the Summary.
 4. Final reply, short: the tracking issue link; the plan URL in the exact form implement takes,
    `https://github.com/<owner>/<repo>/blob/<feature branch>/<plan_dir>/<n>/plan.md`; the `manual_before` items; a
    table of phases (id, title, complexity, depends_on, any `worker_level: strong` with its reason); what the

@@ -471,7 +471,7 @@ step on the human's behalf.
 ## Status record
 
 As [policies/status-board.md](policies/status-board.md) says, with `kind: run`, `command: null`, `attended: true`, document id from `tld board record-id --repo <owner>/<repo> --run --plan-slug <plan_slug>`, written at step 4a,
-`plan_slug`, `plan_url` and `feature_branch` from the plan, and `phases` the output of `tld plan record-items <plan file>` plus every extra item added so far, mirroring the ledger (states
+`plan_slug`, `plan_url` and `feature_branch` from the plan, `tracking_issue` the manifest's `tracking_issue` (left out when the manifest has none), and `phases` the output of `tld plan record-items <plan file>` plus every extra item added so far, mirroring the ledger (states
 `pending`, `running`, `merged`, `failed`, `gate`). The first record (`starting`) is written at step 4a, before the start question and any worker; then at every ledger change and every check-in. Every record write is preceded by the `--check` of rule 3 (Board upkeep). `status` is `starting`, `running`, `waiting_user`,
 `reviewing`, `pr_open`, `done` or `failed`. `next_check_at` is the armed check-in (null while the status is `waiting_user`: Board upkeep, rule 5), `pr` is filled once the pull
 request exists. Each phase gets the optional `scope` at its merge: `tld plan scope-check record --results
