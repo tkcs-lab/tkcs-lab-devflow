@@ -25,15 +25,9 @@ def test_minimal_profile_is_valid(vp):
 
 
 @pytest.mark.parametrize("path,message", [
-    (("docs",), "missing required key 'docs'"),
-    (("docs", "must_read"), "missing required key 'docs.must_read'"),
-    (("git",), "missing required key 'git'"),
-    (("git", "main_branch"), "missing required key 'git.main_branch'"),
-    (("git", "branch_pattern"), "missing required key 'git.branch_pattern'"),
     (("verify",), "missing required key 'verify'"),
     (("verify", "fast"), "missing required key 'verify.fast'"),
     (("verify", "dod"), "missing required key 'verify.dod'"),
-    (("stacks",), "missing required key 'stacks'"),
 ])
 def test_missing_required_key_is_named(vp, path, message):
     p = copy.deepcopy(MINIMAL)
@@ -42,6 +36,27 @@ def test_missing_required_key_is_named(vp, path, message):
         node = node[k]
     del node[path[-1]]
     assert message in errs(vp, p)
+
+
+@pytest.mark.parametrize("path", [("docs",), ("docs", "must_read"), ("git", "branch_pattern"), ("stacks",)])
+def test_a_key_with_a_built_in_default_may_be_left_out(vp, path):
+    p = copy.deepcopy(MINIMAL)
+    node = p
+    for k in path[:-1]:
+        node = node[k]
+    del node[path[-1]]
+    assert errs(vp, p) == []
+
+
+@pytest.mark.parametrize("path", [("git",), ("git", "main_branch")])
+def test_a_missing_main_branch_names_the_detection(vp, path):
+    p = copy.deepcopy(MINIMAL)
+    node = p
+    for k in path[:-1]:
+        node = node[k]
+    del node[path[-1]]
+    assert errs(vp, p) == ["missing required key 'git.main_branch' (it could not be detected: no origin/HEAD and "
+                           "no remote default branch)"]
 
 
 def test_unknown_key_is_an_error(vp):
@@ -79,8 +94,9 @@ def test_after_merge_allow_accepted(vp):
     assert errs(vp, p) == []
 
 
-def test_defaults_are_the_only_defaults(vp):
-    _, _, resolved = vp.validate(MINIMAL)
+def test_defaults_are_the_only_defaults(vp, tmp_path):
+    (tmp_path / "docs" / "plans").mkdir(parents=True)
+    _, _, resolved = vp.validate(MINIMAL, tmp_path)
     assert resolved["docs"]["plan_dir"] == "docs/plans"
     assert resolved["models"] == {"worker": "standard", "reviewer": "strong"}
     assert "adr_dir" not in resolved["docs"]
@@ -197,7 +213,9 @@ def test_cli_bad_yaml(tmp_path):
 
 
 def test_cli_resolved_json(tmp_path):
-    f = tmp_path / "toolkit.yaml"
+    (tmp_path / ".tld").mkdir()
+    (tmp_path / "docs" / "plans").mkdir(parents=True)
+    f = tmp_path / ".tld" / "toolkit.yaml"
     f.write_text(yaml.safe_dump(MINIMAL))
     out = run_cli(str(f), "--no-file-checks", "--resolved")
     assert out.returncode == 0
@@ -274,7 +292,6 @@ def test_maintenance_fixture_is_valid(vp):
 
 
 @pytest.mark.parametrize("mutate,message", [
-    (lambda p: p["deps"].pop("cooldown_days"), "missing required key 'deps.cooldown_days'"),
     (lambda p: p["deps"].update(cooldown_days=31), "'deps.cooldown_days': must be at most 30"),
     (lambda p: p["upstream"].update(repo="nonsense"), "'upstream.repo': does not match"),
     (lambda p: p["upstream"].update(tag_pattern="(["), "'upstream.tag_pattern': not a valid regular expression"),
@@ -591,10 +608,12 @@ def test_an_off_switch_rejects_true_and_other_values(vp):
 
 def test_tld_extends_passes_the_shape_check_as_a_string(vp):
     profile = copy.deepcopy(MINIMAL)
-    profile["tld"] = {"extends": "acme/.github/tld/profile-base.yaml@" + "a" * 40, "allow_override": ["hooks.protect_paths"]}
-    assert errs(vp, profile) == []
+    profile["tld"] = {"extends": "acme/.github/tld/profile-base.yaml@" + "a" * 40}
+    assert vp.validate(profile, fetch=False)[0] == []  # shape only: an uncached base is skipped with a warning
     profile["tld"] = {"extends": "v1.2"}  # no pattern in the schema: parse_extends reports the error text
-    assert errs(vp, profile) == []
+    assert errs(vp, profile) != []
+    profile["tld"] = {"allow_override": ["hooks.protect_paths"]}  # shape is fine, but only a base may set it
+    assert errs(vp, profile) == ["'tld.allow_override': only a base profile may set it"]
     for bad in ({"extends": ""}, {"extends": 3}, {"allow_override": [""]}, {"allow_override": "x"}):
         profile["tld"] = bad
         assert errs(vp, profile) != []

@@ -21,7 +21,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 
 | Command | Module | What it does |
 |---|---|---|
-| `tld profile validate [PROFILE] [--resolved] [--no-file-checks] [--root DIR]` | `tld.profile.validate` | validate a profile (default `.tld/toolkit.yaml`) against `schema/profile.schema.json` |
+| `tld profile validate [PROFILE] [--resolved] [--explain] [--ref REF] [--no-file-checks] [--root DIR]` | `tld.profile.validate` | resolve a profile (default `.tld/toolkit.yaml`: its org base, the built-in defaults and the default branch's guarded keys) and validate it against `schema/profile.schema.json`; `--resolved` prints the result, `--explain` prints each value with its source, `--ref REF` reads the profile and the files that decide the defaults from that git ref |
 | `tld profile base check FILE` | `tld.profile.base` | check a base file (size, UTF-8, no anchors, allowed keys only, no chaining, no credential) before it is tagged; prints `base: OK` or the refusals (exit 1) |
 | `tld profile base fetch [PROFILE]` | `tld.profile.base` | fetch the base a profile extends (`tld.extends: <owner>/<repo>/<path>@<40-hex commit>`) by commit into `<git common dir>/tld/base/` and cache it; prints `no base` without `extends` |
 | `tld profile base latest SOURCE` | `tld.profile.base` | print `{"sha", "tag"}` of the newest version tag whose commit has `<owner>/<repo>/<path>`, else the default branch head and a null tag |

@@ -130,7 +130,8 @@ def test_scripts_are_small_stdlib_plus_pyyaml_python_311_without_network():
     stdlib = set(sys.stdlib_module_names)
     local = {"tld", "claude_adapter"}  # the core package and the Claude adapter the entry scripts import
     forbidden = {"socket", "urllib", "http", "requests", "ssl", "ftplib", "smtplib", "httpx", "aiohttp"}
-    for path in [*HOOKS.glob("*.py"), *(TLD / "guard").glob("*.py"), TLD / "dod" / "gate.py"]:
+    resolver = [TLD / "profile" / f"{name}.py" for name in ("resolve", "defaults", "merge", "base")]
+    for path in [*HOOKS.glob("*.py"), *(TLD / "guard").glob("*.py"), TLD / "dod" / "gate.py", *resolver]:
         tree = ast.parse(path.read_text(), feature_version=(3, 11))
         imported = set()
         for node in ast.walk(tree):
@@ -140,7 +141,10 @@ def test_scripts_are_small_stdlib_plus_pyyaml_python_311_without_network():
                 imported.add(node.module.split(".")[0])
         assert imported <= stdlib | local | {"yaml"}, (path.name, imported - stdlib - local)
         assert not imported & forbidden, (path.name, imported & forbidden)
-        assert len(path.read_text().splitlines()) < 480, f"{path.name} is no longer small"
+        # base.py (p2) was already 560 lines when this check reached it and is outside this phase's touches: it keeps
+        # its own bound until a later phase splits it.
+        limit = 600 if path.name == "base.py" else 480
+        assert len(path.read_text().splitlines()) < limit, f"{path.name} is no longer small"
 
 
 def test_hook_names_agree_everywhere():
@@ -197,10 +201,14 @@ def test_schema_rejects_bad_hooks_sections(vp, hooks, message):
     assert any(message in e for e in errors), errors
 
 
-def test_resolved_profile_is_unchanged_by_the_hooks_section(vp):
+def test_resolved_profile_includes_the_hooks_defaults(vp):
     profile = {"docs": {"must_read": []}, "git": {"main_branch": "main", "branch_pattern": "x"},
                "verify": {"fast": [], "dod": ["true"]}, "stacks": []}
-    assert "hooks" not in vp.validate(profile)[2]
+    hooks = vp.validate(profile)[2]["hooks"]
+    assert hooks["disable"] == [] and hooks["protect_paths_allow"] == []
+    assert hooks["protect_paths"] == [".env", ".env.*", "*.lock", "package-lock.json", "go.sum"]
+    assert hooks["dod_gate"] == {"enabled": True, "max_attempts": 3}
+    assert hooks["plan_gate"] == {"enabled": True} and hooks["board_gate"] == {"enabled": True}
 
 
 # ---- the commands that mark themselves exempt -----------------------------------------------------
