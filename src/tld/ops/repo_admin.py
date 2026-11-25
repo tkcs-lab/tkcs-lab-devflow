@@ -45,6 +45,7 @@ from pathlib import Path
 import yaml
 
 from tld.net import SameHostRedirects, opener as net_opener
+from tld.ops.repo_admin_profile import check_profile
 
 HERE = Path(__file__).resolve().parent
 PLUGIN = HERE.parent
@@ -1487,7 +1488,7 @@ CHECKS = {
     "rulesets": check_rulesets, "agent": check_agent, "release": check_release,
     "secrets": check_secrets, "variables": check_variables, "labels": check_labels,
     "webhooks": check_webhooks, "keys": check_keys, "branches": check_branches, "files": check_files,
-    "lint": check_lint,
+    "lint": check_lint, "profile": check_profile,
 }
 
 
