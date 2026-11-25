@@ -23,8 +23,11 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- None.
 
 ## Finishing
 
-- pending
+- final: scope: all four phases stayed inside their touches lists, no out-of-scope path and no collision; the fix round has no touches list and was not scope-checked.
+- final: fix round: 5 fixed, 3 declined
+- final: fix round changed record.py so the issue_url agreement rule runs only for a same-repo issue_url (one error, as plan 3.1 says); the playbooks/board.md prune sentence now names a separately installed older CLI.
+- final: declined: the archived spec stays as approved (closed change); the bounds test already runs in the fast run; CI already installs Node, Playwright and Chromium for the slow tests.
