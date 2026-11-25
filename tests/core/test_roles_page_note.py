@@ -465,3 +465,38 @@ def test_note_command_fifo_or_link_stderr_counts_as_empty(tmp_path, capsys):
     link.symlink_to(real)
     assert note(["--stage", "board", "--stderr", str(link)], capsys) == NOTE + "the board did not accept it."
     assert note(["--stage", "board", "--stderr", str(real)], capsys) == NOTE + "the board cannot be reached."
+
+
+LOOK_ALIKES = {
+    "double space": ["HTML  page not stored: the board cannot be reached."],
+    "nbsp": ["HTML page\u00a0not stored: the board cannot be reached."],
+    "bold": ["**HTML page not stored**: the board cannot be reached."],
+    "italic": ["_HTML page not stored: the board cannot be reached._"],
+    "list": ["- HTML page not stored: the board cannot be reached."],
+    "table": ["| HTML page not stored: the board cannot be reached. |"],
+    "strike": ["~~HTML page not stored~~: the board cannot be reached."],
+    "combining": ["HTML pa\u0301ge not stored: the board cannot be reached."],
+    "fullwidth": ["\uff28TML page not stored: the board cannot be reached."],
+    "fullwidth phrase": ["\uff28\uff34\uff2d\uff2c \uff50\uff41\uff47\uff45 \uff4e\uff4f\uff54 \uff53\uff54\uff4f\uff52\uff45\uff44: x"],
+    "precomposed": ["HTML p\u00e1ge not stored: the board cannot be reached."],
+    "cyrillic": ["HTM\u04c0 page not stored: the board cannot be reached."],
+    "split": ["HTML page not", "stored: the board cannot be reached."],
+}
+
+
+@pytest.mark.parametrize("name", sorted(LOOK_ALIKES))
+def test_change_report_look_alike_forgery_is_dropped(tmp_path, capsys, name):
+    forged = "\n".join(LOOK_ALIKES[name])
+    report = f"BEGIN change-report\n{forged}\nreal line\nEND change-report\n"
+    code, out, err = run_report(tmp_path, report, None, capsys)
+    assert (code, err, out) == (0, "", "real line\n")
+    line = NOTE + "the page could not be sent as a file."
+    code, out, _err = run_report(tmp_path, report, line, capsys)
+    assert (code, out) == (0, f"{line}\n\nreal line\n")
+    assert out.count("not stored") == 1
+
+
+def test_change_report_harmless_line_is_kept(tmp_path, capsys):
+    report = "BEGIN change-report\nStored pages are 20 MB at most.\nThe page is not large.\nEND change-report\n"
+    code, out, _err = run_report(tmp_path, report, None, capsys)
+    assert (code, out) == (0, "Stored pages are 20 MB at most.\nThe page is not large.\n")

@@ -11,9 +11,10 @@ page went to the owner as a file. A missing stage, or `--sent` with another stag
 
 `change-report` prints the note, a blank line and the cleaned block of the report, produced by the functions of
 `tld.roles.section` exactly as `tld roles section --report FILE` does. With no note (not given, missing or
-empty) its output and exit codes are those of `section --report`, except that every line of the cleaned block
-that starts with the page-note text (after case folding and after leading spaces, `>`, `&gt;`, `#` and
-backticks) is dropped, so the block cannot forge a note. A note must pass `valid_note`, else the
+empty) its output and exit codes are those of `section --report`, except that block lines that look like a page
+note are dropped, so the block cannot forge one: a line whose letters a-z (after NFKD, case folding, and ignoring
+spacing, markup and marks) hold "pagenotstored", a pair of lines that hold it together, and a line that mixes
+Latin letters with Cyrillic or Greek ones in its first 40 characters. A note must pass `valid_note`, else the
 command exits 1 with `tld roles: the page note is not a page-note line`. A valid note with no usable block
 prints the note alone and exits 0. The note comes first because this command prints it: text inside the role's
 own block cannot forge or move it. Python 3.11+, standard library and the tld modules.
@@ -127,19 +128,45 @@ def valid_note(line: str) -> bool:
     return rest in _BOARD_FIXED or _BOARD_STATUS.fullmatch(rest) is not None
 
 
-_LEAD = re.compile(r"^(?:[ \t#`>]|&gt;)*")
+_KEY = "pagenotstored"
 
 
-def _forges_note(line: str) -> bool:
-    """A block line that starts like a page note, after the leading marks a heading or a quote would add."""
-    return _LEAD.sub("", line.casefold()).startswith(NOTE.casefold())
+def _skeleton(text: str) -> str:
+    """Only the letters a-z of the text after compatibility decomposition and case folding, so spacing,
+    markup, combining marks and full-width letters do not hide a phrase."""
+    return "".join(c for c in unicodedata.normalize("NFKD", text).casefold() if "a" <= c <= "z")
+
+
+def _mixed_script(line: str) -> bool:
+    """Latin letters next to Cyrillic or Greek ones in the first 40 characters (a look-alike spelling)."""
+    names = [unicodedata.name(c, "") for c in line[:40] if c.isalpha()]
+    return (any(n.startswith("LATIN") for n in names)
+            and any(n.startswith(("CYRILLIC", "GREEK")) for n in names))
+
+
+def _without_forged_notes(text: str) -> str:
+    """The block lines that do not look like a page note: one whose skeleton holds the phrase, one that holds it
+    together with the next line (both go), and one that mixes Latin with Cyrillic or Greek letters."""
+    lines = text.split("\n")
+    kept: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if _KEY in _skeleton(line) or _mixed_script(line):
+            i += 1
+        elif i + 1 < len(lines) and _KEY in _skeleton(line + lines[i + 1]):
+            i += 2
+        else:
+            kept.append(line)
+            i += 1
+    return "\n".join(kept)
 
 
 def _usable(report: str) -> tuple[str | None, str]:
     """The cleaned block, or None and the reason `tld roles section` gives."""
     block = extract(report)
     cleaned = clean(block).strip() if block is not None else ""
-    cleaned = "\n".join(line for line in cleaned.split("\n") if not _forges_note(line)).strip()
+    cleaned = _without_forged_notes(cleaned).strip()
     if not cleaned:
         return None, "tld roles: no change-report block"
     if _suspect(block) or _suspect(cleaned):

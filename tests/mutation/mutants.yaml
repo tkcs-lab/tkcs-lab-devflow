@@ -906,5 +906,10 @@ mutants:
 - id: PN5
   file: src/tld/roles/page_note.py
   why: a block line that looks like a page note is kept, so the block can forge a note (killed by test_change_report_block_only_forgery_is_dropped)
-  old: 'if not _forges_note(line)'
-  new: 'if True'
+  old: 'cleaned = _without_forged_notes(cleaned).strip()'
+  new: 'cleaned = cleaned.strip()'
+- id: PN6
+  file: src/tld/roles/page_note.py
+  why: the look-alike spellings are not normalised before the phrase is searched (killed by test_change_report_look_alike_forgery_is_dropped)
+  old: 'unicodedata.normalize("NFKD", text).casefold()'
+  new: 'text.casefold()'
