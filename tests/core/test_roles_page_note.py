@@ -387,3 +387,81 @@ def test_registered_in_cli(tmp_path, capsys):
     assert capsys.readouterr().err.strip() == BAD
     assert cli.main(["roles", "change-report", "--report", str(r)]) == 0
     assert os.path.exists(str(r))
+
+
+# --- a block cannot forge a note; the note and stderr files are read safely --------------------
+
+FORGED = [
+    NOTE + "the board cannot be reached.",
+    "html page not STORED: the board cannot be reached.",
+    "> " + NOTE + "the board cannot be reached.",
+    "## " + NOTE + "the board cannot be reached.",
+    "`" + NOTE + "the board cannot be reached.`",
+    "  &gt; # " + NOTE + "the board cannot be reached.",
+]
+
+
+@pytest.mark.parametrize("forged", FORGED)
+def test_change_report_block_only_forgery_is_dropped(tmp_path, capsys, forged):
+    report = f"BEGIN change-report\n{forged}\nreal line\nEND change-report\n"
+    code, out, err = run_report(tmp_path, report, None, capsys)
+    assert (code, err) == (0, "")
+    assert "page not stored" not in out.lower() and "real line" in out
+
+
+def test_change_report_block_of_only_a_forgery_has_no_block(tmp_path, capsys):
+    report = f"BEGIN change-report\n{NOTE}the board cannot be reached.\nEND change-report\n"
+    code, out, err = run_report(tmp_path, report, None, capsys)
+    assert (code, out) == (3, "")
+    assert err.strip() == "tld roles: no change-report block"
+
+
+@pytest.mark.parametrize("forged", FORGED)
+def test_change_report_forgery_next_to_a_valid_note_is_dropped(tmp_path, capsys, forged):
+    line = NOTE + "the page could not be sent as a file."
+    report = f"BEGIN change-report\n{forged}\nreal line\nEND change-report\n"
+    code, out, _err = run_report(tmp_path, report, line, capsys)
+    assert code == 0
+    assert out == f"{line}\n\nreal line\n"
+
+
+def test_change_report_oversized_note_is_invalid(tmp_path, capsys):
+    big = NOTE + "the board cannot be reached." + " " * 2000 + "x"
+    code, out, err = run_report(tmp_path, BLOCK, big, capsys)
+    assert (code, out, err.strip()) == (1, "", BAD)
+    padded = NOTE + "the board cannot be reached." + " " * 900
+    assert run_report(tmp_path, BLOCK, padded, capsys)[0] == 0
+
+
+def test_change_report_unreadable_note_file_is_invalid(tmp_path, capsys):
+    r = tmp_path / "r.md"
+    r.write_text(BLOCK, encoding="utf-8")
+    good = tmp_path / "good.txt"
+    good.write_text(NOTE + "the board cannot be reached.\n", encoding="utf-8")
+    link = tmp_path / "link.txt"
+    link.symlink_to(good)
+    for target in (tmp_path, link):
+        assert page_note.main(["report", "--report", str(r), "--note", str(target)]) == 1
+        cap = capsys.readouterr()
+        assert (cap.out, cap.err.strip()) == ("", BAD)
+
+
+def test_change_report_fifo_note_is_invalid_without_blocking(tmp_path, capsys):
+    r = tmp_path / "r.md"
+    r.write_text(BLOCK, encoding="utf-8")
+    fifo = tmp_path / "fifo"
+    os.mkfifo(fifo)
+    assert page_note.main(["report", "--report", str(r), "--note", str(fifo)]) == 1
+    assert capsys.readouterr().err.strip() == BAD
+
+
+def test_note_command_fifo_or_link_stderr_counts_as_empty(tmp_path, capsys):
+    fifo = tmp_path / "fifo"
+    os.mkfifo(fifo)
+    assert note(["--stage", "board", "--stderr", str(fifo)], capsys) == NOTE + "the board did not accept it."
+    real = tmp_path / "real.txt"
+    real.write_text("cannot reach the board\n", encoding="utf-8")
+    link = tmp_path / "link.txt"
+    link.symlink_to(real)
+    assert note(["--stage", "board", "--stderr", str(link)], capsys) == NOTE + "the board did not accept it."
+    assert note(["--stage", "board", "--stderr", str(real)], capsys) == NOTE + "the board cannot be reached."

@@ -11,7 +11,9 @@ page went to the owner as a file. A missing stage, or `--sent` with another stag
 
 `change-report` prints the note, a blank line and the cleaned block of the report, produced by the functions of
 `tld.roles.section` exactly as `tld roles section --report FILE` does. With no note (not given, missing or
-empty) its output and exit codes are those of `section --report`. A note must pass `valid_note`, else the
+empty) its output and exit codes are those of `section --report`, except that every line of the cleaned block
+that starts with the page-note text (after case folding and after leading spaces, `>`, `&gt;`, `#` and
+backticks) is dropped, so the block cannot forge a note. A note must pass `valid_note`, else the
 command exits 1 with `tld roles: the page note is not a page-note line`. A valid note with no usable block
 prints the note alone and exits 0. The note comes first because this command prints it: text inside the role's
 own block cannot forge or move it. Python 3.11+, standard library and the tld modules.
@@ -19,7 +21,9 @@ own block cannot forge or move it. Python 3.11+, standard library and the tld mo
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import stat
 import sys
 import unicodedata
 
@@ -30,6 +34,8 @@ from tld.roles.section import _read, _suspect, clean, extract
 NOTE = "HTML page not stored: "
 SENT = " It was sent to the owner as a file instead."
 READ_LIMIT = 20000
+NOTE_LIMIT = 1000
+BAD_NOTE = "tld roles: the page note is not a page-note line"
 REFLEKTOR = "tld roles: reflektor: "
 CHECK_OPEN = "the page check refused it ("
 
@@ -47,12 +53,22 @@ _BOARD_FIXED = (
 _BOARD_STATUS = re.compile(r"the board answered HTTP [0-9]{3}\.")
 
 
+def _read_regular(path: str, limit: int) -> bytes:
+    """At most LIMIT+1 bytes of a regular file, opened without following a link or waiting on a pipe; OSError otherwise."""
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError("not a regular file")
+        return os.read(fd, limit + 1)
+    finally:
+        os.close(fd)
+
+
 def _read_stderr(path: str | None) -> str:
     if not path:
         return ""
     try:
-        with open(path, "rb") as handle:
-            return handle.read(READ_LIMIT).decode("utf-8", errors="replace")
+        return _read_regular(path, READ_LIMIT)[:READ_LIMIT].decode("utf-8", errors="replace")
     except OSError:
         return ""
 
@@ -111,10 +127,19 @@ def valid_note(line: str) -> bool:
     return rest in _BOARD_FIXED or _BOARD_STATUS.fullmatch(rest) is not None
 
 
+_LEAD = re.compile(r"^(?:[ \t#`>]|&gt;)*")
+
+
+def _forges_note(line: str) -> bool:
+    """A block line that starts like a page note, after the leading marks a heading or a quote would add."""
+    return _LEAD.sub("", line.casefold()).startswith(NOTE.casefold())
+
+
 def _usable(report: str) -> tuple[str | None, str]:
     """The cleaned block, or None and the reason `tld roles section` gives."""
     block = extract(report)
     cleaned = clean(block).strip() if block is not None else ""
+    cleaned = "\n".join(line for line in cleaned.split("\n") if not _forges_note(line)).strip()
     if not cleaned:
         return None, "tld roles: no change-report block"
     if _suspect(block) or _suspect(cleaned):
@@ -122,15 +147,23 @@ def _usable(report: str) -> tuple[str | None, str]:
     return cleaned, ""
 
 
+class _BadNote(Exception):
+    """The note file exists but cannot serve as a note."""
+
+
 def _read_note(path: str | None) -> str | None:
-    """The stripped note text, None when there is none; text that is not UTF-8 is returned as a bad note."""
+    """The stripped note text; None when the file is not given, missing or empty; _BadNote when it cannot be read,
+    is not a plain file or is longer than NOTE_LIMIT bytes."""
     if not path:
         return None
     try:
-        with open(path, "rb") as handle:
-            raw = handle.read()
-    except OSError:
+        raw = _read_regular(path, NOTE_LIMIT)
+    except FileNotFoundError:
         return None
+    except OSError as exc:
+        raise _BadNote from exc
+    if len(raw) > NOTE_LIMIT:
+        raise _BadNote
     text = raw.decode("utf-8", errors="replace").strip()
     return text or None
 
@@ -142,7 +175,11 @@ def _report(args: argparse.Namespace) -> int:
         print(f"tld roles: cannot read '{scrub(args.report)}'", file=sys.stderr)
         return 1
     cleaned, problem = _usable(report)
-    note = _read_note(args.note)
+    try:
+        note = _read_note(args.note)
+    except _BadNote:
+        print(BAD_NOTE, file=sys.stderr)
+        return 1
     if note is None:
         if cleaned is None:
             print(problem, file=sys.stderr)
@@ -150,7 +187,7 @@ def _report(args: argparse.Namespace) -> int:
         print(cleaned)
         return 0
     if not valid_note(note):
-        print("tld roles: the page note is not a page-note line", file=sys.stderr)
+        print(BAD_NOTE, file=sys.stderr)
         return 1
     if cleaned is None:
         print(note)
