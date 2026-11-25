@@ -664,3 +664,14 @@ def test_unreadable_ask_files_do_not_crash_the_counter(tmp_path):
     (tmp_path / "deep.json").write_text("[" * 100000)
     c = dataclasses.replace(ctx(actions=[shell("tld board ask bin.json"), shell("tld board ask deep.json")], max=5), workdir=tmp_path)
     assert ask_question_ids(c.actions, tmp_path) == [[], []]
+
+
+def test_migrate_dry_run_task_fails_a_run_that_asks():
+    """The migrate-off-default-paths task grades `--dry-run`: the playbook stops before any ask, so one ask fails it."""
+    import yaml
+    from conftest import ROOT
+    task = yaml.safe_load((ROOT / "evals/tasks/migrate-off-default-paths/task.yaml").read_text())
+    spec = next(g for g in task["graders"] if isinstance(g, dict) and g["name"] == "asks_at_most")
+    assert spec["max"] == 0
+    assert not GRADERS["asks_at_most"](ctx(actions=[ask(["docs.index"])], max=spec["max"])).passed
+    assert GRADERS["asks_at_most"](ctx(actions=[], max=spec["max"])).passed
