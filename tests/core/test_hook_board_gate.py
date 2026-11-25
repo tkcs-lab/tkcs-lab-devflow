@@ -113,6 +113,13 @@ def test_docs_init_and_tidy_open_the_state_and_block_once_without_a_write(board,
     assert stop(board).verdict == "allow"
 
 
+def test_quick_opens_the_state_and_blocks_once_without_a_write(board):
+    prompt(board, "quick", text="/tld:quick x")
+    assert state(board)["command"] == "quick"
+    assert stop(board).verdict == "deny"
+    assert stop(board).verdict == "allow"
+
+
 def test_a_plain_prompt_does_not_open_the_state(repo):
     prompt(repo, None, text="hello")
     assert not has_state(repo)

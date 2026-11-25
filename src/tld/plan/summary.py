@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """The `## Summary` section of a plan, a tracking-issue body or a pull-request body.
 
-    summary.py FILE --kind plan|issue|pr [--deviations FILE]
+    summary.py FILE --kind plan|issue|pr [--deviations FILE] [--findings N]
 
 Checks where the Summary stands, its labels and their order, hidden markup and the word limit (350 for a plan
 and an issue, 175 for a pull request). With `--deviations` it also checks that `None.` is not claimed over a
-non-empty deviations file. Prints one `summary: <problem>` line per problem and exits 1, or prints
+non-empty deviations file. For a pull request it checks the rows of a `## Non-blocking findings` section when
+there is one; with `--findings N` that section must exist and hold exactly N rows. Prints one `summary: <problem>` line per problem and exits 1, or prints
 `summary: OK (<n> words)`. Reads one file of at most 1000000 bytes, runs nothing. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
@@ -14,6 +15,8 @@ import argparse
 import re
 import sys
 import unicodedata
+
+from tld.plan import findings as findings_check
 
 KINDS = ("plan", "issue", "pr")
 MAX_WORDS = {"plan": 350, "issue": 350, "pr": 175}
@@ -30,6 +33,7 @@ REQUIRED = {
 }
 NONE_OK = ("Deviations", "Security", "Performance")
 TEXT_MAX = 80
+FINDINGS_HEADING = "Non-blocking findings"
 MAX_BYTES = 1000000
 MIN_VALUE_WORDS = 3
 PLACEHOLDERS = ("tbd", "todo", "n/a", "see below", "...")
@@ -154,7 +158,21 @@ def placement(lines: list[str], kinds: list[str], heads: list[tuple[int, str]], 
     return []
 
 
-def check(text: str, kind: str, deviations_text: str | None = None) -> tuple[list[str], int]:
+def findings_problems(lines: list[str], heads: list[tuple[int, str]], n: int | None) -> list[str]:
+    """The problems of the `## Non-blocking findings` section; `n` is the count from --findings, or None."""
+    found = [h for h in heads if h[1] == FINDINGS_HEADING]
+    if len(found) > 1:
+        return [f"{len(found)} '## {FINDINGS_HEADING}' sections"]
+    if not found:
+        return [f"no '## {FINDINGS_HEADING}' section"] if n is not None else []
+    top = found[0][0]
+    below = [h[0] for h in heads if h[0] > top]
+    body = lines[top + 1:below[0] if below else len(lines)]
+    return [f"findings: {p}" for p in findings_check.check(body, n)]
+
+
+def check(text: str, kind: str, deviations_text: str | None = None,
+          findings: int | None = None) -> tuple[list[str], int]:
     """(problems, word count of the Summary section) for the text of a document."""
     lines = normalise(text).split("\n")
     kinds = scan(lines)
@@ -228,6 +246,8 @@ def check(text: str, kind: str, deviations_text: str | None = None) -> tuple[lis
         count = sum(1 for item in recorded if item not in ("None.", "pending"))
         if count:
             problems.append(f"Deviations says None. but the deviations file records {count} deviations")
+    if kind == "pr":
+        problems += findings_problems(lines, heads, findings)
     return problems, words
 
 
@@ -256,7 +276,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("file", metavar="FILE", help="the plan, issue body or pull request body")
     ap.add_argument("--kind", required=True, choices=KINDS, help="what the file is")
     ap.add_argument("--deviations", metavar="FILE", help="the deviations file (only with --kind pr)")
+    ap.add_argument("--findings", type=int, metavar="N", help="the number of findings (only with --kind pr)")
     args = ap.parse_args(argv)
+    if args.findings is not None and args.kind != "pr":
+        ap.error("--findings is only for --kind pr")
+    if args.findings is not None and args.findings < 0:
+        ap.error("--findings must be 0 or more")
     if args.deviations is not None and args.kind != "pr":
         ap.error("--deviations is only for --kind pr")
     try:
@@ -264,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
         deviations = read(args.deviations) if args.deviations is not None else None
     except ReadError as exc:
         return report([str(exc)])
-    problems, words = check(text, args.kind, deviations)
+    problems, words = check(text, args.kind, deviations, args.findings)
     if problems:
         return report(problems)
     print(f"summary: OK ({words} words)")

@@ -221,6 +221,28 @@ def sections_present(ctx: GradeContext) -> GradeResult:
     return GradeResult(True, f"all {len(sections)} sections present")
 
 
+@grader("findings_section_valid")
+def findings_section_valid(ctx: GradeContext) -> GradeResult:
+    count = ctx.params.get("count")
+    docs = ctx.docs(ctx.params.get("glob", "*.md"))
+    if not docs:
+        return GradeResult(False, "no document")
+    heading = "## Non-blocking findings"
+    lines = docs[0].text.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.strip() == heading]
+    if not starts:
+        return GradeResult(False, f"no '{heading}' section")
+    body = []
+    for line in lines[starts[0] + 1:]:
+        if line.startswith("## "):
+            break
+        body.append(line)
+    problems = plugin_script("findings").check(body, count)
+    if problems:
+        return GradeResult(False, problems[0])
+    return GradeResult(True, "section valid")
+
+
 @grader("no_manifest")
 def no_manifest(ctx: GradeContext) -> GradeResult:
     vm = plugin_script("validate_manifest")

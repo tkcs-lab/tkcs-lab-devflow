@@ -1,0 +1,9 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "files": {
+    "pr-body.md": "Closes #5\n\n## Summary\n\n**Deviations:** None.\n**Review focus:** the three findings, rows below.\n\n## Non-blocking findings\n\n- F1 · final-review · notes/cli.py:12 · the limit help text is missing · fixed abc1234def\n- F2 · code-reviewer@dod · notes/store.py:30 · a variable name is unclear · fixed 0123456789ab\n- F3 · final-review · notes/cli.py:40 · caching the note list was suggested · declined: notes are read once per run so caching adds state\n"
+  },
+  "result_text": "pr-body.md written."
+}

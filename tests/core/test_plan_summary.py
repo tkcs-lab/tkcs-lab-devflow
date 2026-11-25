@@ -660,3 +660,71 @@ def test_the_script_runs_as_a_module(tmp_path):
     r = subprocess.run([sys.executable, "-m", "tld.plan.summary", str(path), "--kind", "plan"],
                        capture_output=True, text=True, cwd=ROOT, env=env)
     assert (r.returncode, r.stdout) == (0, f"summary: OK ({PLAN_BASE} words)\n"), r.stderr
+
+
+# --- --findings --------------------------------------------------------------------------------------------------
+FROW = "- F{k} \u00b7 final-review \u00b7 a.py:1 \u00b7 a b c d \u00b7 {status}"
+
+
+def findings_doc(*statuses, heading="## Non-blocking findings"):
+    rows = "\n".join(FROW.format(k=i, status=st) for i, st in enumerate(statuses, 1))
+    return pr_doc() + f"\n{heading}\n\n{rows}\n"
+
+
+def test_a_valid_findings_section_with_findings_2_exits_0(tmp_path, capsys):
+    code, out, _ = run(tmp_path, capsys, findings_doc("fixed abc1234", "declined: not worth the risk"),
+                       "--findings", "2", kind="pr")
+    assert code == 0 and out.startswith("summary: OK")
+
+
+def test_a_missing_findings_section_with_findings_1_fails(tmp_path, capsys):
+    code, out, _ = run(tmp_path, capsys, pr_doc(), "--findings", "1", kind="pr")
+    assert code == 1 and "summary: no '## Non-blocking findings' section" in out
+
+
+def test_a_pr_without_the_section_and_without_findings_is_ok(tmp_path, capsys):
+    assert run(tmp_path, capsys, pr_doc(), kind="pr")[0] == 0
+
+
+def test_a_declined_row_with_a_two_word_reason_fails_without_findings(tmp_path, capsys):
+    code, out, _ = run(tmp_path, capsys, findings_doc("declined: no way"), kind="pr")
+    assert code == 1 and "summary: findings: row 1" in out
+
+
+def test_findings_with_kind_plan_is_an_argument_error(tmp_path, capsys):
+    path = tmp_path / "d.md"
+    path.write_text(plan_doc())
+    with pytest.raises(SystemExit) as exc:
+        summary.main([str(path), "--kind", "plan", "--findings", "1"])
+    assert exc.value.code == 2 and "--findings is only for --kind pr" in capsys.readouterr().err
+
+
+def test_a_negative_findings_is_an_argument_error(tmp_path, capsys):
+    path = tmp_path / "d.md"
+    path.write_text(pr_doc())
+    with pytest.raises(SystemExit) as exc:
+        summary.main([str(path), "--kind", "pr", "--findings", "-1"])
+    assert exc.value.code == 2 and "--findings must be 0 or more" in capsys.readouterr().err
+
+
+def test_two_findings_sections_are_reported(tmp_path, capsys):
+    text = findings_doc("fixed abc1234") + "\n## Non-blocking findings\n\nNone.\n"
+    code, out, _ = run(tmp_path, capsys, text, kind="pr")
+    assert code == 1 and "2 '## Non-blocking findings' sections" in out
+
+
+def test_the_count_reaches_the_checker(tmp_path, capsys):
+    code, out, _ = run(tmp_path, capsys, findings_doc("fixed abc1234", "fixed abc1235"), "--findings", "3", kind="pr")
+    assert code == 1 and "summary: findings: 2 rows, expected 3" in out
+
+
+def test_findings_0_with_none_exits_0(tmp_path, capsys):
+    text = pr_doc() + "\n## Non-blocking findings\n\nNone.\n"
+    assert run(tmp_path, capsys, text, "--findings", "0", kind="pr")[0] == 0
+
+
+def test_a_fenced_findings_heading_is_ignored(tmp_path, capsys):
+    text = pr_doc() + "\n```\n## Non-blocking findings\n```\n"
+    assert run(tmp_path, capsys, text, kind="pr")[0] == 0
+    code, out, _ = run(tmp_path, capsys, text, "--findings", "1", kind="pr")
+    assert code == 1 and "no '## Non-blocking findings' section" in out

@@ -11,6 +11,7 @@ from tld.plan import summary
 
 MAKE_PLAN = ROOT / "playbooks" / "make-plan.md"
 IMPLEMENT = ROOT / "playbooks" / "implement.md"
+QUICK = ROOT / "playbooks" / "quick.md"
 
 PLAN_DOC = """# Title
 
@@ -60,7 +61,11 @@ PR_DOC = """Closes #36
 
 - [x] The check passes.
 
-**Final review:** approve. Non-blocking findings: none.
+**Final review:** approve.
+
+## Non-blocking findings
+
+None.
 
 ## Scope
 
@@ -127,7 +132,7 @@ def test_the_helper_rejects_an_unknown_kind(tmp_path, monkeypatch):
         check_kinds(bad)
 
 
-@pytest.mark.parametrize("path", [MAKE_PLAN, IMPLEMENT], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [MAKE_PLAN, IMPLEMENT, QUICK], ids=lambda p: p.name)
 def test_every_call_passes_on_a_valid_fixture(path, tmp_path):
     calls = summary_calls(path)
     assert calls
@@ -137,13 +142,24 @@ def test_every_call_passes_on_a_valid_fixture(path, tmp_path):
         dev = tmp_path / f"dev{n}.md"
         dev.write_text(DEVIATIONS)
         files = iter([str(doc), str(dev)])
-        argv = [re.sub(r"^X$", lambda _: next(files), tok) for tok in rest.split()]
+        toks = rest.split()
+        argv = []
+        for i, tok in enumerate(toks):
+            if tok == "X" and i and toks[i - 1] == "--findings":
+                argv.append("0")  # the count of the fixture's section
+            else:
+                argv.append(re.sub(r"^X$", lambda _: next(files), tok))
         r = subprocess.run(tld_cmd("plan", "summary-check", *argv), capture_output=True, text=True, timeout=60)
         assert (r.returncode, r.stdout.startswith("summary: OK")) == (0, True), r.stdout + r.stderr
 
 
 def test_implement_checks_before_the_pull_request_is_created():
     text = section(IMPLEMENT.read_text(), "## 6. Finishing")
+    assert 0 <= text.index("summary-check") < text.index("github.pr_create")
+
+
+def test_quick_checks_before_the_pull_request_is_created():
+    text = section(QUICK.read_text(), "## 6. The pull request")
     assert 0 <= text.index("summary-check") < text.index("github.pr_create")
 
 

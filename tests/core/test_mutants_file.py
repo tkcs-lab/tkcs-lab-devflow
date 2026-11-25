@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "tests" / "mutation"))
 import run_mutants  # noqa: E402
 
 MODULES = ("src/tld/board/record.py", "src/tld/guard/", "src/tld/profile/validate.py", "src/tld/plan/manifest.py", "src/tld/plan/active.py",
-           "src/tld/plan/summary.py",
+           "src/tld/plan/summary.py", "src/tld/plan/findings.py",
            "src/tld/ops/release_prepare.py", "src/tld/ops/spec.py", "src/tld/ops/sysml.py",
            "src/tld/sysml/files.py", "src/tld/sysml/change.py",
            "src/tld/ops/deps_checks.py", "src/tld/ops/deps_prepare.py", "src/tld/ops/deps_body.py")

@@ -28,11 +28,28 @@ AGENTS_EXPECTED = {"roles": {"posture": {"security": "critical"}, "required": [{
 AGENTS_PROFILE = PROFILE + "roles:\n  posture:\n    security: critical\n  required:\n    - {role: security-reviewer, at: [dod], blocking: false}\n"
 GOOD_STATUS = (FIXTURES / "status-records" / "good-run.json").read_text()
 
+FINDINGS_BODY = (
+    "Closes #5\n\n## Summary\n\n**Deviations:** None.\n**Review focus:** the rows below.\n\n## Non-blocking findings\n\n"
+    "- F1 · final-review · notes/cli.py:12 · the limit help text is missing · fixed abc1234def\n"
+    "- F2 · code-reviewer@dod · notes/store.py:30 · a variable name is unclear · fixed 0123456789ab\n"
+    "- F3 · final-review · notes/cli.py:40 · caching the note list was suggested · declined: notes are read once per run\n")
+
+
+def body(text, **params):
+    return ctx([("worktree", "pr-body.md", text)], glob="pr-body.md", **params)
+
 DOCS_OK = [("origin/chore/deps-x", "requirements.in", "alpha==2.0.0\n"), ("origin/chore/deps-x", "requirements.lock", "# lock\nalpha==2.0.0\n")]
 BF_EXPECTED = {"branch_files": {"equals": {"requirements.in": "alpha==2.0.0\n", "requirements.lock": "# lock\nalpha==2.0.0\n"}, "absent": ["gamma==2.0.0"]}}
 
 # name -> (good ctx, [(label, bad ctx), ...])
 CASES = {
+    "findings_section_valid": (
+        body(FINDINGS_BODY, count=3),
+        [("no document", ctx([], glob="pr-body.md", count=3)),
+         ("no section", body(FINDINGS_BODY.replace("## Non-blocking findings", "## Other"), count=3)),
+         ("two-word reason", body(FINDINGS_BODY.replace("declined: notes are read once per run", "declined: not needed"), count=3)),
+         ("three rows, count 2", body(FINDINGS_BODY, count=2))],
+    ),
     "manifest_valid": (
         ctx(plan_docs()),
         [("no plan", ctx([])),

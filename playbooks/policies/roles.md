@@ -54,13 +54,13 @@ With `docs.index`, `Must-read docs` holds the must-read docs plus the docs read 
 |---|---|---|---|
 | `make_plan` | the planner | review | a blocking finding is resolved in the plan before it is pushed; a non-blocking one goes to the plan's Risks |
 | `implement_phase` | the phase's worker | edit for the edit roles, review for the others | the orchestrator sends the phase back; it is not merged |
-| `implement_final` | the final reviewer | review | a blocking finding is a blocking finding of the review (`verdict=changes`) |
+| `implement_final` | the final reviewer | review | a blocking finding is a blocking finding of the review (`verdict=changes`); its non-blocking findings feed the fix round of [findings-fix.md](findings-fix.md) |
 | `review` | the review session, as its dimensions | review | its findings are the review's candidates |
-| `dod` | the dod session (also the orchestrator's) | review | row `FAIL` |
+| `dod` | the dod session (also the orchestrator's) | review | row `FAIL`; its non-blocking findings feed the fix round of [findings-fix.md](findings-fix.md) |
 
 `tld roles required` prints `mode: edit` only for an edit role at `implement_phase`; every other point,
 the orchestrator's dod included, runs roles in review mode. A role runs **at most once per point**; the one
-exception is a re-run after the dispatching session fixed that role's own blocking findings.
+exception is a re-run after the dispatching session fixed that role's own blocking findings; the fix round runs no role of the implement_final or dod points again.
 
 **Fixing a blocking finding.** A review-mode role's blocking finding is fixed by the session that ran it (the
 worker at `implement_phase`, the planner at `make_plan`), and the same role is then run again at the same
