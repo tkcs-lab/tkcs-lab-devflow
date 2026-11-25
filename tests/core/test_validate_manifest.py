@@ -171,21 +171,31 @@ def _warns(vm, entry, profile=None):
     return vm.validate(m, profile)
 
 
+# The profile and ordinary workflows are off the default protect list; a repository that lists them gets the warnings.
+LISTED = {"hooks": {"protect_paths": [".tld/toolkit.yaml", ".github/workflows/**"]}}
+
+
+def test_the_profile_and_ordinary_workflows_are_not_protected_by_default(vm):
+    for entry in (".tld/toolkit.yaml", ".github/workflows/ci.yml", ".github/**", ".github/"):
+        errs, warns = _warns(vm, entry)
+        assert errs == [] and warns == [], entry
+
+
 def test_a_protected_path_in_touches_is_a_warning(vm):
     for entry in (".tld/toolkit.yaml", ".github/workflows/ci.yml"):
-        errs, warns = _warns(vm, entry)
+        errs, warns = _warns(vm, entry, LISTED)
         assert errs == [], entry
         assert any(f"touches '{entry}' is a protected path" in w and "protected-changes.md" in w for w in warns), entry
 
 
 def test_a_wildcard_over_protected_paths_is_a_warning(vm):
-    errs, warns = _warns(vm, ".github/**")
+    errs, warns = _warns(vm, ".github/**", LISTED)
     assert errs == []
     assert any("touches '.github/**' could name a protected path" in w for w in warns)
 
 
 def test_a_directory_entry_is_checked_like_its_glob(vm):
-    errs, warns = _warns(vm, ".github/")
+    errs, warns = _warns(vm, ".github/", LISTED)
     assert errs == []
     assert any("touches '.github/' could name a protected path" in w for w in warns)
 
@@ -215,6 +225,8 @@ def test_the_profile_protect_list_replaces_the_default(vm):
 
 def test_a_profile_without_hooks_gives_the_default_check(vm):
     errs, warns = _warns(vm, ".tld/toolkit.yaml", {"git": {}})
+    assert errs == [] and warns == []  # the default list has no path with a slash
+    errs, warns = _warns(vm, ".tld/toolkit.yaml", {"git": {}, **LISTED})
     assert errs == []
     assert any("is a protected path" in w for w in warns)
 
