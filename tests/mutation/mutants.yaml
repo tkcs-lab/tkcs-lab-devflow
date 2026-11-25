@@ -14,7 +14,11 @@ tests:
   - tests/core/test_guard_corpus.py
   src/tld/guard/secret_scan.py:
   - tests/core/test_hook_secret_scan.py
+  - tests/core/test_roles_reflektor_page.py
   - tests/core/test_guard_mutations.py
+  src/tld/roles/reflektor.py:
+  - tests/core/test_roles_reflektor_page.py
+  - tests/core/test_roles_reflektor.py
   src/tld/guard/protect_paths.py:
   - tests/core/test_hook_protect_paths.py
   - tests/core/test_hook_protect_paths_setup.py
@@ -163,8 +167,8 @@ mutants:
 - id: SS1
   file: src/tld/guard/secret_scan.py
   why: allow mark anywhere
-  old: 'if line.rstrip().endswith(ALLOW_MARK):'
-  new: 'if ALLOW_MARK in line:'
+  old: 'skip_marked and line.rstrip().endswith(ALLOW_MARK):'
+  new: 'skip_marked and ALLOW_MARK in line:'
 - id: SS2
   file: src/tld/guard/secret_scan.py
   why: entropy threshold 4.5
@@ -195,6 +199,41 @@ mutants:
   why: jwt dropped
   old: \.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}
   new: \.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{800,}
+- id: SS12
+  file: src/tld/guard/secret_scan.py
+  why: the allow mark is honoured when the flag says not to
+  old: 'skip_marked and line.rstrip().endswith(ALLOW_MARK):'
+  new: 'line.rstrip().endswith(ALLOW_MARK):'
+- id: RF1
+  file: src/tld/roles/reflektor.py
+  why: the raw page scan honours the mark
+  old: 'hits = secret_scan.scan_text(text, skip_marked=False)'
+  new: 'hits = secret_scan.scan_text(text)'
+- id: RF2
+  file: src/tld/roles/reflektor.py
+  why: the decoded string scan honours the mark
+  old: 'hits = secret_scan.scan_text(s, skip_marked=False)'
+  new: 'hits = secret_scan.scan_text(s)'
+- id: RF3
+  file: src/tld/roles/reflektor.py
+  why: the mark is not replaced
+  old: 'return s.replace(ALLOW_MARK, REDACTED_MARK), s.count(ALLOW_MARK)'
+  new: 'return s, 0'
+- id: RF4
+  file: src/tld/roles/reflektor.py
+  why: an escaped mark is not found in the decoded data
+  old: 'if ALLOW_MARK in s:'
+  new: 'if False:'
+- id: RF5
+  file: src/tld/roles/reflektor.py
+  why: a mark left in the raw text is not found
+  old: 'if ALLOW_MARK in text:'
+  new: 'if False:'
+- id: RF6
+  file: src/tld/roles/reflektor.py
+  why: the page written is not scanned again after the mark is replaced
+  old: 'reasons = verify_html(neutral) or marks_left(neutral)'
+  new: 'reasons = report_check.check(neutral) or marks_left(neutral)'
 - id: PP1
   file: src/tld/guard/protect_paths.py
   why: profile always allowed

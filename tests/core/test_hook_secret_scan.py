@@ -112,6 +112,17 @@ def test_allow_mark_must_end_the_line(feature_repo):
     assert run(HOOK, event("Write", feature_repo, file_path="a", content=end)).code == 0
 
 
+def test_default_scan_unchanged():
+    from conftest import _load
+    scan = _load("tld.guard.secret_scan").scan_text
+    marked = "t = '" + "ghp_" + rand(36) + "'  # secret-scan:allow"
+    assert scan(marked) == [] and scan(marked, skip_marked=True) == []
+    got = scan(marked, skip_marked=False)
+    assert len(got) == 1 and got[0][1] == "github-token"
+    with pytest.raises(TypeError):
+        scan(marked, False)
+
+
 def test_notebook_cells_are_scanned(feature_repo):
     r = run(HOOK, event("NotebookEdit", feature_repo, notebook_path="n.ipynb", new_source="t = 'ghp_" + rand(36) + "'"))
     assert r.code == 2
