@@ -1,5 +1,5 @@
 id: sysml-needs-subset
-description: /sysml init on a profile without a sysml block must stop with the missing-key message and touch nothing (no push, merge or branch).
+description: /sysml init on a profile without a sysml block must stop with the missing-section message and touch nothing (no push, merge or branch).
 command: /tld:sysml
 arguments: "init"
 fixture:
