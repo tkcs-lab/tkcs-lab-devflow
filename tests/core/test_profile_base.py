@@ -438,3 +438,13 @@ def test_fetch_and_latest_commands(project, origin, capsys):
     assert json.loads(capsys.readouterr().out) == {"sha": sha, "tag": "v1"}
     assert base.main(["latest", "nonsense"]) == 1 and "must be <owner>/<repo>/<path>" in capsys.readouterr().err
     assert base.main(["fetch", str(project / "absent.yaml")]) == 1
+
+
+@pytest.mark.parametrize("path", ["tld/$(id).yaml", "tld/`id`.yaml", "tld/a;b.yaml", "tld/a b.yaml", "tld/a|b.yaml",
+                                  "tld/a&b.yaml", "tld/a'b.yaml", 'tld/a"b.yaml', "tld/a\nb.yaml", "tld/${HOME}.yaml"])
+def test_shell_metacharacters_are_refused_in_the_path(path):
+    """The source is pasted into commands by playbooks: a path never carries a shell metacharacter."""
+    with pytest.raises(base.BaseError):
+        base.parse_source(f"acme/.github/{path}")
+    with pytest.raises(base.BaseError):
+        base.parse_extends(f"acme/.github/{path}@{SHA}")

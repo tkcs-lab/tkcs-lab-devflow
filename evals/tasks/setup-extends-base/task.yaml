@@ -13,8 +13,13 @@ cost_ceiling_usd: 3.0
 requires: [playbooks/setup.md]
 graders:
   - profile_valid
+  - name: roles_block_equals
+    expected_key: profile_roles
   - name: asks_at_most
     max: 0
   - name: profile_key_equals
     key: tld.extends
     expected_key: extends
+  - name: profile_key_absent
+    keys: [deps.audit, deps.lock_freshness]
+    blocking_true_roles: true

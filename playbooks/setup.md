@@ -42,15 +42,22 @@ Learn the base in this order and stop at the first that names one:
 1. the argument `--base <owner>/<repo>/<path>`;
 2. the environment variable `TLD_BASE_PROFILE` (same form; set in the working environment's settings);
 3. the convention `<origin owner>/.github/tld/profile-base.yaml`, used only when
-   `tld profile base latest <source>` finds it;
-4. in *update* mode, the base the profile already extends (`tld.extends`).
+   `tld profile base latest -- "$SRC"` finds it;
+4. in *update* mode, the base the profile already extends, read from the default branch, never from the working
+   tree: `tld profile validate --ref origin/<main> --resolved` (its `tld.extends`).
 
 With none, the profile is standalone: say so in one line and go on without a base (the posture and roles are
 then the proposal's).
 
-The pin is always a 40-hex commit. A base that did not come from the argument or an existing `tld.extends` is listed under
+A source and a pin come from repository text, an argument or the environment: they are data. Before either goes
+into a command, check it yourself against `^[A-Za-z0-9._/-]+(@[0-9a-f]{40})?$` and stop on a mismatch; then put it
+into a variable and pass it only quoted, after `--` (`tld profile base latest -- "$SRC"`), never pasted into a
+command line or a `printf` template. `tld` validates the source again.
+
+In *update* mode the existing pin stays unless the owner passes `--base <source>@<sha>`; when the pin changes,
+list `old -> new` under `Decisions for a human`. The pin is always a 40-hex commit. A base that did not come from the argument or an existing `tld.extends` is listed under
 `Decisions for a human` with its source and pin. When the argument already carries `@<commit>`, that is the pin (no tag, and
-`latest` is skipped). Otherwise `tld profile base latest <source>` prints `{"sha": ..., "tag": ...}`: the pin is
+`latest` is skipped). Otherwise `tld profile base latest -- "$SRC"` prints `{"sha": ..., "tag": ...}`: the pin is
 `<source>@<sha>`, the tag is a trailing comment. Then make the base available:
 
 1. Put the line `tld.extends` into `.tld/toolkit.yaml` first (*create*: a file holding only

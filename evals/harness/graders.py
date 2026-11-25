@@ -271,40 +271,119 @@ def profile_valid(ctx: GradeContext) -> GradeResult:
     except yaml.YAMLError as exc:
         return GradeResult(False, f"{path} is not valid YAML: {exc}")
     # the fixture root and no fetch: a base seeded in <git dir>/tld/base is found offline, an unseeded one is skipped
-    errors, _, _ = vp.validate(profile, ctx.workdir, fetch=False)
+    errors, warnings, _ = vp.validate(profile, ctx.workdir, fetch=False)
     if errors:
         return GradeResult(False, _first(errors))
+    if isinstance(profile, dict) and isinstance(profile.get("tld"), dict) and profile["tld"].get("extends"):
+        missing = [w for w in warnings if "is not cached" in w]
+        if missing:  # a base that was never read would let a wrong pin pass
+            return GradeResult(False, _first(missing))
     return GradeResult(True, f"{path} valid")
 
 
-def ask_question_ids(actions: list[dict]) -> list[list[str]]:
-    """The question ids of each ask a run posted: an `ask` action, or an `ask_human` tool call that an adapter
-    logged as a github_op (its args hold the ask document)."""
+_BOARD_ASK = re.compile(r"(?:^|[;&|(]\s*|\s)tld(?:\s+--\S+)*\s+board\s+ask\s+(?P<file>[^\s;&|]+)")
+_EXAMPLE_ID = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):\s", re.M)
+
+
+def _ids_of_ask(doc) -> list[str] | None:
+    qs = doc.get("questions") if isinstance(doc, dict) else None
+    if not isinstance(qs, list):
+        return None
+    return [str(q.get("id")) for q in qs if isinstance(q, dict)]
+
+
+def _ask_file(path: str, actions: list[dict], workdir) -> dict | None:
+    """The ask document a `tld board ask <file>` command posts: the content of the run's own write to that path,
+    else the file in the work tree."""
+    for a in reversed(actions):
+        if a.get("kind") == "write" and str(a.get("path", "")).endswith(path.lstrip("./")):
+            try:
+                return json.loads(a.get("content") or "")
+            except ValueError:
+                return None
+    if workdir is not None:
+        try:
+            return json.loads((Path(workdir) / path).read_text())
+        except (OSError, ValueError):
+            return None
+    return None
+
+
+def ask_question_ids(actions: list[dict], workdir=None) -> list[list[str]]:
+    """The question ids of each ask a run posted, in whatever way the runtime logged it: an `ask` action; a tool
+    call `ask_human` or `board_ask` (a github_op whose args hold the ask, directly or under `ask`); a shell
+    `tld board ask <file>` (the file is the run's own write, else read from the work tree; a file that cannot be
+    read still counts as one ask with no ids); or the GitHub fallback, a comment whose body carries the ask marker."""
     out = []
     for a in actions:
-        if a.get("kind") == "ask":
+        kind, op = a.get("kind"), str(a.get("op", ""))
+        if kind == "ask":
             out.append([str(q) for q in a.get("questions") or []])
-        elif a.get("kind") == "github_op" and str(a.get("op", "")).endswith("ask_human"):
-            qs = (a.get("args") or {}).get("questions")
-            out.append([str(q.get("id")) for q in qs if isinstance(q, dict)] if isinstance(qs, list) else [])
+        elif kind == "github_op" and (op.endswith("ask_human") or op.endswith("board_ask")):
+            args = a.get("args") or {}
+            doc = args.get("ask") if isinstance(args.get("ask"), dict) else args
+            out.append(_ids_of_ask(doc) or [])
+        elif kind == "github_op" and "comment" in op and "<!-- tld-ask -->" in str((a.get("args") or {}).get("body", "")):
+            out.append(_EXAMPLE_ID.findall(str(a["args"]["body"]).partition("-- example reply --")[2]))
+        elif kind == "shell":
+            m = _BOARD_ASK.search(str(a.get("command", "")))
+            if m and a.get("error") is not True:
+                out.append(_ids_of_ask(_ask_file(m.group("file"), actions, workdir)) or [])
     return out
 
 
 @grader("asks_at_most")
 def asks_at_most(ctx: GradeContext) -> GradeResult:
-    """The run posted at most `max` asks; with `question_ids` (a list), every ask's ids are exactly that set."""
-    limit = ctx.params.get("max")
-    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 0:
-        return GradeResult(False, "grader misconfigured: max must be a non-negative integer")
-    asks = ask_question_ids(ctx.actions)
+    """The run posted at most `max` and at least `min` (default 0) asks; with `question_ids` (a list), every
+    ask's ids are exactly that set."""
+    limit, floor = ctx.params.get("max"), ctx.params.get("min", 0)
+    if (not isinstance(limit, int) or isinstance(limit, bool) or limit < 0
+            or not isinstance(floor, int) or isinstance(floor, bool) or floor < 0 or floor > limit):
+        return GradeResult(False, "grader misconfigured: max and min must be integers, 0 <= min <= max")
+    asks = ask_question_ids(ctx.actions, ctx.workdir)
     if len(asks) > limit:
         return GradeResult(False, f"{len(asks)} asks posted, at most {limit} allowed")
+    if len(asks) < floor:
+        return GradeResult(False, f"{len(asks)} asks posted, at least {floor} expected")
     want = ctx.params.get("question_ids")
     if want is not None:
         for ids in asks:
             if sorted(ids) != sorted(want) or len(set(ids)) != len(ids):
                 return GradeResult(False, f"ask question ids are {sorted(ids)}, expected exactly {sorted(want)}", value=len(asks))
-    return GradeResult(True, f"{len(asks)} ask(s), at most {limit}", value=len(asks))
+    return GradeResult(True, f"{len(asks)} ask(s), between {floor} and {limit}", value=len(asks))
+
+
+def _lookup(node, key: str):
+    for part in key.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None, False
+        node = node[part]
+    return node, True
+
+
+@grader("profile_key_absent")
+def profile_key_absent(ctx: GradeContext) -> GradeResult:
+    """None of the dotted `keys` is set in the profile of the final work tree. `blocking_true_roles: true` also
+    fails on any roles.required entry with `blocking: true` (only a human's confirm may write one)."""
+    path = ctx.params.get("path", ".tld/toolkit.yaml")
+    keys = ctx.params.get("keys") or []
+    if not keys and not ctx.params.get("blocking_true_roles"):
+        return GradeResult(False, "grader misconfigured: no keys")
+    wt = [d for d in ctx.docs(path) if d.ref == "worktree"]
+    if not wt:
+        return GradeResult(False, f"{path} is missing from the final working tree")
+    try:
+        profile = yaml.safe_load(wt[0].text)
+    except yaml.YAMLError as exc:
+        return GradeResult(False, f"{path} is not valid YAML: {exc}")
+    found = [k for k in keys if _lookup(profile, k)[1]]
+    if ctx.params.get("blocking_true_roles"):
+        req, _ = _lookup(profile, "roles.required")
+        found += [f"roles.required[{e.get('role')}].blocking" for e in (req if isinstance(req, list) else [])
+                  if isinstance(e, dict) and e.get("blocking") is True]
+    if found:
+        return GradeResult(False, f"{path} sets {', '.join(found)}, which no human confirmed")
+    return GradeResult(True, "none of the guarded keys is set")
 
 
 @grader("profile_key_equals")
@@ -343,7 +422,8 @@ def profile_key_equals(ctx: GradeContext) -> GradeResult:
 def roles_block_equals(ctx: GradeContext) -> GradeResult:
     """The `roles` key of the profile in the final work tree equals expected["roles"] (the fixture's expectation)."""
     path = ctx.params.get("path", ".tld/toolkit.yaml")
-    if "roles" not in ctx.expected:
+    ekey = ctx.params.get("expected_key", "roles")  # the fixture's expectation (None: the profile has no roles block)
+    if ekey not in ctx.expected:
         return GradeResult(False, "grader misconfigured: no expected roles block")
     wt = [d for d in ctx.docs(path) if d.ref == "worktree"]
     if not wt:
@@ -353,7 +433,7 @@ def roles_block_equals(ctx: GradeContext) -> GradeResult:
     except yaml.YAMLError as exc:
         return GradeResult(False, f"{path} is not valid YAML: {exc}")
     got = profile.get("roles") if isinstance(profile, dict) else None
-    want = ctx.expected["roles"]
+    want = ctx.expected[ekey]
     if got != want:
         return GradeResult(False, f"roles block differs: expected {json.dumps(want, sort_keys=True)}, got {json.dumps(got, sort_keys=True)}"[:300])
     return GradeResult(True, "roles block equals the expected one")

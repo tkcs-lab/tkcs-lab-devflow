@@ -8,14 +8,15 @@ import yaml
 from evals.fixtures import setup_repos
 
 KEYS = {"main_branch", "repo", "stacks", "roles", "website", "dispatchable", "adr_dir", "adr_index", "changelog"}
-BASE_KEYS = KEYS | {"extends", "extends_tag"}
+BASE_KEYS = KEYS | {"extends", "extends_tag", "profile_roles"}
 MD_COUNTS = {"docs_website": 11, "security_heavy": 3, "ios_ui_app": 1, "bare": 1, "base_with_tests": 1, "base_no_tests": 1}
 
 
 @pytest.mark.parametrize("repo", setup_repos.REPOS)
 def test_build_has_files_and_keys(repo, tmp_path):
     expected = setup_repos.build(tmp_path / "r", repo=repo)
-    assert set(expected) == (BASE_KEYS if repo in setup_repos.BASE_REPOS else KEYS) and expected["repo"] == repo and expected["main_branch"] == "main"
+    got = set(expected) - {"answer_fast", "answer_dod"}
+    assert got == (BASE_KEYS if repo in setup_repos.BASE_REPOS else KEYS) and expected["repo"] == repo and expected["main_branch"] == "main"
     for rel in setup_repos.FILES[repo]:
         assert (tmp_path / "r" / rel).is_file(), rel
     assert len(list((tmp_path / "r").rglob("*.md"))) == MD_COUNTS[repo]
@@ -116,3 +117,10 @@ def test_setup_playbook_neutralises_the_proposal_before_writing():
     assert "never straight from the survey's proposal" in flat
     assert "never run `set-block roles`" in flat
     assert "only for a `deps_*` confirm answered yes" in flat
+
+
+def test_setup_playbook_never_pastes_a_repository_supplied_base_source():
+    flat = " ".join(SETUP.split())
+    assert 'tld profile base latest -- "$SRC"' in flat
+    assert "never from the working tree" in flat and "origin/<main> --resolved" in flat
+    assert "the existing pin stays unless the owner passes" in flat

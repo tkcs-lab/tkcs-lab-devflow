@@ -128,6 +128,8 @@ BARE = {
 BASE_WITH_TESTS = {
     "README.md": "# tally\n\nA tiny counter library.\n",
     "Makefile": "test:\n\tpython3 -m unittest discover -s tests -q\n",
+    "requirements.txt": "alpha==1.0.0\n",  # with package-lock.json: the survey proposes deps.audit commands
+    "package-lock.json": '{"name": "tally", "lockfileVersion": 3, "packages": {}}\n',
     "tally.py": '"""Count things."""\n\n\ndef add(a: int, b: int) -> int:\n    return a + b\n',
     "tests/test_tally.py": "import unittest\n\nimport tally\n\n\nclass AddTest(unittest.TestCase):\n    def test_add(self):\n        self.assertEqual(tally.add(1, 2), 3)\n",
 }
@@ -197,7 +199,7 @@ EXPECTED = {
     },
     # the roles a survey without a base proposes (tests/core/test_survey_proposal.py); the setup tasks run with the
     # base, which already requires both roles, so the written profile holds no roles block
-    "base_with_tests": {"stacks": [], "website": None, "dispatchable": [], "roles": BASE_PROPOSED_ROLES},
+    "base_with_tests": {"stacks": ["python"], "website": None, "dispatchable": [], "roles": BASE_PROPOSED_ROLES},
     "base_no_tests": {"stacks": [], "website": None, "dispatchable": [], "roles": BASE_PROPOSED_ROLES},
 }
 
@@ -220,6 +222,10 @@ def build(dest: Path, repo: str = "security_heavy", with_profile: bool = False, 
         disable = (expected["roles"] or {}).get("disable")
         expected["roles"] = {"disable": disable} if disable else None
     if with_base or repo in BASE_REPOS:
+        if repo in BASE_REPOS:
+            expected["profile_roles"] = None  # the written profile repeats none of the base's roles
+        if repo == "base_no_tests":  # the owner's answers the harness simulates for the single ask
+            expected["answer_fast"] = expected["answer_dod"] = ["python3 -m unittest -q"]
         expected["extends"] = BASE_EXTENDS
         expected["extends_tag"] = BASE_TAG
     if unconfirmed and (expected["roles"] or {}).get("required"):

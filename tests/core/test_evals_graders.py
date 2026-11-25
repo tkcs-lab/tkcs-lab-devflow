@@ -12,7 +12,7 @@ from evals_support import (GOOD_MANIFEST, PROFILE, REVIEW_GOOD, SEEDED, bash, ct
 from evals.harness.actions import ask, github_op, write
 from evals.harness.common import git
 from evals.harness.model import Doc
-from evals.harness.graders import GRADERS, classify_command, is_runnable, parse_findings, run_graders
+from evals.harness.graders import GRADERS, ask_question_ids, classify_command, is_runnable, parse_findings, run_graders
 
 
 def write_call(denied):
@@ -105,7 +105,8 @@ CASES = {
     ),
     "asks_at_most": (
         ctx(actions=[ask(["verify_fast", "verify_dod"])], max=1, question_ids=["verify_fast", "verify_dod"]),
-        [("two asks", ctx(actions=[ask(["verify_fast"]), ask(["verify_dod"], call_id="a2")], max=1)),
+        [("no ask where one is required", ctx(actions=[], max=1, min=1)),
+         ("two asks", ctx(actions=[ask(["verify_fast"]), ask(["verify_dod"], call_id="a2")], max=1)),
          ("an ask where none is allowed", ctx(actions=[ask(["verify_fast"])], max=0)),
          ("other question ids", ctx(actions=[ask(["posture"])], max=1, question_ids=["verify_fast", "verify_dod"])),
          ("no max", ctx(actions=[]))],
@@ -116,6 +117,14 @@ CASES = {
          ("no extends", ctx(PROFILE_OK, key="tld.extends")),
          ("other value", ctx([("worktree", ".tld/toolkit.yaml", EXTENDS_PROFILE)], key="tld.extends", value="x/y/z.yaml@" + "1" * 40)),
          ("no key", ctx([("worktree", ".tld/toolkit.yaml", EXTENDS_PROFILE)]))],
+    ),
+    "profile_key_absent": (
+        ctx(PROFILE_OK, keys=["deps.audit", "deps.lock_freshness"], blocking_true_roles=True),
+        [("no profile", ctx([], keys=["deps.audit"])),
+         ("deps.audit written", ctx([("worktree", ".tld/toolkit.yaml", PROFILE + "deps:\n  audit: [{run: pip-audit}]\n")], keys=["deps.audit"])),
+         ("blocking role written", ctx([("worktree", ".tld/toolkit.yaml", AGENTS_PROFILE.replace("blocking: false", "blocking: true"))],
+                                       blocking_true_roles=True)),
+         ("no keys", ctx(PROFILE_OK))],
     ),
     "result_matches": (
         ctx(result_text="AGENT-REPORT security-reviewer at=dod verdict=pass\n## Threat model", must=["AGENT-REPORT security-reviewer at=dod"],
@@ -504,7 +513,8 @@ def test_profile_valid_reads_the_seeded_base_offline(tmp_path):
             "git:\n  main_branch: main\ndocs:\n  must_read: [README.md]\nverify:\n  fast: [\"make test\"]\n"
             "  dod: [\"make test\"]\nstacks: []\n")
     c = dataclasses.replace(ctx([("worktree", ".tld/toolkit.yaml", text)]), workdir=work)
-    assert GRADERS["profile_valid"](c).passed  # not cached and fetch=False: the base is skipped, no network is tried
+    unseeded = GRADERS["profile_valid"](c)  # not cached and fetch=False: no network is tried, and it must not pass
+    assert not unseeded.passed and "not cached" in unseeded.reason
     setup_repos.seed_base(work)
     assert GRADERS["profile_valid"](c).passed
     # a repository that drops a role the seeded base requires is refused only once the base is read
@@ -512,3 +522,38 @@ def test_profile_valid_reads_the_seeded_base_offline(tmp_path):
     c2 = dataclasses.replace(ctx([("worktree", ".tld/toolkit.yaml", dropped)]), workdir=work)
     res = GRADERS["profile_valid"](c2)
     assert not res.passed and "security-reviewer" in res.reason
+
+
+def _tool_use(call_id, name, tool_input):
+    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": call_id, "name": name, "input": tool_input}]}}
+
+
+def _ok(call_id):
+    return {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": call_id, "content": "ok"}]}}
+
+
+ASK_DOC = {"schema": 1, "kind": "ask", "title": "Profile for x",
+           "questions": [{"id": "verify_fast", "kind": "text"}, {"id": "verify_dod", "kind": "text"}]}
+
+
+def test_asks_are_counted_in_the_shapes_a_real_claude_transcript_has():
+    from evals.adapters.claude import stream
+    board = stream.to_actions([_tool_use("1", "mcp__board__board_ask", {"ask": ASK_DOC}), _ok("1")])
+    assert board[0]["kind"] == "github_op" and board[0]["op"] == "board_ask"
+    shell = stream.to_actions([_tool_use("1", "Write", {"file_path": "/tmp/ask.json", "content": json.dumps(ASK_DOC)}), _ok("1"),
+                               _tool_use("2", "Bash", {"command": "tld board ask /tmp/ask.json --fallback-issue o/r#1"}), _ok("2")])
+    comment = stream.to_actions([_tool_use("1", "mcp__github__add_issue_comment", {"body": "<!-- tld-ask -->\n@o ask\n\n-- example reply --\n\n"
+                                                                              "verify_fast: your answer on one line\nverify_dod: your answer on one line\n\n-- end of example --\n"}), _ok("1")])
+    for actions in (board, shell, comment):
+        assert ask_question_ids(actions) == [["verify_fast", "verify_dod"]]
+        assert GRADERS["asks_at_most"](ctx(actions=actions, max=0)).passed is False
+        assert GRADERS["asks_at_most"](ctx(actions=actions, max=1, min=1, question_ids=["verify_dod", "verify_fast"])).passed
+
+
+def test_a_board_ask_command_reads_its_file_from_the_work_tree(tmp_path):
+    import dataclasses
+    (tmp_path / "ask.json").write_text(json.dumps(ASK_DOC))
+    from evals.harness.actions import shell
+    c = dataclasses.replace(ctx(actions=[shell("tld board ask ask.json")], max=1, min=1), workdir=tmp_path)
+    assert GRADERS["asks_at_most"](c).passed and ask_question_ids(c.actions, tmp_path) == [["verify_fast", "verify_dod"]]
+    assert not GRADERS["asks_at_most"](dataclasses.replace(c, params={"max": 0})).passed

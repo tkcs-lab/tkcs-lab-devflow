@@ -4,7 +4,7 @@
   "cost_usd": 0.0,
   "branch": "chore/toolkit-profile",
   "commit_message": "chore: add .tld/toolkit.yaml",
-  "result_text": "Profile written.",
+  "result_text": "Profile written; the owner answered verify_fast and verify_dod.",
   "actions": [
     {
       "id": "a1",

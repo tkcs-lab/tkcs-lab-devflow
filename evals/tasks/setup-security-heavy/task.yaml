@@ -18,3 +18,6 @@ graders:
   - name: profile_key_equals
     key: tld.extends
     expected_key: extends
+  - name: profile_key_absent
+    keys: [deps.audit, deps.lock_freshness]
+    blocking_true_roles: true
