@@ -301,7 +301,9 @@ def read(path: str) -> str:
 
 def changed_paths(text: str) -> list[str]:
     """The paths of a --changed file: one per line, blank lines and carriage returns ignored."""
-    return [ln.strip() for ln in text.replace("\r", "").split("\n") if ln.strip()]
+    lines = [ln.strip() for ln in text.replace("\r", "").split("\n") if ln.strip()]
+    # git quotes a path with special characters ("..."): the quotes must not hide a workflow path
+    return [ln[1:-1] if len(ln) > 1 and ln[0] == ln[-1] == '"' else ln for ln in lines]
 
 
 def report(problems: list[str]) -> int:

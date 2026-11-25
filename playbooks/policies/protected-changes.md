@@ -11,7 +11,7 @@ lockfiles only: `.env`, `.env.*`, `*.lock`, `package-lock.json` and `go.sum`), r
 The profile `.tld/toolkit.yaml` and ordinary workflows are not on the default list: a pull request that changes one
 names it under Security and the security reviewer checks it at `implement_final`. A repository or its base may add
 them back to `hooks.protect_paths`, and then this flow handles them like any other protected path. Always outside the
-flow: the land, release and git-ops workflows (`GUARDED_WORKFLOWS`), the repository's own release workflow, `.git/**`
+flow: the land and release workflows (`GUARDED_WORKFLOWS`), the git-ops workflow (`tld-git-ops.yml`), the release and git-ops workflows the main profile names, `.git/**`
 and the adapter's protected paths.
 `.env*`, `.git/**` and lockfiles are never part of this flow: secrets are never edited. A lockfile in a phase diff is blocking whoever produced it; lockfile changes are made outside implement (the deps playbook or by the owner).
 `BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of `GUARDED_WORKFLOWS`, `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow pattern matches them. The built-in allow set is `.env.example`, `.env.sample`, `.env.template`, `.env.dist`. The flow also never handles the guarded workflows (`GUARDED_WORKFLOWS`:

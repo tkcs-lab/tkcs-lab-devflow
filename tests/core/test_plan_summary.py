@@ -795,6 +795,12 @@ def test_changed_blank_and_crlf_lines(tmp_path, capsys):
                                        ".github/workflows/ci.yml, .tld/toolkit.yaml\n")
 
 
+def test_changed_quoted_path_still_counts(tmp_path):
+    assert summary.changed_paths('"\\.github/workflows/x.yml"\n"a b.txt"\n') == ["\\.github/workflows/x.yml", "a b.txt"]
+    assert summary.security_paths(summary.changed_paths('".github/workflows/\\303\\251.yml"\n')) == [
+        ".github/workflows/\\303\\251.yml"]
+
+
 def test_changed_unreadable_file(tmp_path, capsys):
     path = tmp_path / "doc.md"
     path.write_text(pr_with_security(None))
