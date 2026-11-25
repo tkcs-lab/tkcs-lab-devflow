@@ -5,7 +5,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p1-defaults-merge
 
-- pending
+- worker: none reported by the worker
+- retry: sent back once: clamp let the security posture fall below the default branch value when the default writes no posture; fixed, with three small hardening changes in the same files
 
 ## p2-base-fetch
 
