@@ -292,3 +292,18 @@ def test_answers_need_defaults(tmp_path):
     assert r.returncode == 2
     r = migrate(root, "--answers", answers(tmp_path, {}))
     assert r.returncode == 2 and "--answers needs --write" in r.stderr
+
+
+def test_destination_through_a_symbolic_link_is_refused(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    root = repo(tmp_path, files={"adr/0001-a.md": "# A\n", "CHANGES.md": "# C\n"})
+    (root / "docs").symlink_to(outside)
+    asked = {c.key: c for c in md.questions(md.plan(root, yaml.safe_load(PROFILE)))}
+    assert asked["docs.adr_dir"].choices == ("keep",) and asked["docs.changelog"].choices == ("rename", "keep")
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.adr_dir": "rename", "docs.changelog": "keep"}))
+    assert r.returncode == 2 and list(outside.iterdir()) == [] and (root / "adr/0001-a.md").exists()
+    # apply itself refuses too, whatever the plan offered
+    forged = [md.Change("off-default", "adr/0001-a.md", "docs/adr/0001-a.md", "docs.index", md.CHOICES)]
+    msgs = md.apply(root, forged, {"docs.index": "rename"})
+    assert any("not done" in m and "symbolic link" in m for m in msgs) and list(outside.iterdir()) == []

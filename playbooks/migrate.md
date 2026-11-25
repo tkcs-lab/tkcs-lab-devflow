@@ -48,7 +48,8 @@ defaults would not find.
    could not prove safe to put in the profile: show the line to the owner under `## Not verified`; never edit
    the profile to guess. Never write a command key (`verify.*`, `deps.*`) here.
 4. Commit what it staged. Deliver as section 4; when the profile changed, the pull request body carries a
-   `**Security:**` line that names `.tld/toolkit.yaml` ([policies/pr-steward.md](policies/pr-steward.md)).
+   `**Security:**` line that names `.tld/toolkit.yaml` ([policies/pr-steward.md](policies/pr-steward.md)) and says
+   that any `git.branch_types` value came from the plan manifests, which are repository text.
 
 ## 2. Confirm
 

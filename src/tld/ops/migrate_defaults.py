@@ -145,14 +145,17 @@ def _off_default(root: Path, docs: dict) -> list[Change]:
     if "index" not in docs and not _is_file(root, INDEX_DEFAULT):
         for cand in INDEX_CANDIDATES:
             if _is_file(root, cand):
-                out.append(Change("off-default", cand, INDEX_DEFAULT, "docs.index", CHOICES))
+                out.append(Change("off-default", cand, INDEX_DEFAULT, "docs.index",
+                                  CHOICES if not unsafe(root, INDEX_DEFAULT) else ("keep",),
+                                  "" if not unsafe(root, INDEX_DEFAULT) else "its default path is unsafe (a symbolic link)"))
                 break
     if "adr_dir" not in docs and not _is_dir(root, ADR_DEFAULT) and not (root / ADR_DEFAULT).exists():
         for cand in ADR_CANDIDATES:
             if _is_dir(root, cand):
                 files = _dir_files(root, cand)
-                movable = files is not None and not any((root / ADR_DEFAULT / Path(f).relative_to(cand)).exists()
-                                                        for f in files)
+                movable = files is not None and not any(
+                    unsafe(root, ADR_DEFAULT + f[len(cand):]) or (root / (ADR_DEFAULT + f[len(cand):])).exists()
+                    for f in files) and not unsafe(root, ADR_DEFAULT)
                 out.append(Change("off-default", cand, ADR_DEFAULT, "docs.adr_dir",
                                   CHOICES if movable else ("keep",),
                                   "" if movable else "it cannot be moved safely (a symbolic link or an odd entry)"))
@@ -163,7 +166,9 @@ def _off_default(root: Path, docs: dict) -> list[Change]:
             for cand in CHANGELOG_CANDIDATES:
                 if _is_file(root, cand):
                     current = cand
-                    out.append(Change("off-default", cand, CHANGELOG_DEFAULT, "docs.changelog", CHOICES))
+                    ok = not unsafe(root, CHANGELOG_DEFAULT)
+                    out.append(Change("off-default", cand, CHANGELOG_DEFAULT, "docs.changelog",
+                                      CHOICES if ok else ("keep",), "" if ok else "its default path is unsafe"))
                     break
         if _is_file(root, current):
             found = _heading(root, current)
@@ -330,6 +335,9 @@ def check_answers(changes: list[Change], answers: object) -> None:
 def _move(root: Path, src: str, dst: str) -> str:
     """`tld ops docs-index move SRC DST --apply` as a function; its output is captured. Raises on failure."""
     import argparse as ap
+    for rel in (src, dst):
+        if unsafe(root, rel):
+            raise DefaultsError(f"refused: {unsafe(root, rel)}")
     args = ap.Namespace(root=str(root), src=src, dst=dst, profile=None, apply=True, exclude=[], json=False)
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
@@ -517,7 +525,7 @@ def note_for(root: Path, raw: object) -> str | None:
     """One line for `tld migrate` where it says there is nothing to migrate, when finds exist."""
     try:
         n = len(questions(plan(root, raw)))
-    except (OSError, ValueError):
+    except Exception:  # a hint never stops a plain dry run
         return None
     return f"{n} file(s) are off their default path: run tld migrate . --defaults" if n else None
 
