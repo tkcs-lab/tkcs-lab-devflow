@@ -212,9 +212,20 @@ function usageVerdict(windows, kind, nowSec) {
   return result;
 }
 
+// The issue page of a record's tracking issue (the same rules as tld.board.record), else null.
+var ISSUE_MAX = 9999999999;
+var ISSUE_REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+function issueUrl(rec) {
+  if (!rec || typeof rec.repo !== "string" || !ISSUE_REPO.test(rec.repo)) return null;
+  if (rec.repo.split("/").some(function (s) { return s === "." || s === ".."; })) return null;
+  var n = rec.tracking_issue;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > ISSUE_MAX) return null;
+  return "https://github.com/" + rec.repo + "/issues/" + n;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { elapsed: elapsed, isHidden: isHidden, isSilent: isSilent, section: section, drift: drift,
     isDismissed: isDismissed, linksTo: linksTo, linkedAsks: linkedAsks, answerReceived: answerReceived, place: place,
     escapeRe: escapeRe, handoverLinks: handoverLinks, handoverCommand: handoverCommand, summaryParts: summaryParts, planReady: planReady,
-    usageBar: usageBar, usageNow: usageNow, usageAgo: usageAgo, usageVerdict: usageVerdict };
+    usageBar: usageBar, usageNow: usageNow, usageAgo: usageAgo, usageVerdict: usageVerdict, issueUrl: issueUrl };
 }

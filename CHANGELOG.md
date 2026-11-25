@@ -7,6 +7,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Added
 
+- Board cards link the run's tracking issue (`issue #<n>`) for make-plan, implement, quick and a single-session prompt's worker; new optional `tracking_issue` field of a status record, and one rule for a board that does not know an optional field (#100).
 - `tld roles page-note` and `tld roles change-report` print the page note and the change-report section with it as first line.
 - `/tld:quick` runs one small change end to end without a plan: tracking issue, size check (a large change is refused and sent to `/tld:make-plan`), one worker, the final review, the fix round, dod and one pull request (#88).
 - `tld plan summary-check --findings N` checks the pull request's `## Non-blocking findings` section.
