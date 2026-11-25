@@ -388,33 +388,40 @@ def _read_text(path: str, actions: list[dict], workdir) -> str | None:
     return None
 
 
+def _is_comment(tokens: list[str]) -> bool:
+    return tokens[:2] in (["issue", "comment"], ["pr", "comment"]) or (tokens[:1] == ["api"] and any("/comments" in t for t in tokens))
+
+
 def _gh_ask_ids(tokens: list[str], actions: list[dict], workdir) -> list[str] | None:
     """The ids of a tld ask posted as a GitHub comment through `gh` (its body inline, or in a file the call
     names), or None when the call is no ask."""
     texts = [t for t in tokens if ASK_MARKER in t]
     for t in tokens:
+        t = re.sub(r"^(?:--body-file|--input|-F)=", "", t)
         cand = t.split("=@", 1)[-1].lstrip("@") if ("=@" in t or t.startswith("@")) else t
         if cand and not cand.startswith("-") and len(cand) < 256 and " " not in cand and "\n" not in cand:
             body = _read_text(cand, actions, workdir)
             if body and ASK_MARKER in body:
                 texts.append(body)
     if not texts:
-        return None
+        # a comment whose body is a file or variable that could not be read is an ask that cannot be ruled out
+        return [] if re.search(r"--body-file|--input|-F\b|-b\b|--body\b.*\$|<\(", " ".join(tokens)) and _is_comment(tokens) else None
     return _EXAMPLE_ID.findall(texts[0].partition("-- example reply --")[2])
 
 
 _RAW_ASK = re.compile(r"\btld\S*(?:\s|\\\n)+(?:\S+(?:\s|\\\n)+){0,6}?board(?:\s|\\\n)+ask\b|\bboard(?:\s|\\\n)+ask\b[^\n]*\.json")
-_GH_COMMENT = re.compile(r"\bgh\s+(?:issue|pr)\s+comment\b|\bgh\s+api\b[^\n]*/comments\b")
+_GH_COMMENT = re.compile(r"\bgh(?:\s|\\\n)+(?:issue|pr)(?:\s|\\\n)+comment\b|\bgh\s+api\b[^\n]*/comments\b")
 
 
 def _raw_ask(command: str) -> bool:
     """A conservative backstop over the raw text, for what the lexer cannot follow: the ask marker anywhere, a
     `tld ... board ask` however the words are separated, or a `gh` comment whose body is not a plain inline string
     (piped, substituted or read from stdin). It over-counts rather than miss an ask; an over-counted ask has no
-    question ids, so it can neither satisfy `question_ids` nor hide in a `min`."""
+    question ids, so it can neither satisfy `question_ids` nor hide in a `min`. It is no guarantee against an
+    adversary who builds the command by indirection (a variable for a subcommand, a script written then run)."""
     if ASK_MARKER in command or _RAW_ASK.search(command):
         return True
-    return bool(_GH_COMMENT.search(command) and re.search(r"\$\(|`|--body-file[ =]-|-F\s+-|--input\s+-|\|\s*gh\b|<<", command))
+    return bool(_GH_COMMENT.search(command) and re.search(r"\$\(|`|--body-file[ =]-|-F\s+-|--input[ =]|<\(|\|\s*gh\b|<<", command))
 
 
 def ask_question_ids(actions: list[dict], workdir=None) -> list[list[str]]:

@@ -637,7 +637,8 @@ def test_profile_valid_pending_keys_may_be_absent_but_nothing_else(tmp_path):
     "uv run --with x tld board ask f", "if true; then tld board ask f; fi", "for i in 1; do tld board ask f; done",
     "{ tld board ask f; }", "! tld board ask f", 'echo "$(tld board ask f)"', "x=`tld board ask f`",
     "${TLD:-tld} board ask f", "tld -C . board ask f", "tld \\\n board ask f", "eval 'tld board ask f'",
-    'gh issue comment 5 --body "$(cat ask.md)"', "cat ask.md | gh issue comment 5 -F -",
+    'gh issue comment 5 --body "$(cat ask.md)"', "gh issue comment 5 --body-file=../ask.md", "gh pr comment 5 --body-file=a.md",
+    "gh api repos/o/r/issues/5/comments --input a.json", "gh\\\nissue comment 5 -F -", "cat ask.md | gh issue comment 5 -F -",
     "gh issue comment 5 --body-file - <<'EOF'\nit's\nEOF"])
 def test_an_ask_in_an_odd_shape_is_still_counted(command):
     from evals.harness.actions import shell
