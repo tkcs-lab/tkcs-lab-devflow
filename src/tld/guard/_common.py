@@ -23,14 +23,15 @@ HOOK_NAMES = ("no-merge", "no-force-push", "no-git-tag", "secret-scan", "protect
 PROFILE = Path(".tld") / "toolkit.yaml"
 
 # Defaults of the `hooks` section. They are repeated in schema/profile.schema.json; a test keeps them equal.
-DEFAULT_PROTECT_PATHS = [".tld/toolkit.yaml", ".env", ".env.*", "*.lock", "package-lock.json", "go.sum",
-                         ".github/workflows/**"]
+DEFAULT_PROTECT_PATHS = [".env", ".env.*", "*.lock", "package-lock.json", "go.sum"]
 # Always allowed, whatever the profile says: templates of environment files.
 BUILTIN_PROTECT_ALLOW = [".env.example", ".env.sample", ".env.template", ".env.dist"]
 # The workflow files the toolkit's own commands install (S13). Protected whatever the profile says, and writable only
 # while `tld guard allow-workflow-install <file>` has set the install marker: the land workflow holds the agent token
 # and the release workflow is the only route to a tag.
 GUARDED_WORKFLOWS = [".github/workflows/tld-land.yml", ".github/workflows/tld-release.yml"]
+GIT_OPS_WORKFLOW = ".github/workflows/tld-git-ops.yml"
+GATES = ("plan_gate", "board_gate", "dod_gate")
 DEFAULT_MAX_ATTEMPTS = 3
 HOOK_BUDGET_SECONDS = 15  # below a 20 s runtime timeout, so a slow destructive guard denies instead of being killed
 
@@ -75,10 +76,12 @@ class Ctx:
     profile: dict | None
     profile_problem: str | None = None
     settings: Settings = field(default_factory=Settings)
+    raw: dict | None = None  # the profile as written, before the base and the defaults
     notice: str | None = None  # shown to the user when the guard allows
     context: str | None = None  # added to the agent's context when the guard allows (prompt events)
     disable_error: ProfileError | None = None  # dod-gate only: a malformed hooks.disable, re-raised by its evaluate
     _trusted: trust.Trusted | None = None
+    _trusted_resolved: tuple[dict | None, bool] | None = None
 
     @property
     def cwd(self) -> str:
@@ -95,18 +98,30 @@ class Ctx:
         return self._trusted
 
     def trusted(self) -> tuple[dict | None, bool]:
-        """(trusted profile, available)."""
-        t = self.trust()
-        return t.profile, t.available
+        """(trusted profile as resolved, available). The resolved dict carries the base and the defaults, so every
+        guarded key has the value the default branch applies."""
+        if self._trusted_resolved is None:
+            t = self.trust()
+            resolved = None
+            if t.available and isinstance(t.profile, dict):
+                from tld.profile import resolve
+                resolved = resolve.for_hook(t.profile, self.project_dir, at_sha=t.sha)[0]
+            self._trusted_resolved = (resolved if resolved is not None else t.profile, t.available)
+        return self._trusted_resolved
 
     def list_key(self, key: str, default: list[str]) -> list[str]:
-        """A protect list. From the trusted copy when there is one; otherwise the defaults plus the
-        working tree's entries. An allow list (`*_allow`) is never taken from the working tree."""
+        """A protect list, the stricter of the working copy and the trusted copy (the clamp of the design: the
+        union for a protect list, the working entries that the trusted list has too for an allow list); with no
+        trusted copy the defaults plus the working tree's entries. An allow list is never taken from the working
+        tree without a trusted copy."""
         working = _list_value(self.hooks_section(), key)  # validated even when it is not applied
         trusted, available = self.trusted()
         if available:
             value = _list_value(_hooks(trusted), key)
-            return list(default) if value is None else value
+            value = list(default) if value is None else value
+            if key.endswith("_allow"):
+                return [p for p in (working or []) if p in value]
+            return list(dict.fromkeys([*value, *(working or [])]))
         if key.endswith("_allow"):
             return list(default)
         return list(dict.fromkeys([*default, *(working or [])]))
@@ -148,10 +163,48 @@ def trusted_disable(ctx: Ctx) -> list[str]:
                           ", so hooks.disable is ignored and every guard is on")
         return []
     committed = _list_value(_hooks(trusted), "disable") or []
-    if (trusted or {}).get("hooks") != ctx.profile.get("hooks"):
+    raw_trusted = ctx.trust().profile or {}
+    raw_here = ctx.raw if ctx.raw is not None else ctx.profile
+    if raw_trusted.get("hooks") != raw_here.get("hooks"):
         ctx.notice = (f"the working tree's hooks section differs from the {ctx.trust().branch} profile on the "
                       "remote; only the remote hooks.disable and protect lists are applied")
     return committed
+
+
+def guarded_workflows(ctx: Ctx) -> list[str]:
+    """The workflow files only the toolkit's own steps write: the land and release workflows, the git-ops workflow and
+    the release workflow the trusted profile names (the working copy's when there is no trusted copy)."""
+    out = list(GUARDED_WORKFLOWS) + [GIT_OPS_WORKFLOW]
+    trusted, available = ctx.trusted()
+    for profile in ([trusted] if available else [ctx.profile]):
+        release = (profile or {}).get("release")
+        name = release.get("workflow") if isinstance(release, dict) else None
+        if isinstance(name, str) and name and "/" not in name and name not in ("", ".", ".."):
+            out.append(f".github/workflows/{name}")
+    return list(dict.fromkeys(out))
+
+
+def gate_enabled(ctx: Ctx, key: str) -> bool:
+    """Whether the gate `hooks.<key>.enabled` is on: the resolved value unless it is false, and a gate the trusted
+    copy turns on stays on (trusted OR working copy). With no profile at all every gate is off."""
+    if ctx.profile is None:
+        return False
+    gate = ctx.hooks_section().get(key)
+    if gate is not None and not isinstance(gate, dict):
+        raise ProfileError(f"toolkit.yaml: 'hooks.{key}' must be a mapping")
+    value = True if gate is None else gate.get("enabled", True)
+    if not isinstance(value, bool):
+        raise ProfileError(f"toolkit.yaml: 'hooks.{key}.enabled' must be true or false")
+    if value:
+        return True
+    trusted, available = ctx.trusted()  # looked up only for a gate the working copy switches off
+    t_gate = _hooks(trusted).get(key) if available else None
+    if isinstance(t_gate, dict) and t_gate.get("enabled", True) is True:
+        branch = ctx.trust().branch or "the default branch"
+        ctx.notice = (f"toolkit.yaml: warning: 'hooks.{key}.enabled' is weaker here than on {branch} (the remote "
+                      f"default branch); the {branch} value applies until this change is merged")
+        return True
+    return False
 
 
 def find_project(cwd: str, hint: str | None = None) -> tuple[str, dict | None, str | None]:
@@ -195,8 +248,13 @@ def find_project(cwd: str, hint: str | None = None) -> tuple[str, dict | None, s
 
 
 def make_ctx(action: Action, settings: Settings) -> Ctx:
-    _, profile, problem = find_project(action.cwd, settings.project_hint or action.project_dir)
-    return Ctx(action, action.project_dir, profile, problem, settings)
+    _, raw, problem = find_project(action.cwd, settings.project_hint or action.project_dir)
+    profile, notice = raw, None
+    if raw is not None:
+        from tld.profile import resolve
+        resolved, notice = resolve.for_hook(raw, action.project_dir)
+        profile = resolved if resolved is not None else raw
+    return Ctx(action, action.project_dir, profile, problem, settings, notice=notice, raw=raw)
 
 
 def _arm_budget():

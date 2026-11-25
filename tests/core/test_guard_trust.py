@@ -6,7 +6,7 @@ import json
 import tarfile
 import zipfile
 
-from hooks_helpers import PROFILE, bash, git, make_repo_with_origin, run
+from hooks_helpers import PROFILE, PROFILE_GATES_OFF, bash, git, make_repo_with_origin, run
 
 from tld.guard import trust
 
@@ -169,15 +169,15 @@ def test_recursive_copies_and_archives_are_checked_file_by_file(tmp_path):
     repo = make_repo_with_origin(tmp_path / "r")
     src = tmp_path / "gh"
     (src / "workflows").mkdir(parents=True)
-    (src / "workflows" / "ci.yml").write_text("on: push\n")
+    (src / "workflows" / "tld-land.yml").write_text("on: push\n")
     harmless = tmp_path / "docs-src"
     harmless.mkdir()
     (harmless / "a.md").write_text("a\n")
     assert run("protect-paths", bash(f"cp -r {src} .github", repo)).code == 2
     assert run("protect-paths", bash(f"cp -a {src}/. .github/", repo)).code == 2
     tree = tmp_path / "tree"
-    (tree / ".github").mkdir(parents=True)
-    (tree / ".github" / "workflows").symlink_to(src / "workflows")
+    (tree / ".github" / "workflows").mkdir(parents=True)
+    (tree / ".github" / "workflows" / "tld-land.yml").symlink_to(src / "workflows" / "tld-land.yml")
     assert run("protect-paths", bash(f"rsync -a {tree}/ .", repo)).code == 2  # .github/workflows lands in the root
     assert run("protect-paths", bash(f"rsync -a {tree} .", repo)).code == 0  # ... or under tree/
     assert run("protect-paths", bash(f"cp -r {harmless} docs", repo)).code == 0
@@ -218,3 +218,40 @@ def test_a_patch_read_from_stdin_or_input_is_checked(tmp_path):
     assert run("protect-paths", bash("patch -p1 -i x.diff", repo)).code == 2
     assert run("protect-paths", bash("git apply < x.diff", repo)).code == 2
     assert run("protect-paths", bash("patch -p1 < ok.diff", repo)).code == 0
+
+
+def test_gate_switched_off_on_a_branch_stays_on(tmp_path):
+    # the default branch has the gates on (the default); the branch switches them off in its own profile
+    repo = make_repo_with_origin(tmp_path / "r", committed=PROFILE, working=PROFILE_GATES_OFF)
+    r = run("plan-gate", {"session_id": "s1", "cwd": str(repo), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                          "tool_input": {"file_path": "a.txt", "content": "x"}})
+    assert r.code == 2 and "no plan" in r.stderr
+    # the same branch profile with no trusted copy that has the gate on: the gate is off
+    plain = make_repo_with_origin(tmp_path / "p", committed=PROFILE_GATES_OFF, working=PROFILE_GATES_OFF)
+    assert run("plan-gate", {"session_id": "s1", "cwd": str(plain), "hook_event_name": "PreToolUse",
+                             "tool_name": "Write", "tool_input": {"file_path": "a.txt", "content": "x"}}).code == 0
+
+
+def test_base_not_cached_in_a_hook(tmp_path):
+    from tld.guard import _common
+    from tld.guard.action import Action
+    profile = PROFILE + "tld:\n  extends: owner/base/profile.yaml@" + "a" * 40 + "\n"
+    repo = make_repo_with_origin(tmp_path / "r", committed=profile)
+    ctx = _common.make_ctx(Action("shell", str(repo), str(repo), command="ls"), _common.Settings())
+    assert ctx.notice and "is not cached here" in ctx.notice and "tld profile validate" in ctx.notice
+    assert not (repo / ".git" / "tld" / "base" / "objects.git").exists(), "a hook never fetches a base"
+    assert ctx.profile["hooks"]["plan_gate"]["enabled"] is True  # the defaults still apply
+
+
+def test_a_trailing_newline_is_not_a_sha():
+    sha = "a" * 40
+    assert trust.SHA_RE.match(sha) and trust.SHA_RE.match(sha + "a" * 24)
+    assert trust.SHA_RE.match(sha + "\n") is None and trust.SHA_RE.match(sha + "a" * 24 + "\n") is None
+
+
+def test_for_hook_ignores_an_at_sha_with_a_trailing_newline(tmp_path):
+    from tld.profile import resolve
+    repo = make_repo_with_origin(tmp_path / "r")
+    sha = git(repo, "rev-parse", "HEAD").strip()
+    profile, _ = resolve.for_hook({"git": {"main_branch": "main"}}, str(repo), at_sha=sha + "\n")
+    assert profile is not None and profile["hooks"]["dod_gate"]["enabled"] is True

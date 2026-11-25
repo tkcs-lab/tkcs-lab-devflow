@@ -646,7 +646,7 @@
     "hooks": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Settings of the guardrail hooks the tld plugin ships (docs/architecture/hooks.md). Every key is optional; the hooks apply the defaults in 'x-hook-default' themselves, they are not part of --resolved.",
+      "description": "Settings of the guardrail hooks the tld plugin ships (docs/architecture/hooks.md). Every key is optional; the defaults in 'x-hook-default' are applied by the resolver and are part of --resolved.",
       "properties": {
         "disable": {
           "type": "array",
@@ -670,13 +670,11 @@
         "protect_paths": {
           "$ref": "#/$defs/stringList",
           "x-hook-default": [
-            ".tld/toolkit.yaml",
             ".env",
             ".env.*",
             "*.lock",
             "package-lock.json",
-            "go.sum",
-            ".github/workflows/**"
+            "go.sum"
           ],
           "description": "Globs of repo-relative paths protect-paths refuses to edit. A pattern without a slash matches the file name at any depth; ** crosses directories. A list here replaces the default."
         },
@@ -691,7 +689,7 @@
           "properties": {
             "enabled": {
               "type": "boolean",
-              "x-hook-default": false,
+              "x-hook-default": true,
               "description": "Opt in: block stopping until verify.dod passes."
             },
             "max_attempts": {
@@ -709,7 +707,7 @@
           "properties": {
             "enabled": {
               "type": "boolean",
-              "x-hook-default": false,
+              "x-hook-default": true,
               "description": "Opt in: a session that no tld command started cannot write into the repository; it is told to answer and propose /tld:make-plan."
             }
           }
@@ -720,7 +718,7 @@
           "properties": {
             "enabled": {
               "type": "boolean",
-              "x-hook-default": false,
+              "x-hook-default": true,
               "description": "Opt in: a session that a record-writing tld command started cannot end its turn before it has written its status record to the board once."
             }
           }

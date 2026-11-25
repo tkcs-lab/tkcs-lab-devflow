@@ -161,10 +161,10 @@ def test_schema_defaults_equal_the_hooks_built_in_defaults():
     assert props["protect_paths_allow"]["x-hook-default"] == []
     assert props["disable"]["x-hook-default"] == []
     gate = props["dod_gate"]["properties"]
-    assert gate["enabled"]["x-hook-default"] is False
+    assert gate["enabled"]["x-hook-default"] is True
     assert gate["max_attempts"]["x-hook-default"] == _common.DEFAULT_MAX_ATTEMPTS
-    assert props["plan_gate"]["properties"]["enabled"]["x-hook-default"] is False
-    assert props["board_gate"]["properties"]["enabled"]["x-hook-default"] is False
+    assert props["plan_gate"]["properties"]["enabled"]["x-hook-default"] is True
+    assert props["board_gate"]["properties"]["enabled"]["x-hook-default"] is True
 
 
 def test_template_documents_the_defaults_and_stays_valid(vp):
@@ -177,7 +177,7 @@ def test_template_documents_the_defaults_and_stays_valid(vp):
             break
         block.append(re.sub(r"^# ?", "", line))
     hooks = yaml.safe_load("\n".join(block))["hooks"]
-    assert hooks["protect_paths"] == _common.DEFAULT_PROTECT_PATHS and hooks["dod_gate"]["enabled"] is False
+    assert hooks["protect_paths"] == _common.DEFAULT_PROTECT_PATHS and hooks["dod_gate"]["enabled"] is True
     profile = yaml.safe_load(text)
     profile["hooks"] = hooks
     errors, _, _ = vp.validate(profile)

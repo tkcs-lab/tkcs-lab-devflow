@@ -35,6 +35,10 @@ FAIL_CLOSED = {"no-merge": True, "no-force-push": True, "no-git-tag": True, "sec
                "model-check": False, "board-gate": False, "env-check": False}
 BASH_GUARDS = ("no-merge", "no-force-push", "no-git-tag", "protect-paths")
 PROFILE = "git:\n  main_branch: main\n  branch_pattern: \"<type>/<kebab-case>\"\n"
+# PROFILE plus a hooks block that switches the three gates off (they are on by default). Never concatenate another
+# `hooks:` block onto it: PyYAML would silently keep the last duplicate key.
+PROFILE_GATES_OFF = (PROFILE + "hooks:\n  plan_gate:\n    enabled: false\n  board_gate:\n    enabled: false\n"
+                     "  dod_gate:\n    enabled: false\n")
 
 
 def git(cwd, *args):

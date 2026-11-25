@@ -51,6 +51,7 @@ tests:
   - tests/core/test_hook_protect_paths_setup.py
   src/tld/guard/_common.py:
   - tests/core/test_guard_trust.py
+  - tests/core/test_hook_protect_paths.py
   - tests/adapters/claude/test_hooks_config.py
   - tests/core/test_guard_corpus.py
   - tests/core/test_hook_no_force_push.py
@@ -1017,3 +1018,13 @@ mutants:
   why: a pin of 39 hex digits instead of 40 is accepted (killed by test_validate_rejects_a_malformed_source and the pin tests of test_profile_base.py)
   old: 'SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")'
   new: 'SHA40_RE = re.compile(r"^[0-9a-fA-F]{39}$")'
+- id: CL1
+  file: src/tld/guard/_common.py
+  why: guarded_workflows drops the release workflow of the trusted profile (killed by test_release_workflow_of_the_trusted_profile_is_denied)
+  old: '    for profile in ([trusted] if available else [ctx.profile]):'
+  new: '    for profile in []:'
+- id: CL2
+  file: src/tld/guard/_common.py
+  why: the gate clamp uses the working copy only, so a branch can switch off a gate the default branch has on (killed by test_gate_switched_off_on_a_branch_stays_on)
+  old: '    if isinstance(t_gate, dict) and t_gate.get("enabled", True) is True:'
+  new: '    if False:'

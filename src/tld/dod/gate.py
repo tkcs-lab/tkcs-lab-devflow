@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stop hook `dod-gate`: block stopping until the profile's definition-of-done commands pass.
 
-Opt-in (`hooks.dod_gate.enabled: true`). Which sessions it applies to is documented in docs/architecture/hooks.md:
+On by default (`hooks.dod_gate.enabled: false` switches it off). Which sessions it applies to is documented in docs/architecture/hooks.md:
 every session in a checkout, except one that marked itself exempt with `dod_gate.py --exempt` (the
 /implement orchestrator, which legitimately stops at human gates). It never loops: it honours
 `stop_hook_active`, counts failed attempts, and lets the session stop after `max_attempts` of them,
@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 from tld.guard import _common
-from tld.guard._common import DEFAULT_MAX_ATTEMPTS, Ctx, ProfileError
+from tld.guard._common import DEFAULT_MAX_ATTEMPTS, Ctx, ProfileError, gate_enabled
 
 NAME = "dod-gate"
 MARKER_TTL_SECONDS = 24 * 3600   # an exemption lapses a day after the exempt session last stopped
@@ -210,13 +210,9 @@ def evaluate(ctx: Ctx) -> str | None:
 
 
 def _evaluate(ctx: Ctx) -> str | None:
-    gate = ctx.hooks_section().get("dod_gate")
-    if gate is None:
+    if not gate_enabled(ctx, "dod_gate"):
         return None
-    if not isinstance(gate, dict):
-        raise ProfileError("toolkit.yaml: 'hooks.dod_gate' must be a mapping")
-    if gate.get("enabled") is not True:
-        return None
+    gate = ctx.hooks_section().get("dod_gate") or {}
     if ctx.disable_error:
         raise ctx.disable_error
     max_attempts = gate.get("max_attempts", DEFAULT_MAX_ATTEMPTS)

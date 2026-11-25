@@ -1,4 +1,4 @@
-"""dod-gate (Stop): block stopping until verify.dod passes. Opt-in, loop-free, orchestrator-exempt."""
+"""dod-gate (Stop): block stopping until verify.dod passes. On by default, loop-free, orchestrator-exempt."""
 import json
 import os
 import subprocess
@@ -40,10 +40,19 @@ def repo_with(tmp_path, dod, enabled=True, extra="", change=True):
     return repo
 
 
-def test_off_by_default(tmp_path):
-    repo = repo_with(tmp_path, ["exit 1"], enabled=None)
-    assert run(HOOK, stop(repo)).code == 0
-    repo = repo_with(tmp_path / "b", ["exit 1"], enabled=False)
+def test_on_by_default_blocks_a_failing_stop(tmp_path):
+    repo = repo_with(tmp_path, ["exit 1"], enabled=None)  # no hooks block
+    assert run(HOOK, stop(repo)).code == 2
+
+
+def test_switched_off_runs_nothing(tmp_path, counter):
+    repo = repo_with(tmp_path, [counter.cmd + "; exit 1"], enabled=False)
+    assert run(HOOK, stop(repo)).code == 0 and counter() == 0
+
+
+def test_no_profile_allows_everything(tmp_path):
+    repo = make_repo(tmp_path / "repo", "feature/demo", None)
+    (repo / "work.txt").write_text("new work\n")
     assert run(HOOK, stop(repo)).code == 0
 
 

@@ -6,13 +6,12 @@ import pytest
 from hooks_helpers import bash, event, make_repo, make_repo_with_origin, run, run_script
 
 HOOK = "protect-paths"
-PROTECTED_FILES = [".tld/toolkit.yaml", ".env", ".env.local", ".env.production", "sub/.env", "package-lock.json",
-                   "web/package-lock.json", "uv.lock", "deep/er/Cargo.lock", "go.sum", ".github/workflows/ci.yml",
-                   ".github/workflows/sub/x.yml", "./.env", "docs/../.env"]
+PROTECTED_FILES = [".env", ".env.local", ".env.production", "sub/.env", "package-lock.json",
+                   "web/package-lock.json", "uv.lock", "deep/er/Cargo.lock", "go.sum", "./.env", "docs/../.env"]
 ALLOWED_FILES = ["src/app.py", "README.md", ".env.example", ".env.sample", ".env.template", ".env.dist",
                  "docs/lock.md",
                  "lockfile.txt", ".github/CODEOWNERS", ".github/dependabot.yml", "src/tld/templates/toolkit.yaml",
-                 "sub/.tld/toolkit.yaml", ".envrc.md", "environment.txt", "go.mod", "package.json"]
+                 "sub/.tld/toolkit.yaml", ".tld/toolkit.yaml", ".github/workflows/ci.yml", ".github/workflows/sub/x.yml", ".envrc.md", "environment.txt", "go.mod", "package.json"]
 
 
 @pytest.mark.parametrize("path", PROTECTED_FILES)
@@ -41,8 +40,7 @@ def test_a_symlink_to_a_protected_file_is_followed(fresh_repo):
 
 
 def test_messages_say_what_to_do_instead(feature_repo):
-    expected = {".tld/toolkit.yaml": "protected-change: .tld/toolkit.yaml - <why>", ".env": ".env.example",
-                "uv.lock": "lock command", ".github/workflows/ci.yml": "protected-change: .github/workflows/ci.yml - <why>"}
+    expected = {".env": ".env.example", "uv.lock": "lock command"}
     for path, words in expected.items():
         assert words in run(HOOK, event("Write", feature_repo, file_path=path, content="x")).stderr, path
 
@@ -52,8 +50,7 @@ def _msg(repo, path):
 
 
 def test_a_protected_path_denial_names_the_protected_change_report(feature_repo):
-    assert "protected-change:" in _msg(feature_repo, ".tld/toolkit.yaml")
-    assert "protected-change:" in _msg(feature_repo, ".github/workflows/x.yml")
+    assert _msg(feature_repo, ".tld/toolkit.yaml") == "" and _msg(feature_repo, ".github/workflows/x.yml") == ""
     assert "protected-change:" not in _msg(feature_repo, ".git/config")
 
 
@@ -77,15 +74,14 @@ DENIED_BASH = [
     "echo x > .env", "echo x >> .env.local", "echo x 2> .env", "echo hi &> uv.lock", "echo x >| .env", "cat a | tee .env",
     "tee -a uv.lock < a", "sed -i 's/a/b/' package-lock.json", "sed -i.bak -e 's/a/b/' uv.lock",
     "sed -n -i -e p go.sum", "sed --in-place 's/a/b/' .env", "perl -pi -e 's/a/b/' .env", "perl -i.bak -pe 's/a/b/' uv.lock",
-    "cp x .env", "cp -f x .github/workflows/ci.yml", "cp x .github/workflows/", "cp -t .github/workflows x.yml",
-    "mv x uv.lock", "mv .env .env.bak", "mv uv.lock /tmp/old.lock", "install -m 600 x .env", "rm .env", "rm -f uv.lock",
+    "cp x .env", "mv x uv.lock", "mv .env .env.bak", "mv uv.lock /tmp/old.lock", "install -m 600 x .env", "rm .env", "rm -f uv.lock",
     "rm -rf .env package-lock.json", "unlink .env", "touch .env", "truncate -s 0 .env", "dd if=x of=.env", "git rm .env",
     "git mv .env .env.old", "ln -sf x .env", "bash -c 'echo x > .env'", "cd sub && echo x > ../.env", "cd . && rm uv.lock",
-    "echo ok; echo x > .github/workflows/ci.yml", "echo $(echo x > .env)", "sudo rm .env", "FOO=1 tee .env",
+    "echo $(echo x > .env)", "sudo rm .env", "FOO=1 tee .env",
     "echo x > ./.env", "echo x > docs/../.env",
-    "ln .env notes2", "ln -s .env notes && echo B=2 >> notes", "ln -s .github/workflows wf && echo 'on: push' > wf/ci.yml",
-    "echo B=2 | tee .{env,tmp}", "git checkout origin/x -- .tld/toolkit.yaml",
-    "git restore --source origin/x .tld/toolkit.yaml", "git restore --source=origin/x -S -W .env",
+    "ln .env notes2", "ln -s .env notes && echo B=2 >> notes",
+    "echo B=2 | tee .{env,tmp}", "git checkout origin/x -- .env.local",
+    "git restore --source origin/x uv.lock", "git restore --source=origin/x -S -W .env",
     "git checkout -- .env", "git config alias.p push", "git config remote.origin.push HEAD:main",
     "git config --add include.path ../x", "git config --unset branch.main.remote", "git config -e",
     "git config Alias.p push",
@@ -99,6 +95,8 @@ ALLOWED_BASH = [
     "mv x y", "cat <<EOF > notes.md\n.env\nEOF", "rm .envrc.md", "ls .github/workflows", "grep -r x .github/workflows",
     "echo $(cat .env)", "bash -c 'cat .env'", "git status", 'echo x > "$OUT"',
     "git config user.name x", "git config --get alias.p", "git config --list", "git config alias.p",
+    "cp -f x .github/workflows/ci.yml", "cp x .github/workflows/", "echo x > .tld/toolkit.yaml",
+    "git checkout origin/x -- .tld/toolkit.yaml", "ln -s .github/workflows wf && echo 'on: push' > wf/ci.yml",
     "git checkout feature", "git restore src/a.py", "git checkout -- src/a.py", "echo x > a.{txt,md}",
 ]
 
@@ -276,3 +274,46 @@ def test_a_changelog_only_change_may_open_the_version_heading(tmp_path, policy):
     assert run(HOOK, heading).code == 0
     (repo / "src.py").write_text("x = 1\n")  # another change in the same branch: no longer changelog-only
     assert run(HOOK, heading).code == 2
+
+
+# ---- the default list and the guarded workflows (the profile and ordinary workflows are not protected) -----------
+RELEASE_PROFILE = "git:\n  main_branch: main\nrelease:\n  workflow: release.yml\n"
+
+
+def test_default_protected_paths_are_the_new_list():
+    from tld.guard import _common
+    assert _common.DEFAULT_PROTECT_PATHS == [".env", ".env.*", "*.lock", "package-lock.json", "go.sum"]
+
+
+def test_edit_of_the_profile_is_allowed_by_default(feature_repo):
+    for tool in ("Write", "Edit"):
+        assert run(HOOK, event(tool, feature_repo, file_path=".tld/toolkit.yaml", content="x")).code == 0
+    assert run(HOOK, bash("sed -i 's/main/trunk/' .tld/toolkit.yaml", feature_repo)).code == 0
+
+
+def test_edit_of_an_ordinary_workflow_is_allowed_by_default(feature_repo):
+    assert run(HOOK, event("Write", feature_repo, file_path=".github/workflows/ci.yml", content="x")).code == 0
+    assert run(HOOK, bash("echo x > .github/workflows/ci.yml", feature_repo)).code == 0
+
+
+def test_release_workflow_of_the_trusted_profile_is_denied(tmp_path):
+    repo = make_repo_with_origin(tmp_path / "r", committed=RELEASE_PROFILE)
+    r = run(HOOK, event("Write", repo, file_path=".github/workflows/release.yml", content="x"))
+    assert r.code == 2 and "tld workflow file" in r.stderr
+    assert run(HOOK, bash("echo x > .github/workflows/release.yml", repo)).code == 2
+    assert run(HOOK, event("Write", repo, file_path=".github/workflows/ci.yml", content="x")).code == 0
+
+
+def test_git_ops_workflow_is_denied(feature_repo):
+    r = run(HOOK, event("Write", feature_repo, file_path=".github/workflows/tld-git-ops.yml", content="x"))
+    assert r.code == 2 and "tld workflow file" in r.stderr
+    assert run(HOOK, bash("echo x > .github/workflows/tld-git-ops.yml", feature_repo)).code == 2
+
+
+def test_release_workflow_guard_uses_trusted_value(tmp_path):
+    # a branch that renames the release workflow in its own profile still cannot write the trusted one,
+    # and the name it invents is not guarded
+    repo = make_repo_with_origin(tmp_path / "r", committed=RELEASE_PROFILE,
+                                 working=RELEASE_PROFILE.replace("release.yml", "other.yml"))
+    assert run(HOOK, event("Write", repo, file_path=".github/workflows/release.yml", content="x")).code == 2
+    assert run(HOOK, event("Write", repo, file_path=".github/workflows/other.yml", content="x")).code == 0

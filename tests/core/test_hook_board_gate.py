@@ -4,6 +4,7 @@ import socket
 
 import pytest
 
+import hooks_helpers as hh
 from hooks_helpers import PROFILE, make_repo_with_origin
 from tld.board import mcp as board_mcp
 from tld.board.store import Store
@@ -254,10 +255,26 @@ def test_a_prompt_after_the_ttl_reopens_the_state(board, monkeypatch):
     assert state(board)["written"] is False
 
 
-def test_the_hook_is_off_by_default(tmp_path, monkeypatch):
+def test_the_hook_is_on_by_default(tmp_path, monkeypatch):
     monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
     monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
-    repo = make_repo_with_origin(tmp_path / "r", "feature/demo", PROFILE)
+    repo = make_repo_with_origin(tmp_path / "r", "feature/demo", PROFILE)  # no hooks block
+    prompt(repo, "docs")
+    assert has_state(repo)
+
+
+def test_switched_off_never_blocks(tmp_path, monkeypatch):
+    monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
+    monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
+    repo = make_repo_with_origin(tmp_path / "r", "feature/demo", hh.PROFILE_GATES_OFF)
+    prompt(repo, "docs")
+    assert not has_state(repo) and stop(repo).verdict == "allow"
+
+
+def test_no_profile_allows_everything(tmp_path, monkeypatch):
+    monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
+    monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
+    repo = make_repo_with_origin(tmp_path / "r", "feature/demo", None)
     prompt(repo, "docs")
     assert not has_state(repo) and stop(repo).verdict == "allow"
 
