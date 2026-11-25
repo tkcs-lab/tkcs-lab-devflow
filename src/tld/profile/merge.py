@@ -9,8 +9,10 @@ import re
 
 POSTURE_RANK = {"low": 0, "standard": 1, "critical": 2}
 GATES = ("dod_gate", "plan_gate", "board_gate")
-# tld's own protect list (the built-in floor when a base sets none); defaults.STATIC holds the same value.
-BUILTIN_PROTECT_PATHS = [".env", ".env.*", "*.lock", "package-lock.json", "go.sum"]
+from tld.profile.defaults import STATIC
+
+# tld's own protect list (the built-in floor when a base sets none): one copy, in defaults.STATIC.
+BUILTIN_PROTECT_PATHS = list(STATIC["hooks.protect_paths"])
 _ROLE = r"[a-z][a-z0-9-]*"
 _OVERRIDE_RE: re.Pattern[str] | None = None
 
@@ -27,8 +29,8 @@ def __getattr__(name: str):
         if _OVERRIDE_RE is None:
             hooks = "|".join(re.escape(h) for h in hook_names())
             _OVERRIDE_RE = re.compile(
-                rf"^(?:hooks\.disable\.(?:{hooks})|hooks\.protect_paths|hooks\.protect_paths_allow"
-                rf"|hooks\.(?:dod|plan|board)_gate\.enabled|roles\.posture\.security|roles\.required\.{_ROLE})$")
+                rf"\A(?:hooks\.disable\.(?:{hooks})|hooks\.protect_paths|hooks\.protect_paths_allow"
+                rf"|hooks\.(?:dod|plan|board)_gate\.enabled|roles\.posture\.security|roles\.required\.{_ROLE})\Z")
         return _OVERRIDE_RE
     raise AttributeError(name)
 
@@ -136,6 +138,11 @@ def _posture(p: dict) -> str | None:
     return posture.get("security")
 
 
+def _rank(value: str | None, unknown: int) -> int:
+    """Rank of a posture; a missing value is `standard`, an unknown one gets `unknown`."""
+    return POSTURE_RANK.get(value or "standard", unknown)
+
+
 def _required(p: dict) -> list:
     return (p.get("roles") or {}).get("required") or []
 
@@ -151,9 +158,14 @@ def guarded_errors(floor: dict, merged: dict, allow: list[str], label: str) -> l
             errors.append(f"toolkit.yaml: 'hooks.disable': '{hook}' is switched on by the base {label}; the "
                           f"repository cannot switch it off unless the base lists 'hooks.disable.{hook}' in {ao}")
 
-    floor_rank = POSTURE_RANK[_posture(floor) or "standard"]
     repo_posture = _posture(merged) or "standard"
-    if POSTURE_RANK[repo_posture] < floor_rank and "roles.posture.security" not in allow:
+    if repo_posture not in POSTURE_RANK:
+        errors.append(f"toolkit.yaml: 'roles.posture.security': must be one of critical, standard, low "
+                      f"(got {repo_posture!r})")
+    else:
+        floor_rank = _rank(_posture(floor), POSTURE_RANK["critical"])
+    if repo_posture in POSTURE_RANK and POSTURE_RANK[repo_posture] < floor_rank \
+            and "roles.posture.security" not in allow:
         base_posture = next(k for k, v in POSTURE_RANK.items() if v == floor_rank)
         errors.append(f"toolkit.yaml: 'roles.posture.security': '{repo_posture}' is weaker than the base's "
                       f"'{base_posture}' (critical > standard > low); allowed only when the base lists "
@@ -225,8 +237,10 @@ def clamp(trusted: dict, merged: dict, branch: str) -> tuple[dict, list[str]]:
             hooks()[gate]["enabled"] = True
             warnings.append(_weaker(f"hooks.{gate}.enabled", branch))
 
-    t_post = _posture(trusted)
-    if t_post and POSTURE_RANK[t_post] > POSTURE_RANK[_posture(out) or "standard"]:
+    # A default branch without a posture means `standard`; an unknown trusted value counts as `critical`.
+    t_rank = _rank(_posture(trusted), POSTURE_RANK["critical"])
+    if t_rank > _rank(_posture(out), -1):
+        t_post = next(k for k, v in POSTURE_RANK.items() if v == t_rank)
         roles = out.setdefault("roles", {})
         roles.setdefault("posture", {})["security"] = t_post
         warnings.append(_weaker("roles.posture.security", branch))

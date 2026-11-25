@@ -127,7 +127,7 @@ def test_override_re_rejects_unknown_names():
     ok = ["hooks.disable.plan-gate", "hooks.protect_paths", "hooks.protect_paths_allow", "hooks.dod_gate.enabled",
           "hooks.plan_gate.enabled", "hooks.board_gate.enabled", "roles.posture.security",
           "roles.required.reflektor"]
-    bad = ["hooks.disable.nope", "hooks.disable", "hooks.dod_gate.max_attempts", "verify.fast", "roles.required",
+    bad = ["hooks.protect_paths\n", "roles.posture.security\n", "hooks.disable.nope", "hooks.disable", "hooks.dod_gate.max_attempts", "verify.fast", "roles.required",
            "roles.required.", "hooks.protect_paths.x", "xhooks.protect_paths"]
     assert all(m.OVERRIDE_RE.match(x) for x in ok)
     assert not any(m.OVERRIDE_RE.match(x) for x in bad)
@@ -205,3 +205,25 @@ def test_clamp_leaves_inputs_alone_and_equal_profiles_quiet():
     branch = copy.deepcopy(trusted)
     out, w = m.clamp(trusted, branch, "main")
     assert out == trusted and w == [] and branch == trusted
+
+
+def test_clamp_without_a_trusted_posture_means_standard():
+    out, w = m.clamp({}, {"roles": {"posture": {"security": "low"}}}, "main")
+    assert out["roles"]["posture"]["security"] == "standard" and len(w) == 1
+    out, w = m.clamp({}, {"roles": {"posture": {"security": "critical"}}}, "main")
+    assert out["roles"]["posture"]["security"] == "critical" and w == []
+    out, w = m.clamp({}, {}, "main")
+    assert out == {} and w == []
+
+
+def test_unknown_posture_is_named_not_a_key_error():
+    errs = m.guarded_errors({}, {"roles": {"posture": {"security": "high"}}}, [], LABEL)
+    assert errs == ["toolkit.yaml: 'roles.posture.security': must be one of critical, standard, low (got 'high')"]
+    out, w = m.clamp({"roles": {"posture": {"security": "weird"}}}, {"roles": {"posture": {"security": "standard"}}},
+                     "main")
+    assert out["roles"]["posture"]["security"] == "critical" and len(w) == 1
+
+
+def test_builtin_protect_list_is_the_defaults_copy():
+    from tld.profile import defaults
+    assert m.BUILTIN_PROTECT_PATHS == defaults.STATIC["hooks.protect_paths"]
