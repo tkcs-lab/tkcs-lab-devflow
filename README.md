@@ -56,13 +56,14 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | Command | What it does |
 |---|---|
 | `/tld:setup [create \| update]` | surveys the repository and writes or updates the profile, including the `roles` block; asks you the posture; one pull request ([guide](docs/guides/setup.md)) |
-| `/tld:make-plan <what you want>` | researches the repository, then writes a single-session prompt (small scope) or a plan with an implementation manifest on its feature branch (large scope); manual steps become an ask |
+| `/tld:make-plan <what you want>` | researches the repository, then writes a single-session prompt (small scope) or a plan with an implementation manifest on its feature branch (large scope); manual steps become an ask; when it finishes, the board shows a Plan ready card with the Summary, the links and the implement command to copy |
 | `/tld:implement <plan URL>` | one worker session per phase, merges into one feature branch, verification after every merge, scope-drift monitoring, one final review, one pull request driven to green ([scope drift](docs/architecture/scope-drift.md)) |
+| `/tld:quick <prompt or issue>` | one small change end to end without a plan: creates the tracking issue, refuses a large change (use `/tld:make-plan`), one worker, the final review, one fix round for the non-blocking findings, dod, one pull request driven to green |
 | `/tld:review [scope]` | deep review of security, tests (unit, integration, e2e) and docs by the roles; verified findings in a review document on a `review/<slug>` branch; your decisions are one ask ([guide](docs/guides/review.md)) |
 | `/tld:dod` | runs the profile's definition of done and reports a table |
 | `/tld:land` | orders the bot's open pull requests, resolves conflicts before review, runs CI once on the set, installs the land workflow |
 | `/tld:ci` | daily or weekly, unattended: finds workflows failing on the default branch, fixes what the repository can fix, reports what it cannot |
-| `/tld:deps` | weekly, unattended: triages Dependabot pull requests and audit findings, fixes what is red, opens pull requests |
+| `/tld:deps` | weekly, unattended: triages Dependabot pull requests and audit findings, fixes what is red, opens one combined pull request |
 | `/tld:upstream` | weekly, unattended: syncs a patch-carrying fork to the newest upstream release tag, one pull request |
 | `/tld:docs [check \| init \| tidy]` | a thin CLAUDE.md, one docs index, docs read only when a row matches ([guide](docs/guides/docs-index.md)) |
 | `/tld:board [prune]` | checks the connection to your board, or prunes its stale records and clears cards whose pull requests are done, after you confirm |

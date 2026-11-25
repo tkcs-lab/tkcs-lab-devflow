@@ -63,15 +63,28 @@ COMPAT = {
         ("git add .github/workflows/tld-land.yml && git commit -m 'ci: add the land workflow'", "tld-land.yml"),
     ],
     "deps": [
-        ("git checkout dependabot/npm_and_yarn/lodash-4.17.21", "check out its branch"),
-        ("git push origin dependabot/npm_and_yarn/lodash-4.17.21", "normal push"),
-        ("git checkout -b chore/deps-npm-20260101 origin/main", "chore/deps-<ecosystem>-<yyyymmdd>"),
-        ("git push -u origin chore/deps-npm-20260101", "apply the bump, push it"),
-        ("git commit -am 'chore(deps): bump lodash'", "commit the fix onto it"),
+        ("git fetch origin 'dependabot/npm_and_yarn/lodash-4.17.21'", "git fetch origin '<head branch>'"),
+        ('"${CLAUDE_PLUGIN_ROOT}/cli/tld" ops deps-prepare --base origin/main --branch tld-deps/1 '
+         "--group 'origin/dependabot/npm_and_yarn/lodash-4.17.21'", "tld ops deps-prepare --base origin/<main>"),
+        ("git checkout -b tld-deps/2 origin/main", "git checkout -b tld-deps/<k> origin/<main>"),
+        ("git add -A && git commit -m 'chore(deps): regenerate lockfiles'", "git add -A && git commit -m 'chore(deps): regenerate lockfiles'"),
+        ("git status --porcelain --untracked-files=all", "git status --porcelain --untracked-files=all"),
+        ("git stash push --include-untracked --quiet && git stash drop --quiet", "git stash push --include-untracked --quiet"),
+        ("git ls-remote --heads origin chore/deps-20260101", "git ls-remote --heads origin <name>"),
+        ("git push origin 'tld-deps/combined-1:refs/heads/chore/deps-20260101'", "git push origin 'tld-deps/combined-<m>:refs/heads/<name>'"),
+        ('"${CLAUDE_PLUGIN_ROOT}/cli/tld" ops deps-prepare --base origin/main --branch tld-deps/combined-1 '
+         "--group tld-deps/1 --bot-ref 'origin/dependabot/npm_and_yarn/lodash-4.17.21'", "--bot-ref 'origin/<head branch>'"),
+        ('"${CLAUDE_PLUGIN_ROOT}/cli/tld" ops deps-body /tmp/entries.json', "tld ops deps-body <entries file>"),
     ],
     "ci": [
         ("git checkout -b chore/ci-pages-20260101 origin/main", "git checkout -b chore/ci-<workflow>-<yyyymmdd> origin/<main>"),
         ("git push -u origin chore/ci-pages-20260101", "git push -u origin chore/ci-<workflow>-<yyyymmdd>"),
+    ],
+    "quick": [
+        ("git ls-remote --heads origin feature/demo", "git ls-remote --heads origin <branch>"),
+        ("git merge origin/main && git push origin feature/demo", "Merge `origin/<main>` into `<feature>` once"),
+        ("git diff --name-only --no-renames origin/main...origin/feature/demo",
+         "git diff --name-only --no-renames origin/<main>...origin/<feature>"),
     ],
     "sysml": [
         ("git checkout -b chore/sysml-init-20260101 origin/main", "git checkout -b chore/sysml-init-<yyyymmdd> origin/<main>"),
@@ -171,6 +184,7 @@ PLACEHOLDERS = {
     "<branch>": "feature/demo", "<phase branch>": "feature/demo--p1", "<base>": "abc1234", "<feature>": "feature/demo",
     "<new-with-hyphens>": "v1-2-3", "<new>": "v1.2.3", "<ecosystem>": "npm", "<plan file>": "/tmp/plan.md", "<version_file>": "UPSTREAM", "<upstream.tag_pattern>": "^v[0-9.]+$",
     "<plan path>": "docs/14/plan.md", "<yyyymmdd-hhmm>": "20260101-0101", "<yyyymmdd>": "20260101", "<workflow>": "pages", "<owner>/<repo>": "o/r",
+    "<head branch>": "dependabot/npm_and_yarn/lodash-4.17.21", "<k>": "1", "<m>": "1", "<name>": "chore/deps-20260101",
     "<plan slug>": "foo", "<id>": "foo", "<spec_change>": "foo", "<sysml_change>": "foo",
 }
 SPAN = re.compile(r"`((?:git|gh) [^`]+)`")
@@ -205,7 +219,6 @@ MCP = [
     ("mcp__github__create_branch", "github.branch_create", {"branch": "feature/demo", "from_branch": "plan/foo"}),
     ("mcp__github__create_pull_request", "github.pr_create", {"head": "feature/demo", "base": "main"}),
     ("mcp__github__update_pull_request", "github.pr_update", {"pullNumber": 4, "reviewers": ["owner"]}),
-    ("mcp__github__update_pull_request_branch", "github.pr_update_branch", {"pullNumber": 4}),
     ("mcp__github__actions_run_trigger", "github.workflow_dispatch", {"method": "run_workflow", "ref": "feature/demo"}),
     ("mcp__github__add_issue_comment", "github.issue_comment", {"issue_number": 3, "body": "Phase p1 merged."}),
 ]

@@ -2,7 +2,7 @@
 
 The board is the owner's inbox (D7, D8): it holds a status record of every run and every ask a playbook puts
 to the owner. These playbooks write a status record, so the owner sees each run in one place: setup, review,
-make-plan, implement, land, deps, upstream, docs, spec, sysml, questions and migrate, and the worker of a single-session prompt (make-plan's small scope). dod and board write none
+make-plan, implement, quick, land, deps, upstream, docs, spec, sysml, questions and migrate, and the worker of a single-session prompt (make-plan's small scope). dod and board write none
 (a report and the board itself), nor do git-ops, repo-admin and release. The record
 format is `src/tld/schema/status-record.schema.json`; `tld board validate-record FILE --doc-id ID` checks one.
 Asks are [runtime.md](../runtime.md)'s `ask_human`. This file says where, how and when to write records.
@@ -36,9 +36,9 @@ never a reason to skip the record.
 
 | Field | Value |
 |---|---|
-| `kind` | `run` for implement and for a single-session prompt's worker; `command` for every other playbook (deps, upstream, land, setup, docs, spec, sysml, review, make-plan, questions, migrate) |
+| `kind` | `run` for implement, for quick and for a single-session prompt's worker; `command` for every other playbook (deps, upstream, land, setup, docs, spec, sysml, review, make-plan, questions, migrate) |
 | `command` | `null` for a run; else the playbook: `setup`, `review`, `make-plan`, `deps`, `upstream`, `land`, `docs`, `spec`, `sysml`, `questions`, `migrate` |
-| `plan_slug`, `plan_url`, `feature_branch` | a run's plan and branch; a single-session prompt's run has `plan_slug` `issue-<n>`, `plan_url` `null`, its branch and `phases: []`; all `null` for a command |
+| `plan_slug`, `plan_url`, `feature_branch` | a run's plan and branch; a single-session prompt's run has `plan_slug` `issue-<n>`, `plan_url` `null`, its branch and `phases: []`; quick's run has plan_slug issue-<n>, plan_url null and the items its playbook names. All `null` for a command |
 | `project` | `tld board project-slug <owner>/<repo>`: the repository name, lower case, other characters as `-` |
 | document id | from `tld board record-id` (see "Keys and a record that already exists"): `<project>--run--<plan>` for a run, `<project>--<command>--<tail>` for an attended command, `<project>--<command>` for a scheduled one |
 | `attended` | `true` when a person started the command and can answer; `false` for a scheduled run |
@@ -48,6 +48,7 @@ never a reason to skip the record.
 | `phases` | implement's phases; for the others the items the playbook names |
 | `needs_you`, `needs_you_reason`, `needs_you_since` | true exactly while the owner is asked something or the run stopped on something only they can fix; the reason is one line starting with the verb the owner must do |
 | `next_check_at` | the armed check-in time, or `null`; always `null` while the status is `waiting_user` and in every command record (the ask timer's time goes into `last_event`, Board upkeep, rule 5) |
+| `handover` | optional, a make-plan record in `done` only: the plan's Summary, its slug, the issue, plan and spec links and the command to copy, printed by `tld plan handover`; the board shows it under "Plan ready" until a run of that plan slug is on the board, the owner dismisses it or 7 days pass |
 
 ## Keys and a record that already exists
 
@@ -98,11 +99,11 @@ planned write. The command questions reads its input from the board: without a b
 
 ## No secrets
 
-A record holds no file contents, no commit messages and no tokens. The board is readable by every session
+A record holds no file contents, no commit messages and no tokens; the one excerpt it may hold is `handover.summary`, the plan's Summary, which is already in the plan file and, with a tracking issue, in the issue; `tld plan handover` is what scans it for secret-like values before it reaches the board, and the board itself does not scan a record. The board is readable by every session
 that has the token and by the owner. The one place a record names files is a phase's optional `scope` (implement's scope-drift
 monitoring): at most 20 repository-relative paths, and counts. The board can also hold one checked HTML report page per record, stored beside it with `tld board client put-report` and never as part of a record.
 
 ## Alerts
 
 When `needs_you` goes from false to true, call `notify_human("<project>: <reason>")` once. While it stays
-true nothing new goes out unless the reason changes. The runtime map says what an alert looks like there.
+true nothing new goes out unless the reason changes. The runtime map says what an alert looks like there. A make-plan run that ends with a hand-over also calls `notify_human` once (make-plan, section 5).

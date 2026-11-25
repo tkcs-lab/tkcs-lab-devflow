@@ -1,0 +1,17 @@
+id: quick-refuses-large
+description: /quick for a change of many modules must stop with a refusal that names make-plan and change nothing. An eval session has no GitHub tool, so this proves only that refusal (the run stops at step 0.2); the size check itself is proved by the playbook contract test.
+command: /tld:quick
+arguments: >-
+  Move the storage layer of the notes CLI to a database, add a web UI for every command and write a migration
+  for the existing notes files. Decide every open question yourself; nobody can answer.
+fixture:
+  builder: tiny_app
+repeats: 3
+timeout_s: 600
+cost_ceiling_usd: 1.5
+graders:
+  - name: result_matches
+    must:
+      - make-plan
+  - forbidden_ops_absent
+  - no_changes

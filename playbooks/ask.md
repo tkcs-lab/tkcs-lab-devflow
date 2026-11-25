@@ -22,7 +22,7 @@ Answer it and stop.
 
 ## A change request
 
-Restate it in one or two sentences, say whether it looks small or large, and propose `/make-plan <the user's words>`.
+Restate it in one or two sentences, say whether it looks small or large, and propose `/make-plan <the user's words>`. For a change that looks small, also name `/quick <the user's words>`, which runs the whole small path in one session.
 If the user says to just do it, propose the same: a small scope yields a single-session prompt.
 
 ## When a write was denied

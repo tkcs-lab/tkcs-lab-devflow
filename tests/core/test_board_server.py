@@ -402,6 +402,26 @@ def test_put_invalid_returns_422_with_errors(server):
     assert call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE, body={"if_version": 1})[0] == 400
 
 
+def handover_record():
+    return json.loads((FIXTURES / "status-records" / "good-command-handover.json").read_text())
+
+
+def test_put_handover_foreign_link_returns_422(server):
+    bad = handover_record()
+    bad["handover"]["issue_url"] = "https://github.com/someone/else/issues/7"
+    status, _, body = call(server, "PUT", "/api/records/tkcs-lab-devflow--make-plan--89abcdef", token=WRITE, body={"data": bad})
+    assert status == 422 and body["error"] == "invalid"
+    assert any("'handover.issue_url'" in e for e in body["errors"])
+
+
+def test_put_handover_round_trip(server, owner):
+    cookie, _ = owner
+    path = "/api/records/tkcs-lab-devflow--make-plan--89abcdef"
+    assert call(server, "PUT", path, token=WRITE, body={"data": handover_record()})[0] == 200
+    status, _, body = call(server, "GET", path, cookie=cookie)
+    assert status == 200 and body["data"] == handover_record()
+
+
 def test_if_version_true_is_400(server):
     for bad in (True, "1", 0, 1.5):
         status, _, body = call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE,

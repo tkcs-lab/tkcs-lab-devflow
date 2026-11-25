@@ -37,7 +37,7 @@ survey, at text level (`tld profile patch`), so comments survive; the survey pro
 ### Playbooks
 
 Every procedure is a neutral playbook in `playbooks/` (D6): `setup`, `review`, `make-plan`, `implement`, `dod`,
-`land`, `deps`, `upstream`, `docs`, `spec`, `sysml`, `board`, `questions`, `migrate`, and `git-ops`, `repo-admin` and `ask` (`/tld:ask`: answers without changing anything and proposes `/make-plan`), which run on request. OpenSpec (`spec`) is wrapped, pinned and opt-in, and the plan's spec change is archived by the
+`quick` (one planless worker, same final review, fix round and pull request), `land`, `deps`, `upstream`, `docs`, `spec`, `sysml`, `board`, `questions`, `migrate`, and `git-ops`, `repo-admin` and `ask` (`/tld:ask`: answers without changing anything and proposes `/make-plan`), which run on request. OpenSpec (`spec`) is wrapped, pinned and opt-in, and the plan's spec change is archived by the
 retirement phase. The architecture model (`sysml`) is tld's own pure-Python subset of the SysML v2 notation, drawn as an SVG, and the plan's architecture change is archived by the retirement phase. A
 playbook is plain steps: git, shell, `tld` commands, and named **runtime actions** for what only the runtime can do.
 Rules that several playbooks share live once in `playbooks/policies/`: the profile, untrusted text (D10), pull

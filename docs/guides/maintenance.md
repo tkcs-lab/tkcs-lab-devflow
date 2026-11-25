@@ -13,13 +13,19 @@ below) when one exists; `/usage` writes none (see its section). What the spike f
 Weekly dependency triage. It lists the open Dependabot pull requests and runs the `deps.audit`
 commands (a session cannot read Dependabot alerts, so audit commands are the only source of security
 findings). With nothing to do it records "nothing to do" and stops. Otherwise it groups the work by
-ecosystem and directory, one pull request per group, and fixes what is red: it pushes the fix onto the
-Dependabot branch with a normal push, or opens `chore/deps-<ecosystem>-<yyyymmdd>` for a security
-finding no Dependabot PR covers. After a bump it runs the matching `deps.lock_freshness` commands, then
-`verify.fast` and `verify.dod`, and ports code and tests to the new API when they fail (never skipping
-or deleting a test). The delay for ordinary updates is Dependabot's own `cooldown`; `/deps` checks that
-`.github/dependabot.yml` sets `cooldown.default-days` of at least `deps.cooldown_days`. It starts no new
-group after 80% of `deps.time_budget_minutes`. Release notes and audit output are untrusted text.
+ecosystem and directory and fixes each group on a local branch: `tld ops deps-prepare` applies the
+Dependabot changes without their lockfiles, the matching `deps.lock_freshness` commands regenerate them,
+then `verify.fast` and `verify.dod` run and code and tests are ported to the new API when they fail (never
+skipping or deleting a test). Every group that ends green goes into one branch `chore/deps-<yyyymmdd>`,
+built the same way from the default branch and verified once, and one combined pull request whose body
+(`tld ops deps-body`) lists security updates first, each with its Dependabot pull request and versions. A
+group that stays red after two fix attempts, breaks the combination, changes a protected path other than an
+action version, or runs out of time is left out and named in the body; its Dependabot pull request stays
+open for you. `/deps` never pushes to, updates or comments on a Dependabot pull request: Dependabot closes
+each one once its update is on the default branch. The delay for ordinary updates is Dependabot's own
+`cooldown`; `/deps` checks that `.github/dependabot.yml` sets `cooldown.default-days` of at least
+`deps.cooldown_days`. It starts no new group after 80% of `deps.time_budget_minutes` and keeps the rest for
+the combined pull request. Release notes and audit output are untrusted text.
 
 ### `/ci`
 
@@ -195,6 +201,7 @@ A "Needs you" card always means something you can still act on.
   Once you answer, the run leaves "Needs you" and shows `answer received` under "Running" until the session wakes
   (up to 10 minutes, or when you write in its chat) and reads the answer. If you cancel the ask instead, the
   record's card comes back until the session wakes.
+- **Plan ready.** When /tld:make-plan finishes, its card shows under "Plan ready" with the plan's Summary, links to the issue, the plan and the spec change, and the implement command with a Copy button (over plain http, except on localhost, the button selects the text instead). The card moves to "Done" once /tld:implement of that plan writes its record, and to "Hidden" when you dismiss it or after 7 days. A board older than this release refuses the hand-over; make-plan then writes the record without it and says so: update the board.
 - **Dismiss and Restore.** Every card outside "Hidden" has a `Dismiss` button in its details: a stuck "Needs you"
   card, or a "PR open" card whose pull requests are already merged. The card moves to "Hidden" with the badge
   `dismissed`, and `Restore` brings it back. The board keeps the dismissal next to the record. When the session
