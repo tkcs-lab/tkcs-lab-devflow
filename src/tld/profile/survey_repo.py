@@ -6,7 +6,8 @@ Usage: survey_repo.py [ROOT]  (called by survey.py; not a registered tld command
 Prints `scan(ROOT)` (default `.`) as JSON, 2-space indented, with the keys:
 
 - `codeowners`: the `@login` tokens of `.github/CODEOWNERS`, `CODEOWNERS` or `docs/CODEOWNERS` (the
-  first file that exists), in order of first appearance, without duplicates. `@org/team` tokens and
+  first file that exists), in order of first appearance, without case-insensitive duplicates, at
+  most 50 (`codeowners_truncated: true` is added when more were found). `@org/team` tokens and
   email addresses are skipped; the bot (`bot=` argument) is never listed.
 - `version_files`: `{path, pattern}` for every file whose version line is found: `pyproject.toml`
   (`^version = "..."`), `package.json` (`^\\s*"version": "..."`), `Cargo.toml` (`^version = "..."`
@@ -34,6 +35,7 @@ MAX_BYTES = 200000
 MAX_FILES = 5000
 MAX_DEPTH = 4
 CODEOWNERS_FILES = (".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS")
+MAX_CODEOWNERS = 50
 LOGIN = re.compile(r"^@([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))$")
 PYPROJECT_VERSION = r'^version = "([^"]+)"'
 PACKAGE_VERSION = r'^[ \t]*"version": "([^"]+)"'
@@ -87,12 +89,16 @@ def _walk(root: Path):
                 yield Path(entry.path).relative_to(root).as_posix()
 
 
-def _codeowners(root: Path, bot: str | None) -> list[str]:
+def _codeowners(root: Path, bot: str | None) -> tuple[list[str], bool]:
+    """The logins (first spelling kept, case-insensitive duplicates and the bot dropped, at most
+    MAX_CODEOWNERS) and whether the list was cut."""
     for name in CODEOWNERS_FILES:
         text = _read(root / name, root)
         if text is None:
             continue
         out: list[str] = []
+        seen: set[str] = set()
+        cut = False
         for line in text.splitlines():
             line = line.split("#", 1)[0]
             for token in line.split()[1:]:  # the first token is the path pattern
@@ -100,12 +106,16 @@ def _codeowners(root: Path, bot: str | None) -> list[str]:
                 if not m:
                     continue
                 login = m.group(1)
-                if bot and login.lower() == bot.lower():
+                key = login.lower()
+                if (bot and key == bot.lower()) or key in seen:
                     continue
-                if login not in out:
-                    out.append(login)
-        return out
-    return []
+                if len(out) >= MAX_CODEOWNERS:
+                    cut = True
+                    continue
+                seen.add(key)
+                out.append(login)
+        return out, cut
+    return [], False
 
 
 def _cargo_package_version(text: str) -> bool:
@@ -195,13 +205,17 @@ def _adr_bar(root: Path) -> str | None:
 def scan(root, bot: str | None = None) -> dict:
     root = Path(root)
     files = sorted(f for f in _walk(root) if _safe(f))
-    return {
-        "codeowners": _codeowners(root, bot),
+    owners, cut = _codeowners(root, bot)
+    result = {
+        "codeowners": owners,
         "version_files": _version_files(root),
         "deps_audit": _deps_audit(root, files),
         "lock_freshness": _lock_freshness(files),
         "adr_bar": _adr_bar(root),
     }
+    if cut:
+        result["codeowners_truncated"] = True
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:

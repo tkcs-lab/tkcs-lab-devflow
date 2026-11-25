@@ -136,8 +136,8 @@ def build(evidence: dict, base: dict | None = None) -> dict:
 
     base_git = (base or {}).get("git")
     base_git = base_git if isinstance(base_git, dict) else {}
-    bot = base_git.get("bot_login")
-    owners = [o for o in repo.get("codeowners") or [] if not (bot and str(o).lower() == str(bot).lower())]
+    bot = evidence.get("bot_login") or base_git.get("bot_login")
+    owners = [o for o in repo.get("codeowners") or [] if not (bot and str(o).lower() == str(bot).lower())][:50]
     if owners and set(_logins(owners)) != set(_logins(base_git.get("codeowners"))):
         profile.setdefault("git", {})["codeowners"] = owners
         rationale.append({"key": "git.codeowners", "value": owners, "evidence": ["CODEOWNERS"]})

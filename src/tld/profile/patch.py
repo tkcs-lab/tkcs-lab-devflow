@@ -42,6 +42,7 @@ from pathlib import Path
 import yaml
 
 from tld.plan import manifest as vm  # noqa: E402
+from tld.profile import base as base_mod  # noqa: E402
 
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "vendor", "build", "dist", "Pods", ".build",
              "__pycache__", "DerivedData"}
@@ -49,7 +50,6 @@ MAX_FILES = 5000
 KEYS = ("roles", "docs.website", "tld.extends")
 COMPARED = ("stacks", "git.main_branch", "docs.must_read", "docs.index", "docs.adr_dir", "docs.adr_index",
             "docs.changelog", "docs.website", "ci.dispatchable", "roles")
-EXTENDS = re.compile(r"[\w.-]+/[\w.-]+/[\w./-]+@[0-9a-f]{40}")
 NEEDS_YES = 4
 MISSING = object()
 
@@ -158,13 +158,34 @@ def set_block(text: str, key: str, value) -> str:
 
 
 def _set_extends(text: str, lines: list[str], value) -> str:
+    new_text = _edit_extends(text, lines, value)
+    scalar = value.partition("  # ")[0].strip()
+    try:
+        before, after = yaml.safe_load(text) or {}, yaml.safe_load(new_text)
+    except yaml.YAMLError:
+        before, after = None, None
+    ok = isinstance(before, dict) and isinstance(after, dict) and isinstance(after.get("tld"), dict) \
+        and after["tld"].get("extends") == scalar
+    if ok:
+        want = {k: v for k, v in before.items() if k != "tld"}
+        got = {k: v for k, v in after.items() if k != "tld"}
+        old_tld = before.get("tld") if isinstance(before.get("tld"), dict) else {}
+        ok = want == got and {k: v for k, v in old_tld.items() if k != "extends"} == \
+            {k: v for k, v in after["tld"].items() if k != "extends"}
+    if not ok:
+        raise PatchError("cannot edit 'tld.extends' safely in this profile: edit tld.extends by hand")
+    return new_text
+
+
+def _edit_extends(text: str, lines: list[str], value) -> str:
     """Set `tld.extends` as a text edit: replace the line, insert it first in `tld:`, or add the block."""
     if not isinstance(value, str) or not re.fullmatch(r"[\x20-\x7e]+", value):
         raise PatchError("'tld.extends' must be one line of printable ASCII")
     scalar, _, comment = value.partition("  # ")
-    if not EXTENDS.fullmatch(scalar.strip()) or ".." in scalar.split("@")[0].split("/") \
-            or "//" in scalar.split("@")[0]:
-        raise PatchError("'tld.extends' must be <owner>/<repo>/<path>@<40-hex commit sha>")
+    try:
+        base_mod.parse_extends(scalar.strip())
+    except base_mod.BaseError as exc:
+        raise PatchError(str(exc)) from None
     new = render("extends", scalar.strip(), 2)
     if comment.strip():
         new = new.rstrip("\n") + "  # " + comment.strip() + "\n"

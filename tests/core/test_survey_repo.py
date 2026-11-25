@@ -105,3 +105,10 @@ def test_long_heading_line_is_fast(tmp_path):
     start = time.time()
     sr.scan(tmp_path)
     assert time.time() - start < 2
+
+
+def test_codeowners_are_deduplicated_ignoring_case_and_capped(tmp_path):
+    put(tmp_path, "CODEOWNERS", "* @Alice @alice " + " ".join(f"@u{i}" for i in range(80)) + "\n")
+    out = sr.scan(tmp_path)
+    assert out["codeowners"][0] == "Alice" and len(out["codeowners"]) == 50
+    assert out["codeowners_truncated"] is True

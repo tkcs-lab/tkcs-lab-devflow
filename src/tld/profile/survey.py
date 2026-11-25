@@ -8,8 +8,8 @@ Prints `survey(ROOT)` (default `.`) as JSON, 2-space indented: `root`, `evidence
 verify a change (CI run steps, Makefile targets, package scripts), git facts, and the results of
 survey_docs.scan, survey_signals.scan and survey_repo.scan (CODEOWNERS logins, version line,
 dependency commands, ADR heading). `proposal` is survey_proposal.build(evidence, base).
-`--base FILE` is a cached base profile (YAML, read-only, never fetched here): the bot login it sets is
-left out of the CODEOWNERS logins and the proposal omits every key the base sets.
+`--base FILE` is a cached base profile (YAML, read-only, never fetched here): the bot login it sets (or the one in the repository's own
+`.tld/toolkit.yaml`, which wins) is left out of the CODEOWNERS logins and the proposal omits every key the base sets.
 Exit 1 also when FILE cannot be read or is not a YAML mapping (`profile_survey: <message>`).
 
 Read-only: runs `git` with argument lists and reads files; writes nothing.
@@ -246,14 +246,28 @@ def _git_facts(root: Path) -> dict:
             "branch_prefixes": prefixes}
 
 
-def _bot_login(base: dict | None) -> str | None:
-    git = (base or {}).get("git")
+def _bot_of(profile: dict | None) -> str | None:
+    git = (profile or {}).get("git")
     bot = git.get("bot_login") if isinstance(git, dict) else None
     return bot if isinstance(bot, str) and bot else None
 
 
+def _own_profile(root: Path) -> dict | None:
+    """The repository's own `.tld/toolkit.yaml` as data (None when absent, too large or unreadable)."""
+    try:
+        return _read_base(root / ".tld" / "toolkit.yaml")
+    except ValueError:
+        return None
+
+
+def _bot_login(root: Path, base: dict | None) -> str | None:
+    """The bot login: the repository's own profile first, the base otherwise."""
+    return _bot_of(_own_profile(root)) or _bot_of(base)
+
+
 def survey(root: Path, base: dict | None = None) -> dict:
     root = Path(root)
+    bot = _bot_login(root, base)
     stacks, other = _stacks(root)
     ci = _ci(root)
     evidence = {
@@ -264,7 +278,8 @@ def survey(root: Path, base: dict | None = None) -> dict:
         "git": _git_facts(root),
         "docs": survey_docs.scan(root),
         "signals": survey_signals.scan(root),
-        "repo": survey_repo.scan(root, bot=_bot_login(base)),
+        "repo": survey_repo.scan(root, bot=bot),
+        "bot_login": bot,
     }
     return {"root": str(root), "evidence": evidence, "proposal": survey_proposal.build(evidence, base)}
 
