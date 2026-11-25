@@ -14,7 +14,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-playbooks-tracking-issue
 
-- pending
+- worker: Worker ran without tld; it skipped the dod run and three acceptance greps, so the orchestrator ran the roles and the greps.
 
 ## p4-retire
 
