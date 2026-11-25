@@ -784,6 +784,7 @@ def test_tracking_issue_disagreeing_with_issue_slug_is_refused():
 
 def test_tracking_issue_ignores_a_plan_slug_that_is_not_issue_n():
     assert REC.validate(with_ti("good-run-prompt-issue", 42, plan_slug="issue-042x")) == []
+    assert REC.validate(with_ti("good-run-prompt-issue", 7, plan_slug="issue-42x")) == []
 
 
 def test_old_board_refuses_tracking_issue_with_one_named_error(monkeypatch):
