@@ -300,3 +300,14 @@ def test_a_repository_without_a_profile_or_an_origin_has_the_gates_off(tmp_path)
     ev = {"session_id": "s1", "cwd": str(repo), "hook_event_name": "PreToolUse", "tool_name": "Write",
           "tool_input": {"file_path": "a.txt", "content": "x"}}
     assert run("plan-gate", ev).code == 0
+
+
+def test_a_non_mapping_hooks_section_does_not_switch_a_gate_off(tmp_path):
+    ev = lambda r: {"session_id": "s1", "cwd": str(r), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                    "tool_input": {"file_path": "a.txt", "content": "x"}}
+    for n, bad in enumerate(("hooks: 5\n", "hooks: [x]\n", "hooks:\n  plan_gate: 5\n")):
+        repo = make_repo_with_origin(tmp_path / f"r{n}", committed=PROFILE, working=PROFILE + bad)
+        assert run("plan-gate", ev(repo)).code == 2, bad
+    # the trusted copy itself has a malformed hooks section: the gate is still on for a working copy with it off
+    repo = make_repo_with_origin(tmp_path / "t", committed=PROFILE + "hooks: 5\n", working=PROFILE_GATES_OFF)
+    assert run("plan-gate", ev(repo)).code == 2

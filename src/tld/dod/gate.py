@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 from tld.guard import _common
-from tld.guard._common import DEFAULT_MAX_ATTEMPTS, Ctx, ProfileError, dod_profile, gate_enabled
+from tld.guard._common import DEFAULT_MAX_ATTEMPTS, Ctx, ProfileError, _get, dod_profile, gate_enabled
 
 NAME = "dod-gate"
 MARKER_TTL_SECONDS = 24 * 3600   # an exemption lapses a day after the exempt session last stopped
@@ -126,8 +126,18 @@ def fingerprint(project: str) -> str:
 
 # --------------------------------------------------------------------------- running the gate
 
+def _dod_profile(ctx: Ctx) -> dict | None:
+    """dod_profile, with any failure of the profile reads counted like a profile error (never a crash)."""
+    try:
+        return dod_profile(ctx)
+    except ProfileError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - a malformed profile must count as a failed attempt, not end the gate
+        raise ProfileError(f"toolkit.yaml: the profile could not be read ({type(exc).__name__})") from exc
+
+
 def dod_commands(ctx: Ctx) -> list[tuple[str, str | None]]:
-    verify = (dod_profile(ctx) or {}).get("verify")
+    verify = (_dod_profile(ctx) or {}).get("verify")
     entries = verify.get("dod") if isinstance(verify, dict) else None
     if not isinstance(entries, list) or not entries:
         raise ProfileError("toolkit.yaml: missing required key 'verify.dod' (the dod-gate runs it)")
@@ -177,8 +187,8 @@ MAX_ATTEMPTS_LIMIT = 10
 def _limit_for_errors(ctx: Ctx) -> int:
     """The attempt limit to use when the profile itself is broken: the configured one if it is valid, else the default."""
     try:
-        gate = ((dod_profile(ctx) or {}).get("hooks") or {}).get("dod_gate")
-    except (ProfileError, AttributeError):
+        gate = _get(_dod_profile(ctx), "hooks", "dod_gate")
+    except ProfileError:
         return DEFAULT_MAX_ATTEMPTS
     value = gate.get("max_attempts") if isinstance(gate, dict) else None
     if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= MAX_ATTEMPTS_LIMIT:
@@ -212,7 +222,7 @@ def evaluate(ctx: Ctx) -> str | None:
 def _evaluate(ctx: Ctx) -> str | None:
     if not gate_enabled(ctx, "dod_gate"):
         return None
-    gate = ((dod_profile(ctx) or {}).get("hooks") or {}).get("dod_gate") or {}
+    gate = _get(_dod_profile(ctx), "hooks", "dod_gate")
     gate = gate if isinstance(gate, dict) else {}
     if ctx.disable_error:
         raise ctx.disable_error

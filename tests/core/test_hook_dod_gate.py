@@ -304,3 +304,32 @@ def test_verify_dod_is_read_from_the_trusted_copy(tmp_path):
     (repo / "work.txt").write_text("new work\n")
     r = run(HOOK, stop(repo))
     assert r.code == 0 and not flag.exists(), "the working copy's verify.dod must not run"
+
+
+@pytest.mark.parametrize("bad", ['verify: "touch X"\n', "verify: [x]\n", "verify: 5\n"])
+def test_a_non_mapping_verify_is_a_counted_profile_error_in_the_working_copy(tmp_path, bad):
+    repo = make_repo(tmp_path / "repo", "feature/demo", "git:\n  main_branch: main\n" + bad)
+    (repo / "work.txt").write_text("new work\n")
+    r = run(HOOK, stop(repo))
+    assert r.code == 2 and "attempt 1 of 3" in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize("bad", ['verify: "touch X"\n', "verify: [x]\n"])
+def test_a_non_mapping_verify_is_a_counted_profile_error_in_the_trusted_copy(tmp_path, bad):
+    committed = "git:\n  main_branch: main\n" + bad
+    repo = hh.make_repo_with_origin(tmp_path / "r", committed=committed,
+                                    working=profile(["exit 0"], enabled=None))
+    (repo / "work.txt").write_text("new work\n")
+    r = run(HOOK, stop(repo))
+    assert r.code == 2 and "attempt 1 of 3" in r.stderr, r.stderr
+
+
+def test_both_notices_are_kept(tmp_path):
+    from tld.guard import _common
+    from tld.guard.action import Action
+    repo = hh.make_repo_with_origin(tmp_path / "r", committed=profile(["exit 0"], enabled=None),
+                                    working=profile(["exit 1"], enabled=False))
+    ctx = _common.make_ctx(Action("stop", str(repo), str(repo), session_id="s1"), _common.Settings())
+    assert _common.gate_enabled(ctx, "dod_gate") is True
+    _common.dod_profile(ctx)
+    assert "hooks.dod_gate.enabled" in ctx.notice and "verify.dod" in ctx.notice

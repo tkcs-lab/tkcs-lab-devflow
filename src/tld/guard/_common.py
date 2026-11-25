@@ -203,32 +203,46 @@ def gate_enabled(ctx: Ctx, key: str) -> bool:
         # (not decided from HEAD: a commit that deletes the profile, or a branch that predates it, would pass.
         # The lookup is cached, and with no origin it is cheap and unavailable, so the gate is off.)
         trusted, available = ctx.trusted()
-        return bool(available and isinstance(trusted, dict) and _gate_on(_hooks(trusted).get(key)))
-    if _gate_on(ctx.hooks_section().get(key)):
+        return bool(available and isinstance(trusted, dict) and _gate_on(_get(trusted, "hooks", key)))
+    if _gate_on(_get(ctx.profile, "hooks", key)):
         return True
     trusted, available = ctx.trusted()  # looked up only for a gate the working copy switches off
-    if available and _gate_on(_hooks(trusted).get(key)):
+    if available and _gate_on(_get(trusted, "hooks", key)):
         branch = ctx.trust().branch or "the default branch"
-        ctx.notice = (f"toolkit.yaml: warning: 'hooks.{key}.enabled' is weaker here than on {branch} (the remote "
-                      f"default branch); the {branch} value applies until this change is merged")
+        add_notice(ctx, f"toolkit.yaml: warning: 'hooks.{key}.enabled' is weaker here than on {branch} (the remote "
+                        f"default branch); the {branch} value applies until this change is merged")
         return True
     return False
+
+
+def _get(profile: object, *path: str) -> object:
+    """profile[path[0]][path[1]]... where every step that is not a mapping gives None (never raises)."""
+    for key in path:
+        if not isinstance(profile, dict):
+            return None
+        profile = profile.get(key)
+    return profile
+
+
+def add_notice(ctx: Ctx, text: str) -> None:
+    """Append to the notice shown to the user instead of replacing an earlier one."""
+    ctx.notice = text if not ctx.notice else (text if text in ctx.notice else f"{ctx.notice}; {text}")
 
 
 def dod_profile(ctx: Ctx) -> dict | None:
     """The profile whose `verify.dod` and `hooks.dod_gate.max_attempts` the dod-gate runs: the trusted copy when there
     is one (the working tree is not protected, and the commands run with no prompt), else the working copy. The
-    clamp notice is shown when the working copy differs."""
+    clamp notice is shown when the working copy differs. Reads never raise on a value of the wrong type."""
     trusted, available = ctx.trusted()
     if not (available and isinstance(trusted, dict)):
         return ctx.profile
 
     def keys(p):
-        return ((p or {}).get("verify") or {}).get("dod"), (_hooks(p).get("dod_gate") or {}).get("max_attempts")
+        return _get(p, "verify", "dod"), _get(p, "hooks", "dod_gate", "max_attempts")
     if ctx.profile is not None and keys(ctx.profile) != keys(trusted):
         branch = ctx.trust().branch or "the default branch"
-        ctx.notice = (f"toolkit.yaml: warning: 'verify.dod' or 'hooks.dod_gate.max_attempts' differs here from {branch} "
-                      f"(the remote default branch); the {branch} value applies until this change is merged")
+        add_notice(ctx, f"toolkit.yaml: warning: 'verify.dod' or 'hooks.dod_gate.max_attempts' differs here from "
+                        f"{branch} (the remote default branch); the {branch} value applies until this change is merged")
     return trusted
 
 
