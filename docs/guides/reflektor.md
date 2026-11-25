@@ -18,7 +18,7 @@ section `## Change report` plus a standalone HTML page. The design and its decis
   and `diff.json`, with full file contents; delete them when done). A session can remove a stored page early with
   `DELETE /api/records/<id>/report` (session token only; it does not reach existing backups).
 - A page that is refused or cannot be stored is never silent. These are rules of the dod and implement playbooks, not a code check: the dod row reads `needs attention (... ; HTML page not stored)` (a row that is already `FAIL` stays `FAIL`) and the `## Change report` section starts with the line `HTML page not stored: <reason>`. The reason is one of: the reflektor role built no checked page, the page check refused it, the page is too large to upload, the board answered an error or could not be reached, the file could not be sent. A page the check refused is not edited or rebuilt to get past it (also a playbook rule).
-- A branch that quotes the secret-scan allow mark still gets its page: the mark is shown as `[secret-scan mark removed]` in the page (the count is printed by `reflektor-html`).
+- A branch that quotes the secret-scan allow mark still gets its page: the mark is shown as `[secret-scan mark removed]` in the page (the count is shown only in the role's run, as a non-blocking finding quoting the `removed <n> secret-scan allow marks` line of `reflektor-html --file`; the dod's `--send` finds no marks left and prints nothing).
 
 ## Turn it on
 

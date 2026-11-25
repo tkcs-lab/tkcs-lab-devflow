@@ -60,9 +60,8 @@ and its row is `n/a (partial run)`.
       `tld roles page-note --stage role > <role scratch dir>/note.txt`.
    3. Otherwise, with the line: `tld roles reflektor-html --send --answer <file> --dest <a new scratch directory> 2> <role scratch dir>/html.err`.
       A non-zero exit: `tld roles page-note --stage check --stderr <role scratch dir>/html.err > <role scratch dir>/note.txt`, and the page is not sent
-      anywhere. Exit 0: the printed path is the page; when `<role scratch dir>/html.err` has a line
-      `tld roles: reflektor: removed <n> secret-scan allow marks from the page`, add it as a plain line after the
-      `change-report` output. Then:
+      anywhere. Exit 0: the printed path is the page (the role's own `reflektor-html --file` has already replaced the marks and
+      reported their count as a finding, so `--send` prints no count). Then:
       - with this run's status record: `tld board client health 2> <role scratch dir>/board.err`. Exit 0:
         `tld board client put-report <id> <path> 2> <role scratch dir>/board.err`; exit 0 ends the page, no note. A non-zero
         put-report, or a health exit other than 0 and 3, is a board failure: `show_human(<path>, "change report")`,
