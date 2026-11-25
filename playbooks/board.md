@@ -48,7 +48,7 @@ Needs a working board (steps 1 and 2 above succeed); without one, stop and say s
    `version` that `get` returned. Pass `--reason` as a one-line text of your own, fixed (such as `PRs merged`);
    never text copied from a pull request, an issue or a record. On `version_conflict` leave the record as it is
    and say so. Right before each `resolve`, read the record's pull requests again with `github.pr_read`; if any is open, leave
-   the record and say so. On no, change nothing.
+   the record and say so. On no, change nothing. When `tld board resolve` says `'tracking_issue' is not a known field`, the plugin is older than the board: leave that record, say so, and tell the owner to update the plugin.
 
 Nothing else is ever deleted or cleared: nothing that is not on a list the owner confirmed, and no record
 because it looks old.
