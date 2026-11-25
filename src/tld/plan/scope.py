@@ -125,10 +125,11 @@ def load_ignore(profile: str | None) -> list[str]:
     (the worker brief demands that line from every phase, so it is expected everywhere)."""
     if not profile:
         return []
-    try:
-        data = yaml.safe_load(Path(profile).read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
+    from tld.profile import resolve as rs
+    loaded = rs.load(profile, trusted=False, fetch=False)
+    if loaded.errors:
         raise ScopeError("profile unreadable")
+    data = loaded.profile
     ignore: list[str] = []
     scope = data.get("scope") if isinstance(data, dict) else None
     if isinstance(scope, dict) and isinstance(scope.get("ignore"), list):

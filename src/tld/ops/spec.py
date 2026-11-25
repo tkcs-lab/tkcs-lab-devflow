@@ -22,7 +22,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import yaml
 
 DEFAULT_PROFILE = ".tld/toolkit.yaml"
 MIN_NODE = (22, 20, 0)
@@ -92,13 +91,14 @@ def _check(ns: argparse.Namespace, root: Path) -> str:
     profile = Path(ns.profile) if ns.profile else root / DEFAULT_PROFILE
     if not profile.is_file():
         raise Fail(f"tld ops spec: profile not found: {profile}")
-    try:
-        data = yaml.safe_load(profile.read_text()) or {}
-    except yaml.YAMLError:
-        data = {}
-    block = data.get("spec") if isinstance(data, dict) else None
+    from tld.profile import resolve as rs
+    loaded = rs.load(profile, root=root, trusted=False, fetch=False)
+    if loaded.errors:
+        raise Fail("\n".join(f"toolkit.yaml: {e}" for e in loaded.errors))
+    block = loaded.profile.get("spec")
     if not isinstance(block, dict) or "version" not in block:
-        raise Fail("toolkit.yaml: missing required key 'spec.version' (add a spec block; see docs/guides/spec.md)")
+        raise Fail("toolkit.yaml: /spec needs a 'spec' section (an empty 'spec:' uses version 2.1.0; "
+                   "see docs/guides/spec.md)")
     version = block["version"]
     if not isinstance(version, str) or not re.fullmatch(VERSION_RE, version):
         raise Fail(f"tld ops spec: spec.version must be an exact release such as 2.1.0 (got {version!r})")

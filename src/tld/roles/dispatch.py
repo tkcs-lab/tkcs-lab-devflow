@@ -28,7 +28,6 @@ from pathlib import Path
 import yaml
 
 from tld.plan import manifest as vm  # noqa: E402
-from tld.profile import validate as vp  # noqa: E402
 
 POINTS = ("make_plan", "implement_phase", "implement_final", "review", "dod")
 NO_DIFF_POINTS = ("make_plan", "review")
@@ -125,15 +124,20 @@ def _read(path: str) -> str:
 
 
 def _load_profile(path: str) -> dict:
-    text = _read(path)
-    try:
-        profile = yaml.safe_load(text)
-    except yaml.YAMLError as exc:
-        raise RolesError(f"cannot read '{path}': not valid YAML: {exc}") from exc
-    errors, _warnings, resolved = vp.validate(profile, None)
-    if errors:
-        raise RolesError("\n".join(f"toolkit.yaml: {e}" for e in errors))
-    return resolved
+    """The resolved profile (base and defaults applied; a base is read from the cache, never fetched)."""
+    from tld.profile import resolve as rs  # imported here: keeps the module import light
+    if path == "-":
+        try:
+            raw = yaml.safe_load(sys.stdin.read())
+        except yaml.YAMLError as exc:
+            raise RolesError(f"cannot read '{path}': not valid YAML: {exc}") from exc
+        result = rs.resolve_dict(raw, None, fetch=False)  # no root, no trusted copy: no floor
+    else:
+        _read(path)  # a missing file keeps its own message
+        result = rs.load(path, fetch=False)
+    if result.errors:
+        raise RolesError("\n".join(f"toolkit.yaml: {e}" for e in result.errors))
+    return result.profile
 
 
 def main(argv: list[str] | None = None) -> int:

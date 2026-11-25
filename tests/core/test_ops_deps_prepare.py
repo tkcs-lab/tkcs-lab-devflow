@@ -206,7 +206,7 @@ def test_lock_entries_from_defaults_and_explicit_values_alike(tmp_path, monkeypa
                                                 "lock_freshness": [entry]}}
     assert deps_prepare.lock_entries(written) == [entry]
     assert deps_prepare.lock_entries(yaml.safe_load(HEAD)) == []
-    monkeypatch.setattr(deps_prepare, "validate", lambda profile, root: ([], [], {"deps": {"lock_freshness": [entry]}}))
+    monkeypatch.setattr(deps_prepare, "validate", lambda profile, root, **kw: ([], [], {"deps": {"lock_freshness": [entry]}}))
     assert deps_prepare.lock_entries(yaml.safe_load(HEAD)) == [entry]
     repo = build(tmp_path, profile=HEAD)
     g = group(repo, "pip", {"requirements.in": REQ_IN.replace("alpha==1.0", "alpha==2.0"),
@@ -217,6 +217,29 @@ def test_lock_entries_from_defaults_and_explicit_values_alike(tmp_path, monkeypa
     assert out["lock_commands"] == [{"index": 0, "run": "make lock", "when": ["requirements.in"],
                                      "lockfiles": ["requirements.lock"]}]
     assert out["groups"][0]["lockfiles"] == ["requirements.lock"]
+
+
+def test_deps_prepare_reads_the_trusted_profile_without_fetching(tmp_path, monkeypatch, capsys):
+    from tld.profile import base as base_mod
+    fetched = []
+
+    def recorder(*args, **kw):
+        fetched.append(args)
+        raise AssertionError("an unattended /deps run must never fetch a base")
+
+    monkeypatch.setattr(base_mod, "fetch", recorder)
+    entry = {"when": ["requirements.in"], "run": "make lock", "lockfiles": ["requirements.lock"]}
+    profile = HEAD + f"tld:\n  extends: o/r/p.yaml@{'c' * 40}\n" + yaml.safe_dump(
+        {"deps": {"cooldown_days": 3, "time_budget_minutes": 90, "lock_freshness": [entry]}})
+    repo = build(tmp_path, profile=profile)
+    g = group(repo, "pip", {"requirements.in": REQ_IN.replace("alpha==1.0", "alpha==2.0"),
+                            "requirements.lock": "alpha 2.0\n"})
+    monkeypatch.chdir(repo)
+    assert deps_prepare.main(["--base=origin/main", "--branch=chore/deps-x", f"--group={g}"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert fetched == []
+    assert out["lock_commands"] == [{"index": 0, "run": "make lock", "when": ["requirements.in"],
+                                     "lockfiles": ["requirements.lock"]}]
 
 
 @pytest.mark.parametrize("case", ["side-branch", "no-trusted-copy"])

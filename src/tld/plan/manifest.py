@@ -272,7 +272,7 @@ def validate(manifest, profile: dict | None = None, *, plan_dir: str = "docs/pla
         if types and branch.split("/")[0] not in types:
             errors.append(
                 f"feature_branch '{branch}' does not start with one of {', '.join(t + '/' for t in types)} "
-                f"(git.branch_pattern: {profile['git']['branch_pattern']})"
+                f"(git.branch_pattern: {profile['git'].get('branch_pattern', '<type>/<kebab-case>')})"
             )
     mp = manifest.get("max_parallel")
     if mp is not None and (not isinstance(mp, int) or isinstance(mp, bool) or mp < 1):
@@ -456,7 +456,13 @@ def main(argv: list[str] | None = None) -> int:
 
     profile = None
     if args.profile:
-        profile = yaml.safe_load(Path(args.profile).read_text())
+        from tld.profile import resolve as rs
+        loaded = rs.load(args.profile, trusted=False, fetch=False, file_checks=False)
+        if loaded.errors:
+            for e in loaded.errors:
+                print(f"manifest: toolkit.yaml: {e}", file=sys.stderr)
+            return 1
+        profile = loaded.profile
     plan_dir = "docs/plans"
     main_branch = "main"
     if isinstance(profile, dict):

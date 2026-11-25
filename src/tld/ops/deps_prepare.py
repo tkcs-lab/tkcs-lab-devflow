@@ -59,7 +59,7 @@ def plain_name(value: str) -> bool:
 
 
 def resolve(profile: dict) -> dict:
-    errors, _, resolved = validate(profile, None)
+    errors, _, resolved = validate(profile, None, fetch=False)
     if errors:
         raise DepsError(f"the trusted profile is invalid: {errors[0]}")
     return resolved
