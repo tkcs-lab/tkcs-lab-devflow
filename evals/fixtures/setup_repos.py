@@ -140,6 +140,15 @@ BASE_NO_TESTS = {
 FILES = {"security_heavy": SECURITY_HEAVY, "ios_ui_app": IOS_UI_APP, "docs_website": DOCS_WEBSITE, "bare": BARE,
          "base_with_tests": BASE_WITH_TESTS, "base_no_tests": BASE_NO_TESTS}
 
+BASE_PROPOSED_ROLES = {
+    "posture": {"security": "standard"},
+    "disable": ["website-maintainer"],
+    "required": [
+        {"role": "security-reviewer", "at": ["implement_final"], "blocking": False},
+        {"role": "test-architect", "at": ["make_plan"], "blocking": False},
+    ],
+}
+
 EXPECTED = {
     "security_heavy": {
         "stacks": ["python"],
@@ -186,9 +195,10 @@ EXPECTED = {
         "dispatchable": [],
         "roles": {"posture": {"security": "standard"}, "disable": ["website-maintainer"]},
     },
-    # roles come from the base: the repository's profile writes no roles block
-    "base_with_tests": {"stacks": [], "website": None, "dispatchable": [], "roles": None},
-    "base_no_tests": {"stacks": [], "website": None, "dispatchable": [], "roles": None},
+    # the roles a survey without a base proposes (tests/core/test_survey_proposal.py); the setup tasks run with the
+    # base, which already requires both roles, so the written profile holds no roles block
+    "base_with_tests": {"stacks": [], "website": None, "dispatchable": [], "roles": BASE_PROPOSED_ROLES},
+    "base_no_tests": {"stacks": [], "website": None, "dispatchable": [], "roles": BASE_PROPOSED_ROLES},
 }
 
 
