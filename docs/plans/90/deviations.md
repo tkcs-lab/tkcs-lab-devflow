@@ -13,7 +13,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-schema-validate
 
-- pending
+- worker: none reported by the worker
+- review: worker added two rows to docs/reference/profile-reference.md (outside touches) on the orchestrator's approval so the docs test passes until p14
 
 ## p4-resolve
 
