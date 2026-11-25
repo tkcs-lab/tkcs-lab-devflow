@@ -38,6 +38,9 @@ class Resolved:
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     base: BaseRef | None = None
+    base_missing: bool = False  # the profile extends a base that is not cached (and was not fetched)
+    trusted_base_missing: BaseRef | None = None  # the default branch's base, when it is not cached
+    trusted_branch: str | None = None
 
 
 def _plain(message: str) -> str:
@@ -265,6 +268,7 @@ def resolve_dict(raw, root_dir: Path | None = None, *, fetch: bool = True) -> Re
     env = fs_env(root_dir) if root_dir is not None else Env()
     out = resolve(raw, base=base, base_ref=ref, env=env, root_dir=root_dir)
     out.warnings = warnings + out.warnings
+    out.base_missing = ref is not None and base is None
     return out
 
 
@@ -318,22 +322,23 @@ def _read_profile(path: Path, root: Path, sha: str | None, ref: str | None = Non
 
 
 def _trusted_profile(root: Path, owner: str | None, warnings: list[str]):
-    """(resolved trusted profile | None, its branch | None); appends the warnings."""
+    """(resolved trusted profile | None, its branch | None, its uncached base | None); appends the warnings."""
     from tld.guard import trust
     t = trust.trusted(str(root))
     if not t.available or t.profile is None:
         why = t.problem or "the default branch has no profile"
         warnings.append(f"no trusted copy of the profile ({why}); guarded keys are taken from this working tree")
-        return None, t.branch
+        return None, t.branch, None
     ref, tbase, errors, tw = base_for(t.profile, root, False, trusted_copy=True)
     warnings += tw
+    missing = ref if (ref is not None and tbase is None and not errors) else None
     out = resolve(t.profile, base=None if errors else tbase, base_ref=None if errors else ref,
                   env=tree_env(root, t.sha, owner, t.branch))
     if out.errors:
         warnings.append(f"no trusted copy of the profile (the profile on {t.branch} does not resolve: "
                         f"{(errors or out.errors)[0][:200]}); guarded keys are taken from this working tree")
-        return None, t.branch
-    return out.profile, t.branch
+        return None, t.branch, missing
+    return out.profile, t.branch, missing
 
 
 def load(path, *, ref: str | None = None, root=None, fetch: bool = True, trusted: bool = True,
@@ -359,9 +364,9 @@ def load(path, *, ref: str | None = None, root=None, fetch: bool = True, trusted
     url = origin_url(root)
     owner = _owner_of(url)
     branch = _head_branch(root)
-    trusted_profile = trusted_branch = None
+    trusted_profile = trusted_branch = trusted_missing = None
     if trusted and url:
-        trusted_profile, trusted_branch = _trusted_profile(root, owner, warnings)
+        trusted_profile, trusted_branch, trusted_missing = _trusted_profile(root, owner, warnings)
         branch = branch or trusted_branch
     elif trusted:
         warnings.append("no trusted copy of the profile (no origin remote); guarded keys are taken from this "
@@ -370,6 +375,8 @@ def load(path, *, ref: str | None = None, root=None, fetch: bool = True, trusted
     out = resolve(raw, base=base, base_ref=base_ref, trusted=trusted_profile, trusted_branch=trusted_branch, env=env,
                   root_dir=root if file_checks and not sha else None)
     out.warnings = warnings + out.warnings
+    out.base_missing = base_ref is not None and base is None
+    out.trusted_base_missing, out.trusted_branch = trusted_missing, trusted_branch
     return out
 
 

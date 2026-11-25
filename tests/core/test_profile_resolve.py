@@ -457,3 +457,18 @@ def test_for_hook_never_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(rs.defaults, "apply", lambda *a, **k: 1 / 0)
     resolved, notice = rs.for_hook(MINIMAL, tmp_path)
     assert resolved is None and "could not be resolved" in notice
+
+
+def test_load_flags_an_uncached_base_and_an_uncached_trusted_base(tmp_path):
+    """Structured flags, never the text of a warning, say that a base could not be applied."""
+    ref = f"acme/org/tld/base.yaml@{'d' * 40}"
+    repo = make_repo(tmp_path, with_extends(MINIMAL, REF_A) | {"tld": {"extends": ref}}, origin=True)
+    out = rs.load(repo / ".tld" / "toolkit.yaml", fetch=False)
+    assert out.errors == [] and out.base_missing is True
+    git(repo, "checkout", "-q", "main")  # main extends the uncached base; the branch below drops it
+    git(repo, "checkout", "-q", "-b", "feature/y")
+    write_profile(repo, MINIMAL)
+    out = rs.load(repo / ".tld" / "toolkit.yaml", fetch=False)
+    assert out.errors == [] and out.base_missing is False
+    assert out.trusted_base_missing is not None and out.trusted_base_missing.sha == "d" * 40
+    assert out.trusted_branch == "main"

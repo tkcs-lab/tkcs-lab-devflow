@@ -251,12 +251,15 @@ def repo(tmp_path):
     return r
 
 
+FULL = {"git": {"main_branch": "main"}, "verify": {"fast": ["true"], "dod": ["true"]}}  # no default supplies these
+
+
 @pytest.fixture()
 def files(tmp_path):
     plan = tmp_path / "plan.md"
     plan.write_text("# Plan\n\n## Implementation manifest\n\n```yaml\n" + yaml.safe_dump(MANIFEST) + "```\n")
     profile = tmp_path / "toolkit.yaml"
-    profile.write_text(yaml.safe_dump({"docs": {"must_read": [], "changelog": {"file": "CHANGELOG.md", "section": "## [Unreleased]"}},
+    profile.write_text(yaml.safe_dump({**FULL, "docs": {"must_read": [], "changelog": {"file": "CHANGELOG.md", "section": "## [Unreleased]"}},
                                        "scope": {"ignore": ["lock.json"]}}))
     return plan, profile, tmp_path / "results.json"
 
@@ -453,3 +456,15 @@ def test_resumed_p1_is_not_p10(repo, files, tmp_path):
     got = check(repo, (plan, files[1], files[2]), phase="p1", plan_slug="demo", feature="feature/demo")
     assert got["check"] == "ok"
     assert "resumed" not in (got["reason"] or "")
+
+
+def test_changelog_default_is_ignored(tmp_path):
+    import importlib
+    sc = importlib.import_module("tld.plan.scope")
+    (tmp_path / ".tld").mkdir()
+    (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
+    profile = tmp_path / ".tld" / "toolkit.yaml"
+    profile.write_text(yaml.safe_dump({**FULL, "scope": {"ignore": ["lock.json"]}}))  # no docs.changelog written
+    assert sc.load_ignore(str(profile)) == ["lock.json", "CHANGELOG.md"]
+    (tmp_path / "CHANGELOG.md").unlink()  # no file: no default
+    assert sc.load_ignore(str(profile)) == ["lock.json"]

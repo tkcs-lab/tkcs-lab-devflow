@@ -508,7 +508,19 @@ def _cmd_check(args: argparse.Namespace) -> int:
 def _cmd_fetch(args: argparse.Namespace) -> int:
     profile_path = Path(args.profile)
     try:
-        profile = yaml.safe_load(profile_path.read_text())
+        if args.ref:
+            from tld.profile import resolve as rs
+            sha, problem = rs.resolve_ref(Path.cwd(), args.ref)
+            if problem:
+                print(f"toolkit.yaml: {problem}", file=sys.stderr)
+                return 1
+            shown = rs._git(Path.cwd(), "show", f"{sha}:{profile_path.as_posix()}")
+            if shown is None or shown.returncode != 0:
+                raise OSError("no such file at the ref")
+            profile = yaml.safe_load(shown.stdout)
+            profile_path = Path.cwd() / profile_path  # the repository the cache belongs to
+        else:
+            profile = yaml.safe_load(profile_path.read_text())
     except (OSError, yaml.YAMLError):
         print(f"toolkit.yaml: no readable profile at '{profile_path}'", file=sys.stderr)
         return 1
@@ -548,6 +560,8 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(run=_cmd_check)
     p = sub.add_parser("fetch", help="fill the cache with the base a profile extends")
     p.add_argument("profile", nargs="?", default=DEFAULT_PROFILE)
+    p.add_argument("--ref", help="read the profile from this git ref of the current repository (for example the "
+                                 "default branch, whose base the trusted copy needs)")
     p.set_defaults(run=_cmd_fetch)
     p = sub.add_parser("latest", help="the newest pin of <owner>/<repo>/<path>")
     p.add_argument("source")

@@ -172,6 +172,7 @@ def _warns(vm, entry, profile=None):
 
 
 # The profile and ordinary workflows are off the default protect list; a repository that lists them gets the warnings.
+FULL = {"git": {"main_branch": "main"}, "verify": {"fast": ["true"], "dod": ["true"]}}  # keys no default supplies
 LISTED = {"hooks": {"protect_paths": [".tld/toolkit.yaml", ".github/workflows/**"]}}
 
 
@@ -510,7 +511,7 @@ def test_spec_change_differing_from_the_slug_warns(vm):
 
 def test_cli_spec_change_with_a_spec_profile(tmp_path):
     profile = tmp_path / "toolkit.yaml"
-    profile.write_text(yaml.safe_dump(SPEC_PROFILE))
+    profile.write_text(yaml.safe_dump({**FULL, **SPEC_PROFILE}))
     bad = tmp_path / "bad.yaml"
     bad.write_text(yaml.safe_dump(_spec_manifest(spec_change="A")))
     good = tmp_path / "good.yaml"
@@ -521,7 +522,7 @@ def test_cli_spec_change_with_a_spec_profile(tmp_path):
     assert out.returncode != 0
     assert ID_ERR in out.stdout + out.stderr
     no_spec = tmp_path / "plain.yaml"
-    no_spec.write_text("git: {}\n")
+    no_spec.write_text(yaml.safe_dump(FULL))
     out = run_cli(str(good), "--profile", str(no_spec))
     assert "spec_change needs the profile's spec block" in out.stdout + out.stderr
 
@@ -666,7 +667,7 @@ def test_sysml_change_is_a_known_key(vm):
 
 def test_cli_sysml_change_with_a_sysml_profile(tmp_path):
     profile = tmp_path / "toolkit.yaml"
-    profile.write_text(yaml.safe_dump(SYSML_PROFILE))
+    profile.write_text(yaml.safe_dump({**FULL, **SYSML_PROFILE}))
     good = tmp_path / "good.yaml"
     good.write_text(yaml.safe_dump(_sysml_manifest()))
     bad = tmp_path / "bad.yaml"
@@ -676,6 +677,34 @@ def test_cli_sysml_change_with_a_sysml_profile(tmp_path):
     out = run_cli(str(bad), "--profile", str(profile))
     assert out.returncode != 0 and SYSML_ID_ERR in out.stdout + out.stderr
     plain = tmp_path / "plain.yaml"
-    plain.write_text("git: {}\n")
+    plain.write_text(yaml.safe_dump(FULL))
     out = run_cli(str(good), "--profile", str(plain))
     assert SYSML_BLOCK_ERR in out.stdout + out.stderr
+
+
+def test_branch_types_default_is_checked(tmp_path):
+    """A profile that writes no `git.branch_types` still checks the feature branch against the built-in types."""
+    profile = tmp_path / "toolkit.yaml"
+    profile.write_text(yaml.safe_dump(FULL))
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(mutated(lambda m: m.update(feature_branch="feat/demo"))))
+    out = run_cli(str(bad), "--profile", str(profile))
+    assert out.returncode == 1
+    assert "feature_branch 'feat/demo' does not start with one of feature/, fix/, chore/" in out.stderr
+    good = tmp_path / "good.yaml"
+    good.write_text(yaml.safe_dump(GOOD))
+    assert run_cli(str(good), "--profile", str(profile)).returncode == 0
+
+
+def test_plan_dir_default_resolves_trailing_slash(tmp_path):
+    """`docs/plans` of an existing directory is the default; a written trailing slash is dropped before the check."""
+    (tmp_path / ".tld").mkdir()
+    (tmp_path / "docs" / "plans").mkdir(parents=True)
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(mutated(
+        lambda m: (m["phases"][0].update(touches=["docs/plans/14/plan.md"]), m.update(tracking_issue=14)))))
+    for plan_dir in (None, "docs/plans/"):
+        profile = tmp_path / ".tld" / "toolkit.yaml"
+        profile.write_text(yaml.safe_dump({**FULL, **({"docs": {"plan_dir": plan_dir}} if plan_dir else {})}))
+        out = run_cli(str(bad), "--profile", str(profile))
+        assert out.returncode == 1 and "is a plan record" in out.stderr, (plan_dir, out.stderr)

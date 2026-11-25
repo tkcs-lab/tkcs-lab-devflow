@@ -22,6 +22,14 @@ def profile():
     return yaml.safe_load(FIXTURE.read_text())
 
 
+def isolated(tmp_path):
+    """The fixture profile in a directory with no git repository: no trusted copy of another repository clamps it."""
+    out = tmp_path / ".tld" / "toolkit.yaml"
+    out.parent.mkdir(exist_ok=True)
+    out.write_text(FIXTURE.read_text())
+    return out
+
+
 def names(result, key="required"):
     return [i["role"] for i in result[key]]
 
@@ -198,7 +206,7 @@ def run(*args, stdin=None):
 def test_cli_round_trip(tmp_path):
     changed = tmp_path / "changed.txt"
     changed.write_text("app/views/a.py\n\n")
-    p = run("required", "--profile", str(FIXTURE), "--at", "implement_final", "--changed", str(changed))
+    p = run("required", "--profile", str(isolated(tmp_path)), "--at", "implement_final", "--changed", str(changed))
     assert p.returncode == 0, p.stderr
     req = json.loads(p.stdout)
     assert names(req) == ["security-reviewer", "ux-reviewer"]
@@ -215,26 +223,26 @@ def test_cli_round_trip(tmp_path):
                                      "roles: FAILED (2 of 2 required)"]
 
 
-def test_cli_make_plan_needs_no_changed():
-    p = run("required", "--profile", str(FIXTURE), "--at", "make_plan")
+def test_cli_make_plan_needs_no_changed(tmp_path):
+    p = run("required", "--profile", str(isolated(tmp_path)), "--at", "make_plan")
     assert p.returncode == 0
     assert "test-architect" in names(json.loads(p.stdout))
 
 
-def test_cli_changed_from_stdin():
-    p = run("required", "--profile", str(FIXTURE), "--at", "dod", "--changed", "-", stdin="site/index.md\n")
+def test_cli_changed_from_stdin(tmp_path):
+    p = run("required", "--profile", str(isolated(tmp_path)), "--at", "dod", "--changed", "-", stdin="site/index.md\n")
     assert p.returncode == 0
     assert names(json.loads(p.stdout)) == ["tech-writer", "website-maintainer"]
 
 
 def test_cli_errors(tmp_path):
-    p = run("required", "--profile", str(FIXTURE), "--at", "nope")
+    p = run("required", "--profile", str(isolated(tmp_path)), "--at", "nope")
     assert p.returncode == 1 and p.stderr.startswith("tld roles: unknown point 'nope' (one of make_plan")
     p = run("required", "--profile", str(tmp_path / "missing.yaml"), "--at", "dod")
     assert p.returncode == 1 and p.stderr.startswith(f"tld roles: cannot read '{tmp_path / 'missing.yaml'}'")
-    p = run("required", "--profile", str(FIXTURE), "--at", "dod")
+    p = run("required", "--profile", str(isolated(tmp_path)), "--at", "dod")
     assert p.returncode == 1
-    assert p.stderr.strip() == "tld roles: --changed is needed: roles.required has entries with 'when'"
+    assert p.stderr.strip().splitlines()[-1] == "tld roles: --changed is needed: roles.required has entries with 'when'"
     bad = tmp_path / "bad.yaml"
     bad.write_text("stacks: []\n")
     p = run("required", "--profile", str(bad), "--at", "dod")
@@ -260,3 +268,87 @@ def test_edit_mode_only_for_edit_roles_in_a_phase(ag, point):
     r = ag.required(prof, point, [])
     modes = {i["role"]: i["mode"] for i in r["required"]}
     assert modes == {"tech-writer": "edit" if point == "implement_phase" else "review", "code-reviewer": "review"}
+
+
+def _git(cwd, *args):
+    subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
+
+
+def test_reads_required_roles_from_the_cached_base(ag, tmp_path):
+    from tld.profile import base as base_mod
+    ref = base_mod.BaseRef("acme", "org", "tld/base.yaml", "a" * 40)
+    text = "roles:\n  required:\n    - {role: security-reviewer, at: [dod], blocking: true}\n"
+    repo = tmp_path / "r"
+    (repo / ".tld").mkdir(parents=True)
+    _git(repo, "init", "-q")
+    blob = subprocess.run(["git", "-C", str(repo), "hash-object", "--stdin"], input=text, capture_output=True,
+                          text=True, check=True).stdout.strip()
+    base_mod._store(base_mod.common_dir(repo), ref, text.encode(), blob)
+    (repo / ".tld" / "toolkit.yaml").write_text(
+        f"tld:\n  extends: {ref.source}@{ref.sha}\ngit: {{main_branch: main}}\nverify:\n  fast: ['x']\n  dod: ['x']\n")
+    out = ag._load_profile(str(repo / ".tld" / "toolkit.yaml"))
+    assert names(ag.required(out, "dod", [])) == ["security-reviewer"]
+
+
+def test_a_profile_on_standard_input_is_resolved_without_a_floor(ag, tmp_path, monkeypatch):
+    import io
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(
+        "git: {main_branch: main}\nverify:\n  fast: ['x']\n  dod: ['x']\n"
+        "roles:\n  required:\n    - {role: debugger, at: [dod]}\n"))
+    out = ag._load_profile("-")
+    assert out["land"]["max_prs"] == 10  # a built-in default was applied
+    assert names(ag.required(out, "dod", [])) == ["debugger"]
+
+
+def test_an_uncached_base_stops_the_run(ag, tmp_path):
+    (tmp_path / ".tld").mkdir()
+    _git(tmp_path, "init", "-q")
+    prof = tmp_path / ".tld" / "toolkit.yaml"
+    prof.write_text(f"tld:\n  extends: acme/org/tld/base.yaml@{'b' * 40}\ngit: {{main_branch: main}}\n"
+                    "verify:\n  fast: ['x']\n  dod: ['x']\n")
+    with pytest.raises(ag.RolesError, match="is not cached; .*run `tld profile base fetch`"):
+        ag._load_profile(str(prof))
+
+
+def test_an_uncached_trusted_base_stops_the_run(ag, tmp_path):
+    """main extends a base that requires a role; a feature branch removes `tld.extends`. The base of the default
+    branch is not cached, so its roles cannot be added: the run stops instead of listing fewer roles."""
+    repo = tmp_path / "r"
+    (repo / ".tld").mkdir(parents=True)
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.test")
+    _git(repo, "config", "user.name", "t")
+    _git(repo, "config", "commit.gpgsign", "false")
+    prof = repo / ".tld" / "toolkit.yaml"
+    body = "git: {main_branch: main}\nverify:\n  fast: ['x']\n  dod: ['x']\n"
+    prof.write_text(f"tld:\n  extends: acme/org/tld/base.yaml@{'c' * 40}\n" + body)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "main")
+    bare = tmp_path / "origin.git"
+    _git(tmp_path, "init", "-q", "--bare", "-b", "main", str(bare))
+    _git(repo, "remote", "add", "origin", str(bare))
+    _git(repo, "push", "-q", "origin", "main")
+    _git(repo, "remote", "set-head", "origin", "main")
+    _git(repo, "checkout", "-q", "-b", "feature/x")
+    prof.write_text(body)  # the branch drops `tld.extends`
+    with pytest.raises(ag.RolesError, match=r"base acme/org/tld/base.yaml@ccccccc of the default branch is not "
+                                            r"cached; run `tld profile base fetch --ref origin/main`"):
+        ag._load_profile(str(prof))
+
+
+def test_base_fetch_reads_a_profile_at_a_ref(tmp_path, monkeypatch):
+    repo = tmp_path / "r"
+    (repo / ".tld").mkdir(parents=True)
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.test")
+    _git(repo, "config", "user.name", "t")
+    _git(repo, "config", "commit.gpgsign", "false")
+    (repo / ".tld" / "toolkit.yaml").write_text("git: {main_branch: main}\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "x")
+    monkeypatch.chdir(repo)
+    p = subprocess.run([*tld_cmd("profile", "base"), "fetch", "--ref", "main"], capture_output=True, text=True)
+    assert p.returncode == 0 and p.stdout.strip() == "no base", p.stderr
+    p = subprocess.run([*tld_cmd("profile", "base"), "fetch", "--ref", "nope"], capture_output=True, text=True)
+    assert p.returncode == 1 and "not a commit of this repository" in p.stderr

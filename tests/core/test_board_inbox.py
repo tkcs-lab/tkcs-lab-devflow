@@ -608,3 +608,23 @@ def test_answers_from_reply_needs_the_ask_and_no_id(tmp_path):
     assert tld("answers", "--from-reply", reply, "--from-issue", reply, "--ask", ask_file).returncode == 2
     both = tld("answers", "--from-reply", "-", "--ask", "-", stdin="yes")
     assert both.returncode == 2 and "cannot both read stdin" in both.stderr
+
+
+def test_owner_login_defaults_to_the_repository_owner_with_a_base(tmp_path):
+    """A profile that extends a cached base resolves; the base sets no owner_login, so the repository owner is used,
+    and a written git.owner_login still wins."""
+    from tld.profile import base as base_mod
+    ref = base_mod.BaseRef("acme", "org", "tld/base.yaml", "a" * 40)
+    text = "git: {bot_login: acme-agent}\n"
+    subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+    blob = subprocess.run(["git", "-C", str(tmp_path), "hash-object", "--stdin"], input=text, capture_output=True,
+                          text=True, check=True).stdout.strip()
+    base_mod._store(base_mod.common_dir(tmp_path), ref, text.encode(), blob)
+    (tmp_path / ".tld").mkdir()
+    profile = tmp_path / ".tld" / "toolkit.yaml"
+    head = (f"tld:\n  extends: {ref.source}@{ref.sha}\ngit:\n  main_branch: main\n")
+    tail = "verify:\n  fast: ['x']\n  dod: ['x']\n"
+    profile.write_text(head + tail)
+    assert inbox.owner_login("someone/repo", None, str(profile)) == "someone"
+    profile.write_text(head + "  owner_login: written-owner\n" + tail)
+    assert inbox.owner_login("someone/repo", None, str(profile)) == "written-owner"

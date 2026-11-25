@@ -92,11 +92,15 @@ def owner_login(repo: str, mention: str | None, profile: str | None) -> str:
         return mention
     path = Path(profile) if profile else Path(".tld/toolkit.yaml")
     if path.is_file():
-        import yaml
-        try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except yaml.YAMLError:
-            data = {}
+        from tld.profile import resolve as rs
+        loaded = rs.load(path, trusted=False, fetch=False)
+        data = loaded.profile
+        if loaded.errors:  # an incomplete profile still names its owner_login; read the key as written
+            import yaml
+            try:
+                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            except (OSError, yaml.YAMLError):
+                data = {}
         login = ((data.get("git") or {}) if isinstance(data, dict) else {}).get("owner_login")
         if isinstance(login, str) and LOGIN_RE.match(login):
             return login
