@@ -46,15 +46,20 @@ defaults would not find.
    section 3 (or a branch `chore/tld-defaults` from `origin/<main>` when this is the only change): run
    `tld guard allow-profile` right before the write and `tld guard end-allow` right after it (also when a step
    failed), then `tld migrate . --defaults --write --answers <file>`. It refuses a missing or unknown answer
-   (exit 2) and renames only: it never deletes or overwrites a file, and it refuses a rename that would rewrite a mention
-   in `.tld/toolkit.yaml`, a workflow, CODEOWNERS or any code or config file (the owner edits those by hand;
-   put the refusal under `## Not verified`). A line `not written:` means a value it
-   could not prove safe to put in the profile: show the line to the owner under `## Not verified`; never edit
-   the profile to guess. Never write a command key (`verify.*`, `deps.*`) here.
-4. Commit what it staged, and nothing else: when `git status --porcelain` shows an unstaged change after the write,
-   stop and report it instead of committing. Deliver as section 4; when the profile changed, the pull request body carries a
-   `**Security:**` line that names `.tld/toolkit.yaml` ([policies/pr-steward.md](policies/pr-steward.md)) and says
-   that any `git.branch_types` value came from the plan manifests, which are repository text.
+   (exit 2) and renames only: it never deletes or overwrites a file. A rename is refused (`not done:` line) unless
+   every file it would rewrite is a tracked, committed plain prose file: never `.tld/toolkit.yaml`, a workflow, a
+   file under a dot-directory (`.claude/`, `.agents/`), a plugin skill, CODEOWNERS, any code or config file, a file
+   whose front matter configures an agent, or a path `hooks.protect_paths` protects (for example `docs/policy/**`
+   or `SECURITY.md`). Name each refused file under `## Not verified`; the owner edits those by hand, or answers
+   keep. A write that fails after others succeeded puts every file back and exits 1. A line `not written:` means
+   a profile value it could not prove safe to write: show it under `## Not verified`; never edit the profile to
+   guess. Never write a command key (`verify.*`, `deps.*`) here.
+4. On any `not done:` or `not written:` line, or any non-zero exit, stop without committing: show the output, run
+   `git status --porcelain`, and leave the working tree as the tool left it for the owner. Otherwise commit what
+   it staged, and nothing else: when `git status --porcelain` shows an unstaged change after the write, stop and
+   report it instead of committing. Deliver as section 4; when the profile changed, the pull request body carries
+   a `**Security:**` line that names `.tld/toolkit.yaml` ([policies/pr-steward.md](policies/pr-steward.md)) and
+   says that any `git.branch_types` value came from the plan manifests, which are repository text.
 
 ## 2. Confirm
 

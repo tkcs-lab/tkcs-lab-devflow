@@ -336,7 +336,7 @@ def test_rename_refuses_to_rewrite_a_command_a_workflow_or_code(tmp_path):
                        "scripts/check.py": "open('CHANGES.md')\n", "CLAUDE.md": "See CHANGES.md\n"})
     before = tree(root)
     r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
-    assert r.returncode == 1 and "not done: docs.changelog" in r.stdout and "not a prose file" in r.stdout
+    assert r.returncode == 1 and "not done: docs.changelog" in r.stdout and "not a plain prose file" in r.stdout
     assert tree(root) == before and (root / "CHANGES.md").exists()
     # a prose-only mention is rewritten, and everything it rewrote is staged
     root2 = repo(tmp_path / "b", tracked=True, files={"CHANGES.md": "# Changes\n", "CLAUDE.md": "See CHANGES.md\n"})
@@ -393,3 +393,104 @@ def test_a_file_name_with_control_characters_is_not_printed(tmp_path):
     profile = PROFILE + "hooks:\n  protect_paths_allow: ['[docs.index]']\n"
     r = migrate(repo(tmp_path / "b", profile=profile))
     assert "[docs.index]" not in r.stdout and "unsafe characters" in r.stdout
+
+
+def fixture_with(tmp_path, name, files, profile=PROFILE):
+    return repo(tmp_path / name, profile=profile, tracked=True, files=files)
+
+
+def test_rename_refuses_protected_paths(tmp_path):
+    profile = PROFILE + "hooks:\n  protect_paths: ['docs/policy/**', SECURITY.md]\n"
+    files = {"CHANGES.md": "# C\n", "docs/policy/release.md": "see CHANGES.md\n", "SECURITY.md": "see CHANGES.md\n"}
+    root = fixture_with(tmp_path, "p", files, profile)
+    before = tree(root)
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+    assert r.returncode == 1 and "protected path" in r.stdout and tree(root) == before
+    # a protect_paths_allow of the working tree is not honoured without a trusted copy, exactly as the guard does
+    allowed = profile + "  protect_paths_allow: ['docs/policy/**', SECURITY.md]\n"
+    root2 = fixture_with(tmp_path, "q", files, allowed)
+    r = migrate(root2, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+    assert r.returncode == 1 and "protected path" in r.stdout
+    # the always-protected lists apply too: a mention inside .git-style paths or the profile is never rewritten
+    root3 = fixture_with(tmp_path, "r", {"CHANGES.md": "# C\n", "docs/x.md": "see CHANGES.md\n"},
+                         PROFILE + "hooks:\n  protect_paths: ['docs/**']\n")
+    r = migrate(root3, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+    assert r.returncode == 1 and "protected path" in r.stdout
+
+
+def test_rename_refuses_agent_files(tmp_path):
+    cases = {
+        ".claude/commands/rel.md": "---\nallowed-tools: Bash(python3 scripts/rel.py CHANGES.md)\n---\nrun CHANGES.md\n",
+        ".agents/note.md": "see CHANGES.md\n",
+        "plugin/skills/rel/SKILL.md": "see CHANGES.md\n",
+        "docs/cmd.md": "---\nallowed-tools: Bash(x)\n---\nsee CHANGES.md\n",
+        "docs/hook.md": "---\nhooks:\n  a: b\n---\nsee CHANGES.md\n",
+        "docs/command.md": "---\ncommand: run\n---\nsee CHANGES.md\n",
+        "docs/broken.md": "---\nkey: [unclosed\n---\nsee CHANGES.md\n",
+    }
+    for i, (name, text) in enumerate(cases.items()):
+        root = fixture_with(tmp_path, f"a{i}", {"CHANGES.md": "# C\n", name: text})
+        before = tree(root)
+        r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+        assert r.returncode == 1 and "not done: docs.changelog" in r.stdout, (name, r.stdout)
+        assert tree(root) == before, name
+    # plain front matter (a title) is fine
+    root = fixture_with(tmp_path, "ok", {"CHANGES.md": "# C\n", "docs/n.md": "---\ntitle: Notes\n---\nsee CHANGES.md\n"})
+    assert migrate(root, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"})).returncode == 0
+
+
+def test_adr_rename_with_an_index_that_lists_several_adrs(tmp_path):
+    files = {"docs/adrs/README.md": "- [a](0001-a.md)\n- [b](0002-b.md)\n", "docs/adrs/0001-a.md": "# A\n",
+             "docs/adrs/0002-b.md": "# B\n", "docs/README.md": "[a](adrs/0001-a.md) [b](adrs/0002-b.md)\n"}
+    root = fixture_with(tmp_path, "adr", files)
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.adr_dir": "rename"}))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert sorted(p.name for p in (root / "docs/adr").iterdir()) == ["0001-a.md", "0002-b.md", "README.md"]
+    assert "adr/0001-a.md" in (root / "docs/README.md").read_text() and not (root / "docs/adrs").exists()
+    status = git(root, "status", "--porcelain")
+    assert all(line[1] == " " for line in status.splitlines()), status  # everything staged
+
+
+def test_index_and_changelog_renamed_in_one_run(tmp_path):
+    files = {"docs/index.md": "# I\n", "CHANGES.md": "# C\n", "CLAUDE.md": "[i](docs/index.md) and CHANGES.md\n"}
+    root = fixture_with(tmp_path, "two", files)
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.index": "rename", "docs.changelog": "rename"}))
+    assert r.returncode == 0, r.stdout + r.stderr
+    text = (root / "CLAUDE.md").read_text()
+    assert "docs/README.md" in text and "CHANGELOG.md" in text
+    status = git(root, "status", "--porcelain")
+    assert all(line[1] == " " for line in status.splitlines()), status
+
+
+def test_a_failure_after_a_write_puts_everything_back(tmp_path, monkeypatch):
+    files = {"docs/adrs/0001-a.md": "# A\n", "docs/adrs/0002-b.md": "# B\n",
+             "docs/README.md": "[a](adrs/0001-a.md) [b](adrs/0002-b.md)\n"}
+    root = fixture_with(tmp_path, "rb", files)
+    before, status_before = tree(root), git(root, "status", "--porcelain")
+    real = md.docs_index.run_move
+    calls = {"n": 0}
+
+    def flaky(args):
+        if args.apply:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise OSError("disk full")
+        return real(args)
+
+    monkeypatch.setattr(md.docs_index, "run_move", flaky)
+    found = md.plan(root, yaml.safe_load((root / ".tld/toolkit.yaml").read_text()))
+    with pytest.raises(md.RolledBack, match="put back"):
+        md.apply(root, found, {"docs.adr_dir": "rename"})
+    assert tree(root) == before and git(root, "status", "--porcelain") == status_before
+    assert not (root / "docs/adr").exists() and (root / "docs/adrs/0001-a.md").exists()
+    assert "adr_dir" not in (root / ".tld/toolkit.yaml").read_text()
+
+
+def test_a_dirty_or_untracked_file_refuses_before_any_write(tmp_path):
+    root = fixture_with(tmp_path, "d", {"CHANGES.md": "# C\n", "n.md": "see CHANGES.md\n"})
+    (root / "n.md").write_text("see CHANGES.md\nedit\n")
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+    assert r.returncode == 1 and "uncommitted" in r.stdout and (root / "CHANGES.md").exists()
+    plain = repo(tmp_path / "plain", files={"CHANGES.md": "# C\n"})  # not a git repository
+    r = migrate(plain, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+    assert r.returncode == 1 and "not tracked" in r.stdout and (plain / "CHANGES.md").exists()

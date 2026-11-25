@@ -56,14 +56,20 @@ MAX_BYTES = 1_000_000      # one file read
 SAFE_PATH = re.compile(r"[A-Za-z0-9._][A-Za-z0-9._/-]*")
 SAFE_TYPE = re.compile(r"[a-z][a-z0-9-]{0,30}")
 FEATURE_BRANCH = re.compile(r"^[ \t]*feature_branch:\s*[\"']?([A-Za-z0-9._-]+)/", re.M)
-SAFE_SHOWN = re.compile(r"[\x21-\x5a\x5c\x5e-\x7e]{1,200}")  # printable ASCII, no space, no brackets       # a repository-derived value we print: no space, no control character
+SAFE_SHOWN = re.compile(r"[\x21-\x5a\x5c\x5e-\x7e]{1,200}")  # a repository-derived value we print: printable ASCII, no space, no brackets
 SAFE_KEY = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,100}")
 PROSE_SUFFIXES = (".md", ".markdown", ".rst")
+FRONT_KEYS = {"allowed-tools", "allowed_tools", "hooks", "command", "commands", "tools", "permissions"}
+MAX_SNAPSHOT = 20_000_000  # bytes held to put files back
 MISSING = object()
 
 
 class DefaultsError(ValueError):
     """A refusal to write: the message is printed as it is."""
+
+
+class RolledBack(DefaultsError):
+    """A write failed after others had succeeded; everything this run wrote was put back."""
 
 
 @dataclass
@@ -344,10 +350,63 @@ def check_answers(changes: list[Change], answers: object) -> None:
 
 # --------------------------------------------------------------------------------------------- the writes
 
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(root), *args], capture_output=True)
+
+
+def _front_matter_refusal(text: str) -> bool:
+    """True for a file whose YAML front matter configures an agent (tools, hooks, a command) or cannot be read."""
+    if not text.startswith("---"):
+        return False
+    lines = text.split("\n")
+    end = next((i for i in range(1, len(lines)) if lines[i].rstrip() in ("---", "...")), None)
+    if end is None:
+        return True
+    try:
+        data = yaml.safe_load("\n".join(lines[1:end]))
+    except yaml.YAMLError:
+        return True
+    return isinstance(data, dict) and bool(FRONT_KEYS & {str(k).lower() for k in data})
+
+
+def _ctx(root: Path):
+    from tld.guard import _common
+    from tld.guard.action import Action, Settings
+    return _common.make_ctx(Action("write", str(root), str(root), path=str(root)), Settings())
+
+
+def _check_file(root: Path, f: str, src: str, ctx) -> None:
+    """Why a file the move would rewrite may not be touched (DefaultsError), or return."""
+    from tld.guard import protect_paths
+    shown = f if SAFE_SHOWN.fullmatch(f) else "a file with unsafe characters in its name"
+    if unsafe(root, f):
+        raise DefaultsError(f"refused: {shown} would be rewritten but it is a symbolic link or outside the repository")
+    parts = Path(f).parts
+    low = f.lower()
+    hand = "answer keep, or move the file by hand and update that mention yourself"
+    if (not low.endswith(PROSE_SUFFIXES) or any(p.startswith(".") for p in parts) or "codeowners" in low
+            or parts[-1].lower() == "skill.md"):
+        raise DefaultsError(f"refused: {shown} mentions {src} and is not a plain prose file (code, config, workflow, "
+                            f"agent, hidden-directory and CODEOWNERS files are never rewritten); {hand}")
+    why = protect_paths.violation(ctx, str(root / f), str(root))
+    if why:
+        raise DefaultsError(f"refused: {shown} mentions {src} and is a protected path of this repository; {hand}")
+    try:
+        if (root / f).stat().st_size > MAX_BYTES:
+            raise DefaultsError(f"refused: {shown} is too large to rewrite safely")
+        data = (root / f).read_bytes()
+        text = data.decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        raise DefaultsError(f"refused: {shown} is not readable UTF-8, the rewrite would damage it") from None
+    if b"\r" in data:
+        raise DefaultsError(f"refused: {shown} has CRLF line ends, the rewrite would change every line")
+    if _front_matter_refusal(text):
+        raise DefaultsError(f"refused: {shown} has front matter that configures an agent (or cannot be read); {hand}")
+
+
 def _probe(root: Path, src: str, dst: str) -> list[str]:
-    """The files `tld ops docs-index move SRC DST` would rewrite, from its dry run. Raises DefaultsError when the
-    move cannot be planned, a path is unsafe, or any rewritten file is not plain prose inside the repository:
-    the profile, workflows, CODEOWNERS, scripts and other code are the owner's to edit by hand."""
+    """The files `tld ops docs-index move SRC DST` would rewrite, from its dry run, after every check: nothing
+    unsafe, protected, agent-facing, non-prose or damageable is among them. Raises DefaultsError otherwise."""
     import argparse as ap
     for rel in (src, dst):
         if unsafe(root, rel):
@@ -362,33 +421,83 @@ def _probe(root: Path, src: str, dst: str) -> list[str]:
         planned = None
     if planned is None:
         raise DefaultsError(f"cannot plan the move of {src} to {dst}")
+    ctx = _ctx(root)
     files = sorted({c["file"] for c in planned})
     for f in files:
-        shown = f if SAFE_SHOWN.fullmatch(f) else "a file with unsafe characters in its name"
-        if unsafe(root, f):
-            raise DefaultsError(f"refused: {shown} would be rewritten but it is a symbolic link or outside the repository")
-        low = f.lower()
-        if not low.endswith(PROSE_SUFFIXES) or low.startswith((".github/", ".tld/")) or "codeowners" in low:
-            raise DefaultsError(f"refused: {shown} mentions {src} and is not a prose file; "
-                                "answer keep, or move the file by hand and update that mention yourself")
-        try:
-            text = (root / f).read_bytes()
-            text.decode("utf-8")
-        except (OSError, UnicodeDecodeError):
-            raise DefaultsError(f"refused: {shown} is not readable UTF-8, the rewrite would damage it") from None
-        if b"\r" in text:
-            raise DefaultsError(f"refused: {shown} has CRLF line ends, the rewrite would change every line")
-        if subprocess.run(["git", "-C", str(root), "diff", "--quiet", "HEAD", "--", f],
-                          capture_output=True).returncode == 1:
-            raise DefaultsError(f"refused: {shown} has uncommitted changes that staging would sweep in; commit them first")
+        _check_file(root, f, src, ctx)
     return files
 
 
-def _move(root: Path, src: str, dst: str) -> tuple[str, list[str]]:
+def _tracked_clean(root: Path, paths: list[str]) -> None:
+    """Every path is tracked by git and equals HEAD, so staging what the move rewrites sweeps in nothing else and a
+    rollback can restore it. Anything else (no repository, untracked, edited, a git error) refuses."""
+    paths = [p for p in dict.fromkeys(paths) if (root / p).exists()]
+    if not paths:
+        return
+    listed = _git(root, "ls-files", "-z", "--", *paths)
+    if listed.returncode != 0 or {p for p in listed.stdout.decode("utf-8", "replace").split("\0") if p} != set(paths):
+        raise DefaultsError("refused: a file the rename touches is not tracked by git (or this is not a git "
+                            "repository); commit it first, or answer keep")
+    if _git(root, "diff", "--quiet", "HEAD", "--", *paths).returncode != 0:
+        raise DefaultsError("refused: a file the rename touches has uncommitted changes that staging would sweep "
+                            "in (or git could not tell); commit or stash them first, or answer keep")
+
+
+class Snapshot:
+    """The bytes of every file a rename may touch, taken just before the first write that can change it, so a
+    failure puts all of them back (a path that did not exist is removed again)."""
+
+    def __init__(self, root: Path) -> None:
+        self.root, self.saved, self.size = root, {}, 0
+
+    def add(self, paths: list[str]) -> None:
+        for p in paths:
+            if p in self.saved:
+                continue
+            path = self.root / p
+            if path.is_symlink() or unsafe(self.root, p):
+                raise DefaultsError(f"refused: {p} is unsafe")
+            if path.is_file():
+                data = path.read_bytes()
+                self.size += len(data)
+                if self.size > MAX_SNAPSHOT:
+                    raise DefaultsError("refused: the files a rename touches are too large to put back safely")
+                self.saved[p] = data
+            elif path.exists():
+                raise DefaultsError(f"refused: {p} is not a regular file")
+            else:
+                self.saved[p] = None
+
+    def restore(self) -> list[str]:
+        problems: list[str] = []
+        for p, data in self.saved.items():
+            path = self.root / p
+            try:
+                if data is None:
+                    if path.is_file() and not path.is_symlink():
+                        path.unlink()
+                else:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(data)
+            except OSError as exc:
+                problems.append(f"{p}: {type(exc).__name__}")
+        for p, data in self.saved.items():  # directories a move created and left empty
+            parent = (self.root / p).parent
+            while data is None and parent != self.root and parent.is_dir() and not any(parent.iterdir()):
+                parent.rmdir()
+                parent = parent.parent
+        _git(self.root, "reset", "-q", "HEAD", "--", *self.saved)
+        return problems
+
+
+def _move(root: Path, src: str, dst: str, snap: Snapshot | None = None) -> tuple[str, list[str]]:
     """`tld ops docs-index move SRC DST --apply` as a function; its output is captured. Returns the summary line
-    and the files it rewrote (plus the moved file). Raises DefaultsError on failure, having changed nothing."""
+    and the files it rewrote (plus the moved file). Raises DefaultsError on failure; with a snapshot the caller
+    can put everything back."""
     import argparse as ap
     files = _probe(root, src, dst)
+    if snap is not None:
+        snap.add(files + [src, dst])
     args = ap.Namespace(root=str(root), src=src, dst=dst, profile=None, apply=True, exclude=[], json=False)
     out, err = io.StringIO(), io.StringIO()
     try:
@@ -454,7 +563,7 @@ def set_key(text: str, key: str, value: object) -> str:
     return new
 
 
-def _rename_heading(root: Path, rel: str, found: str) -> str:
+def _rename_heading(root: Path, rel: str, found: str, snap: Snapshot) -> str:
     text = _read(root, rel)
     if text is None:
         raise DefaultsError(f"cannot read {rel}")
@@ -464,48 +573,38 @@ def _rename_heading(root: Path, rel: str, found: str) -> str:
         raise DefaultsError(f"{rel}: the heading '{found}' is not a single line to rename")
     ending = lines[hits[0]][len(lines[hits[0]].rstrip("\r\n")):]
     lines[hits[0]] = HEADING_DEFAULT + ending
+    snap.add([rel])
     (root / rel).write_text("".join(lines), encoding="utf-8")
     return f"renamed the heading '{found}' to '{HEADING_DEFAULT}' in {rel}"
 
 
-def _move_all(root: Path, src_dir: str, staged: list[str]) -> list[str]:
-    """Move every file of an ADR directory, all or nothing: every move is probed first, and a move that fails
-    after others succeeded puts the moved files back."""
-    pairs = [(f, ADR_DEFAULT + f[len(src_dir):]) for f in _dir_files(root, src_dir) or []]
-    if not pairs:
-        raise DefaultsError(f"{src_dir}: nothing to move")
-    for f, dst in pairs:
-        _probe(root, f, dst)
-    done: list[tuple[str, str]] = []
-    messages: list[str] = []
-    try:
-        for f, dst in pairs:
-            msg, files = _move(root, f, dst)
-            done.append((f, dst))
-            messages.append(msg)
-            staged += files
-    except DefaultsError as exc:
-        back = []
-        for f, dst in reversed(done):
-            try:
-                _move(root, dst, f)
-            except DefaultsError as undo:
-                back.append(f"{dst}: {undo}")
-        raise DefaultsError(f"{exc}; the files moved so far were put back" +
-                            (f" except: {'; '.join(back)}" if back else "")) from None
-    return messages
-
-
 def _git_add(root: Path, *paths: str) -> None:
-    inside = subprocess.run(["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
-                            capture_output=True, text=True)
+    inside = _git(root, "rev-parse", "--is-inside-work-tree")
     if inside.returncode == 0:
-        subprocess.run(["git", "-C", str(root), "add", "--", *paths], capture_output=True, text=True)
+        _git(root, "add", "--", *paths)
+
+
+def _prepare(root: Path, c: Change, answers: dict, changes: list[Change]) -> list[tuple[str, str]]:
+    """The moves one `rename` answer needs, probed and checked against git before anything is written. Raises
+    DefaultsError (a refusal of this answer alone)."""
+    if c.key == "docs.adr_dir":
+        pairs = [(f, ADR_DEFAULT + f[len(c.path):]) for f in _dir_files(root, c.path) or []]
+        if not pairs:
+            raise DefaultsError(f"{c.path}: nothing to move")
+    else:
+        pairs = [(c.path, c.default_path)]
+    touched: list[str] = []
+    for src, dst in pairs:
+        touched += _probe(root, src, dst) + [src]
+    _tracked_clean(root, touched)
+    return pairs
 
 
 def apply(root: Path, changes: list[Change], answers: dict) -> list[str]:
     """Do what the answers say and write the preserve keys. Returns the messages. Raises DefaultsError before
-    changing anything when the answers do not fit the questions."""
+    changing anything when the answers do not fit the questions, and RolledBack (after putting every file back
+    and writing nothing to the profile) when a write fails. A rename that is refused before any write is
+    reported as `not done:` and the other answers go on."""
     root = Path(root).resolve()
     check_answers(changes, answers)
     messages: list[str] = []
@@ -513,45 +612,59 @@ def apply(root: Path, changes: list[Change], answers: dict) -> list[str]:
     staged: list[str] = []
     changelog_file, changelog_section = CHANGELOG_DEFAULT, HEADING_DEFAULT
     changelog_touched = False
-    for c in questions(changes):
-        choice = answers[c.key]
+    renames = [c for c in questions(changes) if answers[c.key] == "rename" and c.key != "docs.changelog.section"]
+    prepared: dict[str, list[tuple[str, str]]] = {}
+    refused: set[str] = set()
+    for c in renames:  # phase 1: read only
         try:
-            if c.key == "docs.index":
-                if choice == "rename":
-                    msg, files = _move(root, c.path, c.default_path)
-                    messages.append(msg)
-                    staged += files
-                else:
+            prepared[c.key] = _prepare(root, c, answers, changes)
+        except DefaultsError as exc:
+            refused.add(c.key)
+            messages.append(f"not done: {c.key}: {exc}")
+    snap = Snapshot(root)
+    try:  # phase 2: one transaction
+        for c in questions(changes):
+            choice = answers[c.key]
+            if c.key in refused:
+                continue
+            try:
+                if c.key in prepared:
+                    for src, dst in prepared[c.key]:
+                        msg, files = _move(root, src, dst, snap)
+                        messages.append(msg)
+                        staged += files
+                    changelog_touched = changelog_touched or c.key == "docs.changelog"
+                elif c.key == "docs.index":
                     edits.append(("docs.index", _safe_value(root, c.path)))
-            elif c.key == "docs.adr_dir":
-                if choice == "rename":
-                    messages += _move_all(root, c.path, staged)
-                else:
+                elif c.key == "docs.adr_dir":
                     edits.append(("docs.adr_dir", _safe_value(root, c.path)))
                     if _is_file(root, f"{c.path}/README.md"):
                         edits.append(("docs.adr_index", _safe_value(root, f"{c.path}/README.md")))
-            elif c.key == "docs.changelog":
-                changelog_touched = True
-                if choice == "rename":
-                    msg, files = _move(root, c.path, c.default_path)
-                    messages.append(msg)
-                    staged += files
-                else:
+                elif c.key == "docs.changelog":
+                    changelog_touched = True
                     changelog_file = _safe_value(root, c.path)
-            elif c.key == "docs.changelog.section":
-                changelog_touched = True
-                if choice == "rename":
-                    target = CHANGELOG_DEFAULT if any(
-                        x.key == "docs.changelog" and answers[x.key] == "rename" for x in questions(changes)) \
-                        else c.path
-                    messages.append(_rename_heading(root, target, str(c.value)))
-                    staged.append(target)
-                else:
-                    if c.value not in HEADING_OTHER:
-                        raise DefaultsError(f"'{c.value}' is not a known heading")
-                    changelog_section = str(c.value)
-        except DefaultsError as exc:
-            messages.append(f"not done: {c.key}: {exc}")
+                elif c.key == "docs.changelog.section":
+                    changelog_touched = True
+                    if choice == "rename":
+                        moved = "docs.changelog" in prepared
+                        target = CHANGELOG_DEFAULT if moved else c.path
+                        if not moved:
+                            _tracked_clean(root, [target])
+                            _check_file(root, target, c.path, _ctx(root))
+                        messages.append(_rename_heading(root, target, str(c.value), snap))
+                        staged.append(target)
+                    else:
+                        if c.value not in HEADING_OTHER:
+                            raise DefaultsError(f"'{c.value}' is not a known heading")
+                        changelog_section = str(c.value)
+            except DefaultsError as exc:
+                if c.key in prepared or (c.key == "docs.changelog.section" and choice == "rename"):
+                    raise
+                messages.append(f"not done: {c.key}: {exc}")
+    except (DefaultsError, OSError) as exc:
+        problems = snap.restore()
+        raise RolledBack(f"{exc}; everything this run changed was put back and nothing was written to the profile"
+                         + (f" (could not restore: {'; '.join(problems)})" if problems else "")) from None
     if changelog_touched and (changelog_file, changelog_section) != (CHANGELOG_DEFAULT, HEADING_DEFAULT):
         edits.append(("docs.changelog", {"file": changelog_file, "section": changelog_section, "policy": "unreleased"}))
     for c in changes:
@@ -644,6 +757,9 @@ def run(root: Path, write: bool, answers_path: str | None) -> int:
         return 0
     try:
         messages = apply(root, changes, load_answers(answers_path))
+    except RolledBack as exc:
+        print(f"tld migrate: not done: {exc}", file=sys.stderr)
+        return 1
     except DefaultsError as exc:
         print(f"tld migrate: {exc}", file=sys.stderr)
         return 2
