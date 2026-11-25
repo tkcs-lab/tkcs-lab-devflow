@@ -59,7 +59,8 @@ FEATURE_BRANCH = re.compile(r"^[ \t]*feature_branch:\s*[\"']?([A-Za-z0-9._-]+)/"
 SAFE_SHOWN = re.compile(r"[\x21-\x5a\x5c\x5e-\x7e]{1,200}")  # a repository-derived value we print: printable ASCII, no space, no brackets
 SAFE_KEY = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,100}")
 PROSE_SUFFIXES = (".md", ".markdown", ".rst")
-FRONT_KEYS = {"allowed-tools", "allowed_tools", "hooks", "command", "commands", "tools", "permissions"}
+FRONT_KEYS = {"allowed-tools", "allowed_tools", "disallowed-tools", "hooks", "command", "commands", "tools",
+              "permissions", "mcp", "mcpservers", "mcp-servers", "agent", "agents", "model", "context"}
 MAX_SNAPSHOT = 20_000_000  # bytes held to put files back
 MISSING = object()
 
@@ -351,11 +352,12 @@ def check_answers(changes: list[Change], answers: object) -> None:
 # --------------------------------------------------------------------------------------------- the writes
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(root), *args], capture_output=True)
+    return subprocess.run(["git", "--literal-pathspecs", "-C", str(root), *args], capture_output=True)
 
 
 def _front_matter_refusal(text: str) -> bool:
     """True for a file whose YAML front matter configures an agent (tools, hooks, a command) or cannot be read."""
+    text = text.lstrip("\ufeff \t\r\n")
     if not text.startswith("---"):
         return False
     lines = text.split("\n")
@@ -375,22 +377,33 @@ def _ctx(root: Path):
     return _common.make_ctx(Action("write", str(root), str(root), path=str(root)), Settings())
 
 
-def _check_file(root: Path, f: str, src: str, ctx) -> None:
-    """Why a file the move would rewrite may not be touched (DefaultsError), or return."""
+def _check_path(root: Path, f: str, src: str, ctx, what: str = "mentions") -> None:
+    """Why a path may not be rewritten, moved from or moved to (DefaultsError), or return. Applies to every file a
+    rename touches: the file it moves (both ends), every other file of a moved directory and every rewritten one."""
     from tld.guard import protect_paths
     shown = f if SAFE_SHOWN.fullmatch(f) else "a file with unsafe characters in its name"
     if unsafe(root, f):
-        raise DefaultsError(f"refused: {shown} would be rewritten but it is a symbolic link or outside the repository")
+        raise DefaultsError(f"refused: {shown} would be touched but it is a symbolic link or outside the repository")
     parts = Path(f).parts
     low = f.lower()
     hand = "answer keep, or move the file by hand and update that mention yourself"
     if (not low.endswith(PROSE_SUFFIXES) or any(p.startswith(".") for p in parts) or "codeowners" in low
             or parts[-1].lower() == "skill.md"):
-        raise DefaultsError(f"refused: {shown} mentions {src} and is not a plain prose file (code, config, workflow, "
-                            f"agent, hidden-directory and CODEOWNERS files are never rewritten); {hand}")
-    why = protect_paths.violation(ctx, str(root / f), str(root))
-    if why:
-        raise DefaultsError(f"refused: {shown} mentions {src} and is a protected path of this repository; {hand}")
+        raise DefaultsError(f"refused: {shown} ({what} {src}) is not a plain prose file (code, config, workflow, "
+                            f"agent, hidden-directory and CODEOWNERS files are never touched); {hand}")
+    for cand in dict.fromkeys([f, f.lower()]):  # a case-insensitive filesystem reaches a protected name by its folded spelling
+        why = protect_paths.violation(ctx, str(root / cand), str(root))
+        if why:
+            raise DefaultsError(f"refused: {shown} ({what} {src}) is a protected path of this repository; {hand}")
+    if (root / f).exists() and (root / f).stat().st_nlink > 1:
+        raise DefaultsError(f"refused: {shown} ({what} {src}) has other hard links; {hand}")
+
+
+def _check_file(root: Path, f: str, src: str, ctx) -> None:
+    """Why a file the move would rewrite may not be touched (DefaultsError), or return."""
+    shown = f if SAFE_SHOWN.fullmatch(f) else "a file with unsafe characters in its name"
+    hand = "answer keep, or move the file by hand and update that mention yourself"
+    _check_path(root, f, src, ctx)
     try:
         if (root / f).stat().st_size > MAX_BYTES:
             raise DefaultsError(f"refused: {shown} is too large to rewrite safely")
@@ -422,6 +435,8 @@ def _probe(root: Path, src: str, dst: str) -> list[str]:
     if planned is None:
         raise DefaultsError(f"cannot plan the move of {src} to {dst}")
     ctx = _ctx(root)
+    _check_path(root, src, src, ctx, "is moved from")
+    _check_path(root, dst, src, ctx, "is moved to")
     files = sorted({c["file"] for c in planned})
     for f in files:
         _check_file(root, f, src, ctx)
@@ -448,7 +463,7 @@ class Snapshot:
     failure puts all of them back (a path that did not exist is removed again)."""
 
     def __init__(self, root: Path) -> None:
-        self.root, self.saved, self.size = root, {}, 0
+        self.root, self.saved, self.size, self.modes = root, {}, 0, {}
 
     def add(self, paths: list[str]) -> None:
         for p in paths:
@@ -463,6 +478,7 @@ class Snapshot:
                 if self.size > MAX_SNAPSHOT:
                     raise DefaultsError("refused: the files a rename touches are too large to put back safely")
                 self.saved[p] = data
+                self.modes[p] = path.stat().st_mode & 0o777
             elif path.exists():
                 raise DefaultsError(f"refused: {p} is not a regular file")
             else:
@@ -479,6 +495,7 @@ class Snapshot:
                 else:
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_bytes(data)
+                    path.chmod(self.modes.get(p, 0o644))
             except OSError as exc:
                 problems.append(f"{p}: {type(exc).__name__}")
         for p, data in self.saved.items():  # directories a move created and left empty
@@ -621,6 +638,14 @@ def apply(root: Path, changes: list[Change], answers: dict) -> list[str]:
         except DefaultsError as exc:
             refused.add(c.key)
             messages.append(f"not done: {c.key}: {exc}")
+    if prepared:  # the profile is staged by this run too: it must equal HEAD like the files a rename touches
+        try:
+            _tracked_clean(root, [NEW_PROFILE])
+        except DefaultsError as exc:
+            for key in list(prepared):
+                refused.add(key)
+                messages.append(f"not done: {key}: {exc}")
+            prepared.clear()
     snap = Snapshot(root)
     try:  # phase 2: one transaction
         for c in questions(changes):
@@ -661,31 +686,35 @@ def apply(root: Path, changes: list[Change], answers: dict) -> list[str]:
                 if c.key in prepared or (c.key == "docs.changelog.section" and choice == "rename"):
                     raise
                 messages.append(f"not done: {c.key}: {exc}")
-    except (DefaultsError, OSError) as exc:
+        if changelog_touched and (changelog_file, changelog_section) != (CHANGELOG_DEFAULT, HEADING_DEFAULT):
+            edits.append(("docs.changelog", {"file": changelog_file, "section": changelog_section, "policy": "unreleased"}))
+        for c in changes:
+            if c.kind == "preserve":
+                edits.append((c.key, c.value))
+        profile = root / NEW_PROFILE
+        if edits:
+            if unsafe(root, NEW_PROFILE) or not profile.is_file():
+                messages.append(f"not written: {NEW_PROFILE} is missing or unsafe; add " +
+                                ", ".join(f"{k}: {v!r}" for k, v in edits) + " by hand")
+            else:
+                text = original = profile.read_text(encoding="utf-8")
+                for key, value in edits:
+                    try:
+                        text = set_key(text, key, value)
+                        messages.append(f"wrote {key}: {value!r}")
+                    except DefaultsError as exc:
+                        messages.append(f"not written: {key}: {exc}; add `{key}: {value!r}` to {NEW_PROFILE} by hand")
+                if text != original:
+                    snap.add([NEW_PROFILE])
+                    profile.write_text(text, encoding="utf-8")
+                    staged.append(NEW_PROFILE)
+    except BaseException as exc:  # any failure, an interrupt included: put every file back first
         problems = snap.restore()
-        raise RolledBack(f"{exc}; everything this run changed was put back and nothing was written to the profile"
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        raise RolledBack(f"{exc if isinstance(exc, DefaultsError) else type(exc).__name__}; everything this run "
+                         "changed was put back and nothing was written to the profile"
                          + (f" (could not restore: {'; '.join(problems)})" if problems else "")) from None
-    if changelog_touched and (changelog_file, changelog_section) != (CHANGELOG_DEFAULT, HEADING_DEFAULT):
-        edits.append(("docs.changelog", {"file": changelog_file, "section": changelog_section, "policy": "unreleased"}))
-    for c in changes:
-        if c.kind == "preserve":
-            edits.append((c.key, c.value))
-    profile = root / NEW_PROFILE
-    if edits:
-        if unsafe(root, NEW_PROFILE) or not profile.is_file():
-            messages.append(f"not written: {NEW_PROFILE} is missing or unsafe; add " +
-                            ", ".join(f"{k}: {v!r}" for k, v in edits) + " by hand")
-        else:
-            text = original = profile.read_text(encoding="utf-8")
-            for key, value in edits:
-                try:
-                    text = set_key(text, key, value)
-                    messages.append(f"wrote {key}: {value!r}")
-                except DefaultsError as exc:
-                    messages.append(f"not written: {key}: {exc}; add `{key}: {value!r}` to {NEW_PROFILE} by hand")
-            if text != original:
-                profile.write_text(text, encoding="utf-8")
-                staged.append(NEW_PROFILE)
     staged = [p for p in dict.fromkeys(staged) if (root / p).exists() or (root / p).is_symlink()]
     if staged:
         _git_add(root, *staged)
@@ -763,6 +792,9 @@ def run(root: Path, write: bool, answers_path: str | None) -> int:
     except DefaultsError as exc:
         print(f"tld migrate: {exc}", file=sys.stderr)
         return 2
+    except Exception as exc:  # a bug must not leave a traceback over a half-written tree
+        print(f"tld migrate: not done: {type(exc).__name__}", file=sys.stderr)
+        return 1
     print()
     for m in messages:
         print(f"  {m}")

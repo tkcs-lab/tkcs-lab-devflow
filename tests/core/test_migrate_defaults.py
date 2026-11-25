@@ -494,3 +494,54 @@ def test_a_dirty_or_untracked_file_refuses_before_any_write(tmp_path):
     plain = repo(tmp_path / "plain", files={"CHANGES.md": "# C\n"})  # not a git repository
     r = migrate(plain, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
     assert r.returncode == 1 and "not tracked" in r.stdout and (plain / "CHANGES.md").exists()
+
+
+def test_a_protected_moved_directory_is_refused(tmp_path):
+    profile = PROFILE + "hooks:\n  protect_paths: ['docs/adr/**', 'docs/adrs/**']\n"
+    root = fixture_with(tmp_path, "pa", {"docs/adrs/0001-a.md": "# A\n", "docs/adrs/0002-b.md": "# B\n"}, profile)
+    before = tree(root)
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.adr_dir": "rename"}))
+    assert r.returncode == 1 and "protected path" in r.stdout and tree(root) == before
+    # a non-prose or hidden entry inside the directory refuses the whole directory
+    root2 = fixture_with(tmp_path, "pb", {"docs/adrs/0001-a.md": "# A\n", "docs/adrs/run.sh": "echo\n"})
+    r = migrate(root2, "--write", "--answers", answers(tmp_path, {"docs.adr_dir": "rename"}))
+    assert r.returncode == 1 and "not a plain prose file" in r.stdout and (root2 / "docs/adrs/run.sh").exists()
+
+
+def test_a_hard_linked_file_and_a_bom_front_matter_are_refused(tmp_path):
+    root = fixture_with(tmp_path, "h", {"CHANGES.md": "# C\n", "n.md": "see CHANGES.md\n"})
+    import os
+    os.link(root / "n.md", tmp_path / "other-name")
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+    assert r.returncode == 1 and "hard links" in r.stdout
+    root2 = fixture_with(tmp_path, "b", {"CHANGES.md": "# C\n"})
+    (root2 / "n.md").write_bytes("\ufeff\n---\nallowed-tools: Bash\n---\nsee CHANGES.md\n".encode())
+    git(root2, "add", "-A")
+    git(root2, "commit", "-q", "-m", "x")
+    r = migrate(root2, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+    assert r.returncode == 1 and "front matter" in r.stdout
+
+
+def test_any_exception_after_a_write_rolls_back_and_the_profile_is_covered(tmp_path, monkeypatch):
+    files = {"docs/adrs/0001-a.md": "# A\n", "docs/adrs/0002-b.md": "# B\n", "docs/README.md": "[a](adrs/0001-a.md)\n"}
+    root = fixture_with(tmp_path, "ex", files)
+    before, status_before = tree(root), git(root, "status", "--porcelain")
+    real, calls = md.docs_index.run_move, {"n": 0}
+
+    def flaky(args):
+        if args.apply:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise ValueError("odd")
+        return real(args)
+
+    monkeypatch.setattr(md.docs_index, "run_move", flaky)
+    found = md.plan(root, yaml.safe_load((root / ".tld/toolkit.yaml").read_text()))
+    with pytest.raises(md.RolledBack):
+        md.apply(root, found, {"docs.adr_dir": "rename"})
+    assert tree(root) == before and git(root, "status", "--porcelain") == status_before
+    # the profile must equal HEAD too: an edited profile refuses every rename
+    monkeypatch.setattr(md.docs_index, "run_move", real)
+    (root / ".tld/toolkit.yaml").write_text((root / ".tld/toolkit.yaml").read_text() + "# edit\n")
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.adr_dir": "rename"}))
+    assert r.returncode == 1 and "uncommitted" in r.stdout and (root / "docs/adrs").exists()

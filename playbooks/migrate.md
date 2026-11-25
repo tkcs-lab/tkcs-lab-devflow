@@ -47,7 +47,7 @@ defaults would not find.
    `tld guard allow-profile` right before the write and `tld guard end-allow` right after it (also when a step
    failed), then `tld migrate . --defaults --write --answers <file>`. It refuses a missing or unknown answer
    (exit 2) and renames only: it never deletes or overwrites a file. A rename is refused (`not done:` line) unless
-   every file it would rewrite is a tracked, committed plain prose file: never `.tld/toolkit.yaml`, a workflow, a
+   every file it moves, moves to or rewrites (and the profile) is a tracked, committed plain prose file: never `.tld/toolkit.yaml`, a workflow, a
    file under a dot-directory (`.claude/`, `.agents/`), a plugin skill, CODEOWNERS, any code or config file, a file
    whose front matter configures an agent, or a path `hooks.protect_paths` protects (for example `docs/policy/**`
    or `SECURITY.md`). Name each refused file under `## Not verified`; the owner edits those by hand, or answers
