@@ -17,7 +17,7 @@ def run(*args, stdin=None):
     return subprocess.run([*SCRIPT_CMD, *map(str, args)], input=stdin, capture_output=True, text=True)
 
 
-@pytest.mark.parametrize("name", ["good-run", "good-run-prompt", "good-run-scope", "good-command", "good-command-docs", "good-command-handover"])
+@pytest.mark.parametrize("name", ["good-run", "good-run-prompt", "good-run-scope", "good-command", "good-command-docs", "good-command-handover", "good-run-prompt-issue"])
 def test_good_fixture_passes(name):
     result = run(RECORDS / f"{name}.json")
     assert result.returncode == 0, result.stdout
@@ -714,3 +714,70 @@ def test_handover_refuses_a_repo_with_a_trailing_newline():
     assert REC.validate(rec) == [
         "'repo' must look like owner/name",
         "'repo' must look like owner/name before a 'handover' link can be checked"]
+
+
+# ---- the optional tracking_issue field ----------------------------------------------------------------------
+
+TI_MALFORMED = "'tracking_issue' must be null or a positive integer of at most 10 digits"
+
+
+def fixture_rec(name):
+    return json.loads((RECORDS / f"{name}.json").read_text())
+
+
+def with_ti(name, value, **changes):
+    rec = fixture_rec(name)
+    rec.update(changes)
+    rec["tracking_issue"] = value
+    return rec
+
+
+@pytest.mark.parametrize("value", [0, -1, 10_000_000_000, True, 1.5, "12"])
+def test_tracking_issue_malformed_is_refused(value):
+    assert REC.validate(with_ti("good-run", value)) == [TI_MALFORMED]
+
+
+@pytest.mark.parametrize("value", [1, 9_999_999_999, None])
+def test_tracking_issue_valid_values_pass(value):
+    assert REC.validate(with_ti("good-run", value)) == []
+
+
+def test_tracking_issue_on_a_command_record_passes():
+    assert REC.validate(with_ti("good-command", 7)) == []
+
+
+@pytest.mark.parametrize("value", [7, None])
+def test_tracking_issue_agrees_with_handover(value):
+    assert REC.validate(with_ti("good-command-handover", value)) == []
+
+
+def test_tracking_issue_disagreeing_with_handover_is_refused():
+    assert REC.validate(with_ti("good-command-handover", 8)) == ["'tracking_issue' must agree with 'handover.issue_url'"]
+
+
+def test_tracking_issue_malformed_issue_url_reports_once():
+    rec = with_ti("good-command-handover", 7)
+    rec["handover"]["issue_url"] = "https://github.com/tkcs-lab/tkcs-lab-devflow/issues/07"
+    assert REC.validate(rec) == REC.handover_errors(rec["handover"], rec["repo"])
+    assert not any("tracking_issue" in e for e in REC.validate(rec))
+
+
+@pytest.mark.parametrize("name, value", [
+    ("good-run-prompt", "42"), ("good-run-prompt", 0), ("good-command-handover", 0),
+])
+def test_tracking_issue_malformed_skips_agreement_rules(name, value):
+    assert REC.validate(with_ti(name, value)) == [TI_MALFORMED]
+
+
+def test_tracking_issue_disagreeing_with_issue_slug_is_refused():
+    assert REC.validate(with_ti("good-run-prompt", 43)) == ["'tracking_issue' must be 42, the number in 'plan_slug'"]
+    assert REC.validate(with_ti("good-run-prompt", None)) == []
+
+
+def test_tracking_issue_ignores_a_plan_slug_that_is_not_issue_n():
+    assert REC.validate(with_ti("good-run-prompt-issue", 42, plan_slug="issue-042x")) == []
+
+
+def test_old_board_refuses_tracking_issue_with_one_named_error(monkeypatch):
+    monkeypatch.setattr(REC, "OPTIONAL_FIELDS", ("handover",))
+    assert REC.validate(fixture_rec("good-run-prompt-issue")) == ["'tracking_issue' is not a known field"]

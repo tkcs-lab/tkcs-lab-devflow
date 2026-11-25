@@ -422,6 +422,26 @@ def test_put_handover_round_trip(server, owner):
     assert status == 200 and body["data"] == handover_record()
 
 
+def test_put_tracking_issue_round_trip(server, owner):
+    cookie, _ = owner
+    path = "/api/records/tkcs-lab-devflow--make-plan--89abcdef"
+    for version, value in ((None, 7), (1, None)):
+        rec = handover_record()
+        rec["tracking_issue"] = value
+        body = {"data": rec} if version is None else {"data": rec, "if_version": version}
+        assert call(server, "PUT", path, token=WRITE, body=body)[0] == 200
+        status, _, got = call(server, "GET", path, cookie=cookie)
+        assert status == 200 and got["data"]["tracking_issue"] == value
+
+
+def test_put_tracking_issue_invalid_returns_422(server):
+    rec = handover_record()
+    rec["tracking_issue"] = 0
+    status, _, body = call(server, "PUT", "/api/records/tkcs-lab-devflow--make-plan--89abcdef", token=WRITE, body={"data": rec})
+    assert status == 422 and body["error"] == "invalid"
+    assert body["errors"] == ["'tracking_issue' must be null or a positive integer of at most 10 digits"]
+
+
 def test_if_version_true_is_400(server):
     for bad in (True, "1", 0, 1.5):
         status, _, body = call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE,

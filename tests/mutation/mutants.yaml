@@ -772,6 +772,36 @@ mutants:
   why: a repo with a trailing line break is accepted (fullmatch became match)
   old: '    if "repo" in rec and not (isinstance(rec["repo"], str) and REPO.fullmatch(rec["repo"])):'
   new: '    if "repo" in rec and not (isinstance(rec["repo"], str) and REPO.match(rec["repo"])):'
+- id: REC-T1
+  file: src/tld/board/record.py
+  why: a boolean tracking_issue is accepted
+  old: '_is_int(ti)'
+  new: 'isinstance(ti, int)'
+- id: REC-T2
+  file: src/tld/board/record.py
+  why: tracking_issue 0 is accepted
+  old: '1 <= ti <= ISSUE_MAX'
+  new: '0 <= ti <= ISSUE_MAX'
+- id: REC-T3
+  file: src/tld/board/record.py
+  why: an eleven digit tracking_issue is accepted
+  old: 'ti <= ISSUE_MAX'
+  new: 'ti <= ISSUE_MAX * 10'
+- id: REC-T4
+  file: src/tld/board/record.py
+  why: a tracking_issue that disagrees with the hand-over issue is accepted
+  old: 'if m and int(m.group(1)) != ti:'
+  new: 'if False:'
+- id: REC-T5
+  file: src/tld/board/record.py
+  why: a tracking_issue that disagrees with an issue-<n> plan slug is accepted
+  old: 'if s and int(s.group(1)) != ti:'
+  new: 'if False:'
+- id: REC-T6
+  file: src/tld/board/record.py
+  why: the agreement rules also run on a malformed tracking_issue
+  old: "        else:\n            ho = rec.get(\"handover\")"
+  new: "        if True:\n            ho = rec.get(\"handover\")"
 - id: deps-uses-line-end-anchor
   file: src/tld/ops/deps_checks.py
   why: a uses line may carry anything after the ref (`@v5#x`), so a ref move is accepted with a suffix nobody reviewed
