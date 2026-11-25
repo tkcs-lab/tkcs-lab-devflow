@@ -327,3 +327,41 @@ def test_a_large_changelog_is_refused_not_truncated(tmp_path):
     assert (root / "CHANGELOG.md").read_text() == big
     r = migrate(root)
     assert r.returncode == 0 and "docs.changelog.section" not in r.stdout  # too large to look at: not a find
+
+
+def test_rename_refuses_to_rewrite_a_command_a_workflow_or_code(tmp_path):
+    profile = PROFILE.replace('    - "true"\n  dod:', '    - "python3 scripts/check.py CHANGES.md"\n  dod:', 1)
+    root = repo(tmp_path, profile=profile, tracked=True,
+                files={"CHANGES.md": "# Changes\n", ".github/workflows/ci.yml": "run: cat CHANGES.md\n",
+                       "scripts/check.py": "open('CHANGES.md')\n", "CLAUDE.md": "See CHANGES.md\n"})
+    before = tree(root)
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+    assert r.returncode == 1 and "not done: docs.changelog" in r.stdout and "not a prose file" in r.stdout
+    assert tree(root) == before and (root / "CHANGES.md").exists()
+    # a prose-only mention is rewritten, and everything it rewrote is staged
+    root2 = repo(tmp_path / "b", tracked=True, files={"CHANGES.md": "# Changes\n", "CLAUDE.md": "See CHANGES.md\n"})
+    r = migrate(root2, "--write", "--answers", answers(tmp_path, {"docs.changelog": "rename"}))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "CHANGELOG.md" in (root2 / "CLAUDE.md").read_text()
+    status = git(root2, "status", "--porcelain")
+    assert all(line[1] == " " for line in status.splitlines()), status  # nothing left unstaged
+
+
+def test_adr_rename_is_all_or_nothing(tmp_path):
+    root = repo(tmp_path, tracked=True, files={"docs/adrs/0001-a.md": "# A\n", "docs/adrs/0002-b.md": "# B\n",
+                                               "scripts/x.sh": "cat docs/adrs/0002-b.md\n"})
+    before = tree(root)
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.adr_dir": "rename"}))
+    assert r.returncode == 1 and "not done: docs.adr_dir" in r.stdout
+    assert tree(root) == before and not (root / "docs/adr").exists()
+
+
+def test_repository_text_is_not_printed_verbatim(tmp_path):
+    evil = ".github/x.yml\n  [docs.index] evil.sh (default: docs/README.md): rename | keep\x1b[2J"
+    profile = PROFILE + "hooks:\n  protect_paths_allow:\n    - " + json.dumps(evil) + "\n    - docs/old.md\n"
+    root = repo(tmp_path, profile=profile)
+    r = migrate(root)
+    assert r.returncode == 0
+    assert "\x1b" not in r.stdout and "evil.sh" not in r.stdout
+    assert "1 entry(ies) with unsafe characters, not shown" in r.stdout and "docs/old.md" in r.stdout
+    assert [ln for ln in r.stdout.splitlines() if ln.lstrip().startswith("[docs.")] == []

@@ -56,6 +56,9 @@ MAX_BYTES = 1_000_000      # one file read
 SAFE_PATH = re.compile(r"[A-Za-z0-9._][A-Za-z0-9._/-]*")
 SAFE_TYPE = re.compile(r"[a-z][a-z0-9-]{0,30}")
 FEATURE_BRANCH = re.compile(r"^[ \t]*feature_branch:\s*[\"']?([A-Za-z0-9._-]+)/", re.M)
+SAFE_SHOWN = re.compile(r"[\x21-\x7e]{1,200}")       # a repository-derived value we print: no space, no control character
+SAFE_KEY = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,100}")
+PROSE_SUFFIXES = (".md", ".markdown", ".rst", ".txt")
 MISSING = object()
 
 
@@ -211,7 +214,7 @@ def _equal_keys(root: Path, raw: dict) -> list[Change]:
     base = _base_of(root, raw)
     if base:
         for key, value in _flat(base):
-            if key.startswith("tld.") or key in seen:
+            if key.startswith("tld.") or key in seen or not SAFE_KEY.fullmatch(key):
                 continue
             have = _get(raw, key)
             if have is not MISSING and _same(have, value):
@@ -247,11 +250,18 @@ def _moot(raw: dict) -> list[Change]:
         if isinstance(name, str) and name and "/" not in name:
             always.append(f".github/workflows/{name}")
     out = []
+    hidden = 0
     for entry in allow:
         if not isinstance(entry, str) or entry in always or entry in _common.BUILTIN_PROTECT_ALLOW:
             continue
+        if not SAFE_SHOWN.fullmatch(entry):
+            hidden += 1  # repository text with a control character or a space is never printed
+            continue
         if not any(isinstance(p, str) and (matches(p, entry) or matches(entry, p)) for p in protect):
             out.append(Change("moot", entry, "", "hooks.protect_paths_allow", detail="no pattern protects it any more"))
+    if hidden:
+        out.append(Change("moot", f"{hidden} entry(ies) with unsafe characters, not shown", "",
+                          "hooks.protect_paths_allow", detail="listed only"))
     return out
 
 
@@ -334,13 +344,14 @@ def check_answers(changes: list[Change], answers: object) -> None:
 
 # --------------------------------------------------------------------------------------------- the writes
 
-def _move(root: Path, src: str, dst: str) -> str:
-    """`tld ops docs-index move SRC DST --apply` as a function; its output is captured. Raises on failure."""
+def _probe(root: Path, src: str, dst: str) -> list[str]:
+    """The files `tld ops docs-index move SRC DST` would rewrite, from its dry run. Raises DefaultsError when the
+    move cannot be planned, a path is unsafe, or any rewritten file is not plain prose inside the repository:
+    the profile, workflows, CODEOWNERS, scripts and other code are the owner's to edit by hand."""
     import argparse as ap
     for rel in (src, dst):
         if unsafe(root, rel):
             raise DefaultsError(f"refused: {unsafe(root, rel)}")
-    # A dry run first: every file the move would rewrite must be a regular file inside the repository.
     probe = ap.Namespace(root=str(root), src=src, dst=dst, profile=None, apply=False, exclude=[], json=True)
     pout = io.StringIO()
     with contextlib.redirect_stdout(pout), contextlib.redirect_stderr(io.StringIO()):
@@ -351,9 +362,22 @@ def _move(root: Path, src: str, dst: str) -> str:
         planned = None
     if planned is None:
         raise DefaultsError(f"cannot plan the move of {src} to {dst}")
-    for f in sorted({c["file"] for c in planned}):
+    files = sorted({c["file"] for c in planned})
+    for f in files:
         if unsafe(root, f):
             raise DefaultsError(f"refused: {f} would be rewritten but {unsafe(root, f)}")
+        low = f.lower()
+        if not low.endswith(PROSE_SUFFIXES) or low.startswith((".github/", ".tld/")) or "codeowners" in low:
+            raise DefaultsError(f"refused: {f} mentions {src} and is not a prose file; "
+                                "answer keep, or move the file by hand and update that mention yourself")
+    return files
+
+
+def _move(root: Path, src: str, dst: str) -> tuple[str, list[str]]:
+    """`tld ops docs-index move SRC DST --apply` as a function; its output is captured. Returns the summary line
+    and the files it rewrote (plus the moved file). Raises DefaultsError on failure, having changed nothing."""
+    import argparse as ap
+    files = _probe(root, src, dst)
     args = ap.Namespace(root=str(root), src=src, dst=dst, profile=None, apply=True, exclude=[], json=False)
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
@@ -361,7 +385,7 @@ def _move(root: Path, src: str, dst: str) -> str:
     if rc != 0:
         raise DefaultsError(f"cannot move {src} to {dst}: {(err.getvalue() or out.getvalue()).strip()}")
     lines = [ln for ln in out.getvalue().splitlines() if ln.strip()]
-    return lines[-1] if lines else f"move: moved {src} -> {dst}"
+    return (lines[-1] if lines else f"move: moved {src} -> {dst}"), [dst if f == src else f for f in files] + [dst]
 
 
 def _safe_value(root: Path, rel: str) -> str:
@@ -430,6 +454,34 @@ def _rename_heading(root: Path, rel: str, found: str) -> str:
     return f"renamed the heading '{found}' to '{HEADING_DEFAULT}' in {rel}"
 
 
+def _move_all(root: Path, src_dir: str, staged: list[str]) -> list[str]:
+    """Move every file of an ADR directory, all or nothing: every move is probed first, and a move that fails
+    after others succeeded puts the moved files back."""
+    pairs = [(f, ADR_DEFAULT + f[len(src_dir):]) for f in _dir_files(root, src_dir) or []]
+    if not pairs:
+        raise DefaultsError(f"{src_dir}: nothing to move")
+    for f, dst in pairs:
+        _probe(root, f, dst)
+    done: list[tuple[str, str]] = []
+    messages: list[str] = []
+    try:
+        for f, dst in pairs:
+            msg, files = _move(root, f, dst)
+            done.append((f, dst))
+            messages.append(msg)
+            staged += files
+    except DefaultsError as exc:
+        back = []
+        for f, dst in reversed(done):
+            try:
+                _move(root, dst, f)
+            except DefaultsError as undo:
+                back.append(f"{dst}: {undo}")
+        raise DefaultsError(f"{exc}; the files moved so far were put back" +
+                            (f" except: {'; '.join(back)}" if back else "")) from None
+    return messages
+
+
 def _git_add(root: Path, *paths: str) -> None:
     inside = subprocess.run(["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
                             capture_output=True, text=True)
@@ -452,13 +504,14 @@ def apply(root: Path, changes: list[Change], answers: dict) -> list[str]:
         try:
             if c.key == "docs.index":
                 if choice == "rename":
-                    messages.append(_move(root, c.path, c.default_path))
+                    msg, files = _move(root, c.path, c.default_path)
+                    messages.append(msg)
+                    staged += files
                 else:
                     edits.append(("docs.index", _safe_value(root, c.path)))
             elif c.key == "docs.adr_dir":
                 if choice == "rename":
-                    for f in _dir_files(root, c.path) or []:
-                        messages.append(_move(root, f, ADR_DEFAULT + f[len(c.path):]))
+                    messages += _move_all(root, c.path, staged)
                 else:
                     edits.append(("docs.adr_dir", _safe_value(root, c.path)))
                     if _is_file(root, f"{c.path}/README.md"):
@@ -466,7 +519,9 @@ def apply(root: Path, changes: list[Change], answers: dict) -> list[str]:
             elif c.key == "docs.changelog":
                 changelog_touched = True
                 if choice == "rename":
-                    messages.append(_move(root, c.path, c.default_path))
+                    msg, files = _move(root, c.path, c.default_path)
+                    messages.append(msg)
+                    staged += files
                 else:
                     changelog_file = _safe_value(root, c.path)
             elif c.key == "docs.changelog.section":
@@ -504,8 +559,9 @@ def apply(root: Path, changes: list[Change], answers: dict) -> list[str]:
             if text != original:
                 profile.write_text(text, encoding="utf-8")
                 staged.append(NEW_PROFILE)
+    staged = [p for p in dict.fromkeys(staged) if (root / p).exists() or (root / p).is_symlink()]
     if staged:
-        _git_add(root, *dict.fromkeys(staged))
+        _git_add(root, *staged)
     return messages
 
 
