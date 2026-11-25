@@ -25,7 +25,10 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p5-hooks
 
-- pending
+- worker: touches: tests/core/test_validate_manifest.py (orchestrator-approved: manifest tests moved to a listed-profile fixture because the profile and ordinary workflows are no longer protected by default); evals/stubs/release-head-moved.json head updated because the tiny_app profile changed
+- review: design addition to 3.4/3.5: dod-gate reads verify.dod and max_attempts from the trusted copy (working copy only when no trusted copy), because the profile is no longer protected and verify.dod is run with a shell at Stop
+- retry: sent back three times by the security review: malformed gate values bypassed the clamp, dod-gate ran the working-tree verify.dod, and a malformed verify value crashed dod-gate so Stop did not block; all fixed
+- review: open, left to the owner and final review: the trust lookup also runs in repositories that never had a profile; with an origin but no reachable trusted copy the working-tree verify.dod runs; a trusted profile that is empty or not a mapping falls back to the working copy
 
 ## p6-summary-protect-playbooks
 
