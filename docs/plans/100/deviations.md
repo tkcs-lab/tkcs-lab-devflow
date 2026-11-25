@@ -10,7 +10,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-board-issue-link
 
-- pending
+- worker: Worker ran without tld, so roles were run by the orchestrator; it used one shared orchestrator_session id in the fixture runs.
 
 ## p3-playbooks-tracking-issue
 
