@@ -63,7 +63,7 @@ def build(dest: Path, command: str = "land") -> dict:
         expected["stop_message"] = "toolkit.yaml: /sysml needs a 'sysml' section (an empty 'sysml:' uses subset 1; see docs/guides/sysml.md)"
     elif command == "deps":
         files[".tld/toolkit.yaml"] = _profile()
-        expected["stop_message"] = "missing required key 'deps.cooldown_days'"
+        expected["stop_message"] = "toolkit.yaml: /deps needs a 'deps' section (an empty 'deps:' uses cooldown_days 3 and time_budget_minutes 90)"
     elif command == "upstream":
         files[".tld/toolkit.yaml"] = _profile(
             "\nupstream:\n  repo: example-org/notes-upstream\n  tag_pattern: '^v[0-9]+\\.[0-9]+\\.[0-9]+$'\n"

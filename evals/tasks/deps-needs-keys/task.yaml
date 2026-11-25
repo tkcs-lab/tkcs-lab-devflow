@@ -1,5 +1,5 @@
 id: deps-needs-keys
-description: /deps on a profile without a deps block must stop with the missing-key message, unattended, and touch nothing.
+description: /deps on a profile without a deps block must stop with the missing-section message, unattended, and touch nothing.
 command: /tld:deps
 arguments: ""
 fixture:

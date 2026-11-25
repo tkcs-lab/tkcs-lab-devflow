@@ -4,9 +4,9 @@ The weekly dependency triage: dependency-bot pull requests and audit findings, f
 requests, never merged. It runs unattended, on a schedule, with nobody watching.
 
 Load the profile as [policies/profile.md](policies/profile.md) says. On an error show the message verbatim and
-stop; never substitute a value of your own. This playbook needs `deps.cooldown_days` and
-`deps.time_budget_minutes`; a missing one stops the run with `toolkit.yaml: missing required key '<key>'`, after
-a `failed` record with `needs_you` when a board exists.
+stop; never substitute a value of your own. This playbook needs a `deps` section; without one
+print `toolkit.yaml: /deps needs a 'deps' section (an empty 'deps:' uses cooldown_days 3 and time_budget_minutes 90)` and stop, after a `failed` record with `needs_you` when a board exists. An empty
+`deps:` is enough: `deps.cooldown_days` and `deps.time_budget_minutes` then come from the resolved profile.
 
 ## Rules
 
