@@ -377,13 +377,13 @@ def _read_text(path: str, actions: list[dict], workdir) -> str | None:
     want = norm(path)
     for a in reversed(actions):
         if a.get("kind") == "write" and norm(str(a.get("path", ""))) == want:
-            return a.get("content") or ""
+            return str(a.get("content") or "")[:MAX_ASK_BYTES]
     if root is not None:
         try:
             f = (root / path).resolve()
             if f.is_relative_to(root) and f.is_file() and f.stat().st_size <= MAX_ASK_BYTES:
-                return f.read_text()
-        except OSError:
+                return f.read_text(errors="replace")
+        except (OSError, ValueError):
             return None
     return None
 
@@ -401,6 +401,20 @@ def _gh_ask_ids(tokens: list[str], actions: list[dict], workdir) -> list[str] | 
     if not texts:
         return None
     return _EXAMPLE_ID.findall(texts[0].partition("-- example reply --")[2])
+
+
+_RAW_ASK = re.compile(r"\btld\S*(?:\s|\\\n)+(?:\S+(?:\s|\\\n)+){0,6}?board(?:\s|\\\n)+ask\b|\bboard(?:\s|\\\n)+ask\b[^\n]*\.json")
+_GH_COMMENT = re.compile(r"\bgh\s+(?:issue|pr)\s+comment\b|\bgh\s+api\b[^\n]*/comments\b")
+
+
+def _raw_ask(command: str) -> bool:
+    """A conservative backstop over the raw text, for what the lexer cannot follow: the ask marker anywhere, a
+    `tld ... board ask` however the words are separated, or a `gh` comment whose body is not a plain inline string
+    (piped, substituted or read from stdin). It over-counts rather than miss an ask; an over-counted ask has no
+    question ids, so it can neither satisfy `question_ids` nor hide in a `min`."""
+    if ASK_MARKER in command or _RAW_ASK.search(command):
+        return True
+    return bool(_GH_COMMENT.search(command) and re.search(r"\$\(|`|--body-file[ =]-|-F\s+-|--input\s+-|\|\s*gh\b|<<", command))
 
 
 def ask_question_ids(actions: list[dict], workdir=None) -> list[list[str]]:
@@ -421,20 +435,24 @@ def ask_question_ids(actions: list[dict], workdir=None) -> list[list[str]]:
             args = a.get("args") or {}
             doc = args.get("ask") if isinstance(args.get("ask"), dict) else args
             out.append(_ids_of_ask(doc) or [])
-        elif kind == "github_op" and "comment" in op and ASK_MARKER in str((a.get("args") or {}).get("body", "")):
-            out.append(_EXAMPLE_ID.findall(str(a["args"]["body"]).partition("-- example reply --")[2]))
+        elif kind == "github_op" and ASK_MARKER in json.dumps(a.get("args") or {}, default=str):
+            out.append(_EXAMPLE_ID.findall(json.dumps(a["args"], default=str).replace("\\n", "\n").partition("-- example reply --")[2]))
         elif kind == "shell":
-            for what, data in _scan_command(str(a.get("command", ""))):
+            found = _scan_command(str(a.get("command", "")))
+            before = len(out)
+            for what, data in found:
                 if what == "board_ask":
                     text = _read_text(data[0], actions, workdir) if data else None
                     try:
                         out.append(_ids_of_ask(json.loads(text)) or [] if text else [])
-                    except ValueError:
+                    except (ValueError, RecursionError):
                         out.append([])
                 else:
                     ids = _gh_ask_ids(data, actions, workdir)
                     if ids is not None:
                         out.append(ids)
+            if len(out) == before and _raw_ask(str(a.get("command", ""))):
+                out.append([])  # backstop: the lexer could not see the ask (odd quoting, a heredoc, a wrapper)
     return out
 
 

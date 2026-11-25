@@ -61,7 +61,8 @@ In *update* mode the existing pin stays unless the owner passes `--base <source>
 source changes, list `old -> new` under `Decisions for a human`. The pin is always a 40-hex commit. A base that did not come from the argument or an existing `tld.extends` is listed under
 `Decisions for a human` with its source and pin. When the argument already carries `@<commit>`, that is the pin (no tag, and
 `latest` is skipped). Otherwise `tld profile base latest -- "$SRC"` prints `{"sha": ..., "tag": ...}`: the pin is
-`<source>@<sha>`, the tag is a trailing comment. Then make the base available:
+`<source>@<sha>`, the tag is a trailing comment and must match `^[A-Za-z0-9._-]+$` (else write none); build `value.json` with a
+JSON encoder (`python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$VALUE"`), never by interpolation. Then make the base available:
 
 1. Put the line `tld.extends` into `.tld/toolkit.yaml` first (*create*: a file holding only
    `tld:` / `  extends: <source>@<sha>  # <tag>`, which step 5 replaces; *update*:
@@ -164,7 +165,7 @@ The resolved `roles.disable` must name no role the base requires (`tld profile v
 `tld profile validate .tld/toolkit.yaml` with its file checks (the base comes from the cache); a message about a
 value that is left out under `Not verified` (for example a missing `verify.fast`) is reported there, never fixed with
 a guessed value. Then each `verify.fast` command once (never a
-retry). List what was not verified and why.
+retry), only when it is a command the survey derived from the default-branch checkout; show it first. List what was not verified and why.
 
 ## 7. Deliver
 

@@ -563,7 +563,7 @@ def test_a_board_ask_command_reads_its_file_from_the_work_tree(tmp_path):
     ("tld board ask ask.json", True), ("cli/tld board ask ask.json --fallback-issue o/r#1", True),
     ("./cli/tld board ask ask.json", True), ("tld --repo o/r board ask ask.json", True),
     ("python3 -m tld board ask ask.json", True), ("X=1 tld board ask ask.json && echo done", True),
-    ("git commit -m 'x; tld board ask ask.json'", False), ("echo tld board ask ask.json", False),
+    ("git commit -m 'x; tld board ask ask.json'", True), ("echo tld board ask ask.json", True),  # over-counted on purpose
     ("tld board answers 12", False)])
 def test_board_ask_commands_are_found_by_tokens(command, counts):
     from evals.harness.actions import shell
@@ -604,8 +604,8 @@ def test_an_attempted_ask_counts_in_every_shape_and_fails_a_max_0_task(label, ac
     assert not GRADERS["asks_at_most"](ctx(actions=actions, max=0)).passed, label
 
 
-@pytest.mark.parametrize("command", ["echo 'bash -c \"tld board ask f\"'", "git commit -m 'tld board ask f'",
-                                     "gh issue comment 5 --body 'thanks'", "bash -c 'echo hi'", "uv run pytest -q"])
+@pytest.mark.parametrize("command", ["gh issue comment 5 --body 'thanks'", "bash -c 'echo hi'", "uv run pytest -q",
+                                     "tld board answers 12", "git status"])
 def test_commands_that_are_no_ask_do_not_count(command):
     assert ask_question_ids([shell(command)]) == []
 
@@ -628,3 +628,38 @@ def test_profile_valid_pending_keys_may_be_absent_but_nothing_else(tmp_path):
     c2 = dataclasses.replace(ctx([("worktree", ".tld/toolkit.yaml", guessed)]), workdir=work,
                              params={"keys": ["verify.fast", "verify.dod"]})
     assert not GRADERS["profile_key_absent"](c2).passed  # a guessed command is caught
+
+
+@pytest.mark.parametrize("command", [
+    "cat > ask.md <<'EOF'\nI don't know the test command\nEOF\ntld board ask ask.json",
+    "# don't\ntld board ask f", "echo it's; tld board ask f", "echo $'it\\'s'; tld board ask f",
+    "timeout 10 tld board ask f", "nice -n 5 tld board ask f", "sudo -u x tld board ask f", "env -C d tld board ask f",
+    "uv run --with x tld board ask f", "if true; then tld board ask f; fi", "for i in 1; do tld board ask f; done",
+    "{ tld board ask f; }", "! tld board ask f", 'echo "$(tld board ask f)"', "x=`tld board ask f`",
+    "${TLD:-tld} board ask f", "tld -C . board ask f", "tld \\\n board ask f", "eval 'tld board ask f'",
+    'gh issue comment 5 --body "$(cat ask.md)"', "cat ask.md | gh issue comment 5 -F -",
+    "gh issue comment 5 --body-file - <<'EOF'\nit's\nEOF"])
+def test_an_ask_in_an_odd_shape_is_still_counted(command):
+    from evals.harness.actions import shell
+    assert len(ask_question_ids([shell(command)])) >= 1, command
+    assert not GRADERS["asks_at_most"](ctx(actions=[shell(command)], max=0)).passed
+
+
+def test_a_backstop_ask_has_no_ids_so_it_cannot_satisfy_the_question_ids():
+    from evals.harness.actions import shell
+    odd = [shell("echo it's; tld board ask f")]
+    assert not GRADERS["asks_at_most"](ctx(actions=odd, max=1, min=1, question_ids=["verify_fast"])).passed
+
+
+def test_github_op_ask_is_counted_by_its_marker_whatever_the_field():
+    comment = github_op("add_issue_comment", {"text": MARKED})
+    assert len(ask_question_ids([comment])) == 1
+    assert not GRADERS["asks_at_most"](ctx(actions=[github_op("create_pull_request", {"body": MARKED})], max=0)).passed
+
+
+def test_unreadable_ask_files_do_not_crash_the_counter(tmp_path):
+    import dataclasses
+    (tmp_path / "bin.json").write_bytes(b"\xff\xfe\x00" * 10)
+    (tmp_path / "deep.json").write_text("[" * 100000)
+    c = dataclasses.replace(ctx(actions=[shell("tld board ask bin.json"), shell("tld board ask deep.json")], max=5), workdir=tmp_path)
+    assert ask_question_ids(c.actions, tmp_path) == [[], []]
