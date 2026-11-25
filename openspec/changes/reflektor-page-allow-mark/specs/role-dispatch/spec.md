@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Reflektor page hardening and send
-The system SHALL, in `tld roles reflektor-html`, either add the Content-Security-Policy to a built page with `--file` or, with `--send --answer FILE --dest DIR`, copy the page named by the last `REPORT-HTML` line of the saved answer to `DIR/report.html` and print its path. Before either writes, it SHALL scan every line of the original page and of every decoded data string for credentials without honouring the secret-scan allow mark, and SHALL write the page with every literal allow mark replaced by the placeholder `[secret-scan mark removed]`.
+The system SHALL, in `tld roles reflektor-html`, either add the Content-Security-Policy to a built page with `--file` or, with `--send --answer FILE --dest DIR`, copy the page named by the last `REPORT-HTML` line of the saved answer to `DIR/report.html` and print its path. Before either writes, it SHALL scan every line of the original page and of every decoded data string for credentials without honouring the secret-scan allow mark, and SHALL write the page with every literal allow mark replaced by the placeholder `[secret-scan mark removed]`, after running the whole page check again on the page with the marks replaced.
 
 #### Scenario: Page hardened once
 - **WHEN** `--file` names a page with exactly one `<head>` that is not yet hardened and passes the viewer and secret checks
@@ -53,7 +53,7 @@ The system SHALL, in `tld roles page-note --stage role|check|board|send [--stder
 - **THEN** a usage error is printed and the exit code is 2
 
 ### Requirement: Change report with a page note
-The system SHALL, in `tld roles change-report --report FILE [--note FILE]`, print the page note line given in the note file, when it is a valid page note, then a blank line and the cleaned change-report block of the report, exactly as `tld roles section --report FILE` prints it.
+The system SHALL, in `tld roles change-report --report FILE [--note FILE]`, print the page note line given in the note file, when it is a valid page note, then a blank line and the cleaned change-report block of the report, exactly as `tld roles section --report FILE` prints it, except that a block line that looks like a page note is replaced by the fixed line `(a line that looked like a page note was removed)`.
 
 #### Scenario: Note and block
 - **WHEN** the note file holds one valid page note line and the report has a usable block
@@ -68,5 +68,5 @@ The system SHALL, in `tld roles change-report --report FILE [--note FILE]`, prin
 - **THEN** the output and exit codes are those of `tld roles section --report FILE`
 
 #### Scenario: Invalid note
-- **WHEN** the note file holds anything but one line of the shape `tld roles page-note` prints
+- **WHEN** the note file holds anything but one line of the shape `tld roles page-note` prints, or is unreadable, not a regular file or longer than 1000 bytes
 - **THEN** `tld roles: the page note is not a page-note line` is printed on stderr and the exit code is 1
