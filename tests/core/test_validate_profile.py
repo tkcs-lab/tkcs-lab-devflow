@@ -474,7 +474,6 @@ def test_resolved_profile_keeps_spec_version(vp):
 
 
 @pytest.mark.parametrize("spec,message", [
-    ({}, "missing required key 'spec.version'"),
     ({"version": 2.1}, "'spec.version': must be a string"),
     ({"version": "latest"}, "'spec.version': does not match"),
     ({"version": "v2.1.0"}, "'spec.version': does not match"),
@@ -516,7 +515,6 @@ def test_sysml_subset_validates(vp):
 
 
 @pytest.mark.parametrize("block,message", [
-    ({}, "missing required key 'sysml.subset'"),
     ({"subset": 2}, "sysml.subset"),
     ({"subset": "1"}, "sysml.subset"),
     ({"subset": 1.0}, "sysml.subset"),
@@ -540,3 +538,82 @@ def test_starter_template_sysml_block_validates_when_uncommented(vp):
     profile.update(yaml.safe_load("\n".join(block)))
     assert profile["sysml"]["subset"] == 1
     assert vp.validate(profile)[0] == []
+
+
+def test_an_empty_spec_block_validates(vp):
+    for block in (None, {}):
+        profile = copy.deepcopy(MINIMAL)
+        profile["spec"] = block
+        errors, _, resolved = vp.validate(profile)
+        assert errors == []
+        assert resolved["spec"] == {"version": "2.1.0"}
+
+
+@pytest.mark.parametrize("key,block", [("deps", {"cooldown_days": 3, "time_budget_minutes": 90}),
+                                       ("sysml", {"subset": 1})])
+def test_an_empty_deps_or_sysml_block_validates(vp, key, block):
+    profile = copy.deepcopy(MINIMAL)
+    profile[key] = None
+    errors, _, resolved = vp.validate(profile)
+    assert errors == [] and resolved[key] == block
+
+
+def test_docs_changelog_false_validates_and_resolves_without_the_key(vp):
+    profile = copy.deepcopy(MINIMAL)
+    profile["docs"]["changelog"] = False
+    errors, _, resolved = vp.validate(profile)
+    assert errors == []
+    assert "changelog" not in resolved["docs"]
+
+
+@pytest.mark.parametrize("path", [("docs", "index"), ("docs", "adr_dir"), ("docs", "website"), ("admin",),
+                                  ("git_ops",), ("land", "max_prs")])
+def test_every_off_switch_accepts_false_and_resolves_without_the_key(vp, path):
+    profile = copy.deepcopy(MINIMAL)
+    node = profile
+    for part in path[:-1]:
+        node = node.setdefault(part, {})
+    node[path[-1]] = False
+    errors, _, resolved = vp.validate(profile)
+    assert errors == []
+    node = resolved
+    for part in path[:-1]:
+        node = node[part]
+    assert path[-1] not in node
+
+
+def test_an_off_switch_rejects_true_and_other_values(vp):
+    for value in (True, 0, "x"):
+        profile = copy.deepcopy(MINIMAL)
+        profile["docs"]["changelog"] = value
+        assert errs(vp, profile) != []
+
+
+def test_tld_extends_passes_the_shape_check_as_a_string(vp):
+    profile = copy.deepcopy(MINIMAL)
+    profile["tld"] = {"extends": "acme/.github/tld/profile-base.yaml@" + "a" * 40, "allow_override": ["hooks.protect_paths"]}
+    assert errs(vp, profile) == []
+    profile["tld"] = {"extends": "v1.2"}  # no pattern in the schema: parse_extends reports the error text
+    assert errs(vp, profile) == []
+    for bad in ({"extends": ""}, {"extends": 3}, {"allow_override": [""]}, {"allow_override": "x"}):
+        profile["tld"] = bad
+        assert errs(vp, profile) != []
+
+
+def test_check_without_required_skips_missing_keys_but_reports_unknown_keys(vp):
+    schema = json.loads(vp.SCHEMA.read_text())
+    raw = {"docs": {"bogus": 1}, "git": {"main_branch": 3}}
+    strict, lax = [], []
+    vp.check(raw, schema, schema, "", strict)
+    vp.check(raw, schema, schema, "", lax, required=False)
+    assert any("missing required key" in e for e in strict)
+    assert not any("missing required key" in e for e in lax)
+    assert any("unknown key 'docs.bogus'" in e for e in lax)
+    assert any("'git.main_branch'" in e for e in lax)
+
+
+def test_normalise_turns_null_sections_into_mappings_and_copies(vp):
+    original = {"deps": None, "spec": None, "sysml": None, "docs": None}
+    out = vp.normalise(original)
+    assert out == {"deps": {}, "spec": {}, "sysml": {}, "docs": None}
+    assert original["spec"] is None

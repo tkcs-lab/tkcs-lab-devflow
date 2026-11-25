@@ -673,6 +673,16 @@ mutants:
   why: reflektor allowed at points other than dod
   old: 'name == "reflektor" and points != ["dod"]'
   new: 'False'
+- id: VP18
+  file: src/tld/profile/validate.py
+  why: the required parameter is inverted, so required keys are skipped by default and demanded when asked to skip
+  old: '        if required:'
+  new: '        if not required:'
+- id: VP19
+  file: src/tld/profile/validate.py
+  why: normalise leaves a null section as None
+  old: 'if key in out and out[key] is None:'
+  new: 'if False:'
 - id: GT10
   file: src/tld/guard/_release_dispatch.py
   why: a release dispatch with skip_checks true allowed
