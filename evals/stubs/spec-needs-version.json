@@ -3,7 +3,7 @@
   "turns": 3,
   "cost_usd": 0.0,
   "guard": true,
-  "result_text": "toolkit.yaml: missing required key 'spec.version' (add a spec block; see docs/guides/spec.md)",
+  "result_text": "toolkit.yaml: /spec needs a 'spec' section (an empty 'spec:' uses version 2.1.0; see docs/guides/spec.md)",
   "actions": [
     {
       "id": "t1",

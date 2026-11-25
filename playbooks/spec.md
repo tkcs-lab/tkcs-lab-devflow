@@ -17,7 +17,7 @@ research: list each open question in the final report and go on without it). Run
 
 Load the profile as [policies/profile.md](policies/profile.md) says. On an error show the message verbatim and
 stop; never substitute a value of your own. The profile needs `spec.version`; without it print
-`toolkit.yaml: missing required key 'spec.version' (add a spec block; see docs/guides/spec.md)` and stop. In `init`
+`toolkit.yaml: /spec needs a 'spec' section (an empty 'spec:' uses version 2.1.0; see docs/guides/spec.md)` and stop. In `init`
 run `tld dod exempt` once: the pull request adds spec files, not code.
 
 ## check

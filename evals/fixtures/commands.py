@@ -57,10 +57,10 @@ def build(dest: Path, command: str = "land") -> dict:
         expected["stop_message"] = "toolkit.yaml: missing required key 'git.bot_login'"
     elif command == "spec":
         files[".tld/toolkit.yaml"] = _profile()
-        expected["stop_message"] = "toolkit.yaml: missing required key 'spec.version' (add a spec block; see docs/guides/spec.md)"
+        expected["stop_message"] = "toolkit.yaml: /spec needs a 'spec' section (an empty 'spec:' uses version 2.1.0; see docs/guides/spec.md)"
     elif command == "sysml":
         files[".tld/toolkit.yaml"] = _profile()
-        expected["stop_message"] = "toolkit.yaml: missing required key 'sysml.subset' (add a sysml block; see docs/guides/sysml.md)"
+        expected["stop_message"] = "toolkit.yaml: /sysml needs a 'sysml' section (an empty 'sysml:' uses subset 1; see docs/guides/sysml.md)"
     elif command == "deps":
         files[".tld/toolkit.yaml"] = _profile()
         expected["stop_message"] = "missing required key 'deps.cooldown_days'"

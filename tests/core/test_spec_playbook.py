@@ -30,7 +30,7 @@ def test_spec_playbook_names_the_stop_message_of_its_eval(tmp_path, capsys):
     message = m.group(1)
     assert message in PLAYBOOK.read_text()
     profile = tmp_path / "toolkit.yaml"
-    profile.write_text("tld:\n  version: '>=1.0'\n")
+    profile.write_text("tld:\n  version: '>=1.0'\ngit:\n  main_branch: main\nverify:\n  fast: ['true']\n  dod: ['true']\n")
     assert _load("tld.ops.spec").main(["validate", "--profile", str(profile), "--root", str(tmp_path)]) == 2
     assert capsys.readouterr().err.strip() == message
 
