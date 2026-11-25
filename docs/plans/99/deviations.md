@@ -20,7 +20,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p3-playbooks
 
-- pending
+- worker: the worker ran without tld; the orchestrator ran the security role and the checks. The dod sequence puts the change-report build in sub-step 1 before note.txt is written and writes note.txt, html.err and board.err as bare names (two non-blocking security findings, left for the fix round)
+- review: verify_after_merge ran in full for the first time: all four test files exist now and pass
 
 ## p4-docs-spec-retire
 
