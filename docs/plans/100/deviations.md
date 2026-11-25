@@ -18,7 +18,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p4-retire
 
-- pending
+- worker: Worker ran without the plugin tld; its role line was not trusted, the orchestrator ran the security review.
+- review: Security reviewer: non-blocking, the archived spec requirement omits the dot-segment, https-only and text-only rules the code enforces; left as the approved delta.
 
 ## Final review
 
