@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Reflektor page hardening and send
-The system SHALL, in `tld roles reflektor-html`, either add the Content-Security-Policy to a built page with `--file` or, with `--send --answer FILE --dest DIR`, copy the page named by the last `REPORT-HTML` line of the saved answer to `DIR/report.html` and print its path. Before either writes, it SHALL scan every line of the original page and of every decoded data string for credentials without honouring the secret-scan allow mark, and SHALL write the page with every literal allow mark replaced by the placeholder `[secret-scan mark removed]`, after running the whole page check again on the page with the marks replaced.
+The system SHALL, in `tld roles reflektor-html`, either add the Content-Security-Policy to a built page with `--file` or, with `--send --answer FILE --dest DIR`, copy the page named by the last `REPORT-HTML` line of the saved answer to `DIR/report.html` and print its path. Before either writes, it SHALL scan every line of the original page and of every decoded data string for credentials without honouring the secret-scan allow mark.
 
 #### Scenario: Page hardened once
 - **WHEN** `--file` names a page with exactly one `<head>` that is not yet hardened and passes the viewer and secret checks
@@ -28,6 +28,13 @@ The system SHALL, in `tld roles reflektor-html`, either add the Content-Security
 - **THEN** a usage error is printed and the exit code is 2
 
 ## ADDED Requirements
+
+### Requirement: Quoted allow mark in the page
+The system SHALL write the page with every literal secret-scan allow mark replaced by the placeholder `[secret-scan mark removed]`, SHALL run the whole page check again on the page with the marks replaced, and SHALL refuse a page whose decoded data still holds the mark.
+
+#### Scenario: Swap checked again
+- **WHEN** the replacement is made
+- **THEN** the whole page check runs again on the replaced page before anything is written
 
 ### Requirement: Change report page note
 The system SHALL, in `tld roles page-note --stage role|check|board|send [--stderr FILE] [--sent]`, print exactly one line that starts with `HTML page not stored: ` and says why, built only from fixed text, a reason of the page check that is on the list of known reasons, and a three-digit HTTP status.
