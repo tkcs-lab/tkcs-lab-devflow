@@ -20,7 +20,8 @@ on stderr. The pin proves the bytes, not the intent of the release. Python 3.11+
 `reflektor-check` refuses a report whose `path` values leave the clone. `reflektor-html --file` adds the
 Content-Security-Policy to build's page and checks it against the pinned viewer; `--send` is the only way the
 orchestrator sends a page: it reads the role's saved answer, takes the path of its last `REPORT-HTML` line, opens
-it without following links, checks the bytes and writes the same text to `DIR/report.html`. Exit 1 on any refusal.
+it without following links, checks the bytes and writes the text to `DIR/report.html`. The page is written with each
+literal allow mark replaced by `[secret-scan mark removed]`, after a scan that ignores the mark. Exit 1 on any refusal.
 """
 from __future__ import annotations
 
@@ -351,7 +352,11 @@ def check_report(report_text, root) -> list[str]:
     return reasons
 
 
-ALLOW_MARK = "secret-scan:allow"
+ALLOW_MARK = secret_scan.ALLOW_MARK
+REDACTED_MARK = "[secret-scan mark removed]"
+REASON_SPLIT = "the data holds a line-splitting character"
+REASON_ESCAPED = "the data carries an escaped secret-scan allow mark"
+REASON_MARK_RAW = "the page carries a secret-scan allow mark outside its data"
 _SPLITTERS = frozenset("\x0b\x0c\x1c\x1d\x1e\x1f\x85")
 
 
@@ -363,16 +368,15 @@ def _splits_lines(s: str) -> bool:
 def verify_html(text) -> list[str]:
     """`report_check.check` plus the secret scan of the raw text and of every decoded string and key of the data.
 
-    The scan skips a line that ends in its allow mark and splits on more characters than a newline, so a page
-    that carries the mark, or a line-splitting character in its data, is refused instead of scanned."""
+    The scan ignores the allow mark (the scan option that turns the skip off), so a credential on a line that ends in the mark is found.
+    It splits on more characters than a newline, so a line-splitting character in the data is refused. The mark
+    itself is dealt with by `prepare_page`, after this check."""
     reasons = report_check.check(text)
     if reasons:
         return reasons
-    if ALLOW_MARK in text:
-        return ["the page carries a secret-scan allow mark"]
     got = report_check.split(text)
     if _splits_lines(got[1]):
-        return ["the data holds a line-splitting character"]
+        return [REASON_SPLIT]
     value = report_check.parse_payload(got[1])
     strings = []
     for _parent, key, child in _walk(value):
@@ -380,18 +384,98 @@ def verify_html(text) -> list[str]:
             if isinstance(s, str):
                 strings.append(s)
     for s in strings:
-        if ALLOW_MARK in s:
-            return ["the page carries a secret-scan allow mark"]
         if _splits_lines(s):
-            return ["the data holds a line-splitting character"]
-    hits = secret_scan.scan_text(text)
+            return [REASON_SPLIT]
+    hits = secret_scan.scan_text(text, skip_marked=False)
     for s in strings:
         if not hits:
-            hits = secret_scan.scan_text(s)
+            hits = secret_scan.scan_text(s, skip_marked=False)
     if hits:
         names = sorted({name for _n, name, _d in hits})
         return [f"the page holds something that looks like a credential ({', '.join(names)})"]
     return []
+
+
+def _swap(s: str) -> tuple[str, int]:
+    return s.replace(ALLOW_MARK, REDACTED_MARK), s.count(ALLOW_MARK)
+
+
+def neutralise_page(text: str) -> tuple[str, int]:
+    """Replace each literal allow mark in the title and the data; the fixed viewer parts and the CSP stay byte for byte."""
+    got = report_check.split(text)
+    if isinstance(got, list):
+        raise ValueError(got[0])
+    title, payload = got
+    n1, n2, n3, n4 = (p[0] for p in report_check.VIEWER_PARTS)
+    t_start = n1 + len(report_check.CSP_META) + n2 + len(report_check.TITLE_OPEN)
+    p_start = t_start + len(title) + len(report_check.TITLE_CLOSE) + n3
+    p_end = len(text) - n4
+    new_title, c1 = _swap(title)
+    new_payload, c2 = _swap(payload)
+    return text[:t_start] + new_title + text[t_start + len(title):p_start] + new_payload + text[p_end:], c1 + c2
+
+
+def marks_left(text: str) -> list[str]:
+    """A reason when the page still holds the allow mark, raw or as an escaped form in the decoded data."""
+    if ALLOW_MARK in text:
+        return [REASON_MARK_RAW]
+    got = report_check.split(text)
+    if isinstance(got, list):
+        return got
+    value = report_check.parse_payload(got[1])
+    for _parent, key, child in _walk(value):
+        for s in (key, child):
+            if not isinstance(s, str):
+                continue
+            if ALLOW_MARK in s:
+                return [REASON_ESCAPED]
+    return []
+
+
+def _report_removed(count: int) -> None:
+    if count:
+        print(f"tld roles: reflektor: removed {count} secret-scan allow marks from the page", file=sys.stderr)
+
+
+def prepare_page(text: str) -> tuple[str, int]:
+    """Check the original page, replace each literal allow mark, check the result in full, and return the neutral page
+    with the number of marks replaced. The caller prints the count with `_report_removed` after its write succeeds.
+
+    The swap can create a word boundary (the mark starts and ends with a letter, its replacement with a bracket), so
+    a credential glued to the mark is found only in the result: the whole check runs on both."""
+    reasons = verify_html(text)
+    if reasons:
+        raise _refuse(reasons)
+    neutral, count = neutralise_page(text)
+    reasons = verify_html(neutral) or marks_left(neutral)
+    if reasons:
+        raise _refuse(reasons)
+    return neutral, count
+
+
+_CHECK_REASONS = (
+    r"the page is not text", r"page part [1-4] differs from the pinned viewer",
+    r"the Content-Security-Policy meta tag is missing or changed", r"the title tag is missing",
+    r"the title tag is not closed", r"the title is not plain one-line text",
+    r"already hardened", r"the page must have exactly one <head>", r"the answer has no REPORT-HTML line",
+    r"the REPORT-HTML path is not an out/report\.html path",
+    r"cannot (?:open|read|write) (?:the page|the answer): [A-Za-z]+",
+    r"(?:the page|the answer) is (?:not a regular file|not UTF-8|larger than [0-9]+ bytes)",
+)
+_INVALID = (r"invalid payload(?: \((?:NaN or Infinity|duplicate key|not one line|contains '<'|not JSON|nested too deeply)\))?")
+_LINK = "the data has a link target under '(?:%s)'" % "|".join(
+    re.escape(k) for k in (*report_check.NULL_KEYS, "branch.pr", "avatar.image"))
+_CRED_NAMES = [name for name, _d, _rx in secret_scan.SPECIFIC] + ["high-entropy-assignment"]
+_CRED = r"the page holds something that looks like a credential \((?:%s)(?:, (?:%s))*\)" % (
+    "|".join(re.escape(n) for n in _CRED_NAMES), "|".join(re.escape(n) for n in _CRED_NAMES))
+_KNOWN = re.compile("|".join(f"(?:{p})" for p in (
+    *_CHECK_REASONS, _INVALID, _LINK, _CRED, re.escape(REASON_SPLIT), re.escape(REASON_ESCAPED),
+    re.escape(REASON_MARK_RAW))))
+
+
+def known_reason(reason: str) -> bool:
+    """True only when REASON fully matches one of the texts this module and `report_check` can emit."""
+    return _KNOWN.fullmatch(reason) is not None
 
 
 def _read_regular(path, what: str) -> str:
@@ -433,16 +517,15 @@ def harden_html(file) -> Path:
         raise PrepareError(1, "the page must have exactly one <head>")
     at = text.index("<head>") + len("<head>")
     hardened = text[:at] + report_check.CSP_META + text[at:]
-    reasons = verify_html(hardened)
-    if reasons:
-        raise _refuse(reasons)
+    neutral, removed = prepare_page(hardened)
     path = Path(file)
     tmp = path.with_name(path.name + ".tmp")
     try:
-        tmp.write_text(hardened, encoding="utf-8")
+        tmp.write_text(neutral, encoding="utf-8")
         os.replace(tmp, path)
     except OSError as exc:
         raise PrepareError(1, f"cannot write the page: {type(exc).__name__}") from exc
+    _report_removed(removed)
     return path
 
 
@@ -457,10 +540,7 @@ def send_copy(answer_file, dest) -> Path:
         raise PrepareError(1, "the answer has no REPORT-HTML line")
     if not REPORT_HTML_RE.fullmatch(rest) or ".." in rest.split("/"):
         raise PrepareError(1, "the REPORT-HTML path is not an out/report.html path")
-    text = _read_regular(rest, "the page")
-    reasons = verify_html(text)
-    if reasons:
-        raise _refuse(reasons)
+    text, removed = prepare_page(_read_regular(rest, "the page"))
     out = Path(dest)
     try:
         out.mkdir(parents=True, exist_ok=True)
@@ -470,6 +550,7 @@ def send_copy(answer_file, dest) -> Path:
             fh.write(text.encode("utf-8"))
     except OSError as exc:
         raise PrepareError(1, f"cannot write the page: {type(exc).__name__}") from exc
+    _report_removed(removed)
     return target
 
 

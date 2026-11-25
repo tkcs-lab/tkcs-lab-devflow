@@ -138,7 +138,7 @@ It also matches GitLab tokens (`glpat-`), Stripe restricted keys (`rk_live_`), a
 is a whole token rather than the ending — `API_KEY_1`, `SECRET_KEY_BASE` — while leaving a label such as
 `secret_name` and any `public` / `pubkey` name alone (S16).
 
-For a test fixture or a documented example, build the value at run time, or end the line with `secret-scan:allow`; the mark must be the last thing on the line.
+For a test fixture or a documented example, build the value at run time, or end the line with `secret-scan:allow`; the mark must be the last thing on the line. `scan_text(text, skip_marked=False)` scans every line and ignores the mark; `tld roles reflektor-html` uses it.
 A line of more than a million characters is not checked for generic assignments. A secret a Bash command writes to
 a file is now scanned too (S16): the hook reads the heredoc / herestring body and the words of a command that
 redirects to a file or pipes to `tee` (`echo ghp_… > f`, `cat <<EOF > .env`). A secret that only passes through a

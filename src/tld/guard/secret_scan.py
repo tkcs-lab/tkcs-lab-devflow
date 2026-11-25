@@ -3,6 +3,7 @@
 
 The message names the pattern and the line, never the secret. A line that ends in
 `secret-scan:allow` is skipped (test fixtures, documented examples).
+A caller that must not honour the mark passes skip_marked=False.
 """
 from __future__ import annotations
 
@@ -109,11 +110,11 @@ def high_entropy_literal(value: str) -> bool:
             and not any(p in low for p in PLACEHOLDERS) and entropy(value) >= MIN_ENTROPY)
 
 
-def scan_text(text: str) -> list[tuple[int, str, str]]:
+def scan_text(text: str, *, skip_marked: bool = True) -> list[tuple[int, str, str]]:
     """(line number, pattern name, description) for every credential-looking line."""
     hits: list[tuple[int, str, str]] = []
     for n, line in enumerate(text.splitlines(), 1):
-        if line.rstrip().endswith(ALLOW_MARK):
+        if skip_marked and line.rstrip().endswith(ALLOW_MARK):
             continue
         for name, desc, rx in SPECIFIC:
             m = rx.search(line)

@@ -136,3 +136,37 @@ def test_page_renders_in_a_browser(real):
     assert result["requests"] == ["file://" + str(real["out"] / "report.html")]
     assert result["errors"] == []
     assert "Add sub to math" in result["text"]
+
+
+def test_page_that_quotes_the_allow_mark_is_built_and_stored(real, tmp_path):
+    clone = tmp_path / "clone-copy"  # the shared clone stays on its branch for the other tests
+    shutil.copytree(real["clone"], clone, symlinks=True)
+    git(clone, "checkout", "-q", "-b", "feature/quote")
+    (clone / "NOTES.md").write_text(f"The guard skips a line that ends in {reflektor.ALLOW_MARK} in prose.\n")
+    git(clone, "add", "-A")
+    git(clone, "commit", "-q", "-m", "quote the mark")
+    base_sha = git(clone, "rev-parse", "origin/main")
+    out = tmp_path / "out"
+    out.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    node = shutil.which("node")
+    env = ["env", "-i", f"PATH={Path(node).parent}:/usr/bin:/bin", "LANG=C.UTF-8", f"HOME={home}",
+           f"REFLEKTOR_HOME={home / '.reflektor'}", "GIT_CONFIG_NOSYSTEM=1", "timeout", "600", node]
+    rdir = real["rdir"]
+    collect = subprocess.run([*env, str(rdir / "scripts" / "collect.mjs"), "--repo", str(clone), "--base", base_sha,
+                              "--no-fetch", "--no-uncommitted", "--out", str(out / "diff.json")],
+                             capture_output=True, text=True)
+    assert collect.returncode == 0, collect.stdout + collect.stderr
+    (out / "report.json").write_text(json.dumps(REPORT, separators=(",", ":")) + "\n")
+    build = subprocess.run([*env, str(rdir / "scripts" / "build.mjs"), "--diff", str(out / "diff.json"),
+                            "--report", str(out / "report.json"), "--html", str(out / "report.html")],
+                           capture_output=True, text=True)
+    assert build.returncode == 0, build.stdout + build.stderr
+    page = out / "report.html"
+    reflektor.harden_html(page)
+    text = page.read_text(encoding="utf-8")
+    assert report_check.check(text) == []
+    assert reflektor.ALLOW_MARK not in text
+    assert reflektor.REDACTED_MARK in text
+    assert reflektor.ALLOW_MARK not in (rdir / "assets" / "viewer.html").read_text(encoding="utf-8")
