@@ -278,7 +278,6 @@ def test_fetch_leaves_the_project_repository_unshallow(project, origin):
     base.fetch(project, ref)
     assert git(project, "rev-parse", "--is-shallow-repository") == "false"
     assert not (project / ".git" / "shallow").exists()
-    assert (project / ".git" / "tld" / "base" / "objects.git" / "shallow").exists()
     assert git(project, "rev-list", "--all", "--count") == "1"  # none of the base's objects went into the project
 
 
@@ -291,6 +290,58 @@ def test_cache_is_shared_by_linked_worktrees(project, origin, tmp_path):
     assert base.cached(base.common_dir(project), ref) == GOOD
     calls = []
     assert base.fetch(project, ref, runner=counting(calls)) == GOOD and calls == []
+
+
+def test_commit_only_a_pull_request_holds_is_refused(project, origin):
+    commit(origin)
+    git(origin, "checkout", "-q", "-b", "side")
+    stray = commit(origin, GOOD.replace("critical", "low"), "a pull request head")
+    git(origin, "update-ref", "refs/pull/1/head", stray)
+    git(origin, "checkout", "-q", "main")
+    git(origin, "branch", "-q", "-D", "side")
+    ref = ref_for(stray)
+    with pytest.raises(base.BaseError) as exc:
+        base.fetch(project, ref)
+    assert str(exc.value) == (f"toolkit.yaml: 'tld.extends': the commit {stray[:7]} is not on a tag or the default "
+                              f"branch of acme/.github")
+    assert base.cached(base.common_dir(project), ref) is None
+
+
+def test_tagged_commit_off_the_default_branch_is_accepted(project, origin):
+    commit(origin)
+    git(origin, "checkout", "-q", "-b", "release")
+    tagged = commit(origin, GOOD + "# release\n", "release")
+    git(origin, "tag", "-a", "-m", "v3", "v3")
+    git(origin, "checkout", "-q", "main")
+    git(origin, "branch", "-q", "-D", "release")
+    assert base.fetch(project, ref_for(tagged)) == GOOD + "# release\n"
+
+
+def test_a_refused_base_is_not_cached(project, origin):
+    sha = commit(origin, GOOD + f"# {_token()}\n")
+    ref = ref_for(sha)
+    with pytest.raises(base.BaseError, match="refused: line"):
+        base.fetch(project, ref)
+    assert base.cached(base.common_dir(project), ref) is None
+    assert not list((base.common_dir(project) / "tld" / "base").glob("*.yaml"))
+
+
+def test_cache_entry_must_match_its_blob_id(project, origin):
+    ref = ref_for(commit(origin))
+    base.fetch(project, ref)
+    git_dir = base.common_dir(project)
+    meta_path = git_dir / "tld" / "base" / f"{base.cache_key(ref)}.json"
+    meta = json.loads(meta_path.read_text())
+    meta["blob"] = "0" * 40
+    meta_path.write_text(json.dumps(meta))
+    assert base.cached(git_dir, ref) is None
+
+
+def test_tags_are_ascii_and_short():
+    for tag in ("v1", "1.2.3", "v10.0", "v1.2.3.4.5.6"):
+        assert base.TAG_RE.match(tag), tag
+    for tag in ("v1.2.3.4.5.6.7", "v" + "1" * 10, "v\u0661", "v1.", "x1", "v1.\u0662"):
+        assert not base.TAG_RE.match(tag), tag
 
 
 def test_fetch_outside_a_repository(tmp_path):

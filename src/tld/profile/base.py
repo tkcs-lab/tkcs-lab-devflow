@@ -47,14 +47,14 @@ SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
 SOURCE_RE = re.compile(r"^(?P<owner>[A-Za-z0-9][A-Za-z0-9-]{0,38})/(?P<repo>[A-Za-z0-9._-]{1,100})/(?P<path>[^@]{1,256})$")
-TAG_RE = re.compile(r"^v?\d+(\.\d+)*$")
+TAG_RE = re.compile(r"^v?[0-9]{1,9}(\.[0-9]{1,9}){0,5}$", re.ASCII)
 
 # The keys a base may set, as dotted paths; a path allows everything below it.
 BASE_KEYS = ("tld.version", "tld.allow_override", "git.bot_login", "git.codeowners", "git.branch_pattern",
              "roles.posture", "roles.required", "hooks", "models", "runtime.environments", "verify.dod_manual")
 BASE_KEYS_TEXT = ", ".join(k if k != "hooks" else "hooks.*" for k in BASE_KEYS)
 
-Runner = Callable[[list, dict, float], "tuple[int, str, str]"]
+Runner = Callable[[list, dict, float], "tuple[int, bytes | str, str]"]
 
 
 class BaseError(Exception):
@@ -258,11 +258,18 @@ def cached(git_dir: str | Path, ref: BaseRef) -> str | None:
         meta = json.loads((folder / f"{key}.json").read_text())
         data = (folder / f"{key}.yaml").read_bytes()
         if (not isinstance(meta, dict) or meta.get("source") != ref.source or meta.get("sha") != ref.sha
-                or meta.get("sha256") != hashlib.sha256(data).hexdigest() or meta.get("size") != len(data)):
+                or meta.get("sha256") != hashlib.sha256(data).hexdigest() or meta.get("size") != len(data)
+                or not isinstance(meta.get("blob"), str) or not _blob_matches(data, meta["blob"])):
             return None
         return data.decode("utf-8", "surrogateescape")
     except (OSError, ValueError):
         return None
+
+
+def _blob_matches(data: bytes, blob: str) -> bool:
+    """Does `data` hash to the git blob id `blob` (SHA-1 or SHA-256 object format)?"""
+    algo = {40: hashlib.sha1, 64: hashlib.sha256}.get(len(blob))  # noqa: S324 - git's own object id
+    return algo is not None and algo(b"blob %d\0" % len(data) + data).hexdigest() == blob.lower()
 
 
 def _write_atomic(path: Path, data: bytes) -> None:
@@ -284,15 +291,22 @@ def _store(git_dir: Path, ref: BaseRef, data: bytes, blob: str) -> None:
     _write_atomic(folder / f"{key}.json", json.dumps(meta).encode())  # last: a half-written entry is a miss
 
 
-def _default_runner(args: list, env: dict, timeout: float) -> tuple[int, str, str]:
+def _default_runner(args: list, env: dict, timeout: float) -> tuple[int, bytes, str]:
     try:
-        r = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="surrogateescape",
-                           timeout=timeout, stdin=subprocess.DEVNULL, env=env)
+        r = subprocess.run(args, capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL, env=env)
     except subprocess.TimeoutExpired:
-        return 124, "", f"timed out after {timeout:g} s"
+        return 124, b"", f"timed out after {timeout:g} s"
     except (OSError, subprocess.SubprocessError) as exc:
-        return 127, "", f"git could not run: {type(exc).__name__}"
-    return r.returncode, r.stdout, r.stderr
+        return 127, b"", f"git could not run: {type(exc).__name__}"
+    return r.returncode, r.stdout, r.stderr.decode("utf-8", "replace")
+
+
+def _bytes(out: bytes | str) -> bytes:
+    return out if isinstance(out, bytes) else out.encode("utf-8", "surrogateescape")
+
+
+def _str(out: bytes | str) -> str:
+    return out.decode("utf-8", "replace") if isinstance(out, bytes) else out
 
 
 def _first_line(text: str) -> str:
@@ -308,8 +322,9 @@ class _Git:
     def __init__(self, repo: Path, runner: Runner | None, timeout: float) -> None:
         self.repo, self.run, self.timeout = repo, runner or _default_runner, timeout
 
-    def __call__(self, *args: str) -> tuple[int, str, str]:
-        return self.run(["git", *SAFE_OPTS, "-C", str(self.repo), *args], _env(), self.timeout)
+    def __call__(self, *args: str) -> tuple[int, bytes, str]:
+        code, out, err = self.run(["git", *SAFE_OPTS, "-C", str(self.repo), *args], _env(), self.timeout)
+        return code, _bytes(out), err
 
 
 def _init_bare(repo: Path, runner: Runner | None, timeout: float) -> None:
@@ -325,16 +340,16 @@ def _blob_at(git: _Git, ref: BaseRef) -> tuple[str, int]:
     """(blob id, size) of the file at the fetched commit, or BaseError."""
     gone = BaseError(f"toolkit.yaml: 'tld.extends': {ref.path} does not exist at {ref.owner}/{ref.repo}@{ref.sha[:7]}")
     code, out, _ = git("ls-tree", ref.sha, "--", ref.path)
-    fields = out.strip().split(None, 3)
+    fields = _str(out).strip().split(None, 3)
     if code != 0 or len(fields) < 4 or fields[3].strip() != ref.path:
         raise gone
     if fields[0] not in ("100644", "100755") or fields[1] != "blob":
         raise BaseError(f"toolkit.yaml: 'tld.extends': {ref.path} at {ref.owner}/{ref.repo}@{ref.sha[:7]} "
                         f"is not a regular file")
     code, size, _ = git("cat-file", "-s", fields[2])
-    if code != 0 or not size.strip().isdigit():
+    if code != 0 or not _str(size).strip().isdigit():
         raise gone
-    return fields[2], int(size)
+    return fields[2], int(_str(size))
 
 
 def _fetch_commit(git: _Git, ref: BaseRef) -> None:
@@ -342,6 +357,61 @@ def _fetch_commit(git: _Git, ref: BaseRef) -> None:
     if code != 0:
         raise BaseError(f"toolkit.yaml: 'tld.extends': the base {ref.label} is not cached and could not be fetched "
                         f"({_first_line(err)[:200]}); run again with network access")
+
+
+def _remote_tags(out: str) -> dict[str, str]:
+    """version tag -> commit from `git ls-remote --tags` output (the peeled line, the commit of an annotated tag, wins)."""
+    tags: dict[str, str] = {}
+    for line in out.splitlines():
+        sha, _, name = line.partition("\t")
+        if not name.startswith("refs/tags/") or not SHA40_RE.match(sha):
+            continue
+        tag = name[len("refs/tags/"):]
+        peeled = tag.endswith("^{}")
+        tag = tag[:-3] if peeled else tag
+        if TAG_RE.match(tag) and (peeled or tag not in tags):
+            tags[tag] = sha.lower()
+    return tags
+
+
+def _remote_head(out: str) -> str:
+    for line in out.splitlines():
+        sha, _, name = line.partition("\t")
+        if name.strip() == "HEAD" and SHA40_RE.match(sha):
+            return sha.lower()
+    return ""
+
+
+def _require_approved(git: _Git, ref: BaseRef, runner: Runner | None, timeout: float) -> None:
+    """The commit must be the commit of a version tag or an ancestor of the default branch head. A commit that only
+    a pull request or a fork holds is served by the same URL, so a bare SHA does not prove the owners approved it."""
+    run = runner or _default_runner
+    base = ["git", *SAFE_OPTS]
+    url = url_for(ref)
+
+    def listing(*args: str) -> str:  # options first, then the URL, then the patterns: `--tags` or `HEAD`
+        options = [a for a in args if a.startswith("-")]
+        patterns = [a for a in args if not a.startswith("-")]
+        code, out, err = run([*base, "ls-remote", *options, url, *patterns], _env(), timeout)
+        if code != 0:
+            raise BaseError(f"toolkit.yaml: 'tld.extends': the base {ref.label} is not cached and could not be fetched "
+                            f"({_first_line(err)[:200]}); run again with network access")
+        return _str(out)
+
+    if ref.sha in _remote_tags(listing("--tags")).values():
+        _fetch_commit(git, ref)
+        return
+    head = _remote_head(listing("HEAD"))
+    refused = BaseError(f"toolkit.yaml: 'tld.extends': the commit {ref.sha[:7]} is not on a tag or the default branch "
+                        f"of {ref.owner}/{ref.repo}")
+    if not head:
+        raise refused
+    code, _, err = git("fetch", "--quiet", "--no-tags", "--no-write-fetch-head", url, head)  # the whole history of the head
+    if code != 0:
+        raise BaseError(f"toolkit.yaml: 'tld.extends': the base {ref.label} is not cached and could not be fetched "
+                        f"({_first_line(err)[:200]}); run again with network access")
+    if git("merge-base", "--is-ancestor", ref.sha, head)[0] != 0:
+        raise refused
 
 
 def fetch(project: str | Path, ref: BaseRef, timeout: float = FETCH_TIMEOUT, runner: Runner | None = None) -> str:
@@ -356,16 +426,20 @@ def fetch(project: str | Path, ref: BaseRef, timeout: float = FETCH_TIMEOUT, run
     bare = _base_dir(git_dir) / "objects.git"
     _init_bare(bare, runner, timeout)
     git = _Git(bare, runner, timeout)
-    _fetch_commit(git, ref)
+    _require_approved(git, ref, runner, timeout)
     blob, size = _blob_at(git, ref)
     if size > MAX_BYTES:
         raise BaseError(f"toolkit.yaml: base {ref.label}: is larger than {MAX_BYTES} bytes")
-    code, text, err = git("cat-file", "blob", blob)
+    code, data, err = git("cat-file", "blob", blob)
     if code != 0:
         raise BaseError(f"toolkit.yaml: 'tld.extends': the base {ref.label} could not be read ({_first_line(err)[:200]})")
-    data = text.encode("utf-8", "surrogateescape")
+    if not _blob_matches(data, blob):
+        raise BaseError(f"toolkit.yaml: 'tld.extends': the base {ref.label} does not match its git object id")
+    _, errors = check_base_text(data, ref.label)
+    if errors:
+        raise BaseError("\n".join(errors))  # nothing refused is ever cached
     _store(git_dir, ref, data, blob)
-    return text
+    return data.decode("utf-8")
 
 
 # ---- the newest pin ------------------------------------------------------------------------------------------
@@ -389,18 +463,9 @@ def latest_pin(source: str, runner: Runner | None = None, timeout: float = FETCH
         code, out, err = run([*base, "ls-remote", *args], env, timeout)
         if code != 0:
             raise BaseError(f"toolkit.yaml: 'tld.extends': could not list {owner}/{repo} ({_first_line(err)[:200]})")
-        return out
+        return _str(out)
 
-    tags: dict[str, str] = {}
-    for line in ls_remote("--tags", url_for(probe)).splitlines():
-        sha, _, name = line.partition("\t")
-        if not name.startswith("refs/tags/") or not SHA40_RE.match(sha):
-            continue
-        tag = name[len("refs/tags/"):]
-        peeled = tag.endswith("^{}")
-        tag = tag[:-3] if peeled else tag
-        if TAG_RE.match(tag) and (peeled or tag not in tags):
-            tags[tag] = sha.lower()  # the peeled line (the commit of an annotated tag) wins
+    tags = _remote_tags(ls_remote("--tags", url_for(probe)))
     with tempfile.TemporaryDirectory(prefix="tld-base-") as scratch:
         bare = Path(scratch) / "probe.git"
         _init_bare(bare, runner, timeout)
@@ -413,11 +478,7 @@ def latest_pin(source: str, runner: Runner | None = None, timeout: float = FETCH
             except BaseError:
                 continue
             return candidate.sha, tag
-        head = ""
-        for line in ls_remote(url_for(probe), "HEAD").splitlines():
-            sha, _, name = line.partition("\t")
-            if name.strip() == "HEAD" and SHA40_RE.match(sha):
-                head = sha.lower()
+        head = _remote_head(ls_remote(url_for(probe), "HEAD"))
         if not head:
             raise BaseError(f"toolkit.yaml: 'tld.extends': {owner}/{repo} has no default branch to pin")
         candidate = BaseRef(owner, repo, path, head)
