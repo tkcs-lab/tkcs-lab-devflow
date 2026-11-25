@@ -55,7 +55,7 @@ MAX_ENTRIES = 500          # files looked at in one directory walk
 MAX_BYTES = 1_000_000      # one file read
 SAFE_PATH = re.compile(r"[A-Za-z0-9._][A-Za-z0-9._/-]*")
 SAFE_TYPE = re.compile(r"[a-z][a-z0-9-]{0,30}")
-FEATURE_BRANCH = re.compile(r"^\s*feature_branch:\s*[\"']?([A-Za-z0-9._-]+)/", re.M)
+FEATURE_BRANCH = re.compile(r"^[ \t]*feature_branch:\s*[\"']?([A-Za-z0-9._-]+)/", re.M)
 MISSING = object()
 
 
