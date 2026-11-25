@@ -22,6 +22,9 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | Command | Module | What it does |
 |---|---|---|
 | `tld profile validate [PROFILE] [--resolved] [--no-file-checks] [--root DIR]` | `tld.profile.validate` | validate a profile (default `.tld/toolkit.yaml`) against `schema/profile.schema.json` |
+| `tld profile base check FILE` | `tld.profile.base` | check a base file (size, UTF-8, no anchors, allowed keys only, no chaining, no credential) before it is tagged; prints `base: OK` or the refusals (exit 1) |
+| `tld profile base fetch [PROFILE]` | `tld.profile.base` | fetch the base a profile extends (`tld.extends: <owner>/<repo>/<path>@<40-hex commit>`) by commit into `<git common dir>/tld/base/` and cache it; prints `no base` without `extends` |
+| `tld profile base latest SOURCE` | `tld.profile.base` | print `{"sha", "tag"}` of the newest version tag whose commit has `<owner>/<repo>/<path>`, else the default branch head and a null tag |
 | `tld profile patch set-block PROFILE roles\|docs.website PROPOSAL [--answers F] [--write [--yes]]` | `tld.profile.patch` | merge the survey's proposal with the human's answers into one block; prints the diff, writes a changed block only with `--yes` (exit 4 otherwise), a block neither has is a no-op |
 | `tld profile patch diff PROFILE PROPOSAL [--root DIR]` | `tld.profile.patch` | new, changed, same and stale keys of a proposal |
 | `tld profile survey [ROOT]` | `tld.profile.survey` | the survey and proposal behind `/setup` |
