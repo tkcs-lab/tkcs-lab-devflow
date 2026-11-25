@@ -806,13 +806,20 @@ def test_changed_quoted_path_still_counts(tmp_path):
     "touches [x] only\n\n[x]: .github/workflows/ci.yml",
     "touches <span hidden>ci.yml</span> only",
     "touches ![ci.yml](x.png) only",
+    "touches\n\n> [x]: .github/workflows/ci.yml",
+    "touches\n\n- [x]: .github/workflows/ci.yml",
+    "touches\n\n[x]:\n.github/workflows/ci.yml",
+    "touches [see here ](a(b).github/workflows/ci.yml)",
+    "touches [see [x] here](#.github/workflows/ci.yml)",
+    "touches ![a](b(c) .github/workflows/ci.yml)",
+    "touches \\` <span hidden>.github/workflows/ci.yml</span> \\` files",
 ])
 def test_changed_hidden_forms_do_not_name(security):
     assert changed_probs(security, [".github/workflows/ci.yml"]) != []
 
 
 def test_changed_plain_text_and_code_span_name():
-    assert changed_probs("touches `.github/workflows/ci.yml` and [the toolkit.yaml file](https://e.x/y)",
+    assert changed_probs("touches `.github/workflows/ci.yml` and the toolkit.yaml file",
                          [".github/workflows/ci.yml", ".tld/toolkit.yaml"]) == []
 
 

@@ -43,11 +43,7 @@ HIDDEN = ("<!--", "<details")
 UNSAFE = ("Cc", "Cf", "Cs", "Co", "Zl", "Zp")
 CLOSES = re.compile(r"(closes|fixes|resolves) #[0-9]+\.?", re.IGNORECASE)
 WORD = re.compile(r"\w")
-TAG = re.compile(r"</?[A-Za-z][^<>]*>")
-CODE_SPAN = re.compile(r"`[^`\n]*`")
-IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)|!\[[^\]]*\]\[[^\]]*\]")
-LINK = re.compile(r"\[([^\]]*)\](?:\([^)]*\)|\[[^\]]*\])")
-REF_DEF = re.compile(r"^\s{0,3}\[[^\]]+\]:.*$", re.MULTILINE)
+LINKISH = re.compile(r"\]\(|\]\[|!\[|<|^[\s>*+\-]*\[[^\]]*\]:", re.MULTILINE)
 SECURITY_PATHS = (".github/workflows/", ".tld/toolkit.yaml")
 
 
@@ -185,14 +181,6 @@ def security_paths(changed: list[str]) -> list[str]:
     return list(dict.fromkeys(hits))
 
 
-def visible(text: str) -> str:
-    """What a reader of the rendered text sees: no HTML tag, no link target, no image, no reference definition."""
-    text = REF_DEF.sub("", text)
-    text = IMAGE.sub("", text)
-    text = LINK.sub(r"\1", text)
-    return TAG.sub("", text)
-
-
 def names(path: str, text: str) -> bool:
     """Whether the Security text names the path by its full path or by its file name as a whole word."""
     for cand in (path, path.rsplit("/", 1)[-1]):
@@ -206,10 +194,10 @@ def security_problems(values: dict[str, str], changed: list[str]) -> list[str]:
     hits = security_paths(changed)
     if not hits:
         return []
-    raw = values.get("Security", "")
-    if TAG.search(CODE_SPAN.sub("", raw)):
-        return ["**Security:** holds an HTML tag, which can hide a file name; name the files in plain text"]
-    value = visible(raw)
+    value = values.get("Security", "")
+    if LINKISH.search(value):
+        return ["**Security:** must name the files in plain text: it holds a link, an image, a reference definition "
+                "or an HTML tag, which can hide a file name"]
     if not value or is_none(value):
         return [f"**Security:** is missing or None. but the pull request changes {', '.join(clean(p) for p in hits)}"]
     missing = [p for p in hits if not names(p, value)]
