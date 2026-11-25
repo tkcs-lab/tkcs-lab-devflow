@@ -269,6 +269,11 @@ def test_bot_in_codeowners_is_an_error(vp):
         "'git.codeowners' must not contain 'git.bot_login': the agent cannot be its own code owner"]
 
 
+def test_bot_in_codeowners_in_another_case_is_an_error(vp):
+    assert errs(vp, _git(codeowners=["owner", "AGENT"], bot_login="agent")) == [
+        "'git.codeowners' must not contain 'git.bot_login': the agent cannot be its own code owner"]
+
+
 def test_codeowners_without_bot_login_is_an_error(vp):
     assert errs(vp, _git(codeowners=["owner"])) == ["'git.codeowners' needs 'git.bot_login'"]
 

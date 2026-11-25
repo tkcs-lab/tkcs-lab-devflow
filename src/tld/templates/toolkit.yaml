@@ -5,6 +5,7 @@
 
 tld:
   version: ">=1.0,<2"    # optional: the tld releases this profile is written for; tld profile validate checks it
+  # extends: <owner>/<repo>/<path>@<40-hex commit sha>  # optional: the base profile this one extends; setup writes it
 
 project:
   name: My Project       # optional; used in prose. Default: the repository name
