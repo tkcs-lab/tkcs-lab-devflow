@@ -220,7 +220,7 @@ def test_session_is_refreshed_on_read(repo):
 
 
 def test_malformed_plan_gate_section_allows_with_a_notice(tmp_path):
-    repo = make_repo(tmp_path / "r", "feature/demo", hh.PROFILE + "hooks:\n  plan_gate: yes\n")
+    repo = make_repo(tmp_path / "r", "feature/demo", hh.PROFILE + "hooks:\n  plan_gate:\n    enabled: maybe\n")
     d = write(repo, repo / "a.txt")
     assert d.verdict == "allow" and d.notice and "plan_gate" in d.notice
 

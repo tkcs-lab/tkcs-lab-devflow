@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from conftest import ROOT, TLD, CLAUDE
-from hooks_helpers import FAIL_CLOSED, HOOKS, MODULES, bash, git, make_repo, module, run, run_script
+from hooks_helpers import FAIL_CLOSED, HOOKS, MODULES, PROFILE_GATES_OFF, bash, git, make_repo, module, run, run_script
 
 from tld.guard import _common
 from evals.adapters.claude.hookcheck import matcher_matches
@@ -115,8 +115,9 @@ def test_stop_hook_has_the_longest_timeout():
     assert 1800 > module("dod-gate").TOTAL_BUDGET_SECONDS
 
 
-def test_every_hook_command_runs_as_written(fresh_repo):
+def test_every_hook_command_runs_as_written(tmp_path):
     """The command string is run through a shell with the plugin root substituted, as Claude Code does."""
+    fresh_repo = make_repo(tmp_path / "repo", "feature/demo", PROFILE_GATES_OFF)  # the gates are on by default
     event = json.dumps({"cwd": str(fresh_repo), "tool_name": "Bash", "tool_input": {"command": "ls"},
                         "hook_event_name": "PreToolUse", "session_id": "x"})
     for _, _, hook in entries():
