@@ -60,6 +60,28 @@ Unattended (nobody to ask): audit, report, and stop; never apply.
   organisation-level one) names it; nothing is called unused when a workflow hides names (`secrets: inherit`, a
   computed name). Anything used from elsewhere belongs in `keep`.
 
+## The profile and git-ops sections
+
+Two optional policy sections add checks (a section that is absent is not managed):
+
+- `profile` (`base`, `pin`, `guarded_overrides`): `profile-no-extends`, `profile-invalid-extends`, `profile-pin-old`,
+  `profile-guarded-override`, `profile-merge-style`. The pin fix is a pull request that rewrites only the
+  `extends:` line.
+- `git_ops` (`repo`, `workflow`, `allowlist`): the central git-ops repository (default `<org>/git-ops`).
+  - `git-ops-workflow` and `git-ops-allowlist` are `fix` findings: one pull request into the central repository
+    (one commit, never a push to its default branch) with the shipped `tld-git-ops.yml` workflow and the allowlist
+    `git-ops-allowlist.json` naming every audited repository. Both are built from the template and the policy's
+    values only. The workflow is a protected path: it changes only through that pull request.
+  - `git-ops-environment` and `git-ops-token` are open items the audit reports as `warn` and never creates: the
+    owner creates the environment `git-ops` (deployment branches limited to the default branch) and the secret
+    `GIT_OPS_TOKEN` in it, and says so when done. Never ask for the token's value in chat; the audit reads only names.
+  - `secrets_scope` (runs with the `git_ops` section) reports a repository or organisation Actions secret, and a
+    secret in an environment whose deployment branches are not limited to the default branch: a workflow edited on a
+    pushed branch runs at once with those. The owner moves each into a limited environment.
+
+A pull request that changes the profile (`.tld/toolkit.yaml`) or a workflow carries a `## Security` line (the `**Security:**` line of its Summary) naming
+every such file it changes ([policies/pr-steward.md](policies/pr-steward.md)).
+
 ## Releases
 
 A release is the owner's decision: this playbook installs the release workflow and never runs it. The policy
