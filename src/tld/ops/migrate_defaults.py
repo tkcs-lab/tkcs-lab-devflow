@@ -94,8 +94,9 @@ def _read(root: Path, rel: str) -> str | None:
     if unsafe(root, rel) or not (root / rel).is_file():
         return None
     try:
-        data = (root / rel).read_bytes()[:MAX_BYTES]
-        return data.decode("utf-8")
+        if (root / rel).stat().st_size > MAX_BYTES:
+            return None  # never a truncated read: a caller that writes the text back would lose the tail
+        return (root / rel).read_bytes().decode("utf-8")
     except (OSError, UnicodeDecodeError):
         return None
 

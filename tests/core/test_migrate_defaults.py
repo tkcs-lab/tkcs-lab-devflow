@@ -317,3 +317,13 @@ def test_a_symlinked_reference_file_is_never_rewritten(tmp_path):
     r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.adr_dir": "rename"}))
     assert outside.read_text() == "See docs/adrs/0001-a.md\n"
     assert (root / "docs/adrs/0001-a.md").exists() and "not done" in r.stdout and r.returncode == 1
+
+
+def test_a_large_changelog_is_refused_not_truncated(tmp_path):
+    big = "# Changes\n\n## Unreleased\n\n" + "- entry\n" * 200000 + "END\n"
+    assert len(big) > md.MAX_BYTES
+    root = repo(tmp_path, tracked=True, files={"CHANGELOG.md": big})
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {}))
+    assert (root / "CHANGELOG.md").read_text() == big
+    r = migrate(root)
+    assert r.returncode == 0 and "docs.changelog.section" not in r.stdout  # too large to look at: not a find
