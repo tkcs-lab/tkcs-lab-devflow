@@ -43,7 +43,7 @@ HIDDEN = ("<!--", "<details")
 UNSAFE = ("Cc", "Cf", "Cs", "Co", "Zl", "Zp")
 CLOSES = re.compile(r"(closes|fixes|resolves) #[0-9]+\.?", re.IGNORECASE)
 WORD = re.compile(r"\w")
-LINKISH = re.compile(r"\]\(|\]\[|!\[|<|\]:|```|~~~|^(?: {4}|\t)", re.MULTILINE)
+LINKISH = re.compile(r"\]\(|\]\[|!\[|<|\$|\]:|```|~~~|^(?: {4}|\t)", re.MULTILINE)
 SECURITY_PATHS = (".github/workflows/", ".tld/toolkit.yaml")
 
 
@@ -195,9 +195,11 @@ def security_problems(values: dict[str, str], changed: list[str]) -> list[str]:
     if not hits:
         return []
     value = values.get("Security", "")
+    if any(unicodedata.category(c) in UNSAFE and c not in "\n\t\r" for c in value):
+        return ["**Security:** holds a control or direction character, which can hide a file name"]
     if LINKISH.search(value):
         return ["**Security:** must name the files in plain text: it holds a link, an image, a reference definition, "
-                "a code fence, indented code or an HTML tag, which can hide a file name"]
+                "a code fence, indented code, math or an HTML tag, which can hide a file name"]
     if not value or is_none(value):
         return [f"**Security:** is missing or None. but the pull request changes {', '.join(clean(p) for p in hits)}"]
     missing = [p for p in hits if not names(p, value)]
