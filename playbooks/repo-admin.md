@@ -71,11 +71,12 @@ Two optional policy sections add checks (a section that is absent is not managed
   - `git-ops-workflow` and `git-ops-allowlist` are `fix` findings: one pull request into the central repository
     (one commit, never a push to its default branch) with the shipped `tld-git-ops.yml` workflow and the allowlist
     `git-ops-allowlist.json` naming every audited repository. Both are built from the template and the policy's
-    values only. The workflow is a protected path: it changes only through that pull request.
+    values only. Both files decide what the token may delete: they change only through that pull request, which
+    the owner reviews (a Code Owners rule on both is advised) and which carries the `## Security` line below.
   - `git-ops-environment` and `git-ops-token` are open items the audit reports as `warn` and never creates: the
     owner creates the environment `git-ops` (deployment branches limited to the default branch) and the secret
     `GIT_OPS_TOKEN` in it, and says so when done. Never ask for the token's value in chat; the audit reads only names.
-  - `secrets_scope` (runs with the `git_ops` section) reports a repository or organisation Actions secret, and a
+  - The secrets scope check (runs with the `git_ops` section) reports a repository or organisation Actions secret, and a
     secret in an environment whose deployment branches are not limited to the default branch: a workflow edited on a
     pushed branch runs at once with those. The owner moves each into a limited environment.
 

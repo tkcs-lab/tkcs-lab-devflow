@@ -49,7 +49,7 @@ def _ra():
 def _shown(text, limit: int = 60) -> str:
     """A name from a repository, safe to put in a finding: one line, no markup-significant control characters,
     bounded."""
-    text = re.sub(r"[^\w.\-/ :,()@]", "?", " ".join(str(text).split()))
+    text = re.sub(r"[^\w.\-/ ,()]", "?", " ".join(str(text).split()))
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
@@ -58,8 +58,8 @@ def _names(names, limit: int = MAX_SHOWN) -> str:
     return ", ".join(names[:limit]) + (f" and {len(names) - limit} more" if len(names) > limit else "")
 
 
-def _quote(path: str) -> str:
-    return urllib.parse.quote(path, safe="/")
+def _quote(path: str, safe: str = "/") -> str:
+    return urllib.parse.quote(path, safe=safe)
 
 
 # ---------------------------------------------------------------------------------------- the templates
@@ -121,7 +121,8 @@ def _central(ctx, cfg: dict) -> str:
 
 
 def _mode(snap, path: str) -> str:
-    return next((e.get("mode", "100644") for e in snap.entries if e["path"] == path), "100644")
+    mode = next((e.get("mode", "100644") for e in snap.entries if e["path"] == path), "100644")
+    return mode if mode in ("100644", "100755") else "100644"
 
 
 def _workflow_finding(ctx, central: str, snap, workflow: str) -> list:
@@ -170,7 +171,7 @@ def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
         if owner_ok and not missing and len(existing) == len(data["repos"]):
             return []
         repos = existing + missing
-        protected = [b for b in data.get("protected_branches", []) if isinstance(b, str)]
+        protected = [b for b in data.get("protected_branches", []) if isinstance(b, str) and re.match(r"^[A-Za-z0-9._*?/-]{1,100}$", b)]
         parts = []
         if not owner_ok:
             parts.append(f"names the owner '{_shown(data['owner'])}', not {owner}")
@@ -242,7 +243,7 @@ def _limited_to_default(ctx, fn: str, env: dict, default: str) -> bool:
     have = env.get("deployment_branch_policy")
     if not isinstance(have, dict) or not have.get("custom_branch_policies"):
         return False
-    policies = ctx.c.paginate(f"/repos/{fn}/environments/{_quote(str(env.get('name', '')))}/deployment-branch-policies",
+    policies = ctx.c.paginate(f"/repos/{fn}/environments/{_quote(str(env.get('name', '')), '')}/deployment-branch-policies",
                               key="branch_policies")
     return bool(policies) and all(p.get("name") == default and p.get("type", "branch") == "branch" for p in policies)
 
@@ -285,7 +286,7 @@ def secrets_scope(ctx) -> list:
             name = str(env["name"])
             if _limited_to_default(ctx, fn, env, default):
                 continue
-            held = _secret_names(ctx, f"/repos/{fn}/environments/{_quote(name)}/secrets")
+            held = _secret_names(ctx, f"/repos/{fn}/environments/{_quote(name, '')}/secrets")
             if held:
                 found.append(Finding("secrets_scope", fn, f"env:{name}", f"environment {_shown(name)} holds secrets "
                                      f"({_names(s['name'] for s in held)}) but does not limit its deployment branches to "

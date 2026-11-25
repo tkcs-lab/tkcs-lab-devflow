@@ -173,7 +173,7 @@ def test_secret_names_from_a_repository_are_shown_bounded(ra):
     evil = "X" * 500 + "\n<script>@admin`|"
     found, _, _ = audit(ra, complete(), repo_secrets={"app": [evil]})
     (one,) = by_check(found, "secrets_scope")
-    assert "\n" not in one.message and "<script>" not in one.message and "`" not in one.message and len(one.message) < 400
+    assert "\n" not in one.message and "<script>" not in one.message and "`" not in one.message and "@" not in one.message and len(one.message) < 400
 
 
 def test_section_absent_means_nothing_is_checked(ra):
