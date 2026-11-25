@@ -138,10 +138,16 @@ def _load_profile(path: str) -> dict:
         result = rs.load(path, fetch=False)
     if result.errors:
         raise RolesError("\n".join(f"toolkit.yaml: {e}" for e in result.errors))
+    # without a base (the repository's own or the default branch's) the required roles would be a shorter list than
+    # the profile asks for: stop. A flag of the resolver, never the text of a warning.
+    if result.base_missing:
+        raise RolesError(f"toolkit.yaml: the base {result.base.label} is not cached; run `tld profile base fetch` "
+                         "with network access")
+    if result.trusted_base_missing is not None:
+        raise RolesError(f"toolkit.yaml: the base {result.trusted_base_missing.label} of the default branch is not "
+                         f"cached; run `tld profile base fetch --ref origin/{result.trusted_branch}` with network "
+                         "access")
     for warning in result.warnings:
-        if warning.startswith("the base ") and "is not cached" in warning:
-            # without the base the required roles would be a shorter list than the profile asks for: stop
-            raise RolesError(f"toolkit.yaml: {warning}; run `tld profile base fetch` with network access")
         print(f"toolkit.yaml: warning: {warning}", file=sys.stderr)
     return result.profile
 

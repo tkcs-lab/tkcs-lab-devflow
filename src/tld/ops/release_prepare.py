@@ -272,7 +272,15 @@ def _load(path: str) -> dict:
     if not p.is_file():
         raise ReleaseError(f"no profile at '{p}'")
     from tld.profile import resolve as rs
-    loaded = rs.load(p, root=Path.cwd(), trusted=False, fetch=False, file_checks=False)  # run from the repo root
+    root = p.resolve().parent.parent
+    try:
+        top = subprocess.run(["git", "-C", str(p.resolve().parent), "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=10)
+        if top.returncode == 0 and top.stdout.strip():
+            root = Path(top.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass  # no git: the profile's own directory layout decides
+    loaded = rs.load(p, root=root, trusted=False, fetch=False, file_checks=False)
     if loaded.errors:
         raise ReleaseError("\n".join(f"toolkit.yaml: {e}" for e in loaded.errors))
     resolved = loaded.profile
