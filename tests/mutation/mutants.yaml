@@ -30,6 +30,15 @@ tests:
   - tests/core/test_validate_profile.py
   - tests/core/test_profile_roles.py
   - tests/core/test_profile_version.py
+  src/tld/profile/merge.py:
+  - tests/core/test_profile_merge.py
+  - tests/core/test_profile_resolve.py
+  src/tld/profile/resolve.py:
+  - tests/core/test_profile_resolve.py
+  src/tld/profile/base.py:
+  - tests/core/test_profile_base.py
+  src/tld/profile/defaults.py:
+  - tests/core/test_profile_defaults.py
   src/tld/plan/manifest.py:
   - tests/core/test_validate_manifest.py
   src/tld/plan/summary.py:
@@ -978,3 +987,33 @@ mutants:
   why: the raw block is not scanned for the allow mark and secrets, only the cleaned text (killed by test_change_report_equals_section)
   old: '_suspect(raw) or _suspect(cleaned)'
   new: '_suspect(cleaned)'
+- id: MG1
+  file: src/tld/profile/merge.py
+  why: a posture weaker than the base's is no longer refused (killed by test_weaker_posture_refused)
+  old: 'POSTURE_RANK[repo_posture] < floor_rank'
+  new: 'POSTURE_RANK[repo_posture] > floor_rank'
+- id: MG2
+  file: src/tld/profile/merge.py
+  why: a gate switched off is refused only when the base writes the gate itself, not when the built-in floor has it on (killed by test_a_gate_the_base_does_not_write_cannot_be_switched_off)
+  old: '(floor_on is None or floor_on) and'
+  new: '(floor_on) and'
+- id: MG3
+  file: src/tld/profile/merge.py
+  why: the clamp keeps the branch's protect_paths_allow patterns that the default branch lacks (killed by test_clamp_protect_paths_allow_intersection)
+  old: 'kept = [p for p in m_allow if p in t_allow]'
+  new: 'kept = [p for p in m_allow if p not in t_allow]'
+- id: RS1
+  file: src/tld/profile/resolve.py
+  why: the branch is not clamped to the default branch's profile (killed by test_branch_weakening_is_clamped_to_main)
+  old: 'resolved, clamped = merge_mod.clamp(trusted, resolved, trusted_branch)'
+  new: 'resolved, clamped = resolved, []'
+- id: RS2
+  file: src/tld/profile/resolve.py
+  why: a repository may weaken the guarded keys of its base (killed by the guarded-key tests of test_profile_resolve.py)
+  old: 'errors += [_plain(e) for e in merge_mod.guarded_errors(base, resolved, allow, base_ref.label)]'
+  new: 'errors += []'
+- id: BS1
+  file: src/tld/profile/base.py
+  why: a pin of 39 hex digits instead of 40 is accepted (killed by test_validate_rejects_a_malformed_source and the pin tests of test_profile_base.py)
+  old: 'SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")'
+  new: 'SHA40_RE = re.compile(r"^[0-9a-fA-F]{39}$")'

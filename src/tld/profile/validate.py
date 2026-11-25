@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Validate .tld/toolkit.yaml against schema/profile.schema.json.
 
-    tld profile validate [PROFILE] [--root DIR] [--resolved] [--no-file-checks]
+    tld profile validate [PROFILE] [--root DIR] [--ref REF] [--resolved] [--explain] [--no-file-checks]
 
-Exit 0 when valid, 1 with one error per line otherwise. --resolved prints the profile as JSON with
-the schema's documented defaults filled in (the only defaults there are). `tld.version`, when set, is
-checked against the running tld (src/tld/profile/version.py). Python 3.11+, PyYAML.
+Exit 0 when valid, 1 with one error per line otherwise. The profile is resolved by tld.profile.resolve: the org
+base (`tld.extends`), the built-in defaults of tld.profile.defaults and the trusted default branch's guarded keys.
+--resolved prints the resolved profile as JSON (and a note on stderr); --explain prints `<key> = <value>  # <source>`
+per value; --ref REF reads the profile and the files that decide the defaults from that ref. `tld.version`, when
+set, is checked against the running tld (src/tld/profile/version.py). Python 3.11+, PyYAML.
 """
 from __future__ import annotations
 
@@ -14,8 +16,6 @@ import json
 import re
 import sys
 from pathlib import Path
-
-import yaml
 
 import tld
 from tld.profile import version as tv
@@ -123,13 +123,6 @@ def _describe(options: list[dict]) -> str:
 
 
 OPTIONAL_SECTIONS = ("deps", "spec", "sysml")
-# Keys that `false` switches off (the schema allows oneOf [<type>, {const: false}] there).
-OFF_SWITCHES = ("docs.index", "docs.adr_dir", "docs.changelog", "docs.website", "admin", "git_ops", "land.max_prs")
-# Temporary: what an empty section gets until the resolver (tld.profile.defaults) applies SECTION_DEFAULTS.
-_EMPTY_SECTION = {"deps": {"cooldown_days": 3, "time_budget_minutes": 90}, "spec": {"version": "2.1.0"},
-                  "sysml": {"subset": 1}}
-
-
 def normalise(profile: dict) -> dict:
     """A copy where an empty `deps:`, `spec:` or `sysml:` block (YAML null) is the empty mapping: an empty block
     means "on"."""
@@ -137,19 +130,6 @@ def normalise(profile: dict) -> dict:
     for key in OPTIONAL_SECTIONS:
         if key in out and out[key] is None:
             out[key] = {}
-    return out
-
-
-def _drop_off_switches(profile: dict) -> dict:
-    """Temporary (the resolver replaces it): a `false` off switch is an absent key."""
-    out = json.loads(json.dumps(profile))
-    for dotted in OFF_SWITCHES:
-        *parents, leaf = dotted.split(".")
-        node = out
-        for part in parents:
-            node = node.get(part) if isinstance(node, dict) else None
-        if isinstance(node, dict) and node.get(leaf) is False:
-            del node[leaf]
     return out
 
 
@@ -276,61 +256,40 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
     return errors, warnings
 
 
-def validate(profile, root_dir: Path | None = None) -> tuple[list[str], list[str], dict]:
-    schema = json.loads(SCHEMA.read_text())
-    errors: list[str] = []
-    if not isinstance(profile, dict):
-        return ["the profile must be a YAML mapping"], [], {}
-    if "toolkit" in profile:
-        return (["'toolkit' was removed: the toolkit is delivered only as plugins (docs/guides/delivery.md); "
-                 "delete the 'toolkit' section"], [], {})
-    if "agents" in profile:
-        return (["'agents' was renamed to 'roles' (and each entry's 'agent' to 'role'): "
-                 "rename the section"], [], {})
-    profile = normalise(profile)
-    for key, default in _EMPTY_SECTION.items():
-        if profile.get(key) == {}:
-            profile[key] = dict(default)
-    check(profile, schema, schema, "", errors)
-    if errors:
-        return errors, [], {}
-    resolved = apply_defaults(_drop_off_switches(profile), schema, schema)
-    resolved["docs"]["plan_dir"] = resolved["docs"]["plan_dir"].rstrip("/")
-    sem_errors, warnings = semantic_checks(resolved, root_dir)
-    return sem_errors, warnings, resolved
+def validate(profile, root_dir: Path | None = None, *, fetch: bool = True) -> tuple[list[str], list[str], dict]:
+    """(errors, warnings, resolved profile) of an already parsed profile: a wrapper over tld.profile.resolve. With
+    fetch=False a base that is not cached is skipped with a warning."""
+    from tld.profile import resolve as rs  # imported here: resolve imports this module
+    r = rs.resolve_dict(profile, root_dir, fetch=fetch)
+    return r.errors, r.warnings, r.profile
 
 
 def main(argv: list[str] | None = None) -> int:
+    from tld.profile import resolve as rs
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("profile", nargs="?", default=DEFAULT_PROFILE)
     ap.add_argument("--root", help="repo root for file-existence checks (default: the profile's repo root)")
+    ap.add_argument("--ref", help="read the profile and the files that decide the defaults from this git ref")
     ap.add_argument("--resolved", action="store_true", help="print the resolved profile as JSON")
+    ap.add_argument("--explain", action="store_true", help="print each resolved value and where it came from")
     ap.add_argument("--no-file-checks", action="store_true", help="skip checking that listed files exist")
     args = ap.parse_args(argv)
 
     path = Path(args.profile)
-    if not path.is_file():
-        print(f"toolkit.yaml: no profile at '{path}'. Create one from the starter in "
-              f"src/tld/templates/toolkit.yaml ({HELP}).", file=sys.stderr)
-        return 1
-    try:
-        profile = yaml.safe_load(path.read_text())
-    except yaml.YAMLError as exc:
-        print(f"toolkit.yaml: not valid YAML: {exc}", file=sys.stderr)
-        return 1
-
-    root_dir = None if args.no_file_checks else Path(args.root) if args.root else path.resolve().parent.parent
-    errors, warnings, resolved = validate(profile, root_dir)
-    for w in warnings:
+    r = rs.load(path, ref=args.ref, root=args.root, file_checks=not args.no_file_checks)
+    for w in r.warnings:
         print(f"toolkit.yaml: warning: {w}", file=sys.stderr)
-    if errors:
-        for e in errors:
+    if r.errors:
+        for e in r.errors:
             print(f"toolkit.yaml: {e}", file=sys.stderr)
         return 1
+    if args.explain:
+        print("\n".join(rs.explain_lines(r)))
     if args.resolved:
-        json.dump(resolved, sys.stdout, indent=2)
+        json.dump(r.profile, sys.stdout, indent=2)
         print()
-    else:
+        print(rs.note_line(r), file=sys.stderr)
+    if not (args.explain or args.resolved):
         print(f"toolkit.yaml: OK ({path})")
     return 0
 

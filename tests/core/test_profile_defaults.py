@@ -33,6 +33,26 @@ def test_static_defaults_equal_the_schema_defaults():
     assert d.STATIC["models.reviewer"] == schema["properties"]["models"]["properties"]["reviewer"]["default"]
 
 
+def test_schema_defaults_equal_the_table():
+    """Every `default` of the schema is the table's value (the plan directory's schema default is the
+    existing-directory case, written with a trailing slash)."""
+    schema = json.loads((TLD / "schema" / "profile.schema.json").read_text())
+    found = {}
+
+    def walk(node, path):
+        for key, sub in node.get("properties", {}).items():
+            if "default" in sub:
+                found[f"{path}{key}"] = sub["default"]
+            walk(sub, f"{path}{key}.")
+
+    walk(schema, "")
+    assert found == {"docs.plan_dir": "docs/plans/", "models.worker": "standard", "models.reviewer": "strong"}
+    out, _ = d.apply({}, env(files=["docs/plans"]))
+    assert out["docs"]["plan_dir"] == found["docs.plan_dir"].rstrip("/")
+    for key in ("models.worker", "models.reviewer"):
+        assert d.STATIC[key] == found[key]
+
+
 def test_git_ops_repository():
     out, src = d.apply({}, env(origin_owner="acme"))
     assert out["git_ops"] == {"repo": "acme/git-ops", "workflow": "tld-git-ops.yml"}
