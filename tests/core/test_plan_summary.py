@@ -812,6 +812,10 @@ def test_changed_quoted_path_still_counts(tmp_path):
     "touches [see here ](a(b).github/workflows/ci.yml)",
     "touches [see [x] here](#.github/workflows/ci.yml)",
     "touches ![a](b(c) .github/workflows/ci.yml)",
+    "touches\n\n```.github/workflows/ci.yml\n```",
+    "touches\n\n~~~ci.yml\n~~~",
+    "touches\n\n1. [a]: /x \".github/workflows/ci.yml\"",
+    "touches\n\n    .github/workflows/ci.yml",
     "touches \\` <span hidden>.github/workflows/ci.yml</span> \\` files",
 ])
 def test_changed_hidden_forms_do_not_name(security):
