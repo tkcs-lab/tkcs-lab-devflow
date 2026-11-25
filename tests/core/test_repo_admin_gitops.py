@@ -86,7 +86,7 @@ def test_allowlist_keeps_entries_and_adds_only_what_is_missing(ra):
     assert data == {"owner": "acme", "repos": ["app-*", "old", "git-ops", "svc"], "protected_branches": ["main", "x/*"]}
     files["git-ops-allowlist.json"] = "{not json"
     (bad,) = by_check(audit(ra, files)[0], "git-ops-allowlist")
-    assert bad.severity == "fix" and "not a valid allowlist" in bad.message
+    assert bad.severity == "warn" and bad.action is None and "not a valid allowlist" in bad.message
 
 
 def test_allowlist_text_from_the_repositories_is_bounded(ra):
@@ -230,8 +230,26 @@ def test_deeply_nested_allowlist_does_not_stop_the_audit(ra):
     files["git-ops-allowlist.json"] = "[" * 100_000
     found, _, _ = audit(ra, files)
     (one,) = by_check(found, "git-ops-allowlist")
-    assert one.severity == "fix" and "not a valid allowlist" in one.message
+    assert one.severity == "warn" and one.action is None and "not a valid allowlist" in one.message
     assert by_check(found, "secrets_scope") == []
+    files["git-ops-allowlist.json"] = json.dumps({"owner": "acme", "repos": ["app"], "protected_branches": ["hotfix/*", 7]})
+    (kept,) = by_check(audit(ra, files)[0], "git-ops-allowlist")
+    assert kept.severity == "warn" and kept.action is None  # the owner's protections are never replaced by defaults
+
+
+def test_invalid_policy_values_are_not_used_in_paths(ra):
+    found, fake, _ = audit(ra, policy={"git_ops": {"repo": "acme/git-ops", "workflow": "../x.yml"}})
+    (one,) = by_check(found, "git-ops-workflow")
+    assert one.severity == "warn" and "git_ops.workflow" in one.message and not fake.writes
+
+
+def test_central_environment_text_is_defused(ra):
+    env = {"deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True}}
+    extra = {("GET", f"{ENV}/deployment-branch-policies"): {"branch_policies": [
+        {"id": 1, "name": "main", "type": "branch"}, {"id": 2, "name": "x`@everyone<b>\nz", "type": "branch"}]}}
+    found, _, _ = audit(ra, complete(), env=env, extra=extra)
+    (one,) = by_check(found, "git-ops-environment")
+    assert "@" not in one.message and "<" not in one.message and "`" not in one.message and "\n" not in one.message
 
 
 def test_default_branch_name_is_shown_safely(ra):

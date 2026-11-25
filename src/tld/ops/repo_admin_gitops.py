@@ -52,6 +52,12 @@ def _shown(text, limit: int = 60) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
+def _text(text, limit: int = 300) -> str:
+    """A whole message that carries names from a repository: one line, no markup, mention or control character."""
+    text = re.sub(r"[^\w .,;()'\-/]", "?", " ".join(str(text).split()))
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 def _names(names, limit: int = MAX_SHOWN) -> str:
     names = sorted({_shown(n) for n in names})
     return ", ".join(names[:limit]) + (f" and {len(names) - limit} more" if len(names) > limit else "")
@@ -163,13 +169,19 @@ def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
     data = parse_allowlist(text)
     notes = f" ({len(skipped)} repository name(s) with unusual characters are left out)" if skipped else ""
     out: list = []
+    if data is None and text is not None:
+        # never rebuild a file that exists: the owner's protected branches and repos would be lost
+        return [ra.Finding("git-ops-allowlist", central, "allowlist", f"{ALLOWLIST_PATH} exists but is not a valid "
+                           "allowlist (owner, repos, protected_branches), so it is left as it is", "warn",
+                           manual=f"repair {ALLOWLIST_PATH} by hand (a string owner, a non-empty list of repository "
+                                  "names, a list of branch globs), then audit again")]
     if data is None:
         if not audited:
-            return [ra.Finding("git-ops-allowlist", central, "allowlist", f"{ALLOWLIST_PATH} is "
-                               + ("missing" if text is None else "invalid") + " and no repository is in scope to list",
-                               "warn", manual=f"add {ALLOWLIST_PATH} with the repositories the workflow may act on")]
+            return [ra.Finding("git-ops-allowlist", central, "allowlist", f"{ALLOWLIST_PATH} is missing and no "
+                               "repository is in scope to list", "warn",
+                               manual=f"add {ALLOWLIST_PATH} with the repositories the workflow may act on")]
         repos, protected = audited, default_protected_branches()
-        why = "is missing" if text is None else "is not a valid allowlist (owner, repos, protected_branches)"
+        why = "is missing"
     else:
         existing = list(data["repos"])
         # every existing entry is kept as it is; entries that are too wide are reported, never silently changed
@@ -227,10 +239,10 @@ def _open_items(ctx, central_repo: dict) -> list:
         elif f.subject.startswith("secret:"):
             manual = f.manual or ("set it in the environment (value from the token the owner created; never paste it into chat)")
             out.append(dataclasses.replace(f, check="git-ops-token", severity="warn", action=None,
-                                           message=f.message.replace(default, shown), manual=manual))
+                                           message=_text(f.message), manual=_text(manual, 400)))
         else:
             out.append(dataclasses.replace(
-                f, check="git-ops-environment", severity="warn", action=None, message=f.message.replace(default, shown),
+                f, check="git-ops-environment", severity="warn", action=None, message=_text(f.message),
                 manual=f"in https://github.com/{fn}/settings/environments create `{ENV_NAME}` with deployment branches "
                        f"limited to the selected branch `{shown}` only"))
     return out
@@ -320,7 +332,8 @@ def secrets_scope(ctx) -> list:
                                             f"`{_shown(default)}` only (Settings, Environments)"))
         if len(envs) > MAX_ENVIRONMENTS:
             found.append(Finding("secrets_scope", fn, "env:more", f"{len(envs) - MAX_ENVIRONMENTS} more environments "
-                                 "were not read", "info"))
+                                 "were not read: the secrets check is incomplete", "warn",
+                                 manual="look at the environments of this repository by hand"))
         return found
 
     return out + ra.per_repo(ctx, "secrets_scope", one)
@@ -334,6 +347,12 @@ def check_git_ops(ctx) -> list:
         return []
     ra = _ra()
     out: list = []
+    central = _central(ctx, cfg)
+    bad = [k for k, ok in (("repo", re.match(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$", central)),
+                           ("workflow", re.match(r"^[A-Za-z0-9._-]+\.ya?ml$", cfg.get("workflow", DEFAULT_WORKFLOW)))) if not ok]
+    if bad:
+        return [ra.Finding("git-ops-workflow", ctx.org, "policy", f"git_ops.{bad[0]} in the policy is not a valid value, "
+                           "so the central repository is not checked", "warn", manual="correct it in the policy")] + secrets_scope(ctx)
     try:
         out += check_central(ctx, cfg)
     except ra.ApiError as exc:
