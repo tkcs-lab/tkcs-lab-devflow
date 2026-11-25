@@ -157,8 +157,9 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
         errors.append("'docs.adr_index' / 'docs.adr_bar' need 'docs.adr_dir' (ADRs are used iff adr_dir is set)")
     git = profile.get("git", {})
     owners, bot = git.get("codeowners"), git.get("bot_login")
-    if isinstance(owners, list) and isinstance(bot, str) and \
-            bot.lower() in [o.lower() for o in owners if isinstance(o, str)]:
+    if isinstance(owners, list) and isinstance(bot, str):
+        owners, bot = [o.lower() for o in owners if isinstance(o, str)], bot.lower()  # logins ignore case
+    if owners is not None and bot is not None and bot in owners:
         errors.append("'git.codeowners' must not contain 'git.bot_login': the agent cannot be its own code owner")
     if owners is not None and bot is None:
         errors.append("'git.codeowners' needs 'git.bot_login'")
