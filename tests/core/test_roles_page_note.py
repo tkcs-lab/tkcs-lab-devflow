@@ -576,3 +576,31 @@ def test_marker_is_one_fixed_line_per_run_and_never_matched(tmp_path, capsys):
     code, out, _err = _only_block(tmp_path, capsys, "a", f, f.upper(), "HTML page not", "stored: x", "b", f, "c")
     assert (code, out) == (0, f"a\n{MARKER}\nb\n{MARKER}\nc\n")
     assert _only_block(tmp_path, capsys, MARKER, "x")[:2] == (0, MARKER + "\nx\n")
+
+
+SPLIT = ["Fixes #7", "thanks @octocat", "see @org/team", "# heading", "Closes #12 and @octocat"]
+
+
+@pytest.mark.parametrize("form", ["raw", "hex", "dec"])
+@pytest.mark.parametrize("cp", INVISIBLE, ids=lambda cp: f"U+{cp:04X}")
+def test_change_report_split_by_a_filler_equals_section_without_it(tmp_path, capsys, cp, form):
+    filler = {"raw": chr(cp), "hex": f"&#x{cp:X};", "dec": f"&#{cp};"}[form]
+    for plain in SPLIT:
+        pos = 1 if plain[0] in "#@" else plain.index("#") + 1 if "#" in plain else 1
+        split = plain[:pos] + filler + plain[pos:]
+        want = run_section(tmp_path, f"BEGIN change-report\n{plain}\nEND change-report\n", capsys)
+        got = _only_block(tmp_path, capsys, split)
+        assert got[:2] == want[:2], (plain, cp, form)
+        assert chr(cp) not in got[1]
+
+
+def test_change_report_filler_split_forgery_is_still_dropped_after_joining(tmp_path, capsys):
+    code, out, _err = _only_block(tmp_path, capsys, "HTML page n&#x3164;ot stored: x", "Fixes #&#x3164;7")
+    assert code == 0
+    assert out.splitlines()[0] == MARKER and "Fixes #7" not in out
+
+
+def test_joined_deletes_fillers_also_from_nested_entities():
+    assert page_note._joined("a&amp;#x3164;b") == "a&amp;#x3164;b"
+    assert page_note._joined("a&#x3164;&amp;#x3164;b") == "ab"
+    assert page_note._joined("Fixes #&#x3164;7") == "Fixes #7"

@@ -921,10 +921,15 @@ mutants:
 - id: PN8
   file: src/tld/roles/page_note.py
   why: invisible fillers are no longer deleted from the block, so they reach the pull request body (killed by test_change_report_invisible_characters_are_deleted_from_the_block)
-  old: 'cleaned = _strip_invisible(cleaned)'
-  new: 'cleaned = cleaned'
+  old: 'text = stripped'
+  new: 'text = unescaped'
 - id: PN9
   file: src/tld/roles/page_note.py
   why: a line of non-Latin letters only is taken for the page-note phrase (killed by test_change_report_non_latin_line_is_kept)
   old: 'sum(w != "?" for w in window) >= MIN_REAL'
   new: 'sum(w != "?" for w in window) >= 0'
+- id: PN10
+  file: src/tld/roles/page_note.py
+  why: the fillers are no longer deleted before the block is cleaned, so a mention, closing keyword, team or heading split by one joins into live markdown afterwards (killed by test_change_report_split_by_a_filler_equals_section_without_it)
+  old: 'block = _joined(block)'
+  new: 'block = block'

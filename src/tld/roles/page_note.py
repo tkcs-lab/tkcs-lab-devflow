@@ -17,7 +17,7 @@ disappears silently. "Looks like" means the exact phrase and its spelling varian
 look-alike letters, digits and symbols, a phrase split over two or three lines), not paraphrases: the skeleton of
 a line (its letters after NFKD and case folding, invisible characters left out, any other letter, digit or symbol
 counted as a wildcard) is searched for "pagenotstored" with at least 6 real letters, so a line with no Latin
-letters never matches. Invisible fillers are deleted from the block. The command's own note is always printed
+letters never matches. Invisible fillers are deleted from the block before it is cleaned (also when an entity spells them). The command's own note is always printed
 first. A note must pass `valid_note`, else the
 command exits 1 with `tld roles: the page note is not a page-note line`. A valid note with no usable block
 prints the note alone and exits 0. The note comes first because this command prints it: text inside the role's
@@ -26,6 +26,7 @@ own block cannot forge or move it. Python 3.11+, standard library and the tld mo
 from __future__ import annotations
 
 import argparse
+import html
 import os
 import re
 import stat
@@ -144,6 +145,18 @@ def _strip_invisible(text: str) -> str:
     return "".join(c for c in text if c not in _INVISIBLE)
 
 
+def _joined(text: str) -> str:
+    """The text with the invisible fillers deleted before `clean` sees it, also those that an entity spells (one
+    unescape step at a time, as `clean` does), so `clean` works on the joined text: a mention, a closing keyword,
+    a team or a heading split by a filler is neutralised as it is in `tld roles section`."""
+    while True:
+        unescaped = html.unescape(text)
+        stripped = _strip_invisible(unescaped)
+        if stripped == unescaped:
+            return text
+        text = stripped
+
+
 def _skeleton(text: str) -> str:
     """The letters of the text as a-z, with `?` for any other letter, digit or symbol (a look-alike) and nothing
     else: spacing, markup, combining marks, invisible characters and case do not hide a phrase, and one odd
@@ -205,8 +218,9 @@ def _without_forged_notes(text: str) -> str:
 def _usable(report: str) -> tuple[str | None, str]:
     """The cleaned block, or None and the reason `tld roles section` gives."""
     block = extract(report)
+    if block is not None:
+        block = _joined(block)
     cleaned = clean(block).strip() if block is not None else ""
-    cleaned = _strip_invisible(cleaned)
     cleaned = _without_forged_notes(cleaned).strip()
     if not cleaned:
         return None, "tld roles: no change-report block"
