@@ -20,7 +20,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p4-resolve
 
-- pending
+- worker: none reported by the worker
+- retry: sent back once: a --ref value starting with a dash was read by git as an option; fixed by resolving the ref to a commit hash first, with three smaller hardening fixes in resolve.py
 
 ## p5-hooks
 
