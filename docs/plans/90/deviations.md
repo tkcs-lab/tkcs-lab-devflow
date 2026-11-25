@@ -32,7 +32,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p6-summary-protect-playbooks
 
-- pending
+- worker: none reported by the worker
+- retry: sent back twice by the security review: the Security-line check could be bypassed with markup hiding the path (first inside the value, then across labels) and the make-plan pull request path had no changed-files check or test; fixed, with the check now refusing risky markup anywhere in the Summary when a workflow or the profile changes
+- review: open for the final review: strikethrough opened and closed across labels is not refused; the cli reference and module docstring do not describe the whole-Summary refusal
 
 ## p7-cli-readers
 
