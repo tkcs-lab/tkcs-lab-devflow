@@ -55,7 +55,10 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p10-setup-playbook-evals
 
-- pending
+- worker: touches extended (orchestrator-approved): src/tld/profile/base.py and tests/core/test_profile_base.py (source pattern narrowed to safe path characters), eval graders and tasks beyond the listed files
+- retry: sent back twice by the security review: the eval ask counter missed real asks, the no-tests task rewarded a guessed command, safety rules were not graded and the base source was pasted into a shell command; all fixed
+- review: OWNER DECISION NEEDED: setup copies commands found in CI into verify.fast and verify.dod without a confirm and runs verify.fast before the pull request exists; the plan asks only when something is missing, the review says a command found in repository files should be confirmed first
+- review: open for the fix round: ask counter counts a read-only mention of tld board ask and misses indirect forms; Not verified text check is weak; the starter template comments are out of date
 
 ## p11-migrate
 
