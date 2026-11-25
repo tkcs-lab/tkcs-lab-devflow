@@ -26,6 +26,7 @@ import argparse
 import contextlib
 import copy
 import io
+import json
 import re
 import subprocess
 import sys
@@ -338,6 +339,20 @@ def _move(root: Path, src: str, dst: str) -> str:
     for rel in (src, dst):
         if unsafe(root, rel):
             raise DefaultsError(f"refused: {unsafe(root, rel)}")
+    # A dry run first: every file the move would rewrite must be a regular file inside the repository.
+    probe = ap.Namespace(root=str(root), src=src, dst=dst, profile=None, apply=False, exclude=[], json=True)
+    pout = io.StringIO()
+    with contextlib.redirect_stdout(pout), contextlib.redirect_stderr(io.StringIO()):
+        rc = docs_index.run_move(probe)
+    try:
+        planned = json.loads(pout.getvalue())["changes"] if rc == 0 else None
+    except (ValueError, KeyError):
+        planned = None
+    if planned is None:
+        raise DefaultsError(f"cannot plan the move of {src} to {dst}")
+    for f in sorted({c["file"] for c in planned}):
+        if unsafe(root, f):
+            raise DefaultsError(f"refused: {f} would be rewritten but {unsafe(root, f)}")
     args = ap.Namespace(root=str(root), src=src, dst=dst, profile=None, apply=True, exclude=[], json=False)
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):

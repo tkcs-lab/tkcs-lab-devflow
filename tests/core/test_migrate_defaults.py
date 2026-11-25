@@ -307,3 +307,13 @@ def test_destination_through_a_symbolic_link_is_refused(tmp_path):
     forged = [md.Change("off-default", "adr/0001-a.md", "docs/adr/0001-a.md", "docs.index", md.CHOICES)]
     msgs = md.apply(root, forged, {"docs.index": "rename"})
     assert any("not done" in m and "symbolic link" in m for m in msgs) and list(outside.iterdir()) == []
+
+
+def test_a_symlinked_reference_file_is_never_rewritten(tmp_path):
+    outside = tmp_path / "ext.md"
+    outside.write_text("See docs/adrs/0001-a.md\n")
+    root = repo(tmp_path / "b", files={"docs/adrs/0001-a.md": "# A\n"})
+    (root / "notes.md").symlink_to(outside)
+    r = migrate(root, "--write", "--answers", answers(tmp_path, {"docs.adr_dir": "rename"}))
+    assert outside.read_text() == "See docs/adrs/0001-a.md\n"
+    assert (root / "docs/adrs/0001-a.md").exists() and "not done" in r.stdout and r.returncode == 1
