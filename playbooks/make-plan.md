@@ -175,7 +175,7 @@ the pull request in one go. In this order:
    before the first change, the dod playbook, one pull request following the repository template whose body
    starts with `Closes #<n>` (the tracking issue; one more per issue the ask named) and then a `## Summary` of at
    most 175 words that says how the result differs from this prompt (labels `**Deviations:**`, `**Review focus:**`
-   and optionally `**Scope:**` and `**Security:**`, which is required and names each file when the diff changes a workflow or the profile; `None.` is allowed for Deviations; the worker's own words, nothing pasted), the
+   and optionally `**Scope:**` and `**Security:**`, which is required and names each file when the diff changes a workflow or the profile (write `$` and `<` in words there: they are refused, even in inline code); `None.` is allowed for Deviations; the worker's own words, nothing pasted), the
    body written to a scratch file and checked, with the changed paths (`git diff --name-only --no-renames origin/<main>...HEAD`) in a second scratch file, by `tld plan summary-check <body file> --kind pr --changed <changed list>`, which must
    exit 0 before `github.pr_create`; the comment
    `PR opened: <url>.`, and driving it to green per the pr-steward policy (and the steward file, if any).

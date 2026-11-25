@@ -189,17 +189,20 @@ def names(path: str, text: str) -> bool:
     return False
 
 
-def security_problems(values: dict[str, str], changed: list[str]) -> list[str]:
+def security_problems(values: dict[str, str], changed: list[str], section: str = "") -> list[str]:
     """The problems of the Security label against the workflow and profile files a pull request changes."""
     hits = security_paths(changed)
     if not hits:
         return []
     value = values.get("Security", "")
-    if any(unicodedata.category(c) in UNSAFE and c not in "\n\t" for c in value):
-        return ["**Security:** holds a control or direction character, which can hide a file name"]
-    if LINKISH.search(value):
-        return ["**Security:** must name the files in plain text: it holds a link, an image, a reference definition, "
-                "a code fence, indented code, math, a footnote mark, a table or an HTML tag, which can hide a file name"]
+    # markup opened in one label and closed in another hides the lines between, so the whole Summary is scanned
+    scanned = section + "\n" + value
+    if any(unicodedata.category(c) in UNSAFE and c not in "\n\t" for c in scanned):
+        return ["**Security:** the Summary holds a control or direction character, which can hide a file name"]
+    if LINKISH.search(scanned):
+        return ["**Security:** must name the files in plain text, and the Summary must hold no link, image, reference "
+                "definition, code fence, indented code, math (`$`), footnote mark, table or HTML tag (`<`), "
+                "which can hide a file name; write `$` and `<` in words, even inside inline code"]
     if not value or is_none(value):
         return [f"**Security:** is missing or None. but the pull request changes {', '.join(clean(p) for p in hits)}"]
     missing = [p for p in hits if not names(p, value)]
@@ -285,7 +288,7 @@ def check(text: str, kind: str, deviations_text: str | None = None,
         if count:
             problems.append(f"Deviations says None. but the deviations file records {count} deviations")
     if changed is not None:
-        problems += security_problems(values, changed)
+        problems += security_problems(values, changed, "\n".join(sect[1:]))
     if kind == "pr":
         problems += findings_problems(lines, heads, findings)
     return problems, words

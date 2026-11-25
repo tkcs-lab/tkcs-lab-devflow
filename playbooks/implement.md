@@ -452,7 +452,7 @@ text>`; exit 1 counts as `changes`. Then:
    run, declined non-blocking findings. `**Review focus:**` or `**Security:**` must name every deviation that
    touches a protected path or came from the security-reviewer. `**Security:**` must also name every file under
    `.github/workflows/` and the profile `.tld/toolkit.yaml` that the diff changes (the check reads the changed
-   list and says which one is missing). The full `## Deviations` section stays as it
+   list and says which one is missing; write `$` and `<` in words in the Summary, they are refused even in inline code). The full `## Deviations` section stays as it
    is.
 
    **The check.** Write the paths the pull request changes (`git diff --name-only --no-renames origin/<main>...HEAD`)

@@ -113,7 +113,7 @@ the main profile's list and the excluded set, as step 2 does.
 
 1. Write the body to a scratch file: `Closes #<n>` (one more per further issue) first, then `## Summary` of at
    most 175 words with the labels `**Deviations:**` (how the result differs from the ask; `None.` is allowed), then
-   optionally `**Scope:**`, `**Security:**` (required when the pull request changes a workflow or the profile: it names each),
+   optionally `**Scope:**`, `**Security:**` (required when the pull request changes a workflow or the profile: it names each in plain words; `$` and `<` are refused there, even in inline code),
    `**Performance:**`, then `**Review focus:**`, in this order, written by
    you in your own words; then `## Non-blocking findings` ([policies/findings-fix.md](policies/findings-fix.md)); then `## Review`:
    the verdict and every out-of-scope finding the worker reported; then, with a `reflektor` answer in the dod

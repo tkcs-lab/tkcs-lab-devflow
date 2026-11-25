@@ -232,3 +232,10 @@ def test_the_same_file_pasted_without_demoting_fails(tmp_path):
                        capture_output=True, text=True, timeout=60)
     assert r.returncode == 1
     assert "found 'p1-summary-check'" in r.stdout, r.stdout
+
+
+def test_make_plan_pr_check_passes_changed():
+    calls = [rest for kind, rest in summary_calls(MAKE_PLAN) if kind == "pr"]
+    assert calls and all("--changed" in rest for rest in calls)
+    small = " ".join(section(MAKE_PLAN.read_text(), "## Small scope").split())
+    assert "`**Security:**`, which is required" in small and "changes a workflow or the profile" in small

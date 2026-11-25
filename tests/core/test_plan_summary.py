@@ -858,3 +858,25 @@ def test_changed_with_kind_plan_exits_2(tmp_path):
     r = subprocess.run(tld_cmd("plan", "summary-check", str(path), "--kind", "plan", "--changed", str(lst)),
                        capture_output=True, text=True)
     assert r.returncode == 2 and r.stdout == "" and "Traceback" not in r.stderr
+
+
+def cross_label(opener, closer, security="adds a write token to .github/workflows/ci.yml"):
+    body = f"**Deviations:** None as planned {opener}\n**Security:** {security}\n**Review focus:** read ci first{closer}"
+    return f"Closes #1\n\n## Summary\n\n{body}\n"
+
+
+@pytest.mark.parametrize("opener, closer", [
+    ('<abbr title="', '"> x'),
+    ('[a](#x "', '")'),
+    ('[x]: /u "', '"'),
+    ('$\\phantom{', '}$'),
+    ('<div hidden>', ''),
+])
+def test_changed_markup_opened_in_another_label_is_refused(opener, closer):
+    assert summary.check(cross_label(opener, closer), "pr", None, None, [".github/workflows/ci.yml"])[0] != []
+    # without a workflow change the Summary is not scanned this way
+    assert summary.check(cross_label(opener, closer), "pr", None, None, ["src/a.py"])[0] == []
+
+
+def test_changed_clean_summary_with_all_labels_passes():
+    assert summary.check(cross_label("", ""), "pr", None, None, [".github/workflows/ci.yml"])[0] == []
