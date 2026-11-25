@@ -229,6 +229,11 @@ mutants:
   why: a mark left in the raw text is not found
   old: 'if ALLOW_MARK in text:'
   new: 'if False:'
+- id: RF6
+  file: src/tld/roles/reflektor.py
+  why: the page written is not scanned again after the mark is replaced
+  old: 'reasons = verify_html(neutral) or marks_left(neutral)'
+  new: 'reasons = report_check.check(neutral) or marks_left(neutral)'
 - id: PP1
   file: src/tld/guard/protect_paths.py
   why: profile always allowed

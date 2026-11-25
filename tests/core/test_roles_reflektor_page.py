@@ -576,3 +576,33 @@ def test_known_reason():
     for r in ("the page holds something that looks like a credential (ghp_x)", "other", "already hardened!",
               "the data has a link target under 'x'"):
         assert not reflektor.known_reason(r), r
+
+
+NPM = "npm_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"[:36]
+AWS = "AKIA" + "ABCDEFGHIJKLMNOP"
+
+
+@pytest.mark.parametrize("kind,make", [
+    ("after", lambda: (json.dumps({"s": MARK + TOKEN}), "t")),
+    ("npm before", lambda: (json.dumps({"s": NPM + MARK}), "t")),
+    ("aws before", lambda: (json.dumps({"s": AWS + MARK}), "t")),
+    ("title after", lambda: ('{"a":1}', MARK + TOKEN)),
+    ("title before", lambda: ('{"a":1}', NPM + MARK)),
+])
+def test_token_glued_to_mark_is_refused(tmp_path, kind, make):
+    payload, title = make()
+    text = page(payload, title=title)
+    assert reasons(text) == []
+    assert reflektor.verify_html(text) == []  # the original hides it: no word boundary next to the mark
+    f = write(tmp_path / "r.html", hardless(payload).replace("<title>t</title>", f"<title>{title}</title>"))
+    before = f.read_bytes()
+    with pytest.raises(PrepareError) as e:
+        reflektor.harden_html(f)
+    assert "credential" in e.value.message
+    assert f.read_bytes() == before
+    ans, _h = make_answer(tmp_path, ["REPORT-HTML @H@"], html=text, name="g")
+    dest = tmp_path / "dg"
+    dest.mkdir()
+    with pytest.raises(PrepareError) as e:
+        reflektor.send_copy(ans, dest)
+    assert "credential" in e.value.message and list(dest.iterdir()) == []

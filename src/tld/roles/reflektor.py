@@ -433,12 +433,15 @@ def marks_left(text: str) -> list[str]:
 
 
 def prepare_page(text: str) -> str:
-    """Check the original page, replace each literal allow mark, check the result, and return the neutral page."""
+    """Check the original page, replace each literal allow mark, check the result in full, and return the neutral page.
+
+    The swap can create a word boundary (the mark starts and ends with a letter, its replacement with a bracket), so
+    a credential glued to the mark is found only in the result: the whole check runs on both."""
     reasons = verify_html(text)
     if reasons:
         raise _refuse(reasons)
     neutral, count = neutralise_page(text)
-    reasons = report_check.check(neutral) or marks_left(neutral)
+    reasons = verify_html(neutral) or marks_left(neutral)
     if reasons:
         raise _refuse(reasons)
     if count:
