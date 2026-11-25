@@ -442,6 +442,19 @@ def test_put_tracking_issue_invalid_returns_422(server):
     assert body["errors"] == ["'tracking_issue' must be null or a positive integer of at most 10 digits"]
 
 
+def test_older_board_refuses_tracking_issue_and_takes_the_record_without_it(server, monkeypatch):
+    from tld.board import record as board_record
+    monkeypatch.setattr(board_record, "OPTIONAL_FIELDS", ("handover",))
+    path = "/api/records/tkcs-lab-devflow--make-plan--89abcdef"
+    rec = handover_record()
+    rec["tracking_issue"] = 7
+    status, _, body = call(server, "PUT", path, token=WRITE, body={"data": rec})
+    assert status == 422 and body["error"] == "invalid"
+    assert body["errors"] == ["'tracking_issue' is not a known field"]
+    del rec["tracking_issue"]
+    assert call(server, "PUT", path, token=WRITE, body={"data": rec})[0] == 200
+
+
 def test_if_version_true_is_400(server):
     for bad in (True, "1", 0, 1.5):
         status, _, body = call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE,

@@ -762,6 +762,14 @@ def test_tracking_issue_malformed_issue_url_reports_once():
     assert not any("tracking_issue" in e for e in REC.validate(rec))
 
 
+def test_tracking_issue_cross_repo_issue_url_reports_once():
+    rec = with_ti("good-command-handover", 8)
+    rec["handover"]["issue_url"] = "https://github.com/other/repo/issues/7"
+    errors = REC.validate(rec)
+    assert errors == REC.handover_errors(rec["handover"], rec["repo"])
+    assert not any("tracking_issue" in e for e in errors)
+
+
 @pytest.mark.parametrize("name, value", [
     ("good-run-prompt", "42"), ("good-run-prompt", 0), ("good-command-handover", 0),
 ])
@@ -774,8 +782,20 @@ def test_tracking_issue_disagreeing_with_issue_slug_is_refused():
     assert REC.validate(with_ti("good-run-prompt", None)) == []
 
 
+@pytest.mark.parametrize("status, extra", [
+    ("failed", {"finished_at": "2026-11-08T20:10:00Z"}),
+    ("waiting_user", {}),
+])
+def test_tracking_issue_on_a_failed_or_waiting_user_run_record(status, extra):
+    rec = with_ti("good-run-prompt-issue", 42, status=status, **extra)
+    assert REC.validate(rec) == []
+    rec["tracking_issue"] = 43
+    assert REC.validate(rec) == ["'tracking_issue' must be 42, the number in 'plan_slug'"]
+
+
 def test_tracking_issue_ignores_a_plan_slug_that_is_not_issue_n():
     assert REC.validate(with_ti("good-run-prompt-issue", 42, plan_slug="issue-042x")) == []
+    assert REC.validate(with_ti("good-run-prompt-issue", 7, plan_slug="issue-42x")) == []
 
 
 def test_old_board_refuses_tracking_issue_with_one_named_error(monkeypatch):
