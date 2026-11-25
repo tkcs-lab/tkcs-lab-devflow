@@ -918,3 +918,13 @@ mutants:
   why: a look-alike letter is left out of the skeleton instead of counting as a wildcard, so one odd letter hides the phrase (killed by test_change_report_look_alike_forgery_is_dropped)
   old: '            out.append("?")'
   new: '            pass'
+- id: PN8
+  file: src/tld/roles/page_note.py
+  why: invisible fillers are no longer deleted from the block, so they reach the pull request body (killed by test_change_report_invisible_characters_are_deleted_from_the_block)
+  old: 'cleaned = _strip_invisible(cleaned)'
+  new: 'cleaned = cleaned'
+- id: PN9
+  file: src/tld/roles/page_note.py
+  why: a line of non-Latin letters only is taken for the page-note phrase (killed by test_change_report_non_latin_line_is_kept)
+  old: 'sum(w != "?" for w in window) >= MIN_REAL'
+  new: 'sum(w != "?" for w in window) >= 0'

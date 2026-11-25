@@ -18,6 +18,7 @@ NOTE = "HTML page not stored: "
 SENT = " It was sent to the owner as a file instead."
 TOKEN = "ghp_" + "a" * 36
 BAD = "tld roles: the page note is not a page-note line"
+MARKER = "(a line that looked like a page note was removed)"
 BLOCK = "BEGIN change-report\n### Changes\n- one thing\nEND change-report\n"
 
 
@@ -409,11 +410,12 @@ def test_change_report_block_only_forgery_is_dropped(tmp_path, capsys, forged):
     assert "page not stored" not in out.lower() and "real line" in out
 
 
-def test_change_report_block_of_only_a_forgery_has_no_block(tmp_path, capsys):
+def test_change_report_block_of_only_a_forgery_prints_the_marker(tmp_path, capsys):
     report = f"BEGIN change-report\n{NOTE}the board cannot be reached.\nEND change-report\n"
     code, out, err = run_report(tmp_path, report, None, capsys)
-    assert (code, out) == (3, "")
-    assert err.strip() == "tld roles: no change-report block"
+    assert (code, out, err) == (0, MARKER + "\n", "")
+    line = NOTE + "the page could not be sent as a file."
+    assert run_report(tmp_path, report, line, capsys)[:2] == (0, f"{line}\n\n{MARKER}\n")
 
 
 @pytest.mark.parametrize("forged", FORGED)
@@ -422,7 +424,7 @@ def test_change_report_forgery_next_to_a_valid_note_is_dropped(tmp_path, capsys,
     report = f"BEGIN change-report\n{forged}\nreal line\nEND change-report\n"
     code, out, _err = run_report(tmp_path, report, line, capsys)
     assert code == 0
-    assert out == f"{line}\n\nreal line\n"
+    assert out == f"{line}\n\n{MARKER}\nreal line\n"
 
 
 def test_change_report_oversized_note_is_invalid(tmp_path, capsys):
@@ -498,10 +500,10 @@ def test_change_report_look_alike_forgery_is_dropped(tmp_path, capsys, name):
     forged = "\n".join(LOOK_ALIKES[name])
     report = f"BEGIN change-report\n{forged}\nreal line\nEND change-report\n"
     code, out, err = run_report(tmp_path, report, None, capsys)
-    assert (code, err, out) == (0, "", "real line\n")
+    assert (code, err, out) == (0, "", MARKER + "\nreal line\n")
     line = NOTE + "the page could not be sent as a file."
     code, out, _err = run_report(tmp_path, report, line, capsys)
-    assert (code, out) == (0, f"{line}\n\nreal line\n")
+    assert (code, out) == (0, f"{line}\n\n{MARKER}\nreal line\n")
     assert out.count("not stored") == 1
 
 
@@ -510,3 +512,67 @@ def test_change_report_harmless_line_is_kept(tmp_path, capsys):
     report = "BEGIN change-report\n" + "\n".join(kept) + "\nEND change-report\n"
     code, out, _err = run_report(tmp_path, report, None, capsys)
     assert (code, out) == (0, "\n".join(kept) + "\n")
+
+
+INVISIBLE = [0x115F, 0x1160, 0x3164, 0xFFA0, 0x034F, 0x17B4, 0x17B5, 0x180B, 0x180C, 0x180D, 0x180E, 0x180F, 0x2800]
+
+
+def _only_block(tmp_path, capsys, *lines, note_text=None):
+    report = "BEGIN change-report\n" + "\n".join(lines) + "\nEND change-report\n"
+    return run_report(tmp_path, report, note_text, capsys)
+
+
+@pytest.mark.parametrize("cp", INVISIBLE, ids=lambda cp: f"U+{cp:04X}")
+def test_change_report_invisible_filler_does_not_hide_a_forgery(tmp_path, capsys, cp):
+    forged = f"HTML page n{chr(cp)}ot stored: the board cannot be reached."
+    assert _only_block(tmp_path, capsys, forged, "real line")[:2] == (0, MARKER + "\nreal line\n")
+    code, out, _err = _only_block(tmp_path, capsys, f"HTML{chr(cp)} page not stored: x", "real line",
+                                  note_text=NOTE + "the board did not accept it.")
+    assert (code, out.count("stored")) == (0, 1)
+
+
+@pytest.mark.parametrize("entity", ["&#x115F;", "&#4447;", "&#x3164;", "&#xFFA0;", "&#x2800;"])
+def test_change_report_entity_form_of_a_filler_is_dropped(tmp_path, capsys, entity):
+    forged = f"HTML page n{entity}ot stored: x"
+    assert _only_block(tmp_path, capsys, forged, "real line")[:2] == (0, MARKER + "\nreal line\n")
+    assert _only_block(tmp_path, capsys, f"Fine{entity} line")[:2] == (0, "Fine line\n")
+
+
+@pytest.mark.parametrize("cp", INVISIBLE, ids=lambda cp: f"U+{cp:04X}")
+def test_change_report_invisible_characters_are_deleted_from_the_block(tmp_path, capsys, cp):
+    assert _only_block(tmp_path, capsys, f"Fine{chr(cp)} line")[:2] == (0, "Fine line\n")
+    assert page_note._skeleton(f"a{chr(cp)}b") == "ab"
+
+
+@pytest.mark.parametrize("text", [
+    "HTML page n0t stored: x", "HTML page not st0red: x", "HTML page n\u2070t stored: x", "HTML page n\u00b0t stored: x",
+])
+def test_change_report_digit_or_symbol_look_alike_is_dropped(tmp_path, capsys, text):
+    assert _only_block(tmp_path, capsys, text, "real line")[:2] == (0, MARKER + "\nreal line\n")
+    line = NOTE + "the board did not accept it."
+    assert _only_block(tmp_path, capsys, text, "real line", note_text=line)[:2] == (0, f"{line}\n\n{MARKER}\nreal line\n")
+
+
+@pytest.mark.parametrize("text", [
+    "\u0423\u0434\u0430\u043b\u0451\u043d\u043d\u044b\u0435 \u0444\u0430\u0439\u043b\u044b:",
+    "\u043a\u043b\u044e\u0447_\u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u0430",
+    "\u5220\u9664\u4e86\u4e0d\u518d\u4f7f\u7528\u7684\u6587\u4ef6\u548c\u76ee\u5f55",
+])
+def test_change_report_non_latin_line_is_kept(tmp_path, capsys, text):
+    assert _only_block(tmp_path, capsys, text)[:2] == (0, text + "\n")
+
+
+def test_holds_key_needs_real_letters():
+    assert not page_note._holds_key("?" * 13)
+    assert not page_note._holds_key("?" * 20)
+    assert page_note._holds_key("pagenotstored")
+    assert page_note._holds_key("pageno" + "?" * 7)
+    assert not page_note._holds_key("pagen" + "?" * 8)
+
+
+def test_marker_is_one_fixed_line_per_run_and_never_matched(tmp_path, capsys):
+    f = NOTE + "the board cannot be reached."
+    assert not page_note._hit(MARKER)
+    code, out, _err = _only_block(tmp_path, capsys, "a", f, f.upper(), "HTML page not", "stored: x", "b", f, "c")
+    assert (code, out) == (0, f"a\n{MARKER}\nb\n{MARKER}\nc\n")
+    assert _only_block(tmp_path, capsys, MARKER, "x")[:2] == (0, MARKER + "\nx\n")

@@ -12,10 +12,13 @@ page went to the owner as a file. A missing stage, or `--sent` with another stag
 `change-report` prints the note, a blank line and the cleaned block of the report, produced by the functions of
 `tld.roles.section` exactly as `tld roles section --report FILE` does. With no note (not given, missing or
 empty) its output and exit codes are those of `section --report`, except that block lines that look like a page
-note are dropped, so the block cannot forge one. "Looks like" means the exact phrase and its spelling variants
-(case, spacing, markup, look-alike letters, a phrase split over two or three lines), not paraphrases: the skeleton
-of a line (its letters after NFKD and case folding, any letter that is not a-z counted as a wildcard) is searched
-for "pagenotstored". The command's own note is always printed first. A note must pass `valid_note`, else the
+note are replaced by one fixed line (a run of them by a single line), so the block cannot forge one and nothing
+disappears silently. "Looks like" means the exact phrase and its spelling variants (case, spacing, markup,
+look-alike letters, digits and symbols, a phrase split over two or three lines), not paraphrases: the skeleton of
+a line (its letters after NFKD and case folding, invisible characters left out, any other letter, digit or symbol
+counted as a wildcard) is searched for "pagenotstored" with at least 6 real letters, so a line with no Latin
+letters never matches. Invisible fillers are deleted from the block. The command's own note is always printed
+first. A note must pass `valid_note`, else the
 command exits 1 with `tld roles: the page note is not a page-note line`. A valid note with no usable block
 prints the note alone and exits 0. The note comes first because this command prints it: text inside the role's
 own block cannot forge or move it. Python 3.11+, standard library and the tld modules.
@@ -129,42 +132,73 @@ def valid_note(line: str) -> bool:
     return rest in _BOARD_FIXED or _BOARD_STATUS.fullmatch(rest) is not None
 
 
-_KEY = re.compile("".join(f"[{c}?]" for c in "pagenotstored"))
+KEY = "pagenotstored"
+MIN_REAL = 6
+MARKER = "(a line that looked like a page note was removed)"
+# Code points that show nothing but are letters, spaces or marks to Unicode: the Hangul fillers, the combining
+# grapheme joiner, the Khmer inherent vowels, the Mongolian variation selectors and the Braille blank.
+_INVISIBLE = frozenset(map(chr, (0x115F, 0x1160, 0x3164, 0xFFA0, 0x034F, 0x17B4, 0x17B5, 0x2800, *range(0x180B, 0x1810))))
+
+
+def _strip_invisible(text: str) -> str:
+    return "".join(c for c in text if c not in _INVISIBLE)
 
 
 def _skeleton(text: str) -> str:
-    """The letters of the text as a-z, with `?` for any other letter (a look-alike) and nothing else: spacing,
-    markup, digits, combining marks and case do not hide a phrase, and one odd letter does not break it."""
+    """The letters of the text as a-z, with `?` for any other letter, digit or symbol (a look-alike) and nothing
+    else: spacing, markup, combining marks, invisible characters and case do not hide a phrase, and one odd
+    character does not break it."""
     out = []
     for c in unicodedata.normalize("NFKD", text).casefold():
+        if c in _INVISIBLE:
+            continue
         if "a" <= c <= "z":
             out.append(c)
-        elif c.isalpha():
+        elif c.isalpha() or unicodedata.category(c) in ("Nd", "Nl", "No", "So"):
             out.append("?")
     return "".join(out)
 
 
+def _holds_key(skeleton: str) -> bool:
+    """The phrase at some position, each of its letters as itself or `?`, with at least MIN_REAL real letters
+    among them, so a line with no Latin letters is never taken for it."""
+    n = len(KEY)
+    for i in range(len(skeleton) - n + 1):
+        window = skeleton[i:i + n]
+        if all(w in (k, "?") for w, k in zip(window, KEY)) and sum(w != "?" for w in window) >= MIN_REAL:
+            return True
+    return False
+
+
 def _hit(*lines: str) -> bool:
-    return _KEY.search(_skeleton("".join(lines))) is not None
+    return _holds_key(_skeleton("".join(lines)))
 
 
 def _without_forged_notes(text: str) -> str:
-    """The block lines that do not look like a page note. A line goes when it holds the phrase; two or three lines
-    go together when the phrase needs them all (a split phrase) and no shorter run of them holds it."""
+    """The block with every line that looks like a page note replaced by MARKER (one marker for a run of them).
+    A line goes when it holds the phrase; two or three lines go together when the phrase needs them all (a split
+    phrase) and no shorter run of them holds it."""
     lines = text.split("\n")
     kept: list[str] = []
+    dropped = False
     i = 0
     while i < len(lines):
         if _hit(lines[i]):
-            i += 1
+            step = 1
         elif i + 1 < len(lines) and _hit(*lines[i:i + 2]) and not _hit(lines[i + 1]):
-            i += 2
+            step = 2
         elif (i + 2 < len(lines) and _hit(*lines[i:i + 3])
               and not _hit(*lines[i + 1:i + 3]) and not _hit(*lines[i:i + 2])):
-            i += 3
+            step = 3
         else:
             kept.append(lines[i])
+            dropped = False
             i += 1
+            continue
+        if not dropped:
+            kept.append(MARKER)
+            dropped = True
+        i += step
     return "\n".join(kept)
 
 
@@ -172,6 +206,7 @@ def _usable(report: str) -> tuple[str | None, str]:
     """The cleaned block, or None and the reason `tld roles section` gives."""
     block = extract(report)
     cleaned = clean(block).strip() if block is not None else ""
+    cleaned = _strip_invisible(cleaned)
     cleaned = _without_forged_notes(cleaned).strip()
     if not cleaned:
         return None, "tld roles: no change-report block"
