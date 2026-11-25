@@ -100,6 +100,7 @@ def test_setup_playbook_keeps_the_deps_commands_owner_confirmed():
     assert "`deps.audit` and `deps.lock_freshness` are **commands**" in flat
     assert "never written unconfirmed, with or without `--accept-proposals`" in flat
     assert "a `deps.audit` or `deps.lock_freshness` command is **not written**" in flat
+    assert '`answers.json` with `"blocking": false` for every proposed `blocking: true` entry' in flat
     assert "Never write `blocking: true`, `deps.audit` or `deps.lock_freshness` without the human's confirmation" in flat
 
 
