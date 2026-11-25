@@ -10,14 +10,15 @@ at most 20000, decoded with replacement; an unreadable file counts as empty. `--
 page went to the owner as a file. A missing stage, or `--sent` with another stage, exits 2.
 
 `change-report` prints the note, a blank line and the cleaned block of the report, produced by the functions of
-`tld.roles.section` exactly as `tld roles section --report FILE` does. With no note (not given, missing or
-empty) its output and exit codes are those of `section --report`, except that block lines that look like a page
+`tld.roles.section` exactly as `tld roles section --report FILE` does, with the same refusals (exit code and
+stderr), decided in section's order before any line is replaced. With no note (not given, missing or
+empty) its output is that of `section --report`, except that block lines that look like a page
 note are replaced by one fixed line (a run of them by a single line), so the block cannot forge one and nothing
 disappears silently. "Looks like" means the exact phrase and its spelling variants (case, spacing, markup,
 look-alike letters, digits and symbols, a phrase split over two or three lines), not paraphrases: the skeleton of
 a line (its letters after NFKD and case folding, invisible characters left out, any other letter, digit or symbol
 counted as a wildcard) is searched for "pagenotstored" with at least 6 real letters, so a line with no Latin
-letters never matches. Invisible fillers are deleted from the block before it is cleaned (also when an entity spells them). The command's own note is always printed
+letters never matches. The command's own note is always printed
 first. A note must pass `valid_note`, else the
 command exits 1 with `tld roles: the page note is not a page-note line`. A valid note with no usable block
 prints the note alone and exits 0. The note comes first because this command prints it: text inside the role's
@@ -26,7 +27,6 @@ own block cannot forge or move it. Python 3.11+, standard library and the tld mo
 from __future__ import annotations
 
 import argparse
-import html
 import os
 import re
 import stat
@@ -141,22 +141,6 @@ MARKER = "(a line that looked like a page note was removed)"
 _INVISIBLE = frozenset(map(chr, (0x115F, 0x1160, 0x3164, 0xFFA0, 0x034F, 0x17B4, 0x17B5, 0x2800, *range(0x180B, 0x1810))))
 
 
-def _strip_invisible(text: str) -> str:
-    return "".join(c for c in text if c not in _INVISIBLE)
-
-
-def _joined(text: str) -> str:
-    """The text with the invisible fillers deleted before `clean` sees it, also those that an entity spells (one
-    unescape step at a time, as `clean` does), so `clean` works on the joined text: a mention, a closing keyword,
-    a team or a heading split by a filler is neutralised as it is in `tld roles section`."""
-    while True:
-        unescaped = html.unescape(text)
-        stripped = _strip_invisible(unescaped)
-        if stripped == unescaped:
-            return text
-        text = stripped
-
-
 def _skeleton(text: str) -> str:
     """The letters of the text as a-z, with `?` for any other letter, digit or symbol (a look-alike) and nothing
     else: spacing, markup, combining marks, invisible characters and case do not hide a phrase, and one odd
@@ -216,17 +200,15 @@ def _without_forged_notes(text: str) -> str:
 
 
 def _usable(report: str) -> tuple[str | None, str]:
-    """The cleaned block, or None and the reason `tld roles section` gives."""
-    block = extract(report)
-    if block is not None:
-        block = _joined(block)
-    cleaned = clean(block).strip() if block is not None else ""
-    cleaned = _without_forged_notes(cleaned).strip()
+    """The block as `tld roles section` prints it, with forged note lines replaced; or None and the reason
+    `section` gives. The order is section's: the secret check comes before any line is replaced."""
+    raw = extract(report)
+    cleaned = clean(raw).strip() if raw is not None else ""
     if not cleaned:
         return None, "tld roles: no change-report block"
-    if _suspect(block) or _suspect(cleaned):
+    if _suspect(raw) or _suspect(cleaned):
         return None, "tld roles: the change-report block looks like it holds a secret"
-    return cleaned, ""
+    return _without_forged_notes(cleaned).strip(), ""
 
 
 class _BadNote(Exception):

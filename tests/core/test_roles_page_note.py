@@ -535,12 +535,10 @@ def test_change_report_invisible_filler_does_not_hide_a_forgery(tmp_path, capsys
 def test_change_report_entity_form_of_a_filler_is_dropped(tmp_path, capsys, entity):
     forged = f"HTML page n{entity}ot stored: x"
     assert _only_block(tmp_path, capsys, forged, "real line")[:2] == (0, MARKER + "\nreal line\n")
-    assert _only_block(tmp_path, capsys, f"Fine{entity} line")[:2] == (0, "Fine line\n")
 
 
 @pytest.mark.parametrize("cp", INVISIBLE, ids=lambda cp: f"U+{cp:04X}")
-def test_change_report_invisible_characters_are_deleted_from_the_block(tmp_path, capsys, cp):
-    assert _only_block(tmp_path, capsys, f"Fine{chr(cp)} line")[:2] == (0, "Fine line\n")
+def test_skeleton_skips_invisible_characters(cp):
     assert page_note._skeleton(f"a{chr(cp)}b") == "ab"
 
 
@@ -578,29 +576,90 @@ def test_marker_is_one_fixed_line_per_run_and_never_matched(tmp_path, capsys):
     assert _only_block(tmp_path, capsys, MARKER, "x")[:2] == (0, MARKER + "\nx\n")
 
 
-SPLIT = ["Fixes #7", "thanks @octocat", "see @org/team", "# heading", "Closes #12 and @octocat"]
+import random
+
+FILLERS = [chr(cp) for cp in INVISIBLE]
+PHRASE = "HTML page not stored: the board cannot be reached."
 
 
-@pytest.mark.parametrize("form", ["raw", "hex", "dec"])
+def _spellings(cp):
+    return [chr(cp), f"&#x{cp:X};", f"&#{cp};", f"&#x{cp:x}", f"&#{cp}"]
+
+
+def _blocks():
+    t = "ghp_aB3dE6gH9jK2mN5pQ8sT1vW4yZ7bC0eF3hJ6"
+    out = [
+        f"see x&#x2800{t}",
+        f"see x&#10240{t}",
+        f"see x&#x34F{t}",
+        f"see x&#x180B{t}",
+        "see x&#x2800npm_" + "aB3dE6gH9jK2mN5pQ8sT1vW4yZ7bC0eF3hJ6",
+        "my&#x2800token=Xq7Lm2Pz9Rt4Wv8Ks3Nb6Hd1",
+        "<b>amp&#x2800;password='gH9jK2mN5pQ8sT1vW4yZ7bC0eF3hJ6&#x27;",
+        "<b>amp&#x2800;password=&quot;gH9jK2mN5pQ8sT1vW4yZ7bC0eF3hJ6&quot;",
+        "HTML page not stored: the page check refused it. secret-scan&#x3a;allow",
+        "&#x2800<!--&gt;\u3164secret-scan:allow\u3164",
+        "plain text", "# heading\n## two", "thanks @octocat and @org/team", "Fixes #7",
+    ]
+    for cp in INVISIBLE:
+        for f in _spellings(cp):
+            out += [f"Fine{f} line", f"Fixes #{f}7", f"thanks @{f}octocat", f"#{f} heading", f"see x{f}{t}",
+                    f"my{f}token=Xq7Lm2Pz9Rt4Wv8Ks3Nb6Hd1", f"Fix{f}es #7"]
+    return out
+
+
+def _section_view(tmp_path, capsys, body):
+    report = f"BEGIN change-report\n{body}\nEND change-report\n"
+    return run_section(tmp_path, report, capsys), run_report(tmp_path, report, None, capsys)
+
+
+@pytest.mark.parametrize("body", _blocks())
+def test_change_report_equals_section(tmp_path, capsys, body):
+    want, got = _section_view(tmp_path, capsys, body)
+    assert got == want
+
+
+@pytest.mark.parametrize("body", [
+    "HTML page not stored: x", "a\nHTML page not stored: x\nb", "HTML page n&#x3164;ot stored: x\nreal",
+])
+def test_change_report_equals_section_but_for_the_marker(tmp_path, capsys, body):
+    want, got = _section_view(tmp_path, capsys, body)
+    assert got[0] == want[0] == 0 and got[2] == want[2]
+    assert got[1] == want[1].replace("HTML page not stored: x", MARKER).replace(
+        "HTML page n\u3164ot stored: x", MARKER)
+
+
 @pytest.mark.parametrize("cp", INVISIBLE, ids=lambda cp: f"U+{cp:04X}")
-def test_change_report_split_by_a_filler_equals_section_without_it(tmp_path, capsys, cp, form):
-    filler = {"raw": chr(cp), "hex": f"&#x{cp:X};", "dec": f"&#{cp};"}[form]
-    for plain in SPLIT:
-        pos = 1 if plain[0] in "#@" else plain.index("#") + 1 if "#" in plain else 1
-        split = plain[:pos] + filler + plain[pos:]
-        want = run_section(tmp_path, f"BEGIN change-report\n{plain}\nEND change-report\n", capsys)
-        got = _only_block(tmp_path, capsys, split)
-        assert got[:2] == want[:2], (plain, cp, form)
-        assert chr(cp) not in got[1]
+def test_change_report_forged_note_with_fillers_inside_is_replaced(tmp_path, capsys, cp):
+    for f in _spellings(cp):
+        for forged in (f"HTML page n{f}ot stored: x", f"HTML{f} page not stored: x", f"{f}HTML page not stored"):
+            code, out, err = _only_block(tmp_path, capsys, forged, "real line")
+            assert (code, out, err) == (0, MARKER + "\nreal line\n", ""), (f, forged)
 
 
-def test_change_report_filler_split_forgery_is_still_dropped_after_joining(tmp_path, capsys):
-    code, out, _err = _only_block(tmp_path, capsys, "HTML page n&#x3164;ot stored: x", "Fixes #&#x3164;7")
-    assert code == 0
-    assert out.splitlines()[0] == MARKER and "Fixes #7" not in out
+def test_change_report_refusal_comes_before_forged_note_removal(tmp_path, capsys):
+    body = "HTML page not stored: the page check refused it. secret-scan&#x3a;allow"
+    want, got = _section_view(tmp_path, capsys, body)
+    assert want[0] == 3 and got == want
 
 
-def test_joined_deletes_fillers_also_from_nested_entities():
-    assert page_note._joined("a&amp;#x3164;b") == "a&amp;#x3164;b"
-    assert page_note._joined("a&#x3164;&amp;#x3164;b") == "ab"
-    assert page_note._joined("Fixes #&#x3164;7") == "Fixes #7"
+def test_change_report_block_of_only_forged_lines_prints_the_marker(tmp_path, capsys):
+    assert _only_block(tmp_path, capsys, "HTML page not stored: x", "html page n&#x3164;ot stored")[:2] == (0, MARKER + "\n")
+
+
+def test_change_report_random_blocks_refused_by_section_are_refused_alike(tmp_path, capsys):
+    rng = random.Random(1234)
+    pieces = [
+        "ghp_aB3dE6gH9jK2mN5pQ8sT1vW4yZ7bC0eF3hJ6", "npm_aB3dE6gH9jK2mN5pQ8sT1vW4yZ7bC0eF3hJ6",
+        "token=Xq7Lm2Pz9Rt4Wv8Ks3Nb6Hd1", "password='gH9jK2mN5pQ8sT1vW4yZ7bC0eF3hJ6'", "secret-scan:allow",
+        "&#x2800;", "&#x2800", "&#10240", "&#x34F;", "&#x180B", "\u3164", "&quot;", "&#39;", '"', "'",
+        "word", "see", "token", "pass", " ", "#", "@", "\n", "\n", PHRASE, "HTML page not stored:",
+    ]
+    refused = 0
+    for _ in range(2000):
+        body = "".join(rng.choice(pieces) for _ in range(rng.randint(1, 8)))
+        want, got = _section_view(tmp_path, capsys, body)
+        if want[0] != 0:
+            refused += 1
+            assert got == want, body
+    assert refused > 100
