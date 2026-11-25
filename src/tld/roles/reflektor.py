@@ -432,8 +432,14 @@ def marks_left(text: str) -> list[str]:
     return []
 
 
-def prepare_page(text: str) -> str:
-    """Check the original page, replace each literal allow mark, check the result in full, and return the neutral page.
+def _report_removed(count: int) -> None:
+    if count:
+        print(f"tld roles: reflektor: removed {count} secret-scan allow marks from the page", file=sys.stderr)
+
+
+def prepare_page(text: str) -> tuple[str, int]:
+    """Check the original page, replace each literal allow mark, check the result in full, and return the neutral page
+    with the number of marks replaced. The caller prints the count with `_report_removed` after its write succeeds.
 
     The swap can create a word boundary (the mark starts and ends with a letter, its replacement with a bracket), so
     a credential glued to the mark is found only in the result: the whole check runs on both."""
@@ -444,9 +450,7 @@ def prepare_page(text: str) -> str:
     reasons = verify_html(neutral) or marks_left(neutral)
     if reasons:
         raise _refuse(reasons)
-    if count:
-        print(f"tld roles: reflektor: removed {count} secret-scan allow marks from the page", file=sys.stderr)
-    return neutral
+    return neutral, count
 
 
 _CHECK_REASONS = (
@@ -513,7 +517,7 @@ def harden_html(file) -> Path:
         raise PrepareError(1, "the page must have exactly one <head>")
     at = text.index("<head>") + len("<head>")
     hardened = text[:at] + report_check.CSP_META + text[at:]
-    neutral = prepare_page(hardened)
+    neutral, removed = prepare_page(hardened)
     path = Path(file)
     tmp = path.with_name(path.name + ".tmp")
     try:
@@ -521,6 +525,7 @@ def harden_html(file) -> Path:
         os.replace(tmp, path)
     except OSError as exc:
         raise PrepareError(1, f"cannot write the page: {type(exc).__name__}") from exc
+    _report_removed(removed)
     return path
 
 
@@ -535,7 +540,7 @@ def send_copy(answer_file, dest) -> Path:
         raise PrepareError(1, "the answer has no REPORT-HTML line")
     if not REPORT_HTML_RE.fullmatch(rest) or ".." in rest.split("/"):
         raise PrepareError(1, "the REPORT-HTML path is not an out/report.html path")
-    text = prepare_page(_read_regular(rest, "the page"))
+    text, removed = prepare_page(_read_regular(rest, "the page"))
     out = Path(dest)
     try:
         out.mkdir(parents=True, exist_ok=True)
@@ -545,6 +550,7 @@ def send_copy(answer_file, dest) -> Path:
             fh.write(text.encode("utf-8"))
     except OSError as exc:
         raise PrepareError(1, f"cannot write the page: {type(exc).__name__}") from exc
+    _report_removed(removed)
     return target
 
 

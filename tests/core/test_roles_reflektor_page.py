@@ -606,3 +606,15 @@ def test_token_glued_to_mark_is_refused(tmp_path, kind, make):
     with pytest.raises(PrepareError) as e:
         reflektor.send_copy(ans, dest)
     assert "credential" in e.value.message and list(dest.iterdir()) == []
+
+
+def test_removed_line_is_not_printed_when_the_write_fails(tmp_path, capfd, monkeypatch):
+    payload = json.dumps({"note": f"quotes {MARK}"})
+    f = write(tmp_path / "w.html", hardless(payload))
+
+    def boom(*_a, **_k):
+        raise OSError("disk")
+    monkeypatch.setattr(reflektor.os, "replace", boom)
+    with pytest.raises(PrepareError):
+        reflektor.harden_html(f)
+    assert "removed" not in capfd.readouterr().err
