@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from conftest import ROOT, TLD, CLAUDE
-from hooks_helpers import FAIL_CLOSED, HOOKS, MODULES, bash, git, make_repo, module, run, run_script
+from hooks_helpers import FAIL_CLOSED, HOOKS, MODULES, PROFILE_GATES_OFF, bash, git, make_repo, module, run, run_script
 
 from tld.guard import _common
 from evals.adapters.claude.hookcheck import matcher_matches
@@ -115,8 +115,9 @@ def test_stop_hook_has_the_longest_timeout():
     assert 1800 > module("dod-gate").TOTAL_BUDGET_SECONDS
 
 
-def test_every_hook_command_runs_as_written(fresh_repo):
+def test_every_hook_command_runs_as_written(tmp_path):
     """The command string is run through a shell with the plugin root substituted, as Claude Code does."""
+    fresh_repo = make_repo(tmp_path / "repo", "feature/demo", PROFILE_GATES_OFF)  # the gates are on by default
     event = json.dumps({"cwd": str(fresh_repo), "tool_name": "Bash", "tool_input": {"command": "ls"},
                         "hook_event_name": "PreToolUse", "session_id": "x"})
     for _, _, hook in entries():
@@ -161,10 +162,10 @@ def test_schema_defaults_equal_the_hooks_built_in_defaults():
     assert props["protect_paths_allow"]["x-hook-default"] == []
     assert props["disable"]["x-hook-default"] == []
     gate = props["dod_gate"]["properties"]
-    assert gate["enabled"]["x-hook-default"] is False
+    assert gate["enabled"]["x-hook-default"] is True
     assert gate["max_attempts"]["x-hook-default"] == _common.DEFAULT_MAX_ATTEMPTS
-    assert props["plan_gate"]["properties"]["enabled"]["x-hook-default"] is False
-    assert props["board_gate"]["properties"]["enabled"]["x-hook-default"] is False
+    assert props["plan_gate"]["properties"]["enabled"]["x-hook-default"] is True
+    assert props["board_gate"]["properties"]["enabled"]["x-hook-default"] is True
 
 
 def test_template_documents_the_defaults_and_stays_valid(vp):
@@ -177,7 +178,7 @@ def test_template_documents_the_defaults_and_stays_valid(vp):
             break
         block.append(re.sub(r"^# ?", "", line))
     hooks = yaml.safe_load("\n".join(block))["hooks"]
-    assert hooks["protect_paths"] == _common.DEFAULT_PROTECT_PATHS and hooks["dod_gate"]["enabled"] is False
+    assert hooks["protect_paths"] == _common.DEFAULT_PROTECT_PATHS and hooks["dod_gate"]["enabled"] is True
     profile = yaml.safe_load(text)
     profile["hooks"] = hooks
     errors, _, _ = vp.validate(profile)

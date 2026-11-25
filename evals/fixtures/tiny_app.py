@@ -38,6 +38,14 @@ stacks: []
 models:
   worker: fast
   reviewer: standard
+
+hooks:
+  plan_gate:
+    enabled: false
+  board_gate:
+    enabled: false
+  dod_gate:
+    enabled: false
 """
 
 FILES = {

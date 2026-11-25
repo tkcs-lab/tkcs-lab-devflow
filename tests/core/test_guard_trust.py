@@ -6,7 +6,7 @@ import json
 import tarfile
 import zipfile
 
-from hooks_helpers import PROFILE, bash, git, make_repo_with_origin, run
+from hooks_helpers import PROFILE, PROFILE_GATES_OFF, bash, git, make_repo_with_origin, run
 
 from tld.guard import trust
 
@@ -169,15 +169,15 @@ def test_recursive_copies_and_archives_are_checked_file_by_file(tmp_path):
     repo = make_repo_with_origin(tmp_path / "r")
     src = tmp_path / "gh"
     (src / "workflows").mkdir(parents=True)
-    (src / "workflows" / "ci.yml").write_text("on: push\n")
+    (src / "workflows" / "tld-land.yml").write_text("on: push\n")
     harmless = tmp_path / "docs-src"
     harmless.mkdir()
     (harmless / "a.md").write_text("a\n")
     assert run("protect-paths", bash(f"cp -r {src} .github", repo)).code == 2
     assert run("protect-paths", bash(f"cp -a {src}/. .github/", repo)).code == 2
     tree = tmp_path / "tree"
-    (tree / ".github").mkdir(parents=True)
-    (tree / ".github" / "workflows").symlink_to(src / "workflows")
+    (tree / ".github" / "workflows").mkdir(parents=True)
+    (tree / ".github" / "workflows" / "tld-land.yml").symlink_to(src / "workflows" / "tld-land.yml")
     assert run("protect-paths", bash(f"rsync -a {tree}/ .", repo)).code == 2  # .github/workflows lands in the root
     assert run("protect-paths", bash(f"rsync -a {tree} .", repo)).code == 0  # ... or under tree/
     assert run("protect-paths", bash(f"cp -r {harmless} docs", repo)).code == 0
@@ -218,3 +218,109 @@ def test_a_patch_read_from_stdin_or_input_is_checked(tmp_path):
     assert run("protect-paths", bash("patch -p1 -i x.diff", repo)).code == 2
     assert run("protect-paths", bash("git apply < x.diff", repo)).code == 2
     assert run("protect-paths", bash("patch -p1 < ok.diff", repo)).code == 0
+
+
+def test_gate_switched_off_on_a_branch_stays_on(tmp_path):
+    # the default branch has the gates on (the default); the branch switches them off in its own profile
+    repo = make_repo_with_origin(tmp_path / "r", committed=PROFILE, working=PROFILE_GATES_OFF)
+    r = run("plan-gate", {"session_id": "s1", "cwd": str(repo), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                          "tool_input": {"file_path": "a.txt", "content": "x"}})
+    assert r.code == 2 and "no plan" in r.stderr
+    # the same branch profile with no trusted copy that has the gate on: the gate is off
+    plain = make_repo_with_origin(tmp_path / "p", committed=PROFILE_GATES_OFF, working=PROFILE_GATES_OFF)
+    assert run("plan-gate", {"session_id": "s1", "cwd": str(plain), "hook_event_name": "PreToolUse",
+                             "tool_name": "Write", "tool_input": {"file_path": "a.txt", "content": "x"}}).code == 0
+
+
+def test_base_not_cached_in_a_hook(tmp_path):
+    from tld.guard import _common
+    from tld.guard.action import Action
+    profile = PROFILE + "tld:\n  extends: owner/base/profile.yaml@" + "a" * 40 + "\n"
+    repo = make_repo_with_origin(tmp_path / "r", committed=profile)
+    ctx = _common.make_ctx(Action("shell", str(repo), str(repo), command="ls"), _common.Settings())
+    assert ctx.notice and "is not cached here" in ctx.notice and "tld profile validate" in ctx.notice
+    assert not (repo / ".git" / "tld" / "base" / "objects.git").exists(), "a hook never fetches a base"
+    assert ctx.profile["hooks"]["plan_gate"]["enabled"] is True  # the defaults still apply
+
+
+def test_a_trailing_newline_is_not_a_sha():
+    sha = "a" * 40
+    assert trust.SHA_RE.match(sha) and trust.SHA_RE.match(sha + "a" * 24)
+    assert trust.SHA_RE.match(sha + "\n") is None and trust.SHA_RE.match(sha + "a" * 24 + "\n") is None
+
+
+def test_for_hook_ignores_an_at_sha_with_a_trailing_newline(tmp_path):
+    from tld.profile import resolve
+    repo = make_repo_with_origin(tmp_path / "r")
+    sha = git(repo, "rev-parse", "HEAD").strip()
+    profile, _ = resolve.for_hook({"git": {"main_branch": "main"}}, str(repo), at_sha=sha + "\n")
+    assert profile is not None and profile["hooks"]["dod_gate"]["enabled"] is True
+
+
+def test_a_broken_profile_does_not_switch_the_gates_off(tmp_path):
+    ev = lambda r: {"session_id": "s1", "cwd": str(r), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                    "tool_input": {"file_path": "a.txt", "content": "x"}}
+    for broken in ("a: [\n", "- just\n- a list\n"):
+        repo = make_repo_with_origin(tmp_path / ("r%d" % len(broken)), committed=PROFILE, working=broken)
+        assert run("plan-gate", ev(repo)).code == 2, broken
+
+
+def test_a_deleted_or_dangling_profile_does_not_switch_the_gates_off(tmp_path):
+    ev = lambda r: {"session_id": "s1", "cwd": str(r), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                    "tool_input": {"file_path": "a.txt", "content": "x"}}
+    deleted = make_repo_with_origin(tmp_path / "d", committed=PROFILE)
+    (deleted / ".tld" / "toolkit.yaml").unlink()
+    assert run("plan-gate", ev(deleted)).code == 2
+    dangling = make_repo_with_origin(tmp_path / "l", committed=PROFILE)
+    (dangling / ".tld" / "toolkit.yaml").unlink()
+    (dangling / ".tld" / "toolkit.yaml").symlink_to("/nonexistent/profile.yaml")
+    assert run("plan-gate", ev(dangling)).code == 2
+
+
+def test_malformed_gate_on_a_branch_stays_on(tmp_path):
+    ev = lambda r: {"session_id": "s1", "cwd": str(r), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                    "tool_input": {"file_path": "a.txt", "content": "x"}}
+    for n, bad in enumerate(("  plan_gate:\n    enabled: 0\n", "  plan_gate:\n    enabled: 'no'\n", "  plan_gate: no\n")):
+        repo = make_repo_with_origin(tmp_path / f"r{n}", committed=PROFILE, working=PROFILE + "hooks:\n" + bad)
+        assert run("plan-gate", ev(repo)).code == 2, bad
+
+
+def test_a_committed_deletion_of_the_profile_does_not_switch_the_gates_off(tmp_path):
+    ev = lambda r: {"session_id": "s1", "cwd": str(r), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                    "tool_input": {"file_path": "a.txt", "content": "x"}}
+    repo = make_repo_with_origin(tmp_path / "r", committed=PROFILE)
+    git(repo, "rm", "-q", ".tld/toolkit.yaml")
+    git(repo, "commit", "-qm", "drop the profile")
+    assert run("plan-gate", ev(repo)).code == 2
+
+
+def test_a_repository_without_a_profile_or_an_origin_has_the_gates_off(tmp_path):
+    from hooks_helpers import make_repo
+    repo = make_repo(tmp_path / "r", "feature/demo", None)
+    ev = {"session_id": "s1", "cwd": str(repo), "hook_event_name": "PreToolUse", "tool_name": "Write",
+          "tool_input": {"file_path": "a.txt", "content": "x"}}
+    assert run("plan-gate", ev).code == 0
+
+
+def test_a_non_mapping_hooks_section_does_not_switch_a_gate_off(tmp_path):
+    ev = lambda r: {"session_id": "s1", "cwd": str(r), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                    "tool_input": {"file_path": "a.txt", "content": "x"}}
+    for n, bad in enumerate(("hooks: 5\n", "hooks: [x]\n", "hooks:\n  plan_gate: 5\n")):
+        repo = make_repo_with_origin(tmp_path / f"r{n}", committed=PROFILE, working=PROFILE + bad)
+        assert run("plan-gate", ev(repo)).code == 2, bad
+    # the trusted copy itself has a malformed hooks section: the gate is still on for a working copy with it off
+    repo = make_repo_with_origin(tmp_path / "t", committed=PROFILE + "hooks: 5\n", working=PROFILE_GATES_OFF)
+    assert run("plan-gate", ev(repo)).code == 2
+
+
+def test_a_malformed_disable_never_switches_plan_gate_or_board_gate_off(tmp_path, monkeypatch):
+    from tld.guard import board_gate
+    ev = lambda r: {"session_id": "s1", "cwd": str(r), "hook_event_name": "PreToolUse", "tool_name": "Write",
+                    "tool_input": {"file_path": "a.txt", "content": "x"}}
+    for n, bad in enumerate(("hooks:\n  disable: 5\n", "hooks:\n  disable: plan-gate\n", "hooks: 5\n")):
+        # working copy malformed
+        repo = make_repo_with_origin(tmp_path / f"w{n}", committed=PROFILE, working=PROFILE + bad)
+        assert run("plan-gate", ev(repo)).code == 2, bad
+        # trusted copy malformed, working copy has the gate off
+        repo = make_repo_with_origin(tmp_path / f"t{n}", committed=PROFILE + bad, working=PROFILE_GATES_OFF)
+        assert run("plan-gate", ev(repo)).code == 2, bad

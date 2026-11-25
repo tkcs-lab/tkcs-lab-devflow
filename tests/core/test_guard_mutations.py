@@ -7,6 +7,7 @@ import time
 
 import pytest
 
+import hooks_helpers
 from hooks_helpers import bash, event, make_repo, make_repo_with_origin, run
 from tld.guard import secret_scan
 from tld.guard._ansi import ansi_c_decode
@@ -80,7 +81,7 @@ def test_trailing_slash_pattern_matches_the_directory(tmp_path):
 
 def test_a_future_dated_allow_marker_does_not_exempt_the_profile(tmp_path):
     from tld.guard import protect_paths
-    repo = make_repo(tmp_path / "r", "feature/demo")
+    repo = make_repo(tmp_path / "r", "feature/demo", hooks_helpers.PROFILE + "hooks:\n  protect_paths: ['.tld/toolkit.yaml', '.github/workflows/**']\n")  # a repository that lists the profile
     marker = state_dir(str(repo)) / protect_paths.PROFILE_MARKER
     marker.parent.mkdir(parents=True, exist_ok=True)
     future = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 10000))

@@ -164,6 +164,6 @@ def test_script_runs_as_a_subprocess(tmp_path):
 
 
 def test_gate_off_prints_nothing(tmp_path):
-    repo = make_repo(tmp_path / "r", "feature/demo")
+    repo = make_repo(tmp_path / "r", "feature/demo", hh.PROFILE_GATES_OFF)
     assert gate(repo, prompt_event(repo, "hello")) == ca.Result(0)
     assert gate(repo, event("Write", repo, file_path=str(repo / "a.txt"), content="x")) == ca.Result(0)

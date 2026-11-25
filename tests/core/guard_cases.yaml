@@ -133,6 +133,10 @@
 # ---------------- S13: the tld workflow files only with the install marker ----------------
 - {guard: protect-paths, repo: plain, kind: write, path: .github/workflows/tld-land.yml, expect: deny, note: S13}
 - {guard: protect-paths, repo: plain, kind: write, path: .github/workflows/tld-release.yml, expect: deny, note: S13}
+- {guard: protect-paths, repo: plain, kind: write, path: .git/tld/base/0123456789abcdef01234567.yaml, expect: deny, note: base-cache}
+- {guard: protect-paths, repo: plain, kind: write, path: .git/tld/base/0123456789abcdef01234567.json, expect: deny, note: base-cache}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: base-cache, command: "echo x > .git/tld/base/0123456789abcdef01234567.yaml"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: base-cache, command: "echo '{}' > .git/tld/base/0123456789abcdef01234567.json"}
 - {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S13, command: "cp x .github/workflows/tld-land.yml"}
 - {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S13,
    command: "echo '{}' > .git/tld/protect-paths-workflow.json"}
@@ -227,7 +231,7 @@
 - {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "git checkout evil .github"}
 - {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "git restore --source evil .github"}
 - {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "git restore -s evil -- :/"}
-- {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "git checkout evil -- .tld"}
+- {guard: protect-paths, repo: plain, kind: shell, expect: allow, note: S21, command: "git checkout evil -- .tld"}
 - {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "cp -r /tmp/no-such-gh .github"}
 - {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "cp -r x/. .github/"}
 - {guard: protect-paths, repo: plain, kind: shell, expect: deny, note: S21, command: "rsync -a x/ ."}
