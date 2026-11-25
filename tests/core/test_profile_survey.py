@@ -135,3 +135,23 @@ def test_cli(tmp_path):
     out = json.loads(proc.stdout)
     assert set(out) == {"root", "evidence", "proposal"}
     assert out["proposal"]["profile"]["stacks"] is not None
+
+
+def test_base_option_drops_the_bot_and_the_values_the_base_sets(tmp_path):
+    build(tmp_path, "security_heavy")
+    (tmp_path / ".github").mkdir(exist_ok=True)
+    (tmp_path / ".github" / "CODEOWNERS").write_text("* @alice @bot @carol\n", encoding="utf-8")
+    base = tmp_path.parent / (tmp_path.name + "-base.yaml")
+    base.write_text("git:\n  bot_login: bot\n  codeowners: [alice]\n  main_branch: main\n", encoding="utf-8")
+    proc = subprocess.run([*SCRIPT_CMD, str(tmp_path), "--base", str(base)], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+    assert out["evidence"]["repo"]["codeowners"] == ["alice", "carol"]
+    assert out["proposal"]["profile"]["git"] == {"codeowners": ["alice", "carol"]}
+    assert out["evidence"]["git"]["branch_prefixes"] is not None
+
+
+def test_base_option_rejects_an_unreadable_base(tmp_path):
+    proc = subprocess.run([*SCRIPT_CMD, str(tmp_path), "--base", str(tmp_path / "none.yaml")],
+                          capture_output=True, text=True)
+    assert proc.returncode == 1 and "profile_survey: cannot read" in proc.stderr

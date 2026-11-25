@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Survey a repository for the facts /setup turns into a profile proposal.
 
-Usage: profile_survey.py [ROOT]
+Usage: profile_survey.py [ROOT] [--base FILE]
 
 Prints `survey(ROOT)` (default `.`) as JSON, 2-space indented: `root`, `evidence` and `proposal`.
 `evidence` holds the stacks, other stacks, CI workflows and dispatchable workflows, the commands that
 verify a change (CI run steps, Makefile targets, package scripts), git facts, and the results of
-survey_docs.scan and survey_signals.scan. `proposal` is survey_proposal.build(evidence).
+survey_docs.scan, survey_signals.scan and survey_repo.scan (CODEOWNERS logins, version line,
+dependency commands, ADR heading). `proposal` is survey_proposal.build(evidence, base).
+`--base FILE` is a cached base profile (YAML, read-only, never fetched here): the bot login it sets is
+left out of the CODEOWNERS logins and the proposal omits every key the base sets.
+Exit 1 also when FILE cannot be read or is not a YAML mapping (`profile_survey: <message>`).
 
 Read-only: runs `git` with argument lists and reads files; writes nothing.
 Exit 0 ok; 1 ROOT is not a directory (`profile_survey: <message>`).
@@ -24,6 +28,7 @@ import yaml
 
 from tld.profile import survey_docs  # noqa: E402
 from tld.profile import survey_proposal  # noqa: E402
+from tld.profile import survey_repo  # noqa: E402
 from tld.profile import survey_signals  # noqa: E402
 
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "vendor", "build", "dist", "Pods", ".build",
@@ -241,7 +246,13 @@ def _git_facts(root: Path) -> dict:
             "branch_prefixes": prefixes}
 
 
-def survey(root: Path) -> dict:
+def _bot_login(base: dict | None) -> str | None:
+    git = (base or {}).get("git")
+    bot = git.get("bot_login") if isinstance(git, dict) else None
+    return bot if isinstance(bot, str) and bot else None
+
+
+def survey(root: Path, base: dict | None = None) -> dict:
     root = Path(root)
     stacks, other = _stacks(root)
     ci = _ci(root)
@@ -253,17 +264,46 @@ def survey(root: Path) -> dict:
         "git": _git_facts(root),
         "docs": survey_docs.scan(root),
         "signals": survey_signals.scan(root),
+        "repo": survey_repo.scan(root, bot=_bot_login(base)),
     }
-    return {"root": str(root), "evidence": evidence, "proposal": survey_proposal.build(evidence)}
+    return {"root": str(root), "evidence": evidence, "proposal": survey_proposal.build(evidence, base)}
+
+
+def _read_base(path: Path) -> dict:
+    """The parsed base profile in FILE; ValueError with a message when it is unreadable."""
+    try:
+        if path.stat().st_size > MAX_BYTES:
+            raise ValueError(f"{path} is larger than {MAX_BYTES} bytes")
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        raise ValueError(f"cannot read {path}: {exc}") from None
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is not a YAML mapping")
+    return data
 
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
+    base_file = None
+    if "--base" in args:
+        i = args.index("--base")
+        if i + 1 >= len(args):
+            print("profile_survey: --base needs a FILE", file=sys.stderr)
+            return 1
+        base_file = Path(args[i + 1])
+        del args[i:i + 2]
     root = Path(args[0]) if args else Path(".")
     if not root.is_dir():
         print(f"profile_survey: {root} is not a directory", file=sys.stderr)
         return 1
-    print(json.dumps(survey(root), indent=2))
+    base = None
+    if base_file is not None:
+        try:
+            base = _read_base(base_file)
+        except ValueError as exc:
+            print(f"profile_survey: {exc}", file=sys.stderr)
+            return 1
+    print(json.dumps(survey(root, base), indent=2))
     return 0
 
 

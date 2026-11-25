@@ -3,9 +3,13 @@
 
 Usage: tld profile survey-proposal EVIDENCE.json
 
-`build(evidence)` returns `{"profile": {...}, "rationale": [...]}`. `profile` holds the keys
+`build(evidence, base=None)` returns `{"profile": {...}, "rationale": [...]}`. `profile` holds the keys
 `stacks`, `git`, `docs`, `ci` and `roles`, each only when it has a value (`stacks` always). `rationale`
 lists `{key, value, evidence}` for every proposed top-level value and every `roles.required` entry.
+Never proposed: `git.branch_types`, `git.merge_style`. `base` is the parsed base profile: every key it
+sets is left out, and `git.codeowners` is proposed only when the CODEOWNERS logins (bot removed) differ
+from the base's. From `evidence.repo`: `release.version_files` (only when exactly one file has a version
+line), `deps.audit`, `deps.lock_freshness` and `docs.adr_bar` (only with `docs.adr_dir`).
 With a docs index (`docs.index`) the proposed `docs.must_read` keeps at most MUST_READ_WITH_INDEX
 files, the limit `tld profile validate` warns about.
 EVIDENCE.json is the `evidence` object of profile_survey.py, or its whole output.
@@ -72,7 +76,20 @@ def _required(signals: dict) -> tuple[list[dict], list[list[str]]]:
     return entries, evid
 
 
-def build(evidence: dict) -> dict:
+def _has(base: dict | None, dotted: str) -> bool:
+    node = base or {}
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return False
+        node = node[part]
+    return True
+
+
+def _logins(value) -> list[str]:
+    return [str(v).lower() for v in value] if isinstance(value, list) else []
+
+
+def build(evidence: dict, base: dict | None = None) -> dict:
     docs_ev = evidence.get("docs") or {}
     signals = evidence.get("signals") or {}
     git = evidence.get("git") or {}
@@ -111,13 +128,37 @@ def build(evidence: dict) -> dict:
         docs["website"] = site
         rationale.append({"key": "docs.website", "value": site,
                           "evidence": list((docs_ev.get("website") or {}).get("evidence") or [])})
+    repo = evidence.get("repo") or {}
+    if repo.get("adr_bar") and docs.get("adr_dir"):
+        docs["adr_bar"] = repo["adr_bar"]
+        rationale.append({"key": "docs.adr_bar", "value": repo["adr_bar"], "evidence": ["CONTRIBUTING.md heading"]})
     profile["docs"] = docs
+
+    bot = ((base or {}).get("git") or {}).get("bot_login")
+    owners = [o for o in repo.get("codeowners") or [] if not (bot and str(o).lower() == str(bot).lower())]
+    if owners and set(_logins(owners)) != set(_logins(((base or {}).get("git") or {}).get("codeowners"))):
+        profile.setdefault("git", {})["codeowners"] = owners
+        rationale.append({"key": "git.codeowners", "value": owners, "evidence": ["CODEOWNERS"]})
 
     dispatchable = list(ci.get("dispatchable") or [])
     if dispatchable:
         profile["ci"] = {"dispatchable": dispatchable}
         rationale.append({"key": "ci.dispatchable", "value": dispatchable,
                           "evidence": [d["workflow"] for d in dispatchable]})
+
+    version_files = repo.get("version_files") or []
+    if len(version_files) == 1:
+        profile["release"] = {"version_files": version_files}
+        rationale.append({"key": "release.version_files", "value": version_files,
+                          "evidence": [version_files[0]["path"]]})
+    deps: dict = {}
+    for key, ev_key in (("audit", "deps_audit"), ("lock_freshness", "lock_freshness")):
+        if repo.get(ev_key):
+            deps[key] = repo[ev_key]
+            rationale.append({"key": f"deps.{key}", "value": deps[key],
+                              "evidence": [e.get("run", "") for e in deps[key]]})
+    if deps:
+        profile["deps"] = deps
 
     score = (signals.get("security") or {}).get("score", 0)
     roles: dict = {"posture": {"security": "critical" if score >= CRITICAL_SCORE else "standard"}}
@@ -132,7 +173,49 @@ def build(evidence: dict) -> dict:
     profile["roles"] = roles
     for entry, ev in zip(required, evid):
         rationale.append({"key": "roles.required." + entry["role"], "value": entry, "evidence": ev})
+    order = ("stacks", "git", "docs", "ci", "release", "deps", "roles")
+    profile = {k: profile[k] for k in order if k in profile}
+    if base:
+        for dotted in [r["key"] for r in rationale if r["key"] != "git.codeowners"]:
+            if _has(base, dotted):
+                _drop(profile, dotted)
+        _prune(profile)
+        present = _present(profile)
+        rationale = [r for r in rationale if r["key"] in present]
     return {"profile": profile, "rationale": rationale}
+
+
+def _drop(profile: dict, dotted: str) -> None:
+    node = profile
+    parts = dotted.split(".")
+    for part in parts[:-1]:
+        node = node.get(part)
+        if not isinstance(node, dict):
+            return
+    node.pop(parts[-1], None)
+
+
+def _prune(node: dict) -> None:
+    """Remove the mappings a dropped key left empty."""
+    for key in [k for k, v in node.items() if isinstance(v, dict)]:
+        _prune(node[key])
+        if not node[key]:
+            del node[key]
+
+
+def _present(profile: dict) -> set[str]:
+    """Every dotted key of the profile, plus the `roles.required.<role>` rationale keys."""
+    out: set[str] = set()
+
+    def walk(node: dict, prefix: str) -> None:
+        for k, v in node.items():
+            out.add(prefix + k)
+            if isinstance(v, dict):
+                walk(v, prefix + k + ".")
+
+    walk(profile, "")
+    out.update("roles.required." + e["role"] for e in (profile.get("roles") or {}).get("required") or [])
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -4,7 +4,9 @@
     tld profile patch set-block PROFILE KEY PROPOSAL.json [--answers ANSWERS.json] [--write [--yes]]
     tld profile patch diff PROFILE PROPOSAL.json [--root DIR]
 
-`set-block`: KEY is `roles` (top level) or `docs.website` (a child of `docs`). PROPOSAL.json is the
+`set-block`: KEY is `roles` (top level), `docs.website` (a child of `docs`) or `tld.extends` (a child of `tld`;
+a one-line scalar `<owner>/<repo>/<path>@<sha>`, optionally followed by `  # <comment>` which is
+written as a trailing comment). PROPOSAL.json is the
 value itself or the whole output of `tld profile survey` (a top-level `proposal` key; the value is then
 `proposal.profile` at the key path). ANSWERS.json holds the human's answers, keyed by KEY
 (`{"roles": {...}, "docs.website": {...}}`); its value for KEY is merged over the proposal: mappings
@@ -44,7 +46,7 @@ from tld.plan import manifest as vm  # noqa: E402
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "vendor", "build", "dist", "Pods", ".build",
              "__pycache__", "DerivedData"}
 MAX_FILES = 5000
-KEYS = ("roles", "docs.website")
+KEYS = ("roles", "docs.website", "tld.extends")
 COMPARED = ("stacks", "git.main_branch", "docs.must_read", "docs.index", "docs.adr_dir", "docs.adr_index",
             "docs.changelog", "docs.website", "ci.dispatchable", "roles")
 NEEDS_YES = 4
@@ -137,6 +139,8 @@ def set_block(text: str, key: str, value) -> str:
             return "".join(lines[:start]) + new + "".join(lines[end + 1:])
         head = text if text.endswith("\n") or not text else text + "\n"
         return head + "\n" + new
+    if key == "tld.extends":
+        return _set_extends(text, lines, value)
     docs = find_key(lines, "docs", 0)
     if docs is None:
         raise PatchError("no 'docs' block to add 'website' to")
@@ -150,6 +154,25 @@ def set_block(text: str, key: str, value) -> str:
     if not last.endswith("\n"):
         lines[docs_end] = last + "\n"
     return "".join(lines[:docs_end + 1]) + new + "".join(lines[docs_end + 1:])
+
+
+def _set_extends(text: str, lines: list[str], value) -> str:
+    """Set `tld.extends` as a text edit: replace the line, insert it first in `tld:`, or add the block."""
+    if not isinstance(value, str) or not value.strip() or "\n" in value:
+        raise PatchError("'tld.extends' must be a one-line string")
+    scalar, _, comment = value.partition("  # ")
+    new = render("extends", scalar.strip(), 2)
+    if comment.strip():
+        new = new.rstrip("\n") + "  # " + comment.strip() + "\n"
+    tld = find_key(lines, "tld", 0)
+    if tld is None:
+        head = text if text.endswith("\n") or not text else text + "\n"
+        return "tld:\n" + new + ("\n" + head if head else "")
+    end = block_end(lines, tld)
+    start = find_key(lines, "extends", 2, tld + 1, end + 1)
+    if start is not None:
+        return "".join(lines[:start]) + new + "".join(lines[start + 1:])
+    return "".join(lines[:tld + 1]) + new + "".join(lines[tld + 1:])
 
 
 def merge(proposal, answers):
