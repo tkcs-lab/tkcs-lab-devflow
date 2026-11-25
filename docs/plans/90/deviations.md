@@ -10,7 +10,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-base-fetch
 
-- pending
+- worker: design 3.2: a pin is accepted only if it is a version tag commit or an ancestor of the default branch head (needs a full fetch of the head); the changelog line for tld profile base was left out because CHANGELOG.md is outside touches
+- retry: sent back once: a fetch by SHA also serves commits that only a pull request head holds; fixed by the tag or default-branch rule, plus checking the base text before caching, verifying the blob id and a bounded tag pattern
 
 ## p3-schema-validate
 
