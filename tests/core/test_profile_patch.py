@@ -345,3 +345,10 @@ def test_set_block_writes_tld_extends(tmp_path):
     again = pp.set_block(out, "tld.extends", "org/.github/tld/profile-base.yaml@" + "b" * 40)
     assert again.count("extends:") == 1 and "b" * 40 in again and "# v1.7.0" not in again
     assert pp.set_block("project:\n  name: x\n", "tld.extends", "o/r/p@" + "c" * 40).startswith("tld:\n  extends:")
+
+
+def test_set_block_rejects_a_bad_tld_extends():
+    from tld.profile import patch as pp
+    for bad in ("o/r/p@main", "o/r/p@" + "a" * 40 + "  # x\rgit: {bot_login: evil}", "o/r/p@" + "a" * 40 + "\n"):
+        with pytest.raises(pp.PatchError):
+            pp.set_block("tld:\n  version: x\n", "tld.extends", bad)

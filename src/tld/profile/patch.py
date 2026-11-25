@@ -49,6 +49,7 @@ MAX_FILES = 5000
 KEYS = ("roles", "docs.website", "tld.extends")
 COMPARED = ("stacks", "git.main_branch", "docs.must_read", "docs.index", "docs.adr_dir", "docs.adr_index",
             "docs.changelog", "docs.website", "ci.dispatchable", "roles")
+EXTENDS = re.compile(r"[\w.-]+/[\w.-]+/[\w./-]+@[0-9a-f]{40}")
 NEEDS_YES = 4
 MISSING = object()
 
@@ -158,9 +159,11 @@ def set_block(text: str, key: str, value) -> str:
 
 def _set_extends(text: str, lines: list[str], value) -> str:
     """Set `tld.extends` as a text edit: replace the line, insert it first in `tld:`, or add the block."""
-    if not isinstance(value, str) or not value.strip() or "\n" in value:
-        raise PatchError("'tld.extends' must be a one-line string")
+    if not isinstance(value, str) or not re.fullmatch(r"[\x20-\x7e]+", value):
+        raise PatchError("'tld.extends' must be one line of printable ASCII")
     scalar, _, comment = value.partition("  # ")
+    if not EXTENDS.fullmatch(scalar.strip()):
+        raise PatchError("'tld.extends' must be <owner>/<repo>/<path>@<40-hex commit sha>")
     new = render("extends", scalar.strip(), 2)
     if comment.strip():
         new = new.rstrip("\n") + "  # " + comment.strip() + "\n"

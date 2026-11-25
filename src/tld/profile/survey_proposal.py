@@ -134,9 +134,11 @@ def build(evidence: dict, base: dict | None = None) -> dict:
         rationale.append({"key": "docs.adr_bar", "value": repo["adr_bar"], "evidence": ["CONTRIBUTING.md heading"]})
     profile["docs"] = docs
 
-    bot = ((base or {}).get("git") or {}).get("bot_login")
+    base_git = (base or {}).get("git")
+    base_git = base_git if isinstance(base_git, dict) else {}
+    bot = base_git.get("bot_login")
     owners = [o for o in repo.get("codeowners") or [] if not (bot and str(o).lower() == str(bot).lower())]
-    if owners and set(_logins(owners)) != set(_logins(((base or {}).get("git") or {}).get("codeowners"))):
+    if owners and set(_logins(owners)) != set(_logins(base_git.get("codeowners"))):
         profile.setdefault("git", {})["codeowners"] = owners
         rationale.append({"key": "git.codeowners", "value": owners, "evidence": ["CODEOWNERS"]})
 

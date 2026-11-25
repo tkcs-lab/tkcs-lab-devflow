@@ -23,6 +23,7 @@ file is ever run. Exit 0 ok; 1 ROOT is not a directory (`survey_repo: <message>`
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -35,14 +36,24 @@ MAX_DEPTH = 4
 CODEOWNERS_FILES = (".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS")
 LOGIN = re.compile(r"^@([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))$")
 PYPROJECT_VERSION = r'^version = "([^"]+)"'
-PACKAGE_VERSION = r'^\s*"version": "([^"]+)"'
+PACKAGE_VERSION = r'^[ \t]*"version": "([^"]+)"'
 CARGO_VERSION = r'^version = "([^"]+)"'
 LOCK_REQUIREMENTS = re.compile(r"^requirements/.+\.lock\.txt$|^requirements[^/]*\.txt$")
 ADR_HEADING = re.compile(r"\b(adrs?|decisions?)\b", re.I)
 
 
-def _read(path: Path) -> str | None:
+SAFE_PATH = re.compile(r"^(?!-)[A-Za-z0-9._/-]+$")
+
+
+def _safe(rel: str) -> bool:
+    """A repository path that may appear in a command: plain characters, no `..`, no leading `-`."""
+    return bool(SAFE_PATH.match(rel)) and ".." not in rel.split("/") and "/-" not in rel
+
+
+def _read(path: Path, root: Path | None = None) -> str | None:
     try:
+        if root is not None and not path.resolve().is_relative_to(root.resolve()):
+            return None
         if not path.is_file() or path.is_symlink() or path.stat().st_size > MAX_BYTES:
             return None
         return path.read_text(encoding="utf-8", errors="replace")
@@ -57,25 +68,28 @@ def _walk(root: Path):
     while stack:
         d, depth = stack.pop()
         try:
-            entries = sorted(d.iterdir())
+            with os.scandir(d) as it:
+                entries = []
+                for entry in it:
+                    count += 1
+                    if count > MAX_FILES:
+                        return
+                    entries.append(entry)
         except OSError:
             continue
-        for p in entries:
-            if p.is_symlink():
+        for entry in sorted(entries, key=lambda e: e.name):
+            if entry.is_symlink():
                 continue
-            if p.is_dir():
-                if p.name not in SKIP_DIRS and depth < MAX_DEPTH:
-                    stack.append((p, depth + 1))
-            elif p.is_file():
-                count += 1
-                if count > MAX_FILES:
-                    return
-                yield p.relative_to(root).as_posix()
+            if entry.is_dir():
+                if entry.name not in SKIP_DIRS and depth < MAX_DEPTH:
+                    stack.append((Path(entry.path), depth + 1))
+            elif entry.is_file():
+                yield Path(entry.path).relative_to(root).as_posix()
 
 
 def _codeowners(root: Path, bot: str | None) -> list[str]:
     for name in CODEOWNERS_FILES:
-        text = _read(root / name)
+        text = _read(root / name, root)
         if text is None:
             continue
         out: list[str] = []
@@ -107,13 +121,13 @@ def _cargo_package_version(text: str) -> bool:
 
 def _version_files(root: Path) -> list[dict]:
     found: list[dict] = []
-    text = _read(root / "pyproject.toml")
+    text = _read(root / "pyproject.toml", root)
     if text is not None and re.search(PYPROJECT_VERSION, text, re.M):
         found.append({"path": "pyproject.toml", "pattern": PYPROJECT_VERSION})
-    text = _read(root / "package.json")
+    text = _read(root / "package.json", root)
     if text is not None and re.search(PACKAGE_VERSION, text, re.M):
         found.append({"path": "package.json", "pattern": PACKAGE_VERSION})
-    text = _read(root / "Cargo.toml")
+    text = _read(root / "Cargo.toml", root)
     if text is not None and _cargo_package_version(text):
         found.append({"path": "Cargo.toml", "pattern": CARGO_VERSION})
     return found
@@ -124,8 +138,9 @@ def _deps_audit(root: Path, files: list[str]) -> list[dict]:
     locks = sorted(f for f in files if LOCK_REQUIREMENTS.match(f))
     if locks:
         preferred = [f for f in locks if f.endswith(".lock.txt")] or locks
-        runtime = next((f for f in preferred if "dev" not in Path(f).name), preferred[0])
-        out.append({"ecosystem": "pip", "run": f"pip-audit --strict -r {runtime}"})
+        runtime = next((f for f in preferred if "dev" not in Path(f).name), None)
+        if runtime:
+            out.append({"ecosystem": "pip", "run": f"pip-audit --strict -r {runtime}"})
     for f in files:
         name = Path(f).name
         folder = Path(f).parent.as_posix()
@@ -163,7 +178,7 @@ def _anchor(heading: str) -> str:
 
 
 def _adr_bar(root: Path) -> str | None:
-    text = _read(root / "CONTRIBUTING.md")
+    text = _read(root / "CONTRIBUTING.md", root)
     if text is None:
         return None
     for line in text.splitlines():
@@ -175,7 +190,7 @@ def _adr_bar(root: Path) -> str | None:
 
 def scan(root, bot: str | None = None) -> dict:
     root = Path(root)
-    files = sorted(_walk(root))
+    files = sorted(f for f in _walk(root) if _safe(f))
     return {
         "codeowners": _codeowners(root, bot),
         "version_files": _version_files(root),

@@ -69,3 +69,31 @@ def test_no_files_gives_empty_values(tmp_path):
 def test_oversized_files_are_not_read(tmp_path):
     put(tmp_path, "CODEOWNERS", "* @alice\n" + "x" * (sr.MAX_BYTES + 1))
     assert sr.scan(tmp_path)["codeowners"] == []
+
+
+def test_newline_only_package_json_is_fast(tmp_path):
+    import time
+    put(tmp_path, "package.json", "\n" * 190000)
+    start = time.time()
+    assert sr.scan(tmp_path)["version_files"] == []
+    assert time.time() - start < 2
+
+
+def test_unsafe_file_names_never_reach_a_command(tmp_path):
+    for name in ("requirements/a;touch x;.lock.txt", "requirements/$(id).lock.txt", "requirements/a b.lock.txt",
+                 "requirements/-r.lock.txt"):
+        put(tmp_path, name, "")
+    put(tmp_path, "scripts/x;id;lock.sh", "")
+    put(tmp_path, "pyproject.toml", "")
+    out = sr.scan(tmp_path)
+    assert out["deps_audit"] == [] and out["lock_freshness"] == []
+
+
+def test_symlinked_directory_outside_the_tree_is_not_read(tmp_path):
+    outside = tmp_path / "outside"
+    put(outside, "CODEOWNERS", "* @evil\n")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".github").symlink_to(outside, target_is_directory=True)
+    (repo / "CODEOWNERS").symlink_to(outside / "CODEOWNERS")
+    assert sr.scan(repo)["codeowners"] == []

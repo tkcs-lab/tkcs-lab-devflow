@@ -275,7 +275,7 @@ def _read_base(path: Path) -> dict:
         if path.stat().st_size > MAX_BYTES:
             raise ValueError(f"{path} is larger than {MAX_BYTES} bytes")
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+    except (OSError, UnicodeDecodeError, yaml.YAMLError, RecursionError, MemoryError) as exc:
         raise ValueError(f"cannot read {path}: {exc}") from None
     if not isinstance(data, dict):
         raise ValueError(f"{path} is not a YAML mapping")
