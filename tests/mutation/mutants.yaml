@@ -19,6 +19,8 @@ tests:
   src/tld/roles/reflektor.py:
   - tests/core/test_roles_reflektor_page.py
   - tests/core/test_roles_reflektor.py
+  src/tld/roles/page_note.py:
+  - tests/core/test_roles_page_note.py
   src/tld/guard/protect_paths.py:
   - tests/core/test_hook_protect_paths.py
   - tests/core/test_hook_protect_paths_setup.py
@@ -881,3 +883,23 @@ mutants:
   why: security updates are not listed first
   old: '    return (not entry["security"], entry["ecosystem"]'
   new: '    return (False, entry["ecosystem"]'
+- id: PN1
+  file: src/tld/roles/page_note.py
+  why: the check line prints a reason that known_reason does not accept (killed by test_note_line_check_without_a_known_reason)
+  old: '            if known_reason(reason):'
+  new: '            if True:'
+- id: PN2
+  file: src/tld/roles/page_note.py
+  why: the board line never says the page was sent as a file (killed by test_note_line_sent_suffix_on_board_only)
+  old: '(SENT if sent else "")'
+  new: '(SENT if False else "")'
+- id: PN3
+  file: src/tld/roles/page_note.py
+  why: a note with another prefix is accepted (killed by test_invalid_notes)
+  old: '    if not line.startswith(NOTE):'
+  new: '    if False:'
+- id: PN4
+  file: src/tld/roles/page_note.py
+  why: a valid note with no usable block exits 3 instead of printing the note alone (killed by test_change_report_note_and_no_block)
+  old: "        print(note)\n        return 0"
+  new: "        print(note)\n        return 3"
