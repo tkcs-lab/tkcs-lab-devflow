@@ -25,7 +25,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p4-docs-spec-retire
 
-- pending
+- worker: the worker had no tld, so it could not archive the spec change: the orchestrator merged its branch, ran tld ops spec archive and validate and committed the archive, and ran the security role and the checks
+- retry: phase sent back once: the archived spec failed validation (one requirement over 500 characters), so the worker split the page hardening requirement and added a Quoted allow mark requirement; the delta also gained the p2 behaviour (marker line, bounded note file)
+- review: the guide gained one sentence on the page note filter and its limit (paraphrases are not caught), beyond the bullets the brief gave
 
 ## Final review
 
