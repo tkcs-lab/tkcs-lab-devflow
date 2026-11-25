@@ -812,6 +812,8 @@ def test_changed_quoted_path_still_counts(tmp_path):
     "touches [see here ](a(b).github/workflows/ci.yml)",
     "touches [see [x] here](#.github/workflows/ci.yml)",
     "touches ![a](b(c) .github/workflows/ci.yml)",
+    "reviewed it\n| a |\n|---|\n| x | .github/workflows/ci.yml |",
+    "none\n\n| a |\n|---|\n| x | ci.yml |",
     "edits [^.github/workflows/ci.yml] done",
     "edits [^ci.yml] done",
     "x\r    ci.yml",
