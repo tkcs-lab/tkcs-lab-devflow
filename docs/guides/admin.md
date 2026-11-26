@@ -144,7 +144,7 @@ part still run) and the release check is skipped for that repository. The `profi
 profile of a repository come from plan 90: this feature needs that code.
 
 **Detection.** For a repository whose effective policy has `rulesets.default_branch` without
-`required_status_checks`, or the release template without parameters, or that has no override file, the `policy`
+`required_status_checks`, or the release template without parameters, the `policy`
 check reads the newest ten merged pull requests of the default branch (check runs and commit statuses), its tags,
 its manifests and its workflows, and proposes an override file (`override:propose`, a `fix` finding) that `apply`
 opens as one pull request; the owner merges it, or corrects the values in it. It never writes to a branch. A check is
