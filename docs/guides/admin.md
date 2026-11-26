@@ -130,7 +130,7 @@ Every key is optional except `org`. The schema is the exact source of truth.
 | `repos.override_path` | Where each repository keeps its override file; default `.tld/admin-policy.yaml`, a path below the repository root |
 | `repos.allow_loosen` | Repository name globs mapped to the guarded keys an override of those repositories may loosen |
 | `workflow_params` | Per repository, in its override file: parameters of a workflow template, copied into the matching `workflows` entries |
-| `workflow_params.release` | The parameters of the `release` template (`tag_prefix`, `version_style`, `check_script`, `create_release`) |
+| `workflow_params.release.tag_prefix`, `workflow_params.release.version_style`, `workflow_params.release.check_script`, `workflow_params.release.create_release` | The only parameters of the `release` template a repository may set; `main_branch` and the environment come from the policy and the repository |
 | `org_settings.default_repository_permission` | `read`, `write`, `admin` or `none` |
 | `org_settings.members_can_create_repositories`, `org_settings.members_can_create_public_repositories`, `org_settings.members_can_create_private_repositories`, `org_settings.members_can_create_internal_repositories` | Who may create repositories |
 | `org_settings.members_can_create_pages`, `org_settings.members_can_fork_private_repositories` | |
