@@ -199,7 +199,7 @@ def test_anchors_and_size():
     _, errors = base.check_base_text(deep, "l")
     assert errors == [pre + "nests deeper than 8 levels"]
     ok = "hooks: " + "[" * 7 + "]" * 7 + "\n"  # the top mapping plus seven sequences is eight levels
-    assert base.check_base_text(ok, "l")[1] == []
+    assert not any("nests deeper" in e for e in base.check_base_text(ok, "l")[1])  # the shape check may object
 
 
 # ---- fetch and cache -------------------------------------------------------------------------------------------
@@ -455,3 +455,10 @@ def test_a_trailing_newline_is_refused_in_a_source_or_a_pin():
         base.parse_extends(f"{SOURCE}@{SHA}\n")
     with pytest.raises(base.BaseError):
         base.parse_source(SOURCE + "\n")
+
+
+def test_check_base_text_refuses_a_key_of_the_wrong_type():
+    data, errors = base.check_base_text("roles:\n  posture: x\n", "o/r@abcdef1")
+    assert data is None and errors and "roles.posture" in errors[0]
+    data, errors = base.check_base_text("roles:\n  posture:\n    security: critical\n", "o/r@abcdef1")
+    assert errors == [] and data["roles"]["posture"]["security"] == "critical"
