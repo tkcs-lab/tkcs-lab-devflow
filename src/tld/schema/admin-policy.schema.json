@@ -12,7 +12,7 @@
   "properties": {
     "org": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*(?![\\s\\S])",
       "description": "The GitHub organisation this policy governs."
     },
     "extends": {
@@ -172,7 +172,7 @@
       "additionalProperties": false,
       "description": "The account sessions push as, and the environment tld-agent that holds TLD_AGENT_TOKEN.",
       "properties": {
-        "agent_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\Z", "description": "GitHub login of the agent account. Without it the login is derived from the repository profile (git.bot_login) when the policy inherits. A role above write (maintain, admin) is lowered to write; a role below write is reported." },
+        "agent_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?![\\s\\S])", "description": "GitHub login of the agent account. Without it the login is derived from the repository profile (git.bot_login) when the policy inherits. A role above write (maintain, admin) is lowered to write; a role below write is reported." },
         "branch_policy": { "enum": ["default_branch", "protected_branches"], "description": "Which branches may use the environment tld-agent. Default default_branch (a custom policy naming only the default branch)." }
       }
     },
@@ -181,8 +181,8 @@
       "additionalProperties": false,
       "description": "The environment the release workflow runs in: only the default branch may use it, the owner is its one required reviewer, and it holds TLD_RELEASE_TOKEN (an owner token).",
       "properties": {
-        "reviewer_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\Z", "description": "GitHub login of the owner, the one required reviewer of every release run. Without it the login is derived from the repository profile (git.owner_login, or its one git.codeowners entry) when the policy inherits." },
-        "environment": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "description": "Name of the environment. Default tld-release; the release workflow template is rendered with it." }
+        "reviewer_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?![\\s\\S])", "description": "GitHub login of the owner, the one required reviewer of every release run. Without it the login is derived from the repository profile (git.owner_login, or its one git.codeowners entry) when the policy inherits." },
+        "environment": { "type": "string", "pattern": "^[A-Za-z0-9._-]+(?![\\s\\S])", "description": "Name of the environment. Default tld-release; the release workflow template is rendered with it." }
       }
     },
     "profile": {
@@ -308,7 +308,7 @@
         "properties": {
           "template": { "enum": ["release", "land"], "description": "A template shipped with tld." },
           "path": { "type": "string", "minLength": 1, "description": "A template file of your own, below the directory of the policy file (no absolute path, no ..)." },
-          "dest": { "type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9._-]+\\.ya?ml$", "description": "Where it goes. Default: .github/workflows/ plus the template's file name." },
+          "dest": { "type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9._-]+\\.ya?ml(?![\\s\\S])", "description": "Where it goes. Default: .github/workflows/ plus the template's file name." },
           "params": { "type": "object", "description": "Values for the template's __UPPER_CASE__ placeholders, as strings of letters, digits and . _ / -. main_branch defaults to the repository's default branch." },
           "repos": { "$ref": "#/$defs/names", "description": "Repository name globs this entry applies to. Default: all selected." },
           "remove": { "type": "boolean", "description": "Delete the destination file instead of installing it." }
@@ -320,7 +320,17 @@
       "additionalProperties": false,
       "description": "Parameters of a workflow template for one repository, set in its override file without restating the workflows list; copied into the matching entries of the effective workflows.",
       "properties": {
-        "release": { "type": "object", "description": "Values for the template's __UPPER_CASE__ placeholders, as strings of letters, digits and . _ / -. main_branch defaults to the repository's default branch." }
+        "release": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Values for the release template's placeholders, as strings of letters, digits and . _ / -. A repository may set only these four; main_branch and the environment come from the policy and the repository.",
+          "properties": {
+            "tag_prefix": { "type": "string" },
+            "version_style": { "type": "string" },
+            "check_script": { "type": "string" },
+            "create_release": { "type": "string" }
+          }
+        }
       }
     }
   }

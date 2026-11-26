@@ -171,3 +171,54 @@ def test_base_template_has_no_private_section(ra):
     assert not re.search(r"delete_unused|delete_unlisted|delete_merged|max_unused_days|revoke_expired|^webhooks", example, re.M)
     for path in (BASE, ORG, STARTER):
         assert FORBIDDEN.search(path.read_text()) is None, path
+
+
+def test_workflow_params_release_takes_only_the_four_keys(ra):
+    for key in ("main_branch", "release_environment", "environment", "dest"):
+        for kind in ("override", "run"):
+            doc = {"workflow_params": {"release": {key: "x"}}} | ({"org": "a"} if kind == "run" else {})
+            errors = ra.validate_policy(doc, kind=kind)
+            assert has(errors, f"unknown key 'workflow_params.release.{key}'"), (key, kind, errors)
+    four = {"tag_prefix": "v", "version_style": "semver", "check_script": "s.py", "create_release": "true"}
+    assert ra.validate_policy({"workflow_params": {"release": four}}, kind="override") == []
+
+
+def test_override_workflow_params_are_limited_to_the_four_keys(ra):
+    where = "acme/app:.tld/admin-policy.yaml"
+    for key in ("main_branch", "release_environment", "environment"):
+        errors = ra.validate_policy({"workflows": [{"template": "release", "params": {key: "x"}}]}, kind="override", where=where)
+        assert errors == [f"{where}: 'workflows[0].params.{key}': a repository override may set only "
+                          "tag_prefix, version_style, check_script, create_release"], errors
+    ok = {"workflows": [{"template": "release", "params": {"tag_prefix": "v", "version_style": "pep440"}}, {"template": "land"}]}
+    assert ra.validate_policy(ok, kind="override", where=where) == []
+    # the file you run and a base are unchanged: main_branch stays allowed in the run file
+    run = {"org": "a", "workflows": [{"template": "release", "params": {"main_branch": "trunk", "tag_prefix": "v"}}]}
+    assert ra.validate_policy(run) == []
+
+
+def test_a_trailing_newline_is_not_a_safe_value(ra):
+    assert ra.SAFE_PARAM.fullmatch("v") and not ra.SAFE_PARAM.fullmatch("v\n")
+    errors = ra.validate_policy({"org": "a", "workflows": [{"template": "release", "params": {"tag_prefix": "v\n"}}]})
+    assert errors == ["'workflows[0].params.tag_prefix': must be a string of letters, digits and . _ / - only"]
+    errors = ra.validate_policy({"workflow_params": {"release": {"tag_prefix": "v\n"}}}, kind="override")
+    assert errors == ["'workflow_params.release.tag_prefix': must be a string of letters, digits and . _ / - only"]
+    for doc in ({"org": "acme\n"}, {"org": "a", "release": {"environment": "tld-release\n"}},
+                {"org": "a", "workflows": [{"template": "land", "dest": ".github/workflows/x.yml\n"}]}):
+        assert ra.validate_policy(doc), doc
+
+
+def test_an_unknown_kind_raises(ra):
+    for kind in ("", "legacy", "Run", None):
+        with pytest.raises(ValueError):
+            ra.validate_policy({"org": "a"}, kind=kind)
+    assert ra.validate_policy({"org": "a"}, kind="run") == []
+
+
+def test_the_schema_patterns_avoid_the_python_only_end_anchor():
+    import json
+    text = (TLD / "schema" / "admin-policy.schema.json").read_text()
+    assert "\\\\Z" not in text
+    for login in ("agent", "release"):
+        key = "agent_login" if login == "agent" else "reviewer_login"
+        pattern = json.loads(text)["properties"][login]["properties"][key]["pattern"]
+        assert pattern.endswith("(?![\\s\\S])")
