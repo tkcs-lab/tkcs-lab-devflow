@@ -126,6 +126,11 @@ Every key is optional except `org`. The schema is the exact source of truth.
 | `org` | **Required.** The organisation |
 | `repos.include`, `repos.exclude` | Repository name globs; default all, none excluded |
 | `repos.skip_archived`, `repos.skip_forks` | Default true |
+| `extends` | Files the policy inherits: a list of one to four pins, each `<owner>/<repo>/<path>@<40-hex commit>`; an empty list means none. Only the policy file you run may set it |
+| `repos.override_path` | Where each repository keeps its override file; default `.tld/admin-policy.yaml`, a path below the repository root |
+| `repos.allow_loosen` | Repository name globs mapped to the guarded keys an override of those repositories may loosen |
+| `workflow_params` | Per repository, in its override file: parameters of a workflow template, copied into the matching `workflows` entries |
+| `workflow_params.release` | The parameters of the `release` template (`tag_prefix`, `version_style`, `check_script`, `create_release`) |
 | `org_settings.default_repository_permission` | `read`, `write`, `admin` or `none` |
 | `org_settings.members_can_create_repositories`, `org_settings.members_can_create_public_repositories`, `org_settings.members_can_create_private_repositories`, `org_settings.members_can_create_internal_repositories` | Who may create repositories |
 | `org_settings.members_can_create_pages`, `org_settings.members_can_fork_private_repositories` | |
