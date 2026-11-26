@@ -73,7 +73,10 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p13-admin-gitops-secrets
 
-- pending
+- worker: touches: docs/guides/admin.md (orchestrator-approved) got one row for the new git_ops check
+- retry: sent back four times by the security review: the allowlist rebuild dropped protections, over-broad and bash extglob entries passed unseen, repository names were compared case-sensitively and the owner fix could switch on every-repository or dangling entries; all fixed
+- review: OWNER DECISION NEEDED: tld-git-ops.yml should read full_name from the target repository lookup and refuse unless it equals the requested repository ignoring case, because GitHub follows the old name of a renamed repository; this edits a guarded workflow so it was reported as a protected change and not applied
+- review: open for the fix round: a wildcard entry can still match the old name of an excluded repository under a wrong owner; dangling allowlist entries get no finding of their own; the admin policy schema accepts any allowlist path while the code accepts one
 
 ## p14-retire
 
