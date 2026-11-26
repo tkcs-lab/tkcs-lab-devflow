@@ -370,6 +370,17 @@ def test_branch_weakening_is_clamped_to_main(tmp_path):
            "weaker)" in explained
 
 
+def test_another_profile_file_in_the_repository_is_not_clamped_to_main(tmp_path):
+    repo = make_repo(tmp_path, MAIN, origin=True)
+    (repo / "other.yaml").write_text(yaml.safe_dump(WEAKER))
+    out = rs.load(repo / "other.yaml", root=repo, fetch=False, file_checks=False)
+    assert out.errors == [], out.errors
+    assert not [w for w in out.warnings if "weaker here than on main" in w]
+    assert out.profile["roles"]["posture"]["security"] == WEAKER["roles"]["posture"]["security"]
+    own = rs.load(repo / ".tld" / "toolkit.yaml", root=repo, fetch=False, file_checks=False)
+    assert own.errors == [] and own.trusted_branch == "main"
+
+
 def test_branch_repointing_extends_is_clamped_to_main_base(tmp_path):
     repo = make_repo(tmp_path, with_extends(MINIMAL, REF_A), origin=True)
     cache_base(repo, REF_A, BASE_A)

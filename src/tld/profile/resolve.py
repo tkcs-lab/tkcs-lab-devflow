@@ -341,6 +341,14 @@ def _trusted_profile(root: Path, owner: str | None, warnings: list[str]):
     return out.profile, t.branch, missing
 
 
+def _is_repo_profile(path: Path, root: Path) -> bool:
+    """True when `path` is the repository's own `.tld/toolkit.yaml` (the file the default branch's copy stands for)."""
+    try:
+        return path.resolve() == (root / ".tld" / "toolkit.yaml").resolve()
+    except OSError:
+        return False
+
+
 def load(path, *, ref: str | None = None, root=None, fetch: bool = True, trusted: bool = True,
          file_checks: bool = True) -> Resolved:
     """Read the profile (or `git show REF:path`), get the base, resolve. With `trusted` and an origin the
@@ -364,6 +372,7 @@ def load(path, *, ref: str | None = None, root=None, fetch: bool = True, trusted
     url = origin_url(root)
     owner = _owner_of(url)
     branch = _head_branch(root)
+    trusted = trusted and _is_repo_profile(path, root)  # another file (e.g. the starter) is no copy of main's profile
     trusted_profile = trusted_branch = trusted_missing = None
     if trusted and url:
         trusted_profile, trusted_branch, trusted_missing = _trusted_profile(root, owner, warnings)
