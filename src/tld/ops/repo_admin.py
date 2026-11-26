@@ -2259,6 +2259,9 @@ def cmd_validate(args) -> int:
                              public=OWN_FILE if args.public else None)
     if errors:
         return _validate_fail(errors)
+    if resolved and kind == "run" and policy.get("extends") and args.offline:
+        return _validate_fail([f"'{p}' has 'extends'; its bases are not fetched with --offline, "
+                               "so the effective policy cannot be shown"])
     view, sources = policy, {}
     if kind == "run" and policy.get("extends") and not args.offline:
         try:

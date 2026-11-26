@@ -122,8 +122,9 @@ def test_offline_does_not_fetch(cmd):
     fake = world()
     code, out, _ = cmd(["validate-policy", "{file}", "--offline"], fake=fake, doc=run(BASE_PIN, ORG_PIN))
     assert code == 0 and out.startswith("policy: OK (") and fake.reads == []
-    code, out, _ = cmd(["validate-policy", "{file}", "--offline", "--resolved"], fake=fake, doc=run(BASE_PIN))
-    assert fake.reads == [] and yaml.safe_load(out)["extends"] == [BASE_PIN]
+    for flag in ("--resolved", "--explain"):  # the unresolved file is not the effective policy
+        code, out, err = cmd(["validate-policy", "{file}", "--offline", flag], fake=fake, doc=run(BASE_PIN))
+        assert code == 1 and out == "" and "bases are not fetched" in err and fake.reads == []
     code, _, err = cmd(["validate-policy", "{file}", "--offline"], fake=fake, doc=run(f"acme/.github/{BASE_PATH}@v1"))
     assert code == 1 and "latest-pin" in err and fake.reads == []
 
