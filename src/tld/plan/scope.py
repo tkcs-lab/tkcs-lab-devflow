@@ -120,9 +120,27 @@ def phase_touches(manifest: dict) -> dict[str, list[str]]:
     return out
 
 
-def load_ignore(profile: str | None) -> list[str]:
-    """`scope.ignore` of the profile, plus the changelog file when the profile has `docs.changelog`
-    (the worker brief demands that line from every phase, so it is expected everywhere)."""
+def _trusted_ignore(repo: str | None) -> list | None:
+    """`scope.ignore` of the profile on the remote default branch, or None when no trusted copy is reachable. The
+    working copy is not read for it: a merged phase could add `**` and silence the check for every later phase."""
+    if not repo:
+        return None
+    try:
+        from tld.guard import trust
+        t = trust.trusted(str(repo))
+    except Exception:  # noqa: BLE001 - the check must never fail the merge
+        return None
+    if not t.available or not isinstance(t.profile, dict):
+        return None
+    scope = t.profile.get("scope")
+    ignore = scope.get("ignore") if isinstance(scope, dict) else None
+    return ignore if isinstance(ignore, list) else []
+
+
+def load_ignore(profile: str | None, repo: str | None = None) -> list[str]:
+    """`scope.ignore` (from the default branch's profile when one is reachable, else the working copy), plus the
+    changelog file when the profile has `docs.changelog` (the worker brief demands that line from every phase, so
+    it is expected everywhere)."""
     if not profile:
         return []
     from tld.profile import resolve as rs
@@ -132,8 +150,10 @@ def load_ignore(profile: str | None) -> list[str]:
     data = loaded.profile
     ignore: list[str] = []
     scope = data.get("scope") if isinstance(data, dict) else None
-    if isinstance(scope, dict) and isinstance(scope.get("ignore"), list):
-        ignore += [g for g in scope["ignore"] if isinstance(g, str)]
+    listed = _trusted_ignore(repo)
+    if listed is None and isinstance(scope, dict) and isinstance(scope.get("ignore"), list):
+        listed = scope["ignore"]
+    ignore += [g for g in listed or [] if isinstance(g, str)]
     docs = data.get("docs") if isinstance(data, dict) else None
     changelog = docs.get("changelog") if isinstance(docs, dict) else None
     if isinstance(changelog, dict) and isinstance(changelog.get("file"), str):
@@ -160,7 +180,7 @@ def run_check(repo: str, plan: str, phase: str, base: str, head: str, label: str
             raise ScopeError("phase not in the manifest")
         if not touches[phase]:
             raise ScopeError("phase declares no touches")
-        ignore = load_ignore(profile)
+        ignore = load_ignore(profile, repo)
         paths = changed_paths(repo, base, head)
         others = {pid: ts for pid, ts in touches.items() if pid != phase}
         found = classify(paths, touches[phase], others, ignore)

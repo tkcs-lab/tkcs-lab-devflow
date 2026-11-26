@@ -468,3 +468,23 @@ def test_changelog_default_is_ignored(tmp_path):
     assert sc.load_ignore(str(profile)) == ["lock.json", "CHANGELOG.md"]
     (tmp_path / "CHANGELOG.md").unlink()  # no file: no default
     assert sc.load_ignore(str(profile)) == ["lock.json"]
+
+
+def test_scope_ignore_comes_from_the_default_branch_when_one_is_reachable(repo, tmp_path):
+    import importlib
+    sc = importlib.import_module("tld.plan.scope")
+    (repo / ".tld").mkdir()
+    (repo / ".tld" / "toolkit.yaml").write_text(yaml.safe_dump({**FULL, "scope": {"ignore": ["lock.json"]}}))
+    git(repo, "checkout", "-q", "main")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "profile")
+    bare = tmp_path / "o.git"
+    git(tmp_path, "init", "-q", "--bare", "-b", "main", str(bare))
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", "main")
+    git(repo, "fetch", "-q", "origin")
+    git(repo, "remote", "set-head", "origin", "main")
+    profile = repo / ".tld" / "toolkit.yaml"
+    profile.write_text(yaml.safe_dump({**FULL, "scope": {"ignore": ["**"]}}))  # a merged phase silences everything
+    assert sc.load_ignore(str(profile))[0] == "**"  # no repository given: the working copy
+    assert sc.load_ignore(str(profile), str(repo))[0] == "lock.json" and "**" not in sc.load_ignore(str(profile), str(repo))
