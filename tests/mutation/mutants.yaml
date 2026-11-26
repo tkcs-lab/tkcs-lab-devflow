@@ -102,6 +102,20 @@ tests:
   - tests/core/test_ops_deps_prepare.py
   src/tld/ops/deps_body.py:
   - tests/core/test_ops_deps_body.py
+  src/tld/ops/repo_admin.py:
+  - tests/core/test_repo_admin_policy_check.py
+  - tests/core/test_repo_admin_rulesets.py
+  - tests/core/test_repo_admin_unchanged.py
+  src/tld/ops/repo_admin_policy.py:
+  - tests/core/test_repo_admin_policy.py
+  - tests/core/test_repo_admin_extends.py
+  src/tld/ops/repo_admin_detect.py:
+  - tests/core/test_repo_admin_detect.py
+  src/tld/ops/repo_admin_extends.py:
+  - tests/core/test_repo_admin_extends.py
+  - tests/core/test_repo_admin_inherit.py
+  src/tld/ops/repo_admin_profile.py:
+  - tests/core/test_repo_admin_derive.py
 mutants:
 - id: NM1
   file: src/tld/guard/no_merge.py
@@ -1045,3 +1059,88 @@ mutants:
   why: the dod-gate runs verify.dod of the working profile even when a trusted copy exists (killed by test_verify_dod_is_read_from_the_trusted_copy)
   old: '    if not (available and isinstance(trusted, dict)):'
   new: '    if True:'
+- id: AI1
+  file: src/tld/ops/repo_admin_policy.py
+  why: "kind_of returns override for a document with org"
+  old: "return \"run\" if \"org\" in doc else \"override\""
+  new: "return \"override\""
+- id: AI2
+  file: src/tld/ops/repo_admin_policy.py
+  why: "the organisation-level message check is skipped for override keys"
+  old: "elif kind == \"override\" and key in ORG_LEVEL:"
+  new: "elif False and key in ORG_LEVEL:"
+- id: AI3
+  file: src/tld/ops/repo_admin_policy.py
+  why: "clamp_irreversible never sets revoke_expired"
+  old: "fine[\"revoke_expired\"] = False"
+  new: "pass"
+- id: AI4
+  file: src/tld/ops/repo_admin_policy.py
+  why: "loosened treats an ordered key as loosened in the stricter direction"
+  old: "order.index(value) < order.index(org_value)"
+  new: "order.index(value) > order.index(org_value)"
+- id: AI5
+  file: src/tld/ops/repo_admin_policy.py
+  why: "key_errors does not refuse a private section in a public base"
+  old: "elif kind == \"base\" and public and key in PRIVATE_ONLY:"
+  new: "elif False and public and key in PRIVATE_ONLY:"
+- id: AI6
+  file: src/tld/ops/repo_admin_policy.py
+  why: "allowed_for matches no glob"
+  old: "if fnmatch.fnmatchcase(repo_name, glob):"
+  new: "if False:"
+- id: AI7
+  file: src/tld/ops/repo_admin_policy.py
+  why: "key_errors skips the irreversible rule for a base"
+  old: "if value is not _MISSING and _turns_on(key, value):"
+  new: "if False:"
+- id: AI8
+  file: src/tld/ops/repo_admin_policy.py
+  why: "clamp_guarded does not restore a shrunk list"
+  old: "_set(out, item.key, kept + [x for x in item.org_value if x not in kept])"
+  new: "_set(out, item.key, kept)"
+- id: AX1
+  file: src/tld/ops/repo_admin_detect.py
+  why: "status_checks keeps a name that failed on one sample"
+  old: "return f\"failed on #{number}\""
+  new: "return None"
+- id: AX2
+  file: src/tld/ops/repo_admin_detect.py
+  why: "status_checks keeps a name missing from some samples"
+  old: "if seen < len(samples):"
+  new: "if False:"
+- id: AX3
+  file: src/tld/ops/repo_admin_detect.py
+  why: "status_checks keeps a skipped name"
+  old: "return f\"skipped on #{number}\""
+  new: "return None"
+- id: AE1
+  file: src/tld/ops/repo_admin_extends.py
+  why: "the compare status check in fetch_layer also accepts ahead"
+  old: "if status not in (\"behind\", \"identical\"):"
+  new: "if status not in (\"behind\", \"identical\", \"ahead\"):"
+- id: AE2
+  file: src/tld/ops/repo_admin_extends.py
+  why: "shape_errors returns the parsed text with no checks"
+  old: "return base_mod.check_base_shape(text, f\"{label}: \")"
+  new: "return __import__(\"yaml\").safe_load(text), []"
+- id: AE3
+  file: src/tld/ops/repo_admin_extends.py
+  why: "fetch_layer always passes public=None"
+  old: "public = None if private else f\"{ref.owner}/{ref.repo}\""
+  new: "public = None"
+- id: AP1
+  file: src/tld/ops/repo_admin_profile.py
+  why: "repo_profile ignores the check_base_text errors"
+  old: "            if errors:\n                return None\n        res = resolve_mod"
+  new: "            if False:\n                return None\n        res = resolve_mod"
+- id: RB1
+  file: src/tld/ops/repo_admin.py
+  why: "ruleset_bodies ignores live_checks"
+  old: "else (live_checks or [])"
+  new: "else []"
+- id: RB2
+  file: src/tld/ops/repo_admin.py
+  why: "ruleset_bodies treats an explicit empty list like an absent key (killed by test_explicit_empty_checks_ignore_live_checks_in_the_body)"
+  old: "main[\"required_status_checks\"] if \"required_status_checks\" in main else (live_checks or [])"
+  new: "(main.get(\"required_status_checks\") or live_checks or [])"
