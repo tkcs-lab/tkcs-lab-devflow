@@ -82,7 +82,18 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - final: blocking 2 (p7): the proposal leaves out organisation path workflows without a note; sent to fix-1 with a pull request note
 - final: blocking 3 (p7): the override:propose:invalid subject is undocumented; sent to fix-1 to list it in the policy row of the admin guide
 - final: second final review: approve, no blocking findings; the first review blocking findings are fixed by fix-1
+- scope: scope: docs/guides/admin.md
+- scope: scope: SECURITY.md
+- scope: scope: openspec/specs/release-and-repo-ops/spec.md
+- scope: scope: src/tld/ops/repo_admin_policy.py
+- scope: scope: tests/core/test_repo_admin_cli.py
+- scope: scope: tests/core/test_repo_admin_inherit.py
+- scope: scope: tests/core/test_repo_admin_kinds.py
+- scope: scope: tests/core/test_repo_admin_policy_check.py
+- scope: scope: tests/mutation/mutants.yaml
 
 ## Finishing
 
-- pending
+- final: fix round: 25 fixed, 1 declined (F26: a test already runs real git against a commit only a pull request ref holds); F10 was done in part (the JSON-printing _show stays beside base._show) and F22 was adapted (the archived spec text is over 500 characters, so its distinct wording was kept in shorter requirement text)
+- final: scope disposition: every recorded out-of-scope path is accepted and still in the final diff (policy-check test file, admin guide, SECURITY.md, spec, repo_admin_policy.py, mutants file, several admin test files, all changed by review fixes and the fix round); no phase was reverted
+- final: open after the run (not fixed): on a truncated file tree .tld/toolkit.yaml is not listed so a profile that does not resolve can still allow the release template (repo_admin_profile.py _read_profile); shape errors of an override still name the path twice (repo_admin.py check_policy); the tag-workflow detector and the guarded-key rules follow the owner decisions recorded under p6a-per-repo
