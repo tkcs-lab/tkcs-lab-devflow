@@ -264,6 +264,41 @@ mutants:
   why: the page written is not scanned again after the mark is replaced
   old: 'reasons = verify_html(neutral) or marks_left(neutral)'
   new: 'reasons = report_check.check(neutral) or marks_left(neutral)'
+- id: RF7
+  file: src/tld/roles/reflektor.py
+  why: the one-line windows are not scanned
+  old: 'hits = hits or _one_line_hits(s)'
+  new: 'hits = hits'
+- id: RF13
+  file: src/tld/roles/reflektor.py
+  why: the window is too small
+  old: 'WINDOW = 2000'
+  new: 'WINDOW = 1000'
+- id: RF12
+  file: src/tld/roles/reflektor.py
+  why: a window scan clears a hit found earlier
+  old: 'hits = hits or _one_line_hits(s)'
+  new: 'hits = _one_line_hits(s)'
+- id: RF8
+  file: src/tld/roles/reflektor.py
+  why: the one-line scan honours the mark
+  old: 'hits = secret_scan.scan_text(piece.translate(view), skip_marked=False)'
+  new: 'hits = secret_scan.scan_text(piece.translate(view))'
+- id: RF9
+  file: src/tld/roles/reflektor.py
+  why: the window leaves out the text before the separator
+  old: 'piece = s[max(0, m.start() - WINDOW):m.end() + WINDOW]'
+  new: 'piece = s[m.start():m.end() + WINDOW]'
+- id: RF10
+  file: src/tld/roles/reflektor.py
+  why: the deleted view is not scanned
+  old: 'for view in (_ONE_LINE, _NO_LINE):'
+  new: 'for view in (_ONE_LINE,):'
+- id: RF11
+  file: src/tld/roles/reflektor.py
+  why: the separator limit is lifted
+  old: '> MAX_SPLITTERS:'
+  new: '> 10 * MAX_SPLITTERS:'
 - id: PP1
   file: src/tld/guard/protect_paths.py
   why: profile always allowed
