@@ -29,6 +29,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 ## p5-cli-resolve
 
 - review: security review passed with two non-blocking notes: validate-policy --resolved or --explain with --offline on a run file that has extends shows the unresolved file as the effective policy (should refuse), and some network errors (timeouts, incomplete reads) escape as tracebacks instead of ApiError
+- worker: worker reported none
 
 ## p6a-per-repo
 
