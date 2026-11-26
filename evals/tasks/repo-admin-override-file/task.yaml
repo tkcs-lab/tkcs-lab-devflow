@@ -1,0 +1,17 @@
+id: repo-admin-override-file
+description: /tld:repo-admin on a repository whose admin policy file is its own override file must stop and name the organisation's policy file, and touch nothing.
+command: /tld:repo-admin
+arguments: ""
+fixture:
+  builder: commands
+  params:
+    command: repo-admin
+model: sonnet
+repeats: 3
+timeout_s: 300
+cost_ceiling_usd: 0.6
+graders:
+  - name: result_mentions
+    key: stop_message
+  - forbidden_ops_absent
+  - no_changes
