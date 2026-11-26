@@ -45,6 +45,7 @@ from pathlib import Path
 import yaml
 
 from tld.net import SameHostRedirects, opener as net_opener
+from tld.ops import repo_admin_policy
 from tld.ops.repo_admin_gitops import check_git_ops
 from tld.ops.repo_admin_profile import check_profile
 
@@ -63,6 +64,7 @@ BUILTIN_TEMPLATES = {
 }
 KNOWN_DOT_DIRS = (".github", ".claude", ".tld", ".devcontainer", ".vscode", ".husky", ".config", ".changeset", ".githooks")
 SEVERITIES = ("fix", "warn", "info", "unavailable", "error")
+OVERRIDE_PARAMS = ("tag_prefix", "version_style", "check_script", "create_release")  # what a repository may set
 SAFE_PARAM = re.compile(r"^[A-Za-z0-9._/-]*$")
 # Parameters of a built-in template that take one of a few values.
 TEMPLATE_CHOICES = {"release": {"version_style": ("semver", "pep440"), "create_release": ("true", "false")}}
@@ -261,15 +263,52 @@ def _load_check():
     return module.check, module.HELP
 
 
-def validate_policy(policy, base_dir: Path | None = None) -> list[str]:
-    """Return one message per problem; an empty list means the policy is valid."""
+def _param_errors(where: str, template, params: dict) -> list[str]:
+    """The value rules of a workflow template's parameters; `where` is the path prefix of each message."""
+    errors: list[str] = []
+    for key, value in params.items():
+        if not isinstance(value, str) or not SAFE_PARAM.fullmatch(value):
+            errors.append(f"'{where}.{key}': must be a string of letters, digits and . _ / - only")
+            continue
+        choices = TEMPLATE_CHOICES.get(template, {}).get(key)
+        if choices and value not in choices:
+            errors.append(f"'{where}.{key}': must be one of {', '.join(choices)}")
+        if template == "release" and key == "check_script" and (value.startswith(("/", "-")) or ".." in value):
+            errors.append(f"'{where}.check_script': must be a path inside the repository")
+    return errors
+
+
+def _kind_schema(kind: str, inherited: bool) -> dict:
+    """The schema for one kind of file: override and base need no `org`; a run policy that does not inherit still
+    needs the login of an `agent` and of a `release` section."""
+    schema = json.loads(SCHEMA.read_text())
+    if kind != "run":
+        schema["required"] = []
+    elif not inherited:
+        schema["properties"]["agent"]["required"] = ["agent_login"]
+        schema["properties"]["release"]["required"] = ["reviewer_login"]
+    return schema
+
+
+def validate_policy(policy, base_dir: Path | None = None, kind: str = "run", where: str = "",
+                    public: str | None = None, inherited: bool = False) -> list[str]:
+    """Return one message per problem; an empty list means the policy is valid.
+
+    `kind` is run (the default, `org` required), override or base (no `org`; the class errors of
+    repo_admin_policy.key_errors come first, with `where` as their prefix and `public` naming the repository of a
+    public base). `inherited` (or a non-empty `extends`) skips the rule that an `agent` or `release` section needs its login."""
+    if kind not in ("run", "override", "base"):
+        raise ValueError(f"validate_policy: kind must be run, override or base (got {kind!r})")
     if not isinstance(policy, dict):
         return ["the policy must be a YAML mapping"]
     check, profile_help = _load_check()
-    schema = json.loads(SCHEMA.read_text())
+    inherits = inherited or bool(policy.get("extends"))
+    schema = _kind_schema(kind, inherits)
     errors: list[str] = []
     check(policy, schema, schema, "", errors)
     errors = [e.replace(profile_help, DOCS_HELP) for e in errors]
+    if kind != "run":
+        errors = repo_admin_policy.key_errors(policy, kind, where or kind, public) + errors
     if errors:
         return errors
     forbid = policy.get("config_dirs", {}).get("forbid", [])
@@ -288,34 +327,41 @@ def validate_policy(policy, base_dir: Path | None = None) -> list[str]:
                 errors.append(f"'labels.sync': '{name}' is used by both '{seen[name.lower()]}' and '{label['name']}'")
             seen.setdefault(name.lower(), label["name"])
     for i, wf in enumerate(policy.get("workflows", [])):
-        where = f"workflows[{i}]"
+        where_wf = f"workflows[{i}]"
         if ("template" in wf) == ("path" in wf):
-            errors.append(f"'{where}': give exactly one of 'template' and 'path'")
+            errors.append(f"'{where_wf}': give exactly one of 'template' and 'path'")
             continue
         if "path" in wf:
             rel = Path(wf["path"])
             if rel.is_absolute() or ".." in rel.parts:
-                errors.append(f"'{where}.path': must be a path below the policy file's directory (no absolute path, no '..')")
+                errors.append(f"'{where_wf}.path': must be a path below the policy file's directory (no absolute path, no '..')")
                 continue
             if base_dir is not None:
                 target = (base_dir / rel).resolve()
                 if not target.is_relative_to(base_dir.resolve()):
-                    errors.append(f"'{where}.path': '{wf['path']}' leaves the policy file's directory (a symbolic link?)")
+                    errors.append(f"'{where_wf}.path': '{wf['path']}' leaves the policy file's directory (a symbolic link?)")
                     continue
                 if not target.is_file():
-                    errors.append(f"'{where}.path': file not found: '{wf['path']}' (relative to the policy file)")
-        for key, value in wf.get("params", {}).items():
-            if not isinstance(value, str) or not SAFE_PARAM.match(value):
-                errors.append(f"'{where}.params.{key}': must be a string of letters, digits and . _ / - only")
-                continue
-            choices = TEMPLATE_CHOICES.get(wf.get("template"), {}).get(key)
-            if choices and value not in choices:
-                errors.append(f"'{where}.params.{key}': must be one of {', '.join(choices)}")
-            if wf.get("template") == "release" and key == "check_script" and (
-                    value.startswith(("/", "-")) or ".." in value):
-                errors.append(f"'{where}.params.check_script': must be a path inside the repository")
+                    errors.append(f"'{where_wf}.path': file not found: '{wf['path']}' (relative to the policy file)")
+        if kind == "override":
+            errors += [f"{where or kind}: '{where_wf}.params.{key}': a repository override may set only {', '.join(OVERRIDE_PARAMS)}"
+                       for key in wf.get("params", {}) if key not in OVERRIDE_PARAMS]
+        errors += _param_errors(f"{where_wf}.params", wf.get("template"), wf.get("params", {}))
         if "path" in wf and "dest" not in wf and not re.match(r"^[A-Za-z0-9._-]+\.ya?ml$", Path(wf["path"]).name):
-            errors.append(f"'{where}.path': the file name must end in .yml or .yaml, or set 'dest'")
+            errors.append(f"'{where_wf}.path': the file name must end in .yml or .yaml, or set 'dest'")
+    errors += _param_errors("workflow_params.release", "release", policy.get("workflow_params", {}).get("release", {}))
+    if kind == "run":
+        repos = policy.get("repos", {})
+        if "override_path" in repos:
+            rel = Path(repos["override_path"])
+            if rel.is_absolute() or ".." in rel.parts or repos["override_path"].startswith("/"):
+                errors.append("'repos.override_path': must be a path below the repository root (no absolute path, no '..')")
+        for glob, keys in repos.get("allow_loosen", {}).items():
+            if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
+                errors.append(f"'repos.allow_loosen.{glob}': must be a list of guarded keys")
+                continue
+            errors += [f"'repos.allow_loosen': '{k}' is not a guarded key" for k in keys
+                       if k not in repo_admin_policy.GUARDED_KEYS]
     return errors
 
 
@@ -1401,7 +1447,7 @@ def check_files(ctx: Ctx) -> list[Finding]:
                 continue
             params = {"main_branch": snap.branch, **defaults, **{k.lower(): v for k, v in wf.get("params", {}).items()}}
             # The default branch name comes from the repository, not from the policy: it is put into YAML and shell too.
-            bad = [k for k, v in params.items() if not SAFE_PARAM.match(v) or ".." in v or (k == "main_branch" and not v)]
+            bad = [k for k, v in params.items() if not SAFE_PARAM.fullmatch(v) or ".." in v or (k == "main_branch" and not v)]
             if bad:
                 out.append(Finding("files", fn, f"workflow:{dest}", f"workflows[{i}]: not rendered, {', '.join(sorted(bad))} "
                                    "has characters other than letters, digits and . _ / -", "error"))

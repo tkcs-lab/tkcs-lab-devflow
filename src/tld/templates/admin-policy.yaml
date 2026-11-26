@@ -5,6 +5,8 @@
 
 org: your-org                      # REQUIRED: the GitHub organisation
 
+extends: []                        # files to inherit, each <owner>/<repo>/<path>@<40-hex commit> (tld ops repo-admin latest-pin prints one); empty: no inheritance
+
 repos:
   include: ["*"]                   # name globs; default all
   exclude: []                      # e.g. ["sandbox-*"]
@@ -125,6 +127,8 @@ workflow_lint:                     # read only: what to fix by hand in the workf
   pin_actions: third_party         # third_party | all: actions not pinned to a commit SHA
   require_permissions: true
   forbid_pull_request_target: true
+
+workflow_params: {}                # per repository, in its override file: {release: {tag_prefix: "v"}} fills the parameters of the release entry
 
 workflows:                         # installed or updated through a pull request; the script never merges it
   - template: release              # cut a release: annotated tag plus GitHub release (run by hand; starts as a dry run)
