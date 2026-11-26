@@ -63,7 +63,7 @@ to the default branch's profile.
 
 ## Guarded keys
 
-`tld profile validate` and the audit refuse a repository that weakens a base (the hooks clamp to the default branch's profile, not to the base's floor): `hooks.disable` (a hook the base switches on), the protect lists, the
+`tld profile validate` refuses (and the audit reports) a repository that weakens a base (the hooks clamp to the default branch's profile, not to the base's floor): `hooks.disable` (a hook the base switches on), the protect lists, the
 three gates' `enabled`, `roles.posture.security` (critical above standard above low) and the roles the base requires.
 `tld profile validate` names the rule broken. The base lists the keys a repository may weaken in `tld.allow_override`
 (`hooks.disable.<hook>`, `hooks.protect_paths`, `hooks.protect_paths_allow`, `hooks.<gate>.enabled`,

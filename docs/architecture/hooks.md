@@ -482,8 +482,8 @@ The list must be a list of names; anything else, in the working tree or the trus
 Parsing).
 
 **Under a base.** A base that switches a hook or gate on, requires a role or protects a path forbids the repository to
-weaken it unless the base lists the key in `tld.allow_override`. `tld profile validate` and the audit report it as an
-error; the hooks do **not** re-check the base's floor at run time: they keep the stricter of the working copy and the
+weaken it unless the base lists the key in `tld.allow_override`. `tld profile validate` reports it as an
+error and the audit as info; the hooks do **not** re-check the base's floor at run time: they keep the stricter of the working copy and the
 default branch's resolved profile, so a weaker value already on the default branch (or any value with no trusted copy)
 stands until validate or the audit reports it. See [org-base.md](../guides/org-base.md).
 

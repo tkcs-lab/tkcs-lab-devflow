@@ -49,7 +49,7 @@ Rules:
   overrides scalars and lists of the base, except `verify.dod_manual` (rows are appended) and `roles.required`
   (merged by `role`: `at` is the union, `blocking` is base OR repository, `when` the union). The **guarded keys**
   (`hooks.disable`, the protect lists, the three gates, `roles.posture.security` and `roles.required`/`roles.disable`)
-  are refused by `tld profile validate` and the audit when a repository weakens them, unless the base lists them in
+  are refused by `tld profile validate` (and reported by the audit) when a repository weakens them, unless the base lists them in
   `tld.allow_override`; at run time every guarded key is
   also clamped to the stricter of the working copy and the default branch's resolved profile, with a warning.
 - `tld.version`, when set, must be satisfied by the running tld, or validation fails. A profile with `tld.extends`
