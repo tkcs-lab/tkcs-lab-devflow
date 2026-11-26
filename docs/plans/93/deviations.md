@@ -33,7 +33,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p6a-per-repo
 
-- pending
+- gate: owner decision on the board (ask a-dbab5fe8ade05cda): guarded keys the organisation omits stay unguarded as plan 3.6 says, so an override can loosen them; overrides of agent.agent_login, release.reviewer_login and release.environment are applied with a warning only, except that release.environment equal to the agent environment is always refused
+- retry: sent back once after the security review: a reviewer equal to the agent login (case-insensitive) stayed in force when the organisation did not set that login; now both unset logins are dropped and the release check stands down; also one shared effective-policy function, restricted workflow entries, quoted environment names and a message-length fix
+- review: worker Deviations line was not read by the orchestrator; security review notes left open: an override setting the agent environment gives two warnings with the same subject; the size limit applies after the whole override file is downloaded; the p7 phase must repeat the reviewer-vs-agent comparison after derive_logins; p6b must emit the recorded override problems and loosenings as findings
 
 ## p6b-policy-check
 
