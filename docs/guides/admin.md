@@ -139,8 +139,9 @@ repository's resolved profile (`git.bot_login`; `git.owner_login`, else the one 
 is read at the default branch, so it is written by the repository and is untrusted: each derived login is a
 `login:derived:<key>` warning that names the account the changes will use. An explicit value wins and the profile is
 not read for it (it is still read for a release section without an agent section, to compare the reviewer with
-`git.bot_login`). With no value, a `warn` finding says so, the agent role part is skipped (the environment and secret
-part still run) and the release check is skipped for that repository. Deriving needs the profile features of the
+`git.bot_login`). With no agent login, a `warn` finding says so (`login:agent`) and only the agent role part is skipped (the
+environment and secret part still run). With no reviewer login, a `warn` finding says so (`login:reviewer`) and only
+the release check is skipped for that repository. Deriving needs the profile features of the
 same tld: the `profile` and `git_ops` sections, the resolved profile of a repository and its `git.bot_login`,
 `git.owner_login` and `git.codeowners` keys (the changelog names the release that ships them).
 
