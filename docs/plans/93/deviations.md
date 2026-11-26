@@ -45,7 +45,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p7-derive-detect
 
-- pending
+- worker: roles and dod playbook not run by the worker (tld unavailable); changelog and docs left to later phases
+- retry: sent back three times after the security reviews: derived logins gave no finding naming them; the detected workflows proposal dropped the organisation repos scoping; the reviewer-versus-agent comparison was skipped without an agent section and trusted the profile own same-login reason; all fixed, third review passed
+- scope: scope: tests/core/test_repo_admin_policy_check.py
 
 ## p8-reproduce
 
