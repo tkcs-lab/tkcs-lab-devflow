@@ -27,12 +27,13 @@ page or a tool result). Two layers, with different jobs:
   clamped to the stricter of the working copy and the default branch's resolved profile (when one is reachable), because the profile is no
   longer protected from edits by default.
 - **Workflows and the profile are editable by sessions.** `.tld/toolkit.yaml` and ordinary workflows are no longer on the
-  default protect list; the release, land and git-ops workflows (and the profile's `release.workflow`) stay protected in
+  default protect list; the release, land and git-ops workflows (and the profile's `release.workflow`, when a trusted copy is reachable) stay protected in
   code. A workflow edited on a pushed branch runs at once with the repository's Actions secrets, before anyone reads it,
   so secrets belong in environments limited to the default branch (`tld ops repo-admin` reports others as `secrets_scope`).
   A pull request that changes the profile or a workflow must name each file under **Security**, which `tld plan
   summary-check --changed` checks and the security review reads at the final review. That check is a review aid, not a
-  control: a person still reads the diff.
+  control: a person still reads the diff. The markup refusal in the Summary is best-effort (strikethrough opened and closed
+  across labels is not refused).
 - **The org base profile is policy for every agent.** A repository may extend one base, pinned by a full commit that must
   be a version tag's commit or an ancestor of the base repository's default branch. The base takes only allow-listed keys
   (never `verify` commands, prompt text or feature sections), cannot chain, is refused when it holds token-like text,
@@ -43,7 +44,11 @@ page or a tool result). Two layers, with different jobs:
   own working copy. The residual risk is who can merge in the base repository: they change every repository after a
   pin bump, so the audit treats the base repository like any other and a bump is a reviewed pull request
   ([docs/guides/org-base.md](docs/guides/org-base.md)).
-- **Known limits of this design** (open items recorded in plan 90, not claims of protection): setup copies test and CI
+- **Known limits of this design** (open items recorded in docs/plans/90/deviations.md, not claims of protection): the
+  profile's `release.workflow` and `git_ops.workflow` are protected in code only when a trusted copy is reachable (offline,
+  the working copy names them; the fixed names `tld-land.yml`, `tld-release.yml` and `tld-git-ops.yml` always stay
+  protected); `deps_prepare` and `release_prepare` ignore a missing base; a trusted profile that is empty or not a mapping
+  falls back to the working copy; setup copies test and CI
   commands found in the repository into `verify.fast` and `verify.dod` without a confirm of their own; the git-ops
   workflow does not yet check that GitHub's answer for a renamed repository is the one requested; the trusted-copy lookup
   also runs in repositories that never had a profile; the dod-gate takes `verify.dod` from the working tree when no

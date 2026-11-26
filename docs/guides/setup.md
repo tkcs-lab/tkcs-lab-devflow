@@ -73,7 +73,7 @@ need none); a `confirm` for each proposed `deps.audit` and `deps.lock_freshness`
 not be detected. The security posture is no longer asked: the base or the proposal sets it.
 
 When no ask can be posted or answered, every `blocking` is written as `false`, with or without `--accept-proposals`:
-only the human confirms `blocking: true`, and only the human confirms a command, so a proposed command is not written.
+only the human confirms `blocking: true`, and only the human confirms a proposed `deps.audit` or `deps.lock_freshness` command, so it is not written. (Test and CI commands found in the repository are different: see the known limit below.)
 `--accept-proposals` takes the rest of the proposal as it is and lists each proposed `blocking: true` entry and each
 proposed command under `Decisions for a human` in the pull request (add it if you agree); without it each is listed as
 unconfirmed. A value that could not be determined, or whose ask went unanswered, is left out and listed under
@@ -109,7 +109,7 @@ gives the same text.
 
 `.tld/toolkit.yaml` is no longer on the default protect list. `/setup` still runs `tld guard allow-profile` before its first
 write and `tld guard end-allow` after the last, also on failure; the marker matters only where a repository or base lists
-the profile again. The pull request that writes or changes the profile carries a `## Security` line that names
+the profile again. The pull request that writes or changes the profile carries a `**Security:**` line in its Summary that names
 `.tld/toolkit.yaml` (checked by `tld plan summary-check --changed`). Details and limits:
 [hooks.md](../architecture/hooks.md#protect-paths).
 

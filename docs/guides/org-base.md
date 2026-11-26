@@ -57,8 +57,9 @@ Without the cache and without network the playbooks stop (`tld roles required` a
 base); hooks use the cache only and, without it, drop everything the base adds (its extra protect paths included).
 
 A bump is a pull request that changes one line: `/tld:setup update`, the audit's pin-bump pull request
-(`profile-pin-old`, title `chore: bump the tld base to <tag>`) or by hand. Its `## Security` line must name
-`.tld/toolkit.yaml`. The new base's weaker guardrails take effect only after the merge, because guarded keys are clamped
+(`profile-pin-old`, title `chore: bump the tld base to <tag>`) or by hand. Its `**Security:**` line of the Summary must name
+`.tld/toolkit.yaml`. The new base's weaker guardrails take effect only after the merge (when the default branch's copy is
+reachable; offline there is no clamp), because guarded keys are clamped
 to the default branch's profile.
 
 ## Guarded keys
@@ -75,7 +76,7 @@ and where each value came from; `--ref REF` reads the profile and the files that
 ## Behaviour changes on upgrade (1.7)
 
 1. **Gates on.** `plan_gate`, `board_gate` and `dod_gate` are on for every repository with a profile and no `hooks` value;
-   turn one off with `enabled: false` (refused under a base without `tld.allow_override`). `verify.dod` runs at the stop of
+   turn one off with `enabled: false` (`tld profile validate` refuses it, and the audit reports it, under a base without `tld.allow_override`; the hooks do not re-check the base). `verify.dod` runs at the stop of
    an editing session, from the default branch's profile.
 2. **`docs.plan_dir`** is `docs/plans` when that directory exists, else `docs`.
 3. **`land.max_prs` is 10** (`false` for no cap).
@@ -95,12 +96,17 @@ These need a person (another organisation's repositories, secrets, visibility):
 1. **Create the base** in each org's `.github` repository: write `tld/profile-base.yaml`, run `tld profile base check`,
    merge it through a pull request the code owners approve, tag the merge commit (`git tag v1 <sha>`, push the tag) and
    run `tld profile base latest <owner>/.github/tld/profile-base.yaml` for the commit. A cloud session reads the base
-   anonymously, so a private `.github` repository stops sessions with the fetch error; making it public is the owner's
-   decision (the base holds no secret, but the roles and guard settings become visible).
-2. **Create the git-ops environment and secret** in each org's `git-ops` repository: environment `git-ops`, deployment
-   branches `main` only, environment secret `GIT_OPS_TOKEN` (a fine-grained token with `Contents: write` on the audited
-   repositories only; the value goes only into that field). Then run `/tld:repo-admin`: it adds `tld-git-ops.yml` and the
-   allowlist through pull requests into the git-ops repository.
+   anonymously, so a private `.github` repository stops sessions with the fetch error. Making it public is the owner's
+   decision and exposes **every file and the whole history**, issues, pull requests and Actions logs of that repository;
+   for an organisation's `.github` repository it also publishes `profile/README.md` on the organisation page and turns its
+   community-health files into defaults for every public repository. Review the history first. The alternative is a
+   dedicated public repository that holds only the base file, passed with `--base` or `TLD_BASE_PROFILE`.
+2. **Create the git-ops environment and secret** in each org's `git-ops` repository, following steps 1 and 2 of
+   [git-ops.md](git-ops.md#set-up-once): the repository must be private with `main` protected (pull requests only) and a
+   small group with write access; the token is fine-grained, with Contents read and write and Pull requests read on only
+   the repositories to clean up, expiring in 90 days, and is never pasted into chat; the environment `git-ops` allows
+   deployment from `main` only and holds the environment secret `GIT_OPS_TOKEN`. Do this before the audit, then run
+   `/tld:repo-admin`: it adds `tld-git-ops.yml` and the allowlist through pull requests into the git-ops repository.
 3. **After the release** that carries this change, run `/tld:setup update` (or merge the audit's pin-bump pull request) in
-   every repository, check that its `## Security` line names `.tld/toolkit.yaml`, and compare `tld profile validate
+   every repository, check that the `**Security:**` line of its Summary names `.tld/toolkit.yaml`, and compare `tld profile validate
    --resolved` with `--explain`.

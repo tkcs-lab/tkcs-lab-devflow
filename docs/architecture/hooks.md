@@ -219,7 +219,7 @@ marker. Branch protection and the pull request review stay the hard control.
 
 ### `dod-gate`
 
-On by default (`hooks.dod_gate.enabled: false` switches it off, unless a base turns it on without allowing that). A repository with no profile is never gated. The Stop hook runs the `verify.dod` commands
+On by default (`hooks.dod_gate.enabled: false` switches it off; `tld profile validate` refuses `false` (and the audit reports it) when a base turns the gate on without listing it in `tld.allow_override`; the hook applies the resolved, clamped value and does not re-check the base (see "Under a base" in [Disabling a hook](#disabling-a-hook))). A repository with no profile is never gated. The Stop hook runs the `verify.dod` commands
 (each in its `cwd`, all of them, so the report is complete) and, if any fails, blocks the stop and hands the failing
 commands and the tail of their output back to the agent. Rules that keep it from getting in the way:
 
@@ -279,7 +279,7 @@ command is meant for a lower one.
 
 ### `plan-gate`
 
-On by default (`hooks.plan_gate.enabled: false` switches it off, unless a base turns it on without allowing that). A plain chat message must not start an implementation:
+On by default (`hooks.plan_gate.enabled: false` switches it off; `tld profile validate` refuses `false` (and the audit reports it) when a base turns the gate on without listing it in `tld.allow_override`; the hook applies the resolved, clamped value and does not re-check the base (see "Under a base" in [Disabling a hook](#disabling-a-hook))). A plain chat message must not start an implementation:
 while a session has no plan, a write into the repository is denied and the agent is told to answer or research only and
 to propose `/tld:make-plan` (the `ask` skill, `/tld:ask`, says how).
 
@@ -314,7 +314,7 @@ switch the gate off now that the profile is not protected).
 
 ### `board-gate`
 
-On by default (`hooks.board_gate.enabled: false` switches it off, unless a base turns it on without allowing that). The gate covers the commands that always write a status
+On by default (`hooks.board_gate.enabled: false` switches it off; `tld profile validate` refuses `false` (and the audit reports it) when a base turns the gate on without listing it in `tld.allow_override`; the hook applies the resolved, clamped value and does not re-check the base (see "Under a base" in [Disabling a hook](#disabling-a-hook))). The gate covers the commands that always write a status
 record (`make-plan`, `implement`, `quick`, `review`, `setup`, `migrate`, `land`, `deps`, `upstream`, `ci`, `questions`), `docs` only in its
 `init` and `tidy` modes and `spec` and `sysml` only in their `init` mode (`/tld:docs` and `/tld:docs check` write none, so they neither open the state nor block). A
 session that one of them started must write its status record to the board once before it ends a turn. The gate also
@@ -519,6 +519,9 @@ How a command is parsed, and the commands of the playbooks the guards must allow
   against the edit tools. An uncached base drops the base's extra protect paths in a hook. Anyone who can merge in the base repository
   changes every repository after a pin bump; the audit treats the base repository like any other and a pin bump is a
   reviewed pull request.
+- **Offline, the profile's workflows.** `release.workflow` and `git_ops.workflow` are protected in code only from the trusted
+  copy; with none, the working copy names them (the fixed names `tld-land.yml`, `tld-release.yml` and `tld-git-ops.yml`
+  stay protected). A trusted profile that is empty or not a mapping falls back to the working copy.
 - **Known limits of the base work** (also: without a trusted copy a branch can switch a gate off in its own working copy, `tld roles required` has no trusted floor when no default-branch copy is reachable, `deps_prepare` and `release_prepare` still ignore a missing base, and the Security-line markup refusal is best-effort) (recorded as open items of plan 90): the commands that setup copies from CI into
   `verify.fast` and `verify.dod` are not confirmed first and `verify.fast` runs before the pull request exists; the
   `tld-git-ops.yml` workflow does not yet check that the repository GitHub returns for a renamed repository is the one

@@ -25,7 +25,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Behaviour changes on upgrade
 
-1. **Gates on.** `plan_gate`, `board_gate` and `dod_gate` are on for every repository with a profile and no `hooks` value. A session no tld command started cannot write; an editing session runs `verify.dod` at stop. Turn one off with `enabled: false` (refused under a base without `tld.allow_override`).
+1. **Gates on.** `plan_gate`, `board_gate` and `dod_gate` are on for every repository with a profile and no `hooks` value. A session no tld command started cannot write; an editing session runs `verify.dod` at stop. Turn one off with `enabled: false` (`tld profile validate` refuses it, and the audit reports it, under a base without `tld.allow_override`; the hooks apply the resolved, clamped value).
 2. **`docs.plan_dir`** defaults to `docs`, except a repository with a `docs/plans` directory resolves to `docs/plans`, so in-flight plans keep working. `tld migrate --defaults` writes the explicit key.
 3. **`land.max_prs` is 10** (was: no cap). Write another number, or `false` for no cap.
 4. **Protect list.** The profile and ordinary workflows are no longer protected by default; a repository with its own `hooks.protect_paths` is unchanged; `protect_paths_allow` entries for workflows become moot. Pull requests touching them must name them under Security.
