@@ -185,7 +185,7 @@ def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
         if repo["full_name"].split("/", 1)[0].lower() != owner.lower():
             continue
         # a name that starts with - or . is never added: the workflow's globs would read it as an option or a hidden path
-        (audited if SAFE_REPO.match(name) and name[0] not in "-." else skipped).append(name)
+        (audited if SAFE_REPO.fullmatch(name) and name[0] not in "-." else skipped).append(name)
     audited = sorted(set(audited))
     text = _read(ctx, central, snap.commit, ALLOWLIST_PATH)
     data = parse_allowlist(text)
@@ -226,13 +226,13 @@ def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
                                   f"repositories outside this audit: {_names(outside)}", "warn",
                                   manual="narrow the entries, or add those repositories to the audit's scope"))
         owner_ok = data["owner"].lower() == owner.lower()
-        if not owner_ok and (unusual or broad or outside):
+        if not owner_ok and (unusual or broad or outside or ctx.partial or not ctx.org_complete):
             # a wrong owner makes the workflow refuse every run, so these entries do nothing yet; fixing the owner
             # would switch them on
             return out + [ra.Finding("git-ops-allowlist", central, "allowlist:owner", f"{ALLOWLIST_PATH} names the owner "
                                      f"'{_shown(data['owner'])}', not {owner}, and has entries that match "
-                                     "every repository or repositories outside this audit; the owner is not changed "
-                                     "while they are there", "warn",
+                                     "every repository or repositories outside this audit (or this audit did not see "
+                                     "every repository); the owner is not changed while that is so", "warn",
                                      manual=f"replace those entries first (see the other findings), then set the owner to {owner}")]
         have_protected = [b for b in data.get("protected_branches", []) if isinstance(b, str)]
         if not have_protected:

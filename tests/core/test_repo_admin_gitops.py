@@ -306,6 +306,21 @@ def test_a_wrong_owner_is_not_fixed_while_a_glob_reaches_outside_repositories(ra
     assert [f for f in rows if f.action] == [] and {"allowlist:outside", "allowlist:owner"} <= {f.subject for f in rows}
 
 
+def test_a_wrong_owner_is_not_fixed_when_the_audit_did_not_see_every_repository(ra):
+    files = complete()
+    files["git-ops-allowlist.json"] = json.dumps({"owner": "other", "repos": ["svc-*"], "protected_branches": ["main"]})
+    names = ("app", "git-ops", "svc-1")
+    # --repo owner/name: only those repositories are listed
+    ctx, fake = world(ra, POLICY, names=names, routes=routes(names), files={"git-ops": files}, only=("acme/git-ops", "acme/app"))
+    rows = by_check(ra.run_checks(ctx, ["git_ops"]), "git-ops-allowlist")
+    assert ctx.partial and [f for f in rows if f.action] == [] and any(f.subject == "allowlist:owner" for f in rows)
+    # the token sees fewer repositories than the organisation has
+    ctx, fake = world(ra, POLICY, names=names, routes=routes(names), files={"git-ops": files})
+    fake.routes[("GET", "/orgs/acme")] = {"public_repos": 9, "total_private_repos": 0}
+    rows = by_check(ra.run_checks(ctx, ["git_ops"]), "git-ops-allowlist")
+    assert not ctx.org_complete and [f for f in rows if f.action] == [] and any(f.subject == "allowlist:owner" for f in rows)
+
+
 @pytest.mark.parametrize("entry", ["@(*)", "*", "!(x)", "?*"])
 def test_a_wrong_owner_is_not_fixed_while_a_match_everything_entry_is_there(ra, entry):
     files = complete()
