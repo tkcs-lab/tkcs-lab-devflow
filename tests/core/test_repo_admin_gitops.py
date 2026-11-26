@@ -350,3 +350,30 @@ def test_fixed_guidance_is_not_defaced(ra):
     assert "`gh secret set GIT_OPS_TOKEN --env git-ops --repo acme/git-ops`" in tok.manual
     env = next(f for f in by_check(found, "git-ops-environment") if f.subject == "environment:git-ops")
     assert "https://github.com/acme/git-ops/settings/environments" in env.manual
+
+
+def test_a_wrong_owner_is_not_fixed_while_an_entry_names_no_listed_repository(ra):
+    files = complete()
+    files["git-ops-allowlist.json"] = json.dumps({"owner": "other", "repos": ["app", "git-ops", "old"], "protected_branches": ["main"]})
+    found, _, _ = audit(ra, files)
+    rows = by_check(found, "git-ops-allowlist")
+    assert [f for f in rows if f.action] == [] and any(f.subject == "allowlist:owner" for f in rows)
+
+
+def test_a_name_with_a_trailing_newline_is_never_added(ra):
+    found, _, _ = audit(ra, {}, names=("app", "git-ops", "evil\n"))
+    (one,) = by_check(found, "git-ops-allowlist")
+    content = one.action.changes[0]["content"]
+    assert "evil" not in content and json.loads(content)["repos"] == ["app", "git-ops"] and "unusual" in one.message
+
+
+def test_api_error_text_is_defused_in_findings(ra):
+    hostile = "`@everyone` <b>x</b>\n[click](http://evil.example)"
+    ctx, _ = world(ra, POLICY, names=("app", "git-ops"), routes=routes(env=ra.ApiError(500, hostile, "GET", ENV)),
+                   files={"git-ops": complete()})
+    found = ra.run_checks(ctx, ["git_ops"])
+    bad = [f for f in found if f.severity in ("unavailable", "error") and f.check == "git-ops-environment"]
+    assert bad
+    for f in bad:
+        for ch in ("`", "@", "<", "\n", "[", "]"):
+            assert ch not in f.message, (ch, f.message)
