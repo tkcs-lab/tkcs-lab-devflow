@@ -17,7 +17,8 @@ SKIPPED = ("skipped", "neutral", "cancelled", "stale")
 TAG_RE = re.compile(r"^(\D*?)(\d+\.\d+\.\d+)(.*)$")
 SEMVER_SUFFIX = re.compile(r"^-[0-9A-Za-z.-]+$")
 PEP440_SUFFIX = re.compile(r"^(a|b|rc)\d+$")
-TAG_PUSH = re.compile(r"(?ms)^\s*push:\s*\n(?:[ \t]+.*\n)*?[ \t]+tags:")
+PUSH_LINE = re.compile(r"^([ \t]*)push:[ \t]*(?:#.*)?$")
+TAGS_LINE = re.compile(r"^[ \t]+tags:")
 RELEASE_MARKERS = ("gh release create", "action-gh-release", "create-release")
 OWN_TEMPLATE_FILE = "tld-release.yml"
 
@@ -73,9 +74,27 @@ def status_checks(samples: list[Sample]) -> tuple[list[str], dict[str, str]]:
     return kept, excluded
 
 
+def _pushes_on_tags(text: str) -> bool:
+    """True when a `push:` block (the lines indented deeper than it) holds a `tags:` key; one pass, linear."""
+    block_indent: int | None = None
+    for line in text.splitlines():
+        if block_indent is not None:
+            if not line.strip():
+                continue
+            if len(line) - len(line.lstrip(" \t")) > block_indent:
+                if TAGS_LINE.match(line):
+                    return True
+                continue
+            block_indent = None
+        m = PUSH_LINE.match(line.rstrip())
+        if m:
+            block_indent = len(m.group(1))
+    return False
+
+
 def tag_workflow_creates_release(texts: list[str]) -> bool:
     """True when a workflow runs on a pushed tag and itself creates the release."""
-    return any(TAG_PUSH.search(t) and any(m in t for m in RELEASE_MARKERS) for t in texts)
+    return any(_pushes_on_tags(t) and any(m in t for m in RELEASE_MARKERS) for t in texts)
 
 
 def release_params(tags: list[str], manifests: list[str], tag_workflow: bool) -> tuple[dict[str, str], list[str]]:

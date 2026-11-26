@@ -91,6 +91,23 @@ def test_tag_workflow_creates_release():
     assert d.tag_workflow_creates_release(["name: x\n", creates])
 
 
+def test_tag_workflow_regex_is_linear_and_scoped_to_the_push_block():
+    import time
+
+    marker = "      - run: gh release create $TAG\n"
+    long_push = "on:\n  push:\n" + "    branches:\n      - main\n" * 100 + "jobs:\n  r:\n    steps:\n" + marker
+    start = time.monotonic()
+    assert not d.tag_workflow_creates_release([long_push])
+    assert time.monotonic() - start < 1
+    later = ("on:\n  push:\n    branches: [main]\njobs:\n  r:\n    steps:\n"
+             "      - uses: x/y@v1\n        with:\n          tags: latest\n" + marker)
+    assert not d.tag_workflow_creates_release([later])
+    sibling = "on:\n  push:\n    branches: [main]\n  pull_request:\n    tags: [x]\n" + marker
+    assert not d.tag_workflow_creates_release([sibling])
+    blank = "on:\n  push:\n\n    tags:\n      - 'v*'\n" + marker
+    assert d.tag_workflow_creates_release([blank])
+
+
 def test_own_release_workflow():
     wf = [{"template": "release"}, {"template": "land"}]
     assert d.own_release_workflow("release.yml", wf) == [{"template": "land"}]
