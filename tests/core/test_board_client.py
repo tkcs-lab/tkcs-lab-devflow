@@ -159,6 +159,7 @@ import hashlib  # noqa: E402
 
 from tld.board import report_check  # noqa: E402
 from tld.guard import board_gate  # noqa: E402
+from tld.roles import reflektor  # noqa: E402
 
 REPORT_ID = "report-one--run--plan-report-one"
 PA = "<!doctype html><head>"
@@ -216,6 +217,18 @@ def test_put_report_stores_a_valid_page(server, tmp_path, monkeypatch, fake_view
     assert board_client.main(["put-report", REPORT_ID, str(path)]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["id"] == REPORT_ID and out["size"] == len(page.encode()) and out["sha256"] == _sha(page)
+    assert server.store.get_report(REPORT_ID)[0] == page.encode()
+
+
+def test_put_report_stores_a_page_whose_data_holds_line_separators(server, tmp_path, monkeypatch, fake_viewer, capsys):
+    put_env(monkeypatch, server)
+    seeded(server)
+    payload = (FIXTURES / "reflektor-separator-payload.json").read_text(encoding="utf-8").rstrip("\n")
+    page = fake_page(payload)
+    assert reflektor.prepare_page(page) == (page, 0)
+    path = tmp_path / "r.html"
+    path.write_text(page, encoding="utf-8")
+    assert board_client.main(["put-report", REPORT_ID, str(path)]) == 0
     assert server.store.get_report(REPORT_ID)[0] == page.encode()
 
 

@@ -35,6 +35,10 @@ entry of the released version at the top of the GitHub release, above the list o
 7. **Docs paths** apply when the file exists: an existing `docs/README.md` turns on the index steps, `CHANGELOG.md` the changelog line and version-heading guard, `docs/adr/` the ADR steps, `.tld/admin-policy.yaml` the audit, `scripts/build_site.py` the website. Each is turned off with `false`.
 8. **Messages** change (see above); `deps`, `spec`, `sysml` and `release.workflow` default inside their sections.
 
+### Fixed
+
+- The Reflektor change report page is no longer refused when a changed file holds a line or paragraph separator (U+2028, U+2029), U+0085 or a vertical tab, form feed or 0x1c-0x1f control character; a window around each is scanned again the way the viewer shows it, so a credential split around the character is still refused (#105).
+
 ## [1.6.0] - 2026-11-25
 
 ### Added

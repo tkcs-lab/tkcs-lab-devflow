@@ -21,7 +21,7 @@ on stderr. The pin proves the bytes, not the intent of the release. Python 3.11+
 Content-Security-Policy to build's page and checks it against the pinned viewer; `--send` is the only way the
 orchestrator sends a page: it reads the role's saved answer, takes the path of its last `REPORT-HTML` line, opens
 it without following links, checks the bytes and writes the text to `DIR/report.html`. The page is written with each
-literal allow mark replaced by `[secret-scan mark removed]`, after a scan that ignores the mark. Exit 1 on any refusal.
+literal allow mark replaced by `[secret-scan mark removed]`, after a scan that ignores the mark. A line or paragraph separator, U+0085 or a vertical tab, form feed or 0x1c-0x1f control character in the data does not refuse the page (up to 1000 of them); a window around each is scanned again the way the viewer shows it, on one line. Exit 1 on any refusal.
 """
 from __future__ import annotations
 
@@ -357,39 +357,48 @@ REDACTED_MARK = "[secret-scan mark removed]"
 REASON_SPLIT = "the data holds a line-splitting character"
 REASON_ESCAPED = "the data carries an escaped secret-scan allow mark"
 REASON_MARK_RAW = "the page carries a secret-scan allow mark outside its data"
-_SPLITTERS = frozenset("\x0b\x0c\x1c\x1d\x1e\x1f\x85")
+MAX_SPLITTERS = 1000
+WINDOW = 2000
+_SPLIT_CHARS = "\x0b\x0c\x1c\x1d\x1e\x1f\x85\u2028\u2029"
+_SPLIT_RX = re.compile("[" + _SPLIT_CHARS + "]")
+# the viewer's view of a line: each line-splitting character read as a space, or deleted
+_ONE_LINE = {ord(c): " " for c in _SPLIT_CHARS}
+_NO_LINE = dict.fromkeys(_ONE_LINE)
 
 
-def _splits_lines(s: str) -> bool:
-    """A character the secret scan's line splitting treats as a line break (or a category Zl or Zp)."""
-    return any(c in _SPLITTERS or unicodedata.category(c) in ("Zl", "Zp") for c in s)
+def _one_line_hits(s: str) -> list[tuple[int, str, str]]:
+    """Scan a window around each line-splitting character of S with the characters read as a space and deleted."""
+    for m in _SPLIT_RX.finditer(s):
+        piece = s[max(0, m.start() - WINDOW):m.end() + WINDOW]
+        for view in (_ONE_LINE, _NO_LINE):
+            hits = secret_scan.scan_text(piece.translate(view), skip_marked=False)
+            if hits:
+                return hits
+    return []
 
 
 def verify_html(text) -> list[str]:
     """`report_check.check` plus the secret scan of the raw text and of every decoded string and key of the data.
 
-    The scan ignores the allow mark (the scan option that turns the skip off), so a credential on a line that ends in the mark is found.
-    It splits on more characters than a newline, so a line-splitting character in the data is refused. The mark
-    itself is dealt with by `prepare_page`, after this check."""
+    The scan ignores the allow mark (the scan option that turns the skip off), so a credential on a line that ends in the mark is found. The viewer shows a line-splitting character inside a line, so a window around each one, in the raw data and in every decoded string, is scanned a second time with the character read as a space and deleted. More than MAX_SPLITTERS of them in the decoded strings is refused. The mark itself is dealt with by `prepare_page`, after this check."""
     reasons = report_check.check(text)
     if reasons:
         return reasons
     got = report_check.split(text)
-    if _splits_lines(got[1]):
-        return [REASON_SPLIT]
     value = report_check.parse_payload(got[1])
     strings = []
     for _parent, key, child in _walk(value):
         for s in (key, child):
             if isinstance(s, str):
                 strings.append(s)
-    for s in strings:
-        if _splits_lines(s):
-            return [REASON_SPLIT]
+    if sum(len(_SPLIT_RX.findall(s)) for s in strings) > MAX_SPLITTERS:
+        return [REASON_SPLIT]
     hits = secret_scan.scan_text(text, skip_marked=False)
     for s in strings:
         if not hits:
             hits = secret_scan.scan_text(s, skip_marked=False)
+    for s in (got[1], *strings):
+        hits = hits or _one_line_hits(s)
     if hits:
         names = sorted({name for _n, name, _d in hits})
         return [f"the page holds something that looks like a credential ({', '.join(names)})"]
