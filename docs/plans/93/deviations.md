@@ -39,7 +39,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p6b-policy-check
 
-- pending
+- worker: the generic away-from-organisation warning is skipped for the agent-environment drop (subject release:environment kept); extra override problems get subjects override:invalid:N; CHANGELOG.md was edited though not in touches; the optional refusal of equal logins in validate_policy was not added
+- retry: sent back once after the security review: the keep-live rule dropped the integration_id of live required checks, and equal logins from the organisation side kept the agent as release reviewer; both fixed, plus # and & escaping in pull request notes
+- review: open notes: # is escaped with a backslash only (a zero-width space like the @ handling would be safer, p7 puts repository text into notes); an override file is treated as absent when the default branch tree is truncated, so p7 must not propose to create it then; convert notes show only in the pull request body, not in the audit report
 
 ## p7-derive-detect
 
