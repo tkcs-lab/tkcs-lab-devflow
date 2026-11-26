@@ -470,12 +470,57 @@ def _check_logins(org: dict, eff: dict, override: dict) -> tuple[dict, list]:
                 warns.append((f"release:{clean(key, 40)}", f"the override sets release.{clean(key, 40)} away from the organisation's value"))
     agent, reviewer = repo_admin_policy._get(out, "agent.agent_login"), repo_admin_policy._get(out, "release.reviewer_login")
     if isinstance(agent, str) and isinstance(reviewer, str) and agent.casefold() == reviewer.casefold():
-        warns.append(("login:same", "the reviewer login equals the agent login; the organisation's logins apply"))
+        gone = []
         for dotted in ("agent.agent_login", "release.reviewer_login"):
             value = repo_admin_policy._get(org, dotted)
-            if value is not repo_admin_policy._MISSING:
+            section, key = dotted.split(".")
+            if value is repo_admin_policy._MISSING:  # nothing to fall back on: the part that needs the login stands down
+                out[section].pop(key, None)
+                gone.append(dotted)
+            else:
                 repo_admin_policy._set(out, dotted, copy.deepcopy(value))
+        warns.append(("login:same", "the reviewer login equals the agent login; " + (
+            f"{' and '.join(gone)} ha{'s' if len(gone) == 1 else 've'} no organisation value, so the check that needs "
+            f"{'it' if len(gone) == 1 else 'them'} stands down for this repository" if gone
+            else "the organisation's logins apply")))
+    env = repo_admin_policy._get(out, "release.environment")
+    if isinstance(env, str) and env.casefold() == AGENT_ENV.casefold():
+        fallback = repo_admin_policy._get(org, "release.environment")
+        if isinstance(fallback, str) and fallback.casefold() != AGENT_ENV.casefold():
+            out["release"]["environment"] = fallback
+        else:
+            del out["release"]["environment"]
+        warns.append(("release:environment", f"release.environment may not be the agent environment {AGENT_ENV}; "
+                                             "the organisation's or the default environment applies"))
     return out, warns
+
+
+def _usable(doc) -> dict:
+    """The part of an override that may be applied: only overridable sections, each a mapping (`workflows` a list of
+    mappings that hold only template, params and remove). Whatever the caller validated, a bad shape is dropped."""
+    out: dict = {}
+    for key, value in (doc if isinstance(doc, dict) else {}).items():
+        if key not in repo_admin_policy.OVERRIDABLE:
+            continue
+        if key == "workflows":
+            if isinstance(value, list):
+                out[key] = [{k: v for k, v in e.items() if k in ("template", "params", "remove")}
+                            for e in value if isinstance(e, dict) and isinstance(e.get("template"), str)
+                            and isinstance(e.get("params", {}), dict)]
+        elif isinstance(value, dict):
+            out[key] = copy.deepcopy(value)
+    return out
+
+
+def effective_policy(org: dict, override_doc, repo_name: str) -> tuple[dict, list, list]:
+    """(the effective policy, the loosenings put back, the login warnings) of one repository: the one place where an
+    override meets the organisation policy, for the audit and for `validate-policy --org-policy`."""
+    doc = _usable(override_doc)
+    allowed = repo_admin_policy.allowed_for(org, repo_name)
+    eff, loose = repo_admin_policy.clamp_guarded(org, repo_admin_policy.apply_override(org, doc), allowed)
+    eff, more = _restore_guarded(org, eff, allowed)
+    eff, warns = _check_logins(org, eff, doc)
+    return eff, loose + more, warns
 
 
 @dataclasses.dataclass
@@ -568,14 +613,9 @@ class Ctx:
 
     def _effective(self, repo: dict) -> dict:
         fn = repo["full_name"]
-        doc = self.override(repo).doc or {}
-        # An override is data an agent can edit: whatever the caller validated, only the overridable keys are applied.
-        doc = {k: v for k, v in doc.items() if k in repo_admin_policy.OVERRIDABLE}
-        allowed = repo_admin_policy.allowed_for(self.p, repo["name"])
-        eff, loose = repo_admin_policy.clamp_guarded(self.p, repo_admin_policy.apply_override(self.p, doc), allowed)
-        eff, more = _restore_guarded(self.p, eff, allowed)
-        eff, warns = _check_logins(self.p, eff, doc)
-        self._cache[("loose", fn)] = loose + more
+        # An override is data an agent can edit: effective_policy applies only what is safe, whatever was validated.
+        eff, loose, warns = effective_policy(self.p, self.override(repo).doc, repo["name"])
+        self._cache[("loose", fn)] = loose
         self._cache[("warn", fn)] = warns
         return eff
 
@@ -1103,7 +1143,7 @@ def environment_findings(ctx: Ctx, check: str, fn: str, repo: dict, name: str, m
     """(findings, the environment exists) for an environment whose deployment branches are only the default branch
     (mode default_branch) or the protected branches, and, when `reviewers` is given, exactly those required reviewers
     ([{"type": "User", "id": n}])."""
-    env_path = f"/repos/{fn}/environments/{name}"
+    env_path = f"/repos/{fn}/environments/{_q(name)}"
     custom = mode == "default_branch"
     want = {"protected_branches": not custom, "custom_branch_policies": custom}
     default = ctx.repo(repo)["default_branch"]
@@ -1165,7 +1205,7 @@ def secret_findings(ctx: Ctx, check: str, fn: str, env_name: str, secret: str, e
                                manual=f"`{set_it}` (the value is never readable), then delete the other secret"))
     names = set()
     if env_exists:
-        names = {s["name"].upper() for s in ctx.c.paginate(f"/repos/{fn}/environments/{env_name}/secrets", key="secrets")}
+        names = {s["name"].upper() for s in ctx.c.paginate(f"/repos/{fn}/environments/{_q(env_name)}/secrets", key="secrets")}
     if secret not in names:
         out.append(Finding(check, fn, "secret:environment", f"{secret} is not set in the environment {env_name} "
                            f"({needed_by} needs it)", "info", manual=f"`{set_it}`"))
@@ -1876,7 +1916,7 @@ def clean(text: object, limit: int = 400) -> str:
     so it cannot forge a line or move the cursor of a terminal or log."""
     text = text if isinstance(text, str) else str(text)
     out = "".join(c if c.isprintable() else "?" for c in text)
-    return out if len(out) <= limit else out[:limit] + "..."
+    return out if len(out) <= limit else out[:max(limit - 3, 0)] + "..."
 
 
 def _validate_fail(errors: list[str]) -> int:
@@ -1958,8 +1998,7 @@ def cmd_validate(args) -> int:
             if bad:
                 return _validate_fail(bad)
         org_sources = org_doc.get("_sources") or {k: "run" for k in _flatten(org_doc) if k}
-        eff = repo_admin_policy.apply_override(org_doc, policy)
-        view, _ = repo_admin_policy.clamp_guarded(org_doc, eff, repo_admin_policy.allowed_for(org_doc, args.repo_name))
+        view, _, _ = effective_policy(org_doc, policy, args.repo_name)
         sources = dict(org_sources)
         mine = {k for k in _flatten({k: v for k, v in policy.items() if k != "workflow_params"}) if k}
         mine |= {k for k in _flatten(policy.get("workflow_params") or {}, "workflow_params") if k}

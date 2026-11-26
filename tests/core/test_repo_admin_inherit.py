@@ -143,7 +143,7 @@ def test_a_blanked_guarded_section_is_restored(ra):
     assert eff["security"] == {"secret_scanning": True}
     assert eff["actions"]["default_workflow_permissions"] == "read"
     assert eff["config_dirs"]["forbid"] == [".archon"]
-    assert {item.key for item in ctx.loosenings(repo)} == {"security.secret_scanning", "actions.default_workflow_permissions", "config_dirs.forbid"}
+    assert {item.key for item in ctx.loosenings(repo)} == {"actions.default_workflow_permissions", "config_dirs.forbid"}  # a non-mapping section is simply not applied
 
 
 def test_the_reviewer_is_never_the_agent(ra):
@@ -171,3 +171,70 @@ def test_messages_from_a_file_are_clean_and_bounded(ra):
     assert ov.doc is None and ov.problems
     for problem in ov.problems:
         assert len(problem) <= 300 and not any(ord(c) < 32 or 127 <= ord(c) < 160 for c in problem)
+
+
+def _override(ra, ctx, doc):
+    repo = ctx.all_repos[0]
+    ctx._cache[("override", repo["full_name"])] = ra.Override(doc, OVERRIDE)
+    return repo
+
+
+def test_equal_logins_with_no_organisation_reviewer_stand_down(ra):
+    ctx, _ = inherited(ra, {"agent": {"agent_login": "bot"}, "release": {"environment": "tld-release"}},
+                       files={"app": {OVERRIDE: "release:\n  reviewer_login: BOT\n"}})
+    repo = ctx.all_repos[0]
+    eff = ctx.pol(repo)
+    assert eff["agent"]["agent_login"] == "bot" and "reviewer_login" not in eff["release"]
+    [msg] = [m for s, m in ctx.pol_warnings(repo) if s == "login:same"]
+    assert "release.reviewer_login" in msg and "stands down" in msg and "organisation's logins apply" not in msg
+    assert ra.check_release(ctx) == []  # no reviewer: the release check does not run for this repository
+
+
+def test_equal_logins_with_no_organisation_agent_stand_down(ra):
+    ctx, _ = inherited(ra, {"release": {"reviewer_login": "owner"}},
+                       files={"app": {OVERRIDE: "agent:\n  agent_login: Owner\n"}})
+    repo = ctx.all_repos[0]
+    eff = ctx.pol(repo)
+    assert eff["release"]["reviewer_login"] == "owner" and "agent_login" not in eff.get("agent", {})
+    assert any("agent.agent_login" in m and "stands down" in m for s, m in ctx.pol_warnings(repo) if s == "login:same")
+    assert ra.check_agent(ctx) == []  # no agent login and no agent section left: nothing to audit
+
+
+def test_release_environment_is_never_the_agent_environment(ra):
+    ctx, _ = inherited(ra, {"release": {"reviewer_login": "owner", "environment": "tld-release"}})
+    repo = _override(ra, ctx, {"release": {"environment": "TLD-Agent"}})
+    assert ctx.pol(repo)["release"]["environment"] == "tld-release"
+    assert any(s == "release:environment" for s, _ in ctx.pol_warnings(repo))
+    ctx2, _ = inherited(ra, {"release": {"reviewer_login": "owner"}})
+    repo2 = _override(ra, ctx2, {"release": {"environment": "tld-agent"}})
+    assert "environment" not in ctx2.pol(repo2)["release"]  # the default environment applies
+
+
+def test_a_workflow_entry_keeps_only_template_params_remove(ra):
+    ctx, _ = inherited(ra, {"workflows": [{"template": "land"}]})
+    repo = _override(ra, ctx, {"workflows": [{"template": "release", "path": "/etc/passwd", "dest": "x", "repos": ["*"],
+                                              "params": {"tag_prefix": "v"}}, "junk", {"path": "p"}]})
+    assert ctx.pol(repo)["workflows"] == [{"template": "release", "params": {"tag_prefix": "v"}}]
+    ctx._cache.pop(("pol", repo["full_name"]))
+    repo = _override(ra, ctx, {"workflows": {"template": "land"}, "security": ["x"]})  # wrong shapes are dropped
+    assert ctx.pol(repo)["workflows"] == [{"template": "land"}] and "security" not in ctx.pol(repo)
+
+
+def test_environment_names_are_quoted_in_api_paths(ra):
+    ctx, fake = inherited(ra, {"release": {"reviewer_login": "owner", "environment": "a/b c"}},
+                          routes={("GET", "/users/owner"): {"id": 1}})
+    ra.check_release(ctx)
+    assert any("/environments/a%2Fb%20c" in p for p in fake.reads) and not any("a/b c" in p for p in fake.reads)
+
+
+def test_clean_stays_within_the_bound(ra):
+    out = ra.clean("x" * 5000, ra.MAX_MESSAGE)
+    assert len(out) == ra.MAX_MESSAGE and out.endswith("...")
+    assert ra.clean("short", ra.MAX_MESSAGE) == "short"
+
+
+def test_the_validate_view_uses_the_same_function(ra):
+    org = {"org": "acme", "security": {"secret_scanning": True}}
+    over = {"security": {"secret_scanning": False}, "labels": {"delete_unused": True}}
+    eff, loose, _ = ra.effective_policy(org, over, "app")
+    assert eff["security"]["secret_scanning"] is True and "labels" not in eff and [i.key for i in loose] == ["security.secret_scanning"]
