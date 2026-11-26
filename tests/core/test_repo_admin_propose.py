@@ -291,6 +291,31 @@ def test_live_checks_are_not_replaced_by_a_proposal(ra):
     assert [p for p in fake.reads if p.endswith("/pulls")] == []
 
 
+@pytest.mark.parametrize("status", [500, 403])
+def test_an_unreadable_ruleset_listing_fails_closed(ra, status):
+    routes = {**served(), ("GET", "/repos/acme/app/rulesets"): ra.ApiError(status, "boom", "GET", "/repos/acme/app/rulesets")}
+    ctx, _ = inherited(ra, POLICY, routes=routes, files={"app": {"README.md": "x"}})
+    found = ra.check_policy(ctx)
+    assert [f for f in found if f.severity in ("error", "unavailable")], found  # a failure finding, not a silent proposal
+    assert not [f for f in found if f.subject == "override:propose"]
+
+
+def test_a_tld_main_of_an_organisation_is_ignored(ra):
+    live = _live_main([{"context": "inherited-check"}])
+    live[("GET", "/repos/acme/app/rulesets")] = [{"id": 7, "name": "tld-main", "source_type": "Organization"}]
+    ctx, _ = inherited(ra, POLICY, routes={**served(), **live}, files={"app": {"README.md": "x"}})
+    [f] = proposals(ra, ctx)
+    assert content(f)["rulesets"]["default_branch"]["required_status_checks"] == ["lint", "test"]
+
+
+def test_a_tld_main_without_a_checks_rule_still_gets_a_proposal(ra):
+    live = _live_main([])
+    live[("GET", "/repos/acme/app/rulesets/7")] = {"id": 7, "name": "tld-main", "rules": [{"type": "deletion"}]}
+    ctx, _ = inherited(ra, POLICY, routes={**served(), **live}, files={"app": {"README.md": "x"}})
+    [f] = proposals(ra, ctx)
+    assert content(f)["rulesets"]["default_branch"]["required_status_checks"] == ["lint", "test"]
+
+
 def test_a_path_workflow_left_out_is_named(ra):
     policy = {**POLICY, "workflows": [{"template": "release"}, {"path": "ci/x.yml"}, {"path": "o.yml", "repos": ["other-*"]},
                                       {"template": "land"}]}
