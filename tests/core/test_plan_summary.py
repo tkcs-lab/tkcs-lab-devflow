@@ -880,3 +880,8 @@ def test_changed_markup_opened_in_another_label_is_refused(opener, closer):
 
 def test_changed_clean_summary_with_all_labels_passes():
     assert summary.check(cross_label("", ""), "pr", None, None, [".github/workflows/ci.yml"])[0] == []
+
+
+def test_a_composite_action_counts_as_a_security_path():
+    assert summary.security_paths(["src/a.py", ".github/actions/setup/action.yml", ".github/actionsx/y"]) == [
+        ".github/actions/setup/action.yml"]

@@ -23,7 +23,6 @@ Plans (`<n>/plan.md`) and `deviations.md` are kept history, transient and not li
 - [guides/review.md](guides/review.md) - the /review flow and its decisions ask; read when changing /review.
 - [guides/setup.md](guides/setup.md) - /setup: how it learns the org base, surveys a repository and writes the profile in one pull request; read when changing /setup.
 - [guides/org-base.md](guides/org-base.md) - the org base profile: its content and allowed keys, pinning and bumping, the guarded keys, the behaviour changes on upgrade and the owner's manual steps; read when creating or changing a base or upgrading to 1.7.
-
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) - setup, test rules, coverage gate, mutation check, evals and baseline refresh, versions and releasing; read before your first change.
 - [../CHANGELOG.md](../CHANGELOG.md) - what changed in each release; read when upgrading or releasing.
 - [../SECURITY.md](../SECURITY.md) - threat model (rulesets are the control, hooks a seatbelt) and how to report; read when changing a guard or a control.

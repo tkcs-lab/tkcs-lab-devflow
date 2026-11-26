@@ -273,7 +273,7 @@ def test_a_ref_resolves_once_and_only_the_sha_reaches_git(tmp_path, monkeypatch)
     out = rs.load(repo / ".tld" / "toolkit.yaml", ref="HEAD", root=repo, trusted=False)
     assert out.errors == []
     sha = git(repo, "rev-parse", "HEAD")
-    assert ("show", f"{sha}:.tld/toolkit.yaml") in seen and ("ls-tree", "-r", "--name-only", sha) in seen
+    assert ("show", f"{sha}:.tld/toolkit.yaml") in seen and any(a[:3] == ("ls-tree", "--name-only", sha) for a in seen)
     assert not any("HEAD" in a and a[0] in ("show", "ls-tree") for a in seen)
 
 
@@ -368,6 +368,17 @@ def test_branch_weakening_is_clamped_to_main(tmp_path):
     explained = validate_cli(repo, "--explain").stdout
     assert 'roles.posture.security = "critical"  # main (the remote default branch; this branch\'s value is ' \
            "weaker)" in explained
+
+
+def test_another_profile_file_in_the_repository_is_not_clamped_to_main(tmp_path):
+    repo = make_repo(tmp_path, MAIN, origin=True)
+    (repo / "other.yaml").write_text(yaml.safe_dump(WEAKER))
+    out = rs.load(repo / "other.yaml", root=repo, fetch=False, file_checks=False)
+    assert out.errors == [], out.errors
+    assert not [w for w in out.warnings if "weaker here than on main" in w]
+    assert out.profile["roles"]["posture"]["security"] == WEAKER["roles"]["posture"]["security"]
+    own = rs.load(repo / ".tld" / "toolkit.yaml", root=repo, fetch=False, file_checks=False)
+    assert own.errors == [] and own.trusted_branch == "main"
 
 
 def test_branch_repointing_extends_is_clamped_to_main_base(tmp_path):
@@ -472,3 +483,37 @@ def test_load_flags_an_uncached_base_and_an_uncached_trusted_base(tmp_path):
     assert out.errors == [] and out.base_missing is False
     assert out.trusted_base_missing is not None and out.trusted_base_missing.sha == "d" * 40
     assert out.trusted_branch == "main"
+
+
+def test_tree_env_asks_git_only_about_the_default_paths(tmp_path, monkeypatch):
+    repo = make_repo(tmp_path, MINIMAL)
+    (repo / "docs" / "plans").mkdir(parents=True)
+    (repo / "docs" / "plans" / "a.md").write_text("x\n")
+    (repo / "docs" / "adr").mkdir()
+    (repo / "docs" / "adr" / "README.md").write_text("x\n")
+    (repo / "deep" / "tree").mkdir(parents=True)
+    (repo / "deep" / "tree" / "f.txt").write_text("x\n")
+    commit_all(repo)
+    calls = []
+    real = rs._git
+    monkeypatch.setattr(rs, "_git", lambda root, *a: calls.append(a) or real(root, *a))
+    env = rs.tree_env(repo, "HEAD")
+    assert env.exists("docs/plans") and env.exists("docs/adr") and not env.exists("docs/README.md")
+    assert not env.exists("deep/tree/f.txt")
+    assert len(calls) == 1 and "-r" not in calls[0] and "--" in calls[0]
+
+
+def test_a_symlinked_profile_is_still_clamped_to_main(tmp_path):
+    repo = make_repo(tmp_path, MAIN, origin=True)
+    (repo / ".tld" / "real.yaml").write_text(yaml.safe_dump(WEAKER))
+    (repo / ".tld" / "toolkit.yaml").unlink()
+    os.symlink("real.yaml", repo / ".tld" / "toolkit.yaml")
+    out = rs.load(repo / ".tld" / "toolkit.yaml", fetch=False, file_checks=False)
+    assert out.errors == [] and out.profile["roles"]["posture"]["security"] == "critical"
+
+
+def test_skipping_the_clamp_for_another_file_says_so(tmp_path):
+    repo = make_repo(tmp_path, MAIN, origin=True)
+    (repo / "other.yaml").write_text(yaml.safe_dump(WEAKER))
+    out = rs.load(repo / "other.yaml", root=repo, fetch=False, file_checks=False)
+    assert any("not clamped to the default branch" in w for w in out.warnings)

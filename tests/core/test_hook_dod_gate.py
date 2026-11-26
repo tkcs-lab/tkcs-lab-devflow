@@ -357,3 +357,7 @@ def test_a_nul_byte_in_a_dod_command_is_a_failed_attempt(tmp_path):
     repo = repo_with(tmp_path, ["echo a\u0000b"], enabled=None)
     r = run(HOOK, stop(repo))
     assert r.code == 2 and "could not start" in r.stderr, r.stderr
+
+
+# The spec scenario "Commands come from the default branch" (plan 3.13 names the test after it).
+test_commands_come_from_the_default_branch = test_verify_dod_is_read_from_the_trusted_copy

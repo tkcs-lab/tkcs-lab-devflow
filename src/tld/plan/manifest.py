@@ -457,7 +457,7 @@ def main(argv: list[str] | None = None) -> int:
     profile = None
     if args.profile:
         from tld.profile import resolve as rs
-        loaded = rs.load(args.profile, trusted=False, fetch=False, file_checks=False)
+        loaded = rs.load(args.profile, fetch=False, file_checks=False)  # trusted clamp: protect_paths_allow from main
         if loaded.errors:
             for e in loaded.errors:
                 print(f"manifest: toolkit.yaml: {e}", file=sys.stderr)

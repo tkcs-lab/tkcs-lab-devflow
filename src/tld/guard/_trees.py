@@ -12,7 +12,7 @@ import os
 import re
 
 from tld.guard import protect_paths as pp
-from tld.guard._common import Ctx
+from tld.guard._common import Ctx, guarded_workflows
 from tld.guard._gitgh import Item
 from tld.guard._shell import base, is_dynamic
 
@@ -21,7 +21,7 @@ SKIP_DIRS = ("node_modules", ".venv", "__pycache__")
 
 
 def _patterns(ctx: Ctx) -> list[str]:
-    return (ctx.list_key("protect_paths", pp.DEFAULT_PROTECT_PATHS) + pp.ALWAYS_PROTECTED + list(pp.GUARDED_WORKFLOWS)
+    return (ctx.list_key("protect_paths", pp.DEFAULT_PROTECT_PATHS) + pp.ALWAYS_PROTECTED + guarded_workflows(ctx)
             + [p for p in ctx.settings.extra_protected if not p.startswith(("~", "/"))])
 
 

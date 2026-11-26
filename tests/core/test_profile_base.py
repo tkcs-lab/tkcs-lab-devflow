@@ -199,7 +199,7 @@ def test_anchors_and_size():
     _, errors = base.check_base_text(deep, "l")
     assert errors == [pre + "nests deeper than 8 levels"]
     ok = "hooks: " + "[" * 7 + "]" * 7 + "\n"  # the top mapping plus seven sequences is eight levels
-    assert base.check_base_text(ok, "l")[1] == []
+    assert not any("nests deeper" in e for e in base.check_base_text(ok, "l")[1])  # the shape check may object
 
 
 # ---- fetch and cache -------------------------------------------------------------------------------------------
@@ -315,6 +315,24 @@ def test_tagged_commit_off_the_default_branch_is_accepted(project, origin):
     git(origin, "checkout", "-q", "main")
     git(origin, "branch", "-q", "-D", "release")
     assert base.fetch(project, ref_for(tagged)) == GOOD + "# release\n"
+
+
+def test_a_tag_that_points_at_a_different_commit_than_the_pin_is_refused(project, origin):
+    commit(origin)
+    git(origin, "checkout", "-q", "-b", "release")
+    tagged = commit(origin, GOOD + "# release\n", "release")
+    git(origin, "tag", "-a", "-m", "v3", "v3")
+    later = commit(origin, GOOD + "# after the tag\n", "a commit after the tag, held by no tag")
+    git(origin, "checkout", "-q", "main")
+    git(origin, "branch", "-q", "-D", "release")
+    assert later != tagged
+    ref = ref_for(later)
+    with pytest.raises(base.BaseError) as exc:
+        base.fetch(project, ref)
+    assert str(exc.value) == (f"toolkit.yaml: 'tld.extends': the commit {later[:7]} is not on a tag or the default "
+                              f"branch of acme/.github")
+    assert base.cached(base.common_dir(project), ref) is None
+    assert base.fetch(project, ref_for(tagged)) == GOOD + "# release\n"  # the tagged commit itself is accepted
 
 
 def test_a_refused_base_is_not_cached(project, origin):
@@ -455,3 +473,14 @@ def test_a_trailing_newline_is_refused_in_a_source_or_a_pin():
         base.parse_extends(f"{SOURCE}@{SHA}\n")
     with pytest.raises(base.BaseError):
         base.parse_source(SOURCE + "\n")
+
+
+def test_check_base_text_refuses_a_key_of_the_wrong_type():
+    data, errors = base.check_base_text("roles:\n  posture: x\n", "o/r@abcdef1")
+    assert data is None and errors and "roles.posture" in errors[0]
+    data, errors = base.check_base_text("roles:\n  posture:\n    security: critical\n", "o/r@abcdef1")
+    assert errors == [] and data["roles"]["posture"]["security"] == "critical"
+
+
+# The spec scenario "Pin held only by a pull request" (plan 3.13 names the test after it).
+test_pin_held_only_by_a_pull_request = test_commit_only_a_pull_request_holds_is_refused

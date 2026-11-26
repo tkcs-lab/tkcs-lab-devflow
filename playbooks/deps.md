@@ -122,7 +122,8 @@ This step always runs once a group is green, also after 80% of the time budget: 
    `.github/PULL_REQUEST_TEMPLATE.md`, `docs/pull_request_template.md` or `pull_request_template.md`, the first
    that exists), append its sections after the rendered body, leaving out a `## Summary` heading of its own and any
    line that matches `(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\b:?\s+(\S+/\S+)?#\d`. Run
-   `tld plan summary-check <body file> --kind pr`; it must exit 0. When `deps-body` or the check exits 1, read its
+   `tld plan summary-check <body file> --kind pr --changed <changed list>` (a scratch file with the `files` of every
+   included entry, one repository-relative path per line, so a workflow bump must be named under Security); it must exit 0. When `deps-body` or the check exits 1, read its
    message, set that entry's `updates` to `[]` (or cut `files`) when it names one, and run both again; still failing: no pull request, `needs_you`
    `Check deps combine: body rejected`.
 5. **An earlier combined pull request.** List the open pull requests whose head starts with `chore/deps-` and whose

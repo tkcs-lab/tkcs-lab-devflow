@@ -29,7 +29,7 @@ page or a tool result). Two layers, with different jobs:
 - **Workflows and the profile are editable by sessions.** `.tld/toolkit.yaml` and ordinary workflows are no longer on the
   default protect list; the release, land and git-ops workflows (and the profile's `release.workflow`, when a trusted copy is reachable) stay protected in
   code. A workflow edited on a pushed branch runs at once with the repository's Actions secrets, before anyone reads it,
-  so secrets belong in environments limited to the default branch (`tld ops repo-admin` reports others as `secrets_scope`).
+  so secrets belong in environments limited to the default branch (`tld ops repo-admin` reports others as `secrets_scope`, but only when the policy has a `git_ops` section).
   A pull request that changes the profile or a workflow must name each file under **Security**, which `tld plan
   summary-check --changed` checks and the security review reads at the final review. That check is a review aid, not a
   control: a person still reads the diff. The markup refusal in the Summary is best-effort (strikethrough opened and closed
@@ -38,8 +38,9 @@ page or a tool result). Two layers, with different jobs:
   be a version tag's commit or an ancestor of the base repository's default branch. The base takes only allow-listed keys
   (never `verify` commands, prompt text or feature sections), cannot chain, is refused when it holds token-like text,
   anchors or aliases, and is cached by hash under the git directory; hooks read the cache only and, without it, drop what the base adds
-  (its extra protect paths included). `tld profile validate` refuses (and the audit reports, as info) a repository that weakens a guarded
-  key of its base unless the base lists it in `tld.allow_override`; at run time the hooks only keep the stricter of the
+  (its extra protect paths included). `tld profile validate` refuses a repository that weakens a guarded
+  key of its base unless the base lists it in `tld.allow_override` (the audit reports the refusal as `profile-invalid-extends` at
+  warn, and an override the base allows as `profile-guarded-override` at info); at run time the hooks only keep the stricter of the
   working copy and the default branch's profile, and with no trusted copy (offline) a branch can switch a gate off in its
   own working copy. The residual risk is who can merge in the base repository: they change every repository after a
   pin bump, so the audit treats the base repository like any other and a bump is a reviewed pull request

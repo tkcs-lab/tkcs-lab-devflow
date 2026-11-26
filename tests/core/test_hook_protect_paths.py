@@ -299,7 +299,7 @@ def test_edit_of_an_ordinary_workflow_is_allowed_by_default(feature_repo):
 def test_release_workflow_of_the_trusted_profile_is_denied(tmp_path):
     repo = make_repo_with_origin(tmp_path / "r", committed=RELEASE_PROFILE)
     r = run(HOOK, event("Write", repo, file_path=".github/workflows/release.yml", content="x"))
-    assert r.code == 2 and "tld workflow file" in r.stderr
+    assert r.code == 2 and "tld workflow file" in r.stderr and "allow-workflow-install" not in r.stderr
     assert run(HOOK, bash("echo x > .github/workflows/release.yml", repo)).code == 2
     assert run(HOOK, event("Write", repo, file_path=".github/workflows/ci.yml", content="x")).code == 0
 
@@ -307,7 +307,13 @@ def test_release_workflow_of_the_trusted_profile_is_denied(tmp_path):
 def test_git_ops_workflow_is_denied(feature_repo):
     r = run(HOOK, event("Write", feature_repo, file_path=".github/workflows/tld-git-ops.yml", content="x"))
     assert r.code == 2 and "tld workflow file" in r.stderr
+    assert "allow-workflow-install" not in r.stderr and "repository owner" in r.stderr
     assert run(HOOK, bash("echo x > .github/workflows/tld-git-ops.yml", feature_repo)).code == 2
+
+
+def test_the_land_workflow_message_names_the_install_command(feature_repo):
+    r = run(HOOK, event("Write", feature_repo, file_path=".github/workflows/tld-land.yml", content="x"))
+    assert r.code == 2 and "tld guard allow-workflow-install tld-land.yml" in r.stderr
 
 
 def test_release_workflow_guard_uses_trusted_value(tmp_path):

@@ -126,6 +126,10 @@ def workflow_install_allowed(project: str, rel: str) -> bool:
 
 
 def workflow_message(rel: str) -> str:
+    if rel not in GUARDED_WORKFLOWS:  # the trusted release.workflow and tld-git-ops.yml have no install marker
+        return (f"blocked: `{rel}` is a tld workflow file that no session writes. The repository owner changes it, or "
+                "the pull request of the central repository that delivers it. Describe the change you need in your "
+                "report instead.")
     return (f"blocked: `{rel}` is a tld workflow file; it is written only by the step that installs it (`/land`, "
             "`repo-admin`), after `tld guard allow-workflow-install " + os.path.basename(rel) + "` and until "
             "`tld guard end-allow`. Describe the change you need in your report instead.")

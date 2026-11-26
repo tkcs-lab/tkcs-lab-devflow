@@ -37,7 +37,7 @@ follow from that:
 | `tld.extends` | `<owner>/<repo>/<path>@<40-hex sha>`: the base profile whose values this profile inherits |
 | `tld.allow_override` | Guarded keys a repository may override against its base; set only in the base, never in a repository |
 | `docs.must_read` | Read first by the planner; named in every worker brief and in the final review |
-| `docs.plan_dir` | Plans `<plan_dir>/<n>/plan.md` with `deviations.md` next to them, and reviews `<plan_dir>/<slug>-review.md` (default `docs/plans/`) |
+| `docs.plan_dir` | Plans `<plan_dir>/<n>/plan.md` with `deviations.md` next to them, and reviews `<plan_dir>/<slug>-review.md` (default `docs/plans` when that directory exists, else `docs`) |
 | `docs.index` | The docs index ([docs.md](docs.md)): read first, then only matching rows |
 | `docs.adr_dir`, `adr_index`, `adr_bar` | ADR steps, only when `adr_dir` is set |
 | `docs.changelog.file`, `.section` | The changelog line a user-visible change adds |

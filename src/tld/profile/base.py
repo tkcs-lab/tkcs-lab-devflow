@@ -228,6 +228,12 @@ def check_base_text(text: str | bytes, label: str) -> tuple[dict | None, list[st
     if not isinstance(data, dict):
         return None, [f"{pre}must be a mapping at the top"]
     errors = _key_errors(data, label)
+    if not errors:  # the types and enums of every key it sets (a missing required key is fine: a base is partial)
+        from tld.profile import validate as pv
+        shape: list[str] = []
+        schema = json.loads(pv.SCHEMA.read_text())
+        pv.check(pv.normalise(data), schema, schema, "", shape, required=False)
+        errors = [f"{pre}{e}" for e in shape]
     return (None, errors) if errors else (data, [])
 
 

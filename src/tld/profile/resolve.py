@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -132,16 +133,17 @@ def fs_env(root: Path | str, owner: str | None = None, branch: str | None = None
 
 
 def tree_env(project: Path | str, rev: str, owner: str | None = None, branch: str | None = None) -> Env:
-    """An Env that reads the files of commit `rev` (one `git ls-tree` call), never the working tree."""
-    r = _git(project, "ls-tree", "-r", "--name-only", rev)
+    """An Env that reads the files of commit `rev` (one `git ls-tree` call for the few paths the file-checked
+    defaults ask about, not the whole tree), never the working tree."""
+    wanted = ["docs/plans", *(path for _, _, path in defaults.FILE_CHECKED)]
+    r = _git(project, "ls-tree", "--name-only", rev, "--", *wanted)
     files = set(r.stdout.splitlines()) if r is not None and r.returncode == 0 else set()
-    dirs = {d for f in files for d in (str(p) for p in Path(f).parents)}
 
     def read(path: str) -> str | None:
         out = _git(project, "show", f"{rev}:{path}")
         return out.stdout if out is not None and out.returncode == 0 else None
 
-    return Env(exists=lambda p: p in files or p in dirs, read=read, origin_owner=owner, main_branch=branch)
+    return Env(exists=lambda p: p in files, read=read, origin_owner=owner, main_branch=branch)
 
 
 # ----------------------------------------------------------------------------------------------- resolve
@@ -341,12 +343,21 @@ def _trusted_profile(root: Path, owner: str | None, warnings: list[str]):
     return out.profile, t.branch, missing
 
 
+def _is_repo_profile(path: Path, root: Path) -> bool:
+    """True when `path` is the repository's own `.tld/toolkit.yaml` (the file the default branch's copy stands for)."""
+    own = root / ".tld" / "toolkit.yaml"
+    try:
+        return os.path.abspath(path) == os.path.abspath(own) or path.resolve() == own.resolve()
+    except OSError:
+        return False
+
+
 def load(path, *, ref: str | None = None, root=None, fetch: bool = True, trusted: bool = True,
          file_checks: bool = True) -> Resolved:
     """Read the profile (or `git show REF:path`), get the base, resolve. With `trusted` and an origin the
     default branch's profile is resolved on its own and clamps the guarded keys. File checks are skipped at a ref."""
     path = Path(path)
-    root = Path(root) if root is not None else path.resolve().parent.parent
+    root = Path(root) if root is not None else Path(os.path.abspath(path)).parent.parent  # not through a symlink
     sha = None
     if ref is not None:
         sha, problem = resolve_ref(root, ref)
@@ -364,6 +375,9 @@ def load(path, *, ref: str | None = None, root=None, fetch: bool = True, trusted
     url = origin_url(root)
     owner = _owner_of(url)
     branch = _head_branch(root)
+    if trusted and not _is_repo_profile(path, root):  # another file (e.g. the starter) is no copy of main's profile
+        trusted = False
+        warnings.append("not the repository's .tld/toolkit.yaml; guarded keys are not clamped to the default branch")
     trusted_profile = trusted_branch = trusted_missing = None
     if trusted and url:
         trusted_profile, trusted_branch, trusted_missing = _trusted_profile(root, owner, warnings)

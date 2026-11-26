@@ -415,7 +415,8 @@ it), `verify.dod` (`dod-gate`) and `release.workflow` and `git_ops.workflow` (th
 when it needs the fact: `gh pr merge` is denied in a repository with no profile. A `git push` (any branch) is also denied
 there, because deciding whether it targets the main branch needs `git.main_branch`. When the key cannot be resolved the hook
 blocks with `toolkit.yaml: missing required key 'git.main_branch'`, the same message the commands give. Plugins are enabled
-per Claude Project, so every repository in a Project that enables `tld` needs a profile with at least that key.
+per Claude Project, so every repository in a Project that enables `tld` needs a main branch the hooks can resolve: the profile's key or the
+branch `origin/HEAD` names.
 
 Reference: [profile-reference.md](../reference/profile-reference.md).
 
