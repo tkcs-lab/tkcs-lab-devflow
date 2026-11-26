@@ -19,7 +19,7 @@ PRIVATE_ONLY = ("org_settings", "members", "apps", "tokens", "secrets", "variabl
 ORG_LEVEL = PRIVATE_ONLY + ("labels", "webhooks", "deploy_keys", "branches", "branch_protection", "profile", "git_ops")
 OVERRIDABLE = ("repo_settings", "security", "actions", "rulesets", "agent", "release", "workflow_lint", "config_dirs",
                "workflows", "workflow_params")
-PER_REPO_ONLY = ("rulesets.default_branch.required_status_checks", "workflow_params", "config_dirs.known", "workflows[].params")
+PER_REPO_ONLY = ("rulesets.default_branch.required_status_checks", "config_dirs.known", "workflow_params", "workflows[].params")
 IRREVERSIBLE = (
     "secrets.delete_unused", "variables.delete_unused", "labels.delete_unused", "labels.delete_unlisted",
     "webhooks.delete", "deploy_keys.delete_unused", "branches.delete_merged",
@@ -128,7 +128,7 @@ def key_errors(doc, kind: str, where: str, public: str | None = None) -> list[st
             errors.append(f"{where}: '{key}' is organisation-private and {public} is public; keep org_settings, members, "
                           "apps, tokens, secrets and variables in a file of a private repository")
     if kind == "base":
-        for key in ("rulesets.default_branch.required_status_checks", "config_dirs.known", "workflow_params"):
+        for key in (k for k in PER_REPO_ONLY if "[" not in k):  # the dotted keys; workflows[].params is checked below
             if _get(doc, key) is not _MISSING:
                 errors.append(f"{where}: '{key}' is per repository; set it in each repository's override file")
         for key in IRREVERSIBLE:

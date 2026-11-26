@@ -617,7 +617,7 @@ class Ctx:
         if errors or doc is None:
             return bad(*(errors or [f"{path} is not a mapping"]))
         notes: list[str] = []
-        legacy = "org" in doc
+        legacy = repo_admin_policy.kind_of(doc) == "run"
         if legacy:
             errors = validate_policy(doc, kind="run")
             if errors:
@@ -2274,7 +2274,7 @@ def cmd_validate(args) -> int:
         policy, errors = repo_admin_extends.shape_errors(text, str(p))
         if policy is None:
             return _validate_fail(errors)
-        if args.kind == "auto" and "org" in policy:
+        if args.kind == "auto" and repo_admin_policy.kind_of(policy) == "run":
             kind = "run"
     where = str(p) if kind != "run" else ""
     errors = validate_policy(policy, p.resolve().parent, kind=kind, where=where,
