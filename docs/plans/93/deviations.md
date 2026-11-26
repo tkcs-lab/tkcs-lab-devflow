@@ -62,7 +62,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p10-playbook-docs-evals
 
-- pending
+- worker: the stop message in the playbook has no /tld: prefix because the contracts test bans it in playbooks; no changelog line (the retirement phase owns it); the worker had no tld CLI
+- retry: sent back once after the security review: findings that a repository override or a derived login chose could be approved in the bulk choice, and the admin guide did not say that an override may add forbid patterns, empty its required checks or remove workflows; both fixed
 
 ## p11-retire
 
