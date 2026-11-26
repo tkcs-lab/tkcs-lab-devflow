@@ -14,6 +14,7 @@ import tld
 # (group, command) -> (module, arguments put in front of the user's, one-line help)
 COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("profile", "validate"): ("tld.profile.validate", (), "validate a profile against the schema"),
+    ("profile", "base"): ("tld.profile.base", (), "check | fetch | latest: the org base profile a profile extends"),
     ("profile", "patch"): ("tld.profile.patch", (), "set-block | diff: text-level edits of the profile"),
     ("profile", "survey"): ("tld.profile.survey", (), "survey a repository and propose profile blocks"),
     ("profile", "survey-docs"): ("tld.profile.survey_docs", (), "the docs part of the survey"),
@@ -76,7 +77,7 @@ COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("ops", "upstream-sync"): ("tld.ops.upstream_sync", (), "plan | prepare: sync a fork to an upstream release"),
     ("ops", "deps-prepare"): ("tld.ops.deps_prepare", (), "combine dependency update groups onto one branch"),
     ("ops", "deps-body"): ("tld.ops.deps_body", (), "render the combined dependency pull request body"),
-    ("ops", "repo-admin"): ("tld.ops.repo_admin", (), "validate-policy | whoami | audit | apply"),
+    ("ops", "repo-admin"): ("tld.ops.repo_admin", (), "validate-policy | whoami | audit | apply | latest-pin"),
     ("ops", "docs-index"): ("tld.ops.docs_index", (), "check | inventory | move: the docs index"),
     ("ops", "spec"): ("tld.ops.spec", (), "init | new-change | list | validate | archive: the pinned OpenSpec CLI"),
     ("ops", "sysml"): ("tld.ops.sysml", (), "new-change | check | render | archive: the architecture model"),

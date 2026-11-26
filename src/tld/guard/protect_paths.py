@@ -14,7 +14,8 @@ import re
 import sys
 
 from tld.guard import _changelog, _common, _trees, markers
-from tld.guard._common import BUILTIN_PROTECT_ALLOW, DEFAULT_PROTECT_PATHS, GUARDED_WORKFLOWS, Ctx
+from tld.guard._common import (BUILTIN_PROTECT_ALLOW, DEFAULT_PROTECT_PATHS, GUARDED_WORKFLOWS, Ctx,  # noqa: F401 - _trees reads the name here
+                               guarded_workflows)
 from tld.guard._gitgh import Item, iter_items, parse_config
 from tld.guard._shell import ParseError, base, is_dynamic
 
@@ -125,6 +126,10 @@ def workflow_install_allowed(project: str, rel: str) -> bool:
 
 
 def workflow_message(rel: str) -> str:
+    if rel not in GUARDED_WORKFLOWS:  # the trusted release.workflow and tld-git-ops.yml have no install marker
+        return (f"blocked: `{rel}` is a tld workflow file that no session writes. The repository owner changes it, or "
+                "the pull request of the central repository that delivers it. Describe the change you need in your "
+                "report instead.")
     return (f"blocked: `{rel}` is a tld workflow file; it is written only by the step that installs it (`/land`, "
             "`repo-admin`), after `tld guard allow-workflow-install " + os.path.basename(rel) + "` and until "
             "`tld guard end-allow`. Describe the change you need in your report instead.")
@@ -150,12 +155,13 @@ def violation(ctx: Ctx, path: str, here: str) -> str | None:
     hit = plugin_root_hit(path, here) or outside_protected(ctx, path, here) or _changelog.violation(ctx, path, here, relative(ctx, path, here))
     if hit:
         return hit
+    guarded = guarded_workflows(ctx)
     always = ALWAYS_PROTECTED + [p for p in ctx.settings.extra_protected if not p.startswith(("~", "/"))]
     for rel in relative(ctx, path, here):
         for pat in always:
             if matches(pat, rel):
                 return message(rel, pat, flow=False)
-        if rel in GUARDED_WORKFLOWS:
+        if rel in guarded:
             if workflow_install_allowed(ctx.project_dir, rel):
                 continue
             return workflow_message(rel)
@@ -179,7 +185,7 @@ def hard_link_hit(ctx: Ctx, path: str, here: str) -> str | None:
         return None
     if st.st_nlink < 2 or not os.path.isfile(target):
         return None
-    protect = ctx.list_key("protect_paths", DEFAULT_PROTECT_PATHS) + ALWAYS_PROTECTED + GUARDED_WORKFLOWS
+    protect = ctx.list_key("protect_paths", DEFAULT_PROTECT_PATHS) + ALWAYS_PROTECTED + guarded_workflows(ctx)
     root = os.path.realpath(ctx.project_dir)
     seen = 0
     for dirpath, dirnames, filenames in os.walk(root):
@@ -235,17 +241,10 @@ def message(rel: str, pattern: str, flow: bool = True) -> str:
     name = os.path.basename(rel)
     report = (f'Report "protected-change: {rel} - <why>" with the diff in a fenced block '
               "(playbooks/policies/protected-changes.md); edit nothing here.")
-    if rel == ".tld/toolkit.yaml":
-        hint = ("The profile changes only in its own pull request to the main branch, after the owner approved the diff. "
-                + report) if flow else \
-            "The project profile is changed by people or by /setup, not by a session; tell the user what should change."
-    elif name.startswith(".env"):
+    if name.startswith(".env"):
         hint = "Environment files hold secrets and are never edited by a session; document a variable in .env.example instead."
     elif name.endswith(".lock") or name in ("package-lock.json", "go.sum"):
         hint = "Regenerate lockfiles with the project's own lock command (see deps.lock_freshness), never by hand."
-    elif rel.startswith(".github/workflows/"):
-        hint = report if flow else \
-            "Workflow changes are made by the owner; describe the change you need in your report or the pull request."
     else:
         hint = report if flow else "Describe the change you need in your report instead."
     text = f"blocked: `{rel}` is a protected path (it matches `{pattern}` in hooks.protect_paths). {hint}"

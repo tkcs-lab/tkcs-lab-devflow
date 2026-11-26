@@ -59,7 +59,7 @@ same turn as every ask.
 2. The change is small only when every rule of "Sizing" in [make-plan.md](make-plan.md) holds for one phase:
    complexity S or M, one coherent change, one pull request, no open decision left, every acceptance item
    mechanical. It is also not small when it needs a `manual_before` or `manual_after` step, touches a protected path
-   or a lockfile or adds a dependency, or, with a `spec` or `sysml` profile block, changes observable behaviour or
+   (the effective protect list or the excluded set of [policies/protected-changes.md](policies/protected-changes.md); the profile and ordinary workflows are not on the list by default) or a lockfile or adds a dependency, or, with a `spec` or `sysml` profile block, changes observable behaviour or
    the architecture model.
 3. When it is not small: write nothing else. Post `Implementation stopped: too large for quick: <one line>. Run
    make-plan #<n>.` on the issue, write the record `done` with `last_event` `refused: too large`, and end with a
@@ -113,12 +113,13 @@ the main profile's list and the excluded set, as step 2 does.
 
 1. Write the body to a scratch file: `Closes #<n>` (one more per further issue) first, then `## Summary` of at
    most 175 words with the labels `**Deviations:**` (how the result differs from the ask; `None.` is allowed), then
-   optionally `**Scope:**`, `**Security:**`, `**Performance:**`, then `**Review focus:**`, in this order, written by
+   optionally `**Scope:**`, `**Security:**` (required when the pull request changes a workflow or the profile: it names each in plain words; `$` and `<` are refused there, even in inline code),
+   `**Performance:**`, then `**Review focus:**`, in this order, written by
    you in your own words; then `## Non-blocking findings` ([policies/findings-fix.md](policies/findings-fix.md)); then `## Review`:
    the verdict and every out-of-scope finding the worker reported; then, with a `reflektor` answer in the dod
    report, `## Change report` as implement does. Follow the repository's pull request template for any other section.
 2. Run `git diff --name-only --no-renames origin/<main>...origin/<feature>` against the main profile's list and the
-   excluded set once more (as step 2 does), then `tld plan summary-check <body file> --kind pr --findings <N>`; both
+   excluded set once more (as step 2 does) and save its output to a scratch file, then run `tld plan summary-check <body file> --kind pr --findings <N> --changed <changed list>`; both
    must pass before `github.pr_create`. Post `PR opened: <url>.`
 3. With `git.codeowners`, request their review, set `needs_you` (`Review PR #<n>`), `github.pr_subscribe` and drive the
    pull request to green as [policies/pr-steward.md](policies/pr-steward.md) says. A failure goes to a fix worker on

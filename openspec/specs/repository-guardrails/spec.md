@@ -89,11 +89,11 @@ The system SHALL deny a Write, Edit, MultiEdit or NotebookEdit call, and a Bash 
 - **THEN** that line is not scanned; the mark in the middle of a line does not exempt it
 
 ### Requirement: Protected path edits
-The system SHALL deny edits, by the Write tools and by visible Bash writes, to paths listed in the profile's `hooks.protect_paths` and always to the git configuration, hooks and ref files, the plugin's installed files and the agent runtime's own settings, while always allowing `.env.example`, `.env.sample`, `.env.template` and `.env.dist`.
+The system SHALL deny edits, by the Write tools and by visible Bash writes, to paths listed in the resolved profile's `hooks.protect_paths` and always to the git configuration, hooks and ref files, the plugin's installed files, the agent runtime's own settings and the workflows that start a release, a land run or a branch deletion, while always allowing `.env.example`, `.env.sample`, `.env.template` and `.env.dist`.
 
 #### Scenario: Default protected paths
 - **WHEN** the profile does not set `hooks.protect_paths`
-- **THEN** the default list applies: the profile file, `.env` and `.env.*`, lockfiles and workflow files
+- **THEN** the default list applies: `.env` and `.env.*`, lockfiles (`*.lock`, `package-lock.json`, `go.sum`); the profile file and ordinary workflow files are not on it
 
 #### Scenario: Visible Bash writes
 - **WHEN** a Bash command writes to a protected path by a redirect, `tee`, `sed -i`, `cp`, `mv`, `rm`, `git apply`, a directory-wide checkout or extraction, or a similar visible write
@@ -108,8 +108,12 @@ The system SHALL deny edits, by the Write tools and by visible Bash writes, to p
 - **THEN** it is denied
 
 #### Scenario: Tld workflow files
-- **WHEN** a session writes the land or release workflow file and no workflow-install marker names that file
+- **WHEN** a session writes the land workflow, the release workflow (the default name or the profile's `release.workflow`) or the git-ops workflow and no workflow-install marker names that file
 - **THEN** the write is denied whatever the profile lists
+
+#### Scenario: Profile and ordinary workflows
+- **WHEN** the profile does not list them and a session edits `.tld/toolkit.yaml` or an ordinary workflow file
+- **THEN** the edit is allowed
 
 #### Scenario: Changelog
 - **WHEN** the profile names a changelog and an edit adds a new version heading together with other changes
@@ -135,10 +139,18 @@ The system SHALL provide `tld guard allow-profile` (2 hours), `allow-workflow-in
 - **THEN** it does not unlock another checkout
 
 ### Requirement: Plan gate
-The system SHALL, when `hooks.plan_gate.enabled` is true, deny writes into the repository (write tools, writing Bash commands and the GitHub content-write tools) in a session that no plan-starting command opened, while never blocking a prompt, and SHALL add one sentence of context to a plain prompt in a closed session telling the agent to answer or research only and to propose a plan.
+The system SHALL, unless `hooks.plan_gate.enabled` is false in the resolved profile, deny writes into the repository (write tools, writing Bash commands and the GitHub content-write tools) in a session that no plan-starting command opened, while never blocking a prompt, and SHALL add one sentence of context to a plain prompt in a closed session telling the agent to answer or research only and to propose a plan.
+
+#### Scenario: On by default
+- **WHEN** the repository has a profile that does not set the gate and a plain session writes a file
+- **THEN** the write is denied
 
 #### Scenario: Off by default
-- **WHEN** the profile does not enable plan-gate
+- **WHEN** the resolved profile sets `hooks.plan_gate.enabled` to false
+- **THEN** all writes are allowed
+
+#### Scenario: No profile
+- **WHEN** the repository has no profile
 - **THEN** all writes are allowed
 
 #### Scenario: Closed session
@@ -154,7 +166,11 @@ The system SHALL, when `hooks.plan_gate.enabled` is true, deny writes into the r
 - **THEN** the write is allowed (the malformed section shows a notice)
 
 ### Requirement: Board gate
-The system SHALL, when `hooks.board_gate.enabled` is true, block the end of a turn (Stop) at most once per event when a session started by a record-writing command has not written its status record, has changed things since the last record, or posted an ask and armed no timer, and SHALL never deny any other event.
+The system SHALL, unless `hooks.board_gate.enabled` is false in the resolved profile, block the end of a turn (Stop) at most once per event when a session started by a record-writing command has not written its status record, has changed things since the last record, or posted an ask and armed no timer, and SHALL never deny any other event.
+
+#### Scenario: On by default
+- **WHEN** the repository has a profile that does not set the gate and a session started by a record-writing command stops before any record write
+- **THEN** the stop is blocked once
 
 #### Scenario: No record written
 - **WHEN** a board is configured and a session started by a record-writing command stops before any record write
@@ -188,8 +204,16 @@ The system SHALL, at session start and when a prompt starts a tld command, show 
 - **THEN** no warning is shown, and a malformed disable list never causes a denial
 
 ### Requirement: Trusted profile source
-The system SHALL read `hooks.disable` and the protect lists from the profile on the remote's default branch, not from the working tree, so that a session cannot switch a guard off by editing its own files.
+The system SHALL read `hooks.disable`, the protect lists and the gate settings from the resolved profile on the remote's default branch (its own keys, its cached base and the defaults), not from the working tree, SHALL apply the stricter of the two for every guarded key so a branch may strengthen but never weaken a guard, and SHALL read a base only from the cache and never fetch it inside a hook.
 
 #### Scenario: Disable edited locally
 - **WHEN** a session edits the working-tree profile to disable a hook
 - **THEN** the hook stays active until the default branch's profile changes
+
+#### Scenario: Gate switched off on a branch
+- **WHEN** a branch's profile sets a gate to false and the default branch's resolved profile has it on
+- **THEN** the gate stays on and a notice says the branch value is weaker
+
+#### Scenario: Base not cached in a hook
+- **WHEN** the profile's base is not in the cache
+- **THEN** nothing from the base is applied, no hook is switched off by it, and a notice says to run the profile validation to fetch it

@@ -25,10 +25,13 @@ def cache(tmp_path, monkeypatch):
     return tmp_path / "cache" / "openspec" / VERSION
 
 
+BASE = "git:\n  main_branch: main\nverify:\n  fast: ['true']\n  dod: ['true']\n"  # the keys no default can supply
+
+
 @pytest.fixture
 def profile(tmp_path):
     p = tmp_path / "toolkit.yaml"
-    p.write_text(f'spec:\n  version: "{VERSION}"\n')
+    p.write_text(BASE + f'spec:\n  version: "{VERSION}"\n')
     return p
 
 
@@ -139,18 +142,11 @@ def test_invalid_change_id_on_validate_exits_2(rec, profile, tmp_path, capsys):
 @pytest.mark.parametrize("version", ['"latest"', '"^2.1.0"', '"2.1"', "2.1", '"2.1.0\\n"', '"2.1.0 --registry=x"', "null"])
 def test_invalid_versions_exit_2(rec, tmp_path, capsys, version):
     p = tmp_path / "p.yaml"
-    p.write_text(f"spec:\n  version: {version}\n")
-    shown = {"2.1": 2.1, "null": None}.get(version)
-    if version not in ("2.1", "null"):
-        import yaml
-        shown = yaml.safe_load(version)
+    p.write_text(BASE + f"spec:\n  version: {version}\n")
     code = go(p, tmp_path, "list")
     err = capsys.readouterr().err
-    if version == "null":
-        assert code == 2 and "got None" in err
-    else:
-        assert code == 2 and err == (
-            f"tld ops spec: spec.version must be an exact release such as 2.1.0 (got {shown!r})\n")
+    # the resolver's schema check says it first; the command's own exact-release check catches the rest
+    assert code == 2 and err.startswith(("toolkit.yaml: 'spec.version': ", "tld ops spec: spec.version must be"))
     assert not rec.calls and not rec.which_calls
 
 
@@ -166,14 +162,31 @@ def test_default_profile_is_under_root(rec, tmp_path, capsys):
     assert f"profile not found: {tmp_path / '.tld' / 'toolkit.yaml'}" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("text", ['spec: "2.1.0"\n', "project: {}\n", "spec: {}\n", ""])
-def test_missing_spec_version(rec, tmp_path, capsys, text):
+def test_absent_spec_section_message(rec, tmp_path, capsys):
+    p = tmp_path / "p.yaml"
+    p.write_text(BASE)
+    assert go(p, tmp_path, "list") == 2
+    assert capsys.readouterr().err == ("toolkit.yaml: /spec needs a 'spec' section (an empty 'spec:' uses version "
+                                       "2.1.0; see docs/guides/spec.md)\n")
+    assert not rec.calls
+
+
+@pytest.mark.parametrize("text", ['spec: "2.1.0"\n', "project: {}\n", ""])
+def test_an_unusable_profile_is_reported(rec, tmp_path, capsys, text):
     p = tmp_path / "p.yaml"
     p.write_text(text)
     assert go(p, tmp_path, "list") == 2
-    assert capsys.readouterr().err == ("toolkit.yaml: missing required key 'spec.version' "
-                                       "(add a spec block; see docs/guides/spec.md)\n")
+    assert capsys.readouterr().err.startswith("toolkit.yaml: ")
     assert not rec.calls
+
+
+@pytest.mark.parametrize("spec", ["spec:\n", "spec: {}\n"])
+def test_an_empty_spec_section_pins_the_default_version(rec, cache, tmp_path, spec):
+    assert cache.name == "2.1.0"  # the version of the default
+    p = tmp_path / "p.yaml"
+    p.write_text(BASE + spec)
+    assert go(p, tmp_path, "list") == 0
+    assert rec.calls[-1][0] == node_argv(cache, "list", "--specs")
 
 
 @pytest.mark.parametrize("missing", ["node", "npm"])
@@ -329,7 +342,7 @@ cat > {out}/node.stdin
 exit 7
 ''')
     prof = tmp_path / "p.yaml"
-    prof.write_text('spec:\n  version: "2.1.0"\n')
+    prof.write_text(BASE + 'spec:\n  version: "2.1.0"\n')
     env = {"PATH": f"{bin_dir}{os.pathsep}/usr/bin{os.pathsep}/bin", "HOME": str(tmp_path),
            "TLD_CACHE_DIR": str(tmp_path / "c"), "GITHUB_TOKEN": "x", "TLD_BOARD_TOKEN": "x", "NPM_TOKEN": "x",
            "NODE_OPTIONS": "--require=/nonexistent.js", "npm_config_registry": "https://evil.invalid/",

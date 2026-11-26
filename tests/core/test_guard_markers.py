@@ -7,6 +7,7 @@ import time
 import pytest
 
 from conftest import BIN
+import hooks_helpers
 from hooks_helpers import bash, event, make_repo, run
 
 LAND, RELEASE = ".github/workflows/tld-land.yml", ".github/workflows/tld-release.yml"
@@ -42,7 +43,9 @@ def test_the_tld_workflow_files_are_protected_without_the_marker(fresh_repo):
         assert r.code == 2 and "tld guard allow-workflow-install" in r.stderr, r.stderr
 
 
-def test_the_marker_allows_only_the_files_it_names(fresh_repo):
+def test_the_marker_allows_only_the_files_it_names(tmp_path):
+    # the profile and ordinary workflows are off the default list: this repository lists them
+    fresh_repo = make_repo(tmp_path / "listed", "feature/demo", hooks_helpers.PROFILE + "hooks:\n  protect_paths: ['.tld/toolkit.yaml', '.github/workflows/**']\n")
     r = tld(fresh_repo, "allow-workflow-install", "tld-land.yml")
     assert r.returncode == 0 and "may be written for the next 15 minutes" in r.stdout
     assert write(fresh_repo, LAND).code == 0

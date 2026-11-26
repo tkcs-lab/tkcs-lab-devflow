@@ -1,0 +1,25 @@
+{
+  "model": "stub",
+  "turns": 4,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "Dry run: nothing to migrate from claude-toolkit. Two things are off their default path: CHANGES.md (default CHANGELOG.md) and docs/adrs (default docs/adr). Each would be one question, rename or keep. Nothing was changed.",
+  "actions": [
+    {
+      "id": "t1",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "tld migrate .",
+      "error": null,
+      "output": ""
+    },
+    {
+      "id": "t2",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "tld migrate . --defaults",
+      "error": null,
+      "output": ""
+    }
+  ]
+}

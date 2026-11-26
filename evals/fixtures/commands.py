@@ -3,6 +3,8 @@ judgement, so the task checks the command still reads the profile and stops wher
 
 `build(dest, command=...)`:
 - `land`: no `git.bot_login`, so land stops with the missing-key message.
+- `repo-admin`: the profile's `admin.policy` is a repository override file (no `org`), so repo-admin stops and
+  names the organisation's policy file as the one to run.
 - `spec`: no `spec` block, so `spec init` stops with the missing-key message.
 - `sysml`: no `sysml` block, so `sysml init` stops with the missing-key message.
 - `deps`: no `deps` block, so deps stops with the missing-key message.
@@ -15,6 +17,8 @@ judgement, so the task checks the command still reads the profile and stops wher
   starts a worker.
 - `migrate`: a claude-toolkit era profile in `.claude/toolkit.yaml` (model names, `models.planner`, no
   `tld.version`); `migrate --dry-run` shows the plan and changes nothing.
+- `migrate-off-default-paths`: a repository already on tld whose changelog is `CHANGES.md` and whose ADRs are in
+  `docs/adrs`; `migrate --defaults` names both and asks, and a dry run changes nothing.
 No real project names, no secrets, no network.
 """
 from __future__ import annotations
@@ -55,15 +59,19 @@ def build(dest: Path, command: str = "land") -> dict:
     if command == "land":
         files[".tld/toolkit.yaml"] = _profile()
         expected["stop_message"] = "toolkit.yaml: missing required key 'git.bot_login'"
+    elif command == "repo-admin":
+        files[".tld/toolkit.yaml"] = _profile("\nadmin:\n  policy: .tld/admin-policy.yaml\n")
+        files[".tld/admin-policy.yaml"] = "repo_settings:\n  allow_auto_merge: true\n"
+        expected["stop_message"] = "is this repository's override file"
     elif command == "spec":
         files[".tld/toolkit.yaml"] = _profile()
-        expected["stop_message"] = "toolkit.yaml: missing required key 'spec.version' (add a spec block; see docs/guides/spec.md)"
+        expected["stop_message"] = "toolkit.yaml: /spec needs a 'spec' section (an empty 'spec:' uses version 2.1.0; see docs/guides/spec.md)"
     elif command == "sysml":
         files[".tld/toolkit.yaml"] = _profile()
-        expected["stop_message"] = "toolkit.yaml: missing required key 'sysml.subset' (add a sysml block; see docs/guides/sysml.md)"
+        expected["stop_message"] = "toolkit.yaml: /sysml needs a 'sysml' section (an empty 'sysml:' uses subset 1; see docs/guides/sysml.md)"
     elif command == "deps":
         files[".tld/toolkit.yaml"] = _profile()
-        expected["stop_message"] = "missing required key 'deps.cooldown_days'"
+        expected["stop_message"] = "toolkit.yaml: /deps needs a 'deps' section (an empty 'deps:' uses cooldown_days 3 and time_budget_minutes 90)"
     elif command == "upstream":
         files[".tld/toolkit.yaml"] = _profile(
             "\nupstream:\n  repo: example-org/notes-upstream\n  tag_pattern: '^v[0-9]+\\.[0-9]+\\.[0-9]+$'\n"
@@ -95,6 +103,11 @@ def build(dest: Path, command: str = "land") -> dict:
         files.pop(".tld/toolkit.yaml", None)
         files[".claude/toolkit.yaml"] = legacy + "\nmodels:\n  planner: opus\n  worker: sonnet\n"
         expected["stop_message"] = [".tld/toolkit.yaml", "models.planner"]
+    elif command == "migrate-off-default-paths":
+        files[".tld/toolkit.yaml"] = _profile()
+        files["CHANGES.md"] = "# Changes\n\n## [Unreleased]\n\n- Notes can be tagged.\n"
+        files["docs/adrs/0001-json-store.md"] = "# 1. Keep notes in a JSON file\n\nAccepted.\n"
+        expected["stop_message"] = ["CHANGES.md", "docs/adrs"]
     else:
         raise ValueError(f"no fixture for command {command!r}")
     init_repo(dest, files)

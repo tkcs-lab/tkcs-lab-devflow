@@ -48,7 +48,6 @@ import sys
 import time
 from pathlib import Path
 
-import yaml
 
 from tld.plan import manifest as vm  # noqa: E402
 
@@ -108,8 +107,13 @@ def load_config(args) -> dict:
     cfg = {"root": root, "index": None, "adr_dir": None, "adr_index": None, "plan_dir": "docs/plans"}
     profile = Path(args.profile) if args.profile else root / DEFAULT_PROFILE
     if profile.is_file():
-        data = yaml.safe_load(profile.read_text()) or {}
-        docs = data.get("docs", {}) if isinstance(data, dict) else {}
+        from tld.profile import resolve as rs
+        loaded = rs.load(profile, root=root, trusted=False, fetch=False)
+        if loaded.errors:
+            for e in loaded.errors:
+                print(f"toolkit.yaml: {e}", file=sys.stderr)
+            raise SystemExit(2)
+        docs = loaded.profile.get("docs") or {}
         cfg["index"] = docs.get("index")
         cfg["adr_dir"] = docs.get("adr_dir")
         cfg["adr_index"] = docs.get("adr_index")

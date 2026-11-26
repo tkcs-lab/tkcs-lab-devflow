@@ -12,18 +12,31 @@
   "properties": {
     "org": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*(?![\\s\\S])",
       "description": "The GitHub organisation this policy governs."
+    },
+    "extends": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "array", "maxItems": 4, "items": { "type": "string", "minLength": 1 } }
+      ],
+      "description": "Files this policy inherits, as a string or a list of one to four pins, each <owner>/<repo>/<path>@<40-hex commit SHA> (a tag or branch is rejected). Later entries win; this file wins over all of them. An empty list means none, and the policy is not inherited. Only the policy file you run may set it."
     },
     "repos": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Which repositories of the organisation the repository-level checks cover.",
+      "description": "Which repositories of the organisation the repository-level checks cover. Only the policy file you run may set it.",
       "properties": {
         "include": { "$ref": "#/$defs/names", "description": "Repository name globs. Default: all." },
         "exclude": { "$ref": "#/$defs/names", "description": "Repository name globs to leave out." },
         "skip_archived": { "type": "boolean", "description": "Default true." },
-        "skip_forks": { "type": "boolean", "description": "Default true." }
+        "skip_forks": { "type": "boolean", "description": "Default true." },
+        "override_path": { "type": "string", "minLength": 1, "description": "Where each repository keeps its override file. Default .tld/admin-policy.yaml; a path below the repository root (no absolute path, no '..')." },
+        "allow_loosen": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "description": "Repository name globs mapped to the guarded keys an override of those repositories may loosen, for example {\"legacy-*\": [\"security.secret_scanning\"]}."
+        }
       }
     },
     "org_settings": {
@@ -157,21 +170,40 @@
     "agent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["agent_login"],
       "description": "The account sessions push as, and the environment tld-agent that holds TLD_AGENT_TOKEN.",
       "properties": {
-        "agent_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$", "description": "GitHub login of the agent account. A role above write (maintain, admin) is lowered to write; a role below write is reported." },
+        "agent_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?![\\s\\S])", "description": "GitHub login of the agent account. Without it the login is derived from the repository profile (git.bot_login) when the policy inherits. A role above write (maintain, admin) is lowered to write; a role below write is reported." },
         "branch_policy": { "enum": ["default_branch", "protected_branches"], "description": "Which branches may use the environment tld-agent. Default default_branch (a custom policy naming only the default branch)." }
       }
     },
     "release": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["reviewer_login"],
       "description": "The environment the release workflow runs in: only the default branch may use it, the owner is its one required reviewer, and it holds TLD_RELEASE_TOKEN (an owner token).",
       "properties": {
-        "reviewer_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$", "description": "GitHub login of the owner, the one required reviewer of every release run." },
-        "environment": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "description": "Name of the environment. Default tld-release; the release workflow template is rendered with it." }
+        "reviewer_login": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?![\\s\\S])", "description": "GitHub login of the owner, the one required reviewer of every release run. Without it the login is derived from the repository profile (git.owner_login, or its one git.codeowners entry) when the policy inherits." },
+        "environment": { "type": "string", "pattern": "^[A-Za-z0-9._-]+(?![\\s\\S])", "description": "Name of the environment. Default tld-release; the release workflow template is rendered with it." }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base"],
+      "description": "The org base profile every repository extends (tld.extends): whether it does, whether its pin is current, which guarded keys it overrides.",
+      "properties": {
+        "base": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}/[^@\\s]+\\.ya?ml$", "description": "The base file as <owner>/<repo>/<path>, without a pin." },
+        "pin": { "type": "string", "pattern": "^(latest-tag|[0-9a-f]{40})$", "description": "The pin repositories should have: latest-tag (the newest version tag of the base repository; default) or a full 40-hex commit. A tag name is rejected: a tag can move." },
+        "guarded_overrides": { "enum": ["report", "ignore"], "description": "report (default): list each guarded key a repository overrides, as information. ignore: say nothing." }
+      }
+    },
+    "git_ops": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The central git-ops repository the repositories report to.",
+      "properties": {
+        "repo": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$", "description": "The central repository as <owner>/<repo>." },
+        "workflow": { "type": "string", "pattern": "^[A-Za-z0-9._-]+\\.ya?ml$", "description": "The workflow file name in the central repository. Default tld-git-ops.yml." },
+        "allowlist": { "type": "string", "minLength": 1, "description": "Path of the file in the central repository that names every audited repository." }
       }
     },
     "secrets": {
@@ -276,10 +308,28 @@
         "properties": {
           "template": { "enum": ["release", "land"], "description": "A template shipped with tld." },
           "path": { "type": "string", "minLength": 1, "description": "A template file of your own, below the directory of the policy file (no absolute path, no ..)." },
-          "dest": { "type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9._-]+\\.ya?ml$", "description": "Where it goes. Default: .github/workflows/ plus the template's file name." },
+          "dest": { "type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9._-]+\\.ya?ml(?![\\s\\S])", "description": "Where it goes. Default: .github/workflows/ plus the template's file name." },
           "params": { "type": "object", "description": "Values for the template's __UPPER_CASE__ placeholders, as strings of letters, digits and . _ / -. main_branch defaults to the repository's default branch." },
           "repos": { "$ref": "#/$defs/names", "description": "Repository name globs this entry applies to. Default: all selected." },
           "remove": { "type": "boolean", "description": "Delete the destination file instead of installing it." }
+        }
+      }
+    },
+    "workflow_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Parameters of a workflow template for one repository, set in its override file without restating the workflows list; copied into the matching entries of the effective workflows.",
+      "properties": {
+        "release": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Values for the release template's placeholders, as strings of letters, digits and . _ / -. A repository may set only these four; main_branch and the environment come from the policy and the repository.",
+          "properties": {
+            "tag_prefix": { "type": "string" },
+            "version_style": { "type": "string" },
+            "check_script": { "type": "string" },
+            "create_release": { "type": "string" }
+          }
         }
       }
     }

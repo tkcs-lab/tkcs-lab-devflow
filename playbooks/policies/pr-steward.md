@@ -75,5 +75,8 @@ request title.
   the main branch's history; write each one for that audience.
 - **Never open a version heading in the changelog on a feature branch** (when `docs.changelog` is set):
   entries go under `docs.changelog.section`.
+- **A pull request that changes a workflow or the profile names it under Security.** The `## Summary` of a pull
+  request that changes a file under `.github/workflows/` or `.tld/toolkit.yaml` has a `**Security:**` line that names
+  each such file (`tld plan summary-check --changed` checks it).
 - **A protected branch is protected like the main branch.** Work that targets a long-lived integration
   branch the project documents branches from it and is proposed back into it.

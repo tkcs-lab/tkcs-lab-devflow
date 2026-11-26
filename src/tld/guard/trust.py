@@ -38,7 +38,7 @@ FALLBACK_MAINS = ("main", "master")  # also protected while the remote's default
 STRIP_ENV = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
              "GIT_INDEX_FILE", "GIT_NAMESPACE", "GIT_REPLACE_REF_BASE", "GIT_GRAFT_FILE")
 SAFE_OPTS = ("-c", "core.hooksPath=/dev/null", "-c", "protocol.ext.allow=never", "-c", "core.fsmonitor=false")
-SHA_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
+SHA_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?\Z")
 
 
 @dataclass

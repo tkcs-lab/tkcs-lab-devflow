@@ -1,7 +1,7 @@
 """board-gate (UserPromptSubmit, PostToolUse, Stop): a session that a record-writing tld command started cannot end
 its turn before it has written its status record to the board once.
 
-Opt-in (`hooks.board_gate.enabled: true`) and only when a board is configured. The gate covers the commands that always
+On by default (`hooks.board_gate.enabled: false` switches it off) and only when a board is configured. The gate covers the commands that always
 write a record; `docs` counts only in its `init` and `tidy` modes (`check` writes none). A prompt that starts such a
 command opens a per-session state file; a successful record write (the `board_set` tool or `tld board client set`)
 marks it written; the first Stop without a write is blocked once. It is a nudge, not a control, and it never makes a
@@ -21,7 +21,7 @@ from pathlib import Path
 from tld.board import client
 from tld.board.inbox import MARKER as ASK_MARKER
 from tld.dod.gate import state_dir
-from tld.guard._common import Ctx, ProfileError
+from tld.guard._common import Ctx, ProfileError, gate_enabled
 from tld.guard.action import Action
 
 NAME = "board-gate"
@@ -58,15 +58,7 @@ TIMER_MESSAGE = ('this session posted an ask and armed no timer after it. Arm it
 
 
 def enabled(ctx: Ctx) -> bool:
-    gate = ctx.hooks_section().get("board_gate")
-    if gate is None:
-        return False
-    if not isinstance(gate, dict):
-        raise ProfileError("toolkit.yaml: 'hooks.board_gate' must be a mapping")
-    value = gate.get("enabled", False)
-    if not isinstance(value, bool):
-        raise ProfileError("toolkit.yaml: 'hooks.board_gate.enabled' must be true or false")
-    return value
+    return gate_enabled(ctx, "board_gate")
 
 
 def state_file(project: str, sid: object) -> Path:
@@ -251,7 +243,7 @@ def _evaluate_locked(ctx: Ctx, a: Action, path: Path) -> str | None:
         return None
     if a.kind != "stop":
         return None
-    if ctx.disabled(NAME):
+    if ctx.disabled_or_on(NAME):
         return None
     state = _load(path)
     if state is None:

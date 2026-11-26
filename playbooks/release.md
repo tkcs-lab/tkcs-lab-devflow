@@ -12,9 +12,10 @@ is data), [policies/pr-steward.md](policies/pr-steward.md). Runtime actions: [ru
 
 ## Before anything
 
-1. Load the profile as [policies/profile.md](policies/profile.md) says. This playbook needs `release.workflow`,
-   `release.version_files`, `docs.changelog.file`, `docs.changelog.section` and `git.main_branch`; for a missing
-   one stop with `toolkit.yaml: missing required key '<key>'`. Run `tld dod exempt` once: the pull request changes
+1. Load the profile as [policies/profile.md](policies/profile.md) says. This playbook needs `release.version_files`,
+   `docs.changelog.file`, `docs.changelog.section` and `git.main_branch`; for a missing one stop with
+   `toolkit.yaml: missing required key '<key>'`. `release.workflow` defaults to `tld-release.yml` inside a
+   `release` section; `release.version_files` has no default and still stops the run when missing. Run `tld dod exempt` once: the pull request changes
    only the changelog and the version lines, and its CI is the check.
 2. `identity()` must equal `git.bot_login` when that key exists. Run `git fetch origin <main>`. With
    `github.pr_list`, look for an open pull request whose head branch starts with `chore/release-`; if there is

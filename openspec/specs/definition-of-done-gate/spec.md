@@ -5,17 +5,6 @@ Keep a coding session from stopping while the profile's definition-of-done comma
 
 ## Requirements
 
-### Requirement: Opt-in gate
-The system SHALL run the dod-gate Stop hook only when the profile sets `hooks.dod_gate.enabled` to true, and SHALL let the session stop without any check when the key is absent or not true, or when `dod-gate` is disabled through the profile's `disable` list.
-
-#### Scenario: Off by default
-- **WHEN** the profile has no `hooks.dod_gate` or `enabled` is false and a Stop event arrives with failing `verify.dod` commands
-- **THEN** the hook exits 0 and runs nothing
-
-#### Scenario: Disabled by name
-- **WHEN** `dod-gate` is in the disable list read from the main branch
-- **THEN** a failing session is allowed to stop with exit 0
-
 ### Requirement: Blocking a red definition of done
 The system SHALL, when the gate is enabled and the tree has changes, run every `verify.dod` command (a string, or a mapping with `run` and optional `cwd` under the project) through the shell, run all of them even after a failure, and block the stop by exiting 2 with a message on stderr that names the attempt, each failing command with its exit code, timeout or start error, and the last lines of its output.
 
@@ -104,3 +93,22 @@ The system SHALL accept the Stop event as JSON on stdin in the hook script, prin
 #### Scenario: Unknown flag
 - **WHEN** the script or `tld dod` is given an argument other than the exempt flag
 - **THEN** usage text is printed on stderr and the exit code is 2
+
+### Requirement: Default-on gate
+The system SHALL run the dod-gate Stop hook unless the resolved profile sets `hooks.dod_gate.enabled` to false or `dod-gate` is disabled through the profile's `disable` list, and SHALL let a session stop without any check when the repository has no profile. The gate SHALL read `verify.dod` and `max_attempts` from the profile on the remote's default branch when that copy is available, and from the working tree only when no such copy is available.
+
+#### Scenario: On by default
+- **WHEN** the profile has no `hooks.dod_gate` and a Stop event arrives with failing `verify.dod` commands in a session that changed files
+- **THEN** the hook blocks the stop
+
+#### Scenario: Switched off
+- **WHEN** `hooks.dod_gate.enabled` is false and a Stop event arrives with failing `verify.dod` commands
+- **THEN** the hook exits 0 and runs nothing
+
+#### Scenario: Commands come from the default branch
+- **WHEN** a branch's profile changes `verify.dod` and the default branch's copy is available
+- **THEN** the hook runs the default branch's commands
+
+#### Scenario: Disabled by name
+- **WHEN** `dod-gate` is in the disable list read from the main branch
+- **THEN** a failing session is allowed to stop with exit 0

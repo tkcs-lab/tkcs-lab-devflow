@@ -6,7 +6,7 @@ feature branch, reviewed, and delivered as one pull request that a person merges
 
 Everything specific to a repository lives in one file, its **profile** `.tld/toolkit.yaml`: the docs to read, the
 branch rules, the verify commands, the CI workflows a session may dispatch, the stacks, the roles and the worker
-levels. The procedures contain no project facts and stop with a message naming a missing key.
+levels. A repository can extend one pinned org base profile ([docs/guides/org-base.md](docs/guides/org-base.md)), and built-in defaults fill the common values. The procedures contain no project facts and stop with a message naming a missing key.
 
 ## Core and adapter
 
@@ -84,10 +84,10 @@ a policy file; [guide](docs/guides/admin.md)) and `tld:git-ops` (delete a remote
   required checks, no force push, no deletion) and `tld-tags` (no workflow token can tag), an agent account with
   the `write` role, and the environments `tld-agent` and `tld-release` that hold `TLD_AGENT_TOKEN` and
   `TLD_RELEASE_TOKEN`. Tags have one route: the release workflow; the owner approves its publish job in GitHub (after `/tld:release` or by running the workflow).
-- **Seatbelt: the hooks.** `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths` and the opt-in
-  `dod-gate` deny the action before it runs and tell the agent what to do instead; `model-check` only warns when a session runs on the most expensive level, and `env-check` only warns when a cloud session runs in an environment the profile does not list (`runtime.environments`). The protect lists and
-  `hooks.disable` are read from the profile on the remote default branch. They need `python3` 3.11+ and PyYAML in
-  the session, and every repository in a Project that enables `tld` needs at least `git.main_branch` in its profile.
+- **Seatbelt: the hooks.** `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths` and the
+  `dod-gate` (on by default, like `plan-gate` and `board-gate`) deny the action before it runs and tell the agent what to do instead; `model-check` only warns when a session runs on the most expensive level, and `env-check` only warns when a cloud session runs in an environment the profile does not list (`runtime.environments`). The protect lists,
+  `hooks.disable` and the gates are clamped to the resolved profile on the remote default branch. They need `python3` 3.11+ and PyYAML in
+  the session, and every repository in a Project that enables `tld` needs a main branch the hooks can resolve (the profile's `git.main_branch`, or the one `origin/HEAD` names).
 
 See [docs/architecture/hooks.md](docs/architecture/hooks.md) and [SECURITY.md](SECURITY.md).
 

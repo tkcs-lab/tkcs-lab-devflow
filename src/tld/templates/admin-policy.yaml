@@ -5,6 +5,8 @@
 
 org: your-org                      # REQUIRED: the GitHub organisation
 
+extends: []                        # files to inherit, each <owner>/<repo>/<path>@<40-hex commit> (tld ops repo-admin latest-pin prints one); empty: no inheritance
+
 repos:
   include: ["*"]                   # name globs; default all
   exclude: []                      # e.g. ["sandbox-*"]
@@ -30,6 +32,9 @@ tokens:
     revoke_expired: true
 
 repo_settings:                     # changed with PATCH /repos/{owner}/{repo}
+  allow_merge_commit: true         # the default merge style of the tld profile is merge-commit
+  allow_squash_merge: false
+  allow_rebase_merge: false
   allow_auto_merge: true
   delete_branch_on_merge: true
   allow_update_branch: true
@@ -69,6 +74,16 @@ agent:
 release:                           # the environment tld-release: default branch only, the owner approves each run
   reviewer_login: your-owner-account   # REQUIRED in this section; TLD_RELEASE_TOKEN (an owner token) is its secret
   environment: tld-release
+
+profile:                           # the org base profile (tld.extends): audited in every repository that has .tld/toolkit.yaml
+  base: your-org/.github/tld/profile-base.yaml   # REQUIRED in this section: <owner>/<repo>/<path>, no pin
+  pin: latest-tag                # latest-tag (newest version tag of the base repository) | a full 40-hex commit; never a tag name
+  guarded_overrides: report      # report | ignore: list the guarded keys a repository overrides (information)
+
+git_ops:                         # the central git-ops repository
+  repo: your-org/git-ops
+  workflow: tld-git-ops.yml
+  allowlist: allowlist.yml       # the file in the central repository that names every audited repository
 
 secrets:
   required: []                     # e.g. ["SOME_TOKEN"]: a repository without it, own or from the organisation, is reported
@@ -112,6 +127,8 @@ workflow_lint:                     # read only: what to fix by hand in the workf
   pin_actions: third_party         # third_party | all: actions not pinned to a commit SHA
   require_permissions: true
   forbid_pull_request_target: true
+
+workflow_params: {}                # per repository, in its override file: {release: {tag_prefix: "v"}} fills the parameters of the release entry
 
 workflows:                         # installed or updated through a pull request; the script never merges it
   - template: release              # cut a release: annotated tag plus GitHub release (run by hand; starts as a dry run)

@@ -23,6 +23,7 @@ tests:
   - tests/core/test_roles_page_note.py
   src/tld/guard/protect_paths.py:
   - tests/core/test_hook_protect_paths.py
+  - tests/core/test_hook_dod_gate.py
   - tests/core/test_hook_protect_paths_setup.py
   - tests/core/test_guard_mutations.py
   - tests/core/test_guard_corpus.py
@@ -30,6 +31,15 @@ tests:
   - tests/core/test_validate_profile.py
   - tests/core/test_profile_roles.py
   - tests/core/test_profile_version.py
+  src/tld/profile/merge.py:
+  - tests/core/test_profile_merge.py
+  - tests/core/test_profile_resolve.py
+  src/tld/profile/resolve.py:
+  - tests/core/test_profile_resolve.py
+  src/tld/profile/base.py:
+  - tests/core/test_profile_base.py
+  src/tld/profile/defaults.py:
+  - tests/core/test_profile_defaults.py
   src/tld/plan/manifest.py:
   - tests/core/test_validate_manifest.py
   src/tld/plan/summary.py:
@@ -42,6 +52,8 @@ tests:
   - tests/core/test_hook_protect_paths_setup.py
   src/tld/guard/_common.py:
   - tests/core/test_guard_trust.py
+  - tests/core/test_hook_dod_gate.py
+  - tests/core/test_hook_protect_paths.py
   - tests/adapters/claude/test_hooks_config.py
   - tests/core/test_guard_corpus.py
   - tests/core/test_hook_no_force_push.py
@@ -90,6 +102,22 @@ tests:
   - tests/core/test_ops_deps_prepare.py
   src/tld/ops/deps_body.py:
   - tests/core/test_ops_deps_body.py
+  src/tld/ops/repo_admin.py:
+  - tests/core/test_repo_admin_policy_check.py
+  - tests/core/test_repo_admin_rulesets.py
+  - tests/core/test_repo_admin_unchanged.py
+  - tests/core/test_repo_admin_derive.py
+  - tests/core/test_repo_admin_kinds.py
+  src/tld/ops/repo_admin_policy.py:
+  - tests/core/test_repo_admin_policy.py
+  - tests/core/test_repo_admin_extends.py
+  src/tld/ops/repo_admin_detect.py:
+  - tests/core/test_repo_admin_detect.py
+  src/tld/ops/repo_admin_extends.py:
+  - tests/core/test_repo_admin_extends.py
+  - tests/core/test_repo_admin_inherit.py
+  src/tld/ops/repo_admin_profile.py:
+  - tests/core/test_repo_admin_derive.py
 mutants:
 - id: NM1
   file: src/tld/guard/no_merge.py
@@ -668,6 +696,16 @@ mutants:
   why: problems exit 0 (killed by every exit-1 test)
   old: "        print(f\"summary: {problem}\")\n    return 1"
   new: "        print(f\"summary: {problem}\")\n    return 0"
+- id: SC1
+  file: src/tld/plan/summary.py
+  why: the workflow prefix loses its trailing slash, so a sibling directory counts (killed by test_changed_workflows_old_dir_is_not_a_workflow)
+  old: "p.startswith(SECURITY_PATHS[0])"
+  new: "p.startswith(SECURITY_PATHS[0][:-1])"
+- id: SC2
+  file: src/tld/plan/summary.py
+  why: a file name no longer names a changed file, only its full path does (killed by test_changed_named_by_file_name)
+  old: "for cand in (path, path.rsplit(\"/\", 1)[-1]):"
+  new: "for cand in (path,):"
 - id: FI1
   file: src/tld/plan/findings.py
   why: the row count may differ from the count given (killed by test_n_with_a_different_row_count_is_a_problem)
@@ -708,6 +746,16 @@ mutants:
   why: reflektor allowed at points other than dod
   old: 'name == "reflektor" and points != ["dod"]'
   new: 'False'
+- id: VP18
+  file: src/tld/profile/validate.py
+  why: the required parameter is inverted, so required keys are skipped by default and demanded when asked to skip
+  old: '        if required:'
+  new: '        if not required:'
+- id: VP19
+  file: src/tld/profile/validate.py
+  why: normalise leaves a null section as None
+  old: 'if key in out and out[key] is None:'
+  new: 'if False:'
 - id: GT10
   file: src/tld/guard/_release_dispatch.py
   why: a release dispatch with skip_checks true allowed
@@ -1003,3 +1051,193 @@ mutants:
   why: the raw block is not scanned for the allow mark and secrets, only the cleaned text (killed by test_change_report_equals_section)
   old: '_suspect(raw) or _suspect(cleaned)'
   new: '_suspect(cleaned)'
+- id: MG1
+  file: src/tld/profile/merge.py
+  why: a posture weaker than the base's is no longer refused (killed by test_weaker_posture_refused)
+  old: 'POSTURE_RANK[repo_posture] < floor_rank'
+  new: 'POSTURE_RANK[repo_posture] > floor_rank'
+- id: MG2
+  file: src/tld/profile/merge.py
+  why: a gate switched off is refused only when the base writes the gate itself, not when the built-in floor has it on (killed by test_a_gate_the_base_does_not_write_cannot_be_switched_off)
+  old: '(floor_on is None or floor_on) and'
+  new: '(floor_on) and'
+- id: MG3
+  file: src/tld/profile/merge.py
+  why: the clamp keeps the branch's protect_paths_allow patterns that the default branch lacks (killed by test_clamp_protect_paths_allow_intersection)
+  old: 'kept = [p for p in m_allow if p in t_allow]'
+  new: 'kept = [p for p in m_allow if p not in t_allow]'
+- id: RS1
+  file: src/tld/profile/resolve.py
+  why: the branch is not clamped to the default branch's profile (killed by test_branch_weakening_is_clamped_to_main)
+  old: 'resolved, clamped = merge_mod.clamp(trusted, resolved, trusted_branch)'
+  new: 'resolved, clamped = resolved, []'
+- id: RS2
+  file: src/tld/profile/resolve.py
+  why: a repository may weaken the guarded keys of its base (killed by the guarded-key tests of test_profile_resolve.py)
+  old: 'errors += [_plain(e) for e in merge_mod.guarded_errors(base, resolved, allow, base_ref.label)]'
+  new: 'errors += []'
+- id: BS1
+  file: src/tld/profile/base.py
+  why: a pin of 39 hex digits instead of 40 is accepted (killed by test_validate_rejects_a_malformed_source and the pin tests of test_profile_base.py)
+  old: 'SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")'
+  new: 'SHA40_RE = re.compile(r"^[0-9a-fA-F]{39}$")'
+- id: CL1
+  file: src/tld/guard/_common.py
+  why: guarded_workflows drops the release workflow of the trusted profile (killed by test_release_workflow_of_the_trusted_profile_is_denied)
+  old: '    for profile in ([trusted] if available else [ctx.profile]):'
+  new: '    for profile in []:'
+- id: CL2
+  file: src/tld/guard/_common.py
+  why: the gate clamp uses the working copy only, so a branch can switch off a gate the default branch has on (killed by test_gate_switched_off_on_a_branch_stays_on)
+  old: '    if available and _gate_on(_get(trusted, "hooks", key)):'
+  new: '    if False:'
+- id: CL3
+  file: src/tld/guard/_common.py
+  why: the dod-gate runs verify.dod of the working profile even when a trusted copy exists (killed by test_verify_dod_is_read_from_the_trusted_copy)
+  old: '    if not (available and isinstance(trusted, dict)):'
+  new: '    if True:'
+- id: AI1
+  file: src/tld/ops/repo_admin_policy.py
+  why: "kind_of returns override for a document with org (killed by test_kind_of)"
+  old: "return \"run\" if \"org\" in doc else \"override\""
+  new: "return \"override\""
+- id: AI2
+  file: src/tld/ops/repo_admin_policy.py
+  why: "the organisation-level message check is skipped for override keys (killed by test_key_errors_override_org_level)"
+  old: "elif kind == \"override\" and key in ORG_LEVEL:"
+  new: "elif False and key in ORG_LEVEL:"
+- id: AI3
+  file: src/tld/ops/repo_admin_policy.py
+  why: "clamp_irreversible never sets revoke_expired (killed by test_clamp_irreversible)"
+  old: "fine[\"revoke_expired\"] = False"
+  new: "pass"
+- id: AI4
+  file: src/tld/ops/repo_admin_policy.py
+  why: "loosened treats an ordered key as loosened in the stricter direction (killed by test_loosened_each_group)"
+  old: "order.index(value) < order.index(org_value)"
+  new: "order.index(value) > order.index(org_value)"
+- id: AI5
+  file: src/tld/ops/repo_admin_policy.py
+  why: "key_errors does not refuse a private section in a public base (killed by test_key_errors_base_public_private_sections)"
+  old: "elif kind == \"base\" and public and key in PRIVATE_ONLY:"
+  new: "elif False and public and key in PRIVATE_ONLY:"
+- id: AI6
+  file: src/tld/ops/repo_admin_policy.py
+  why: "allowed_for matches no glob (killed by test_allowed_for_globs)"
+  old: "if fnmatch.fnmatchcase(repo_name, glob):"
+  new: "if False:"
+- id: AI7
+  file: src/tld/ops/repo_admin_policy.py
+  why: "key_errors skips the irreversible rule for a base (killed by test_key_errors_base_irreversible)"
+  old: "if value is not MISSING and _turns_on(key, value):"
+  new: "if False:"
+- id: AI8
+  file: src/tld/ops/repo_admin_policy.py
+  why: "clamp_guarded does not restore a shrunk list (killed by test_clamp_guarded_restores_and_allows)"
+  old: "set_path(out, item.key, kept + [x for x in item.org_value if x not in kept])"
+  new: "set_path(out, item.key, kept)"
+- id: AX1
+  file: src/tld/ops/repo_admin_detect.py
+  why: "status_checks keeps a name that failed on one sample (killed by test_flaky_failed_skipped_and_partial_checks_are_excluded)"
+  old: "return f\"failed on #{number}\""
+  new: "return None"
+- id: AX2
+  file: src/tld/ops/repo_admin_detect.py
+  why: "status_checks keeps a name missing from some samples (killed by test_flaky_failed_skipped_and_partial_checks_are_excluded)"
+  old: "if seen < len(samples):"
+  new: "if False:"
+- id: AX3
+  file: src/tld/ops/repo_admin_detect.py
+  why: "status_checks keeps a skipped name (killed by test_flaky_failed_skipped_and_partial_checks_are_excluded)"
+  old: "return f\"skipped on #{number}\""
+  new: "return None"
+- id: AE1
+  file: src/tld/ops/repo_admin_extends.py
+  why: "the compare status check in fetch_layer also accepts ahead (killed by test_pin_is_not_on_the_default_branch)"
+  old: "if status not in (\"behind\", \"identical\"):"
+  new: "if status not in (\"behind\", \"identical\", \"ahead\"):"
+- id: AE2
+  file: src/tld/ops/repo_admin_extends.py
+  why: "shape_errors returns the parsed text with no checks (killed by test_token_like_text)"
+  old: "return base_mod.check_base_shape(text, f\"{label}: \")"
+  new: "return __import__(\"yaml\").safe_load(text), []"
+- id: AE3
+  file: src/tld/ops/repo_admin_extends.py
+  why: "fetch_layer always passes public=None (killed by test_organisation_private_section_in_a_public_repository)"
+  old: "public = None if private else f\"{ref.owner}/{ref.repo}\""
+  new: "public = None"
+- id: AP1
+  file: src/tld/ops/repo_admin_profile.py
+  why: "repo_profile ignores the check_base_text errors (killed by test_repo_profile_is_none_when_unreadable_or_refused)"
+  old: "            if errors:\n                return None, exists\n        res = resolve_mod"
+  new: "            if False:\n                return None, exists\n        res = resolve_mod"
+- id: RB1
+  file: src/tld/ops/repo_admin.py
+  why: "ruleset_bodies ignores live_checks (killed by test_absent_checks_are_kept_in_the_put_body)"
+  old: "else (live_checks or [])"
+  new: "else []"
+- id: RB2
+  file: src/tld/ops/repo_admin.py
+  why: "ruleset_bodies treats an explicit empty list like an absent key (killed by test_explicit_empty_checks_ignore_live_checks_in_the_body)"
+  old: "main[\"required_status_checks\"] if \"required_status_checks\" in main else (live_checks or [])"
+  new: "(main.get(\"required_status_checks\") or live_checks or [])"
+- id: LG1
+  file: src/tld/ops/repo_admin.py
+  why: "the same-login check on the effective pair is off (killed by test_equal_effective_logins_stand_down)"
+  old: "if has_release and compare and reviewer and compare.casefold() == reviewer.casefold():"
+  new: "if False:"
+- id: LG2
+  file: src/tld/ops/repo_admin.py
+  why: "the same-login check compares with case (killed by test_equal_effective_logins_stand_down)"
+  old: "compare.casefold() == reviewer.casefold():\n            same,"
+  new: "compare == reviewer:\n            same,"
+- id: LG3
+  file: src/tld/ops/repo_admin.py
+  why: "the derived reviewer comes from the profile that still holds bot_login (killed by test_equal_effective_logins_stand_down)"
+  old: "derive_logins(bare)"
+  new: "derive_logins(profile)"
+- id: LG4
+  file: src/tld/ops/repo_admin.py
+  why: "a repository override may set any workflow param (killed by test_override_workflow_params_are_limited_to_the_four_keys)"
+  old: "if key not in OVERRIDE_PARAMS]"
+  new: "if False]"
+- id: LG5
+  file: src/tld/ops/repo_admin.py
+  why: "no warning for a derived agent login (killed by test_logins_derived)"
+  old: "if ctx.inherited and login and lg.agent_derived:"
+  new: "if False:"
+- id: LG6
+  file: src/tld/ops/repo_admin.py
+  why: "no warning for a derived reviewer login (killed by test_logins_derived)"
+  old: "if lg.reviewer_derived:"
+  new: "if False:"
+- id: LG7
+  file: src/tld/ops/repo_admin.py
+  why: "_param_diffs ignores the integration_id of a kept live check (killed by test_kept_live_checks_keep_their_integration_id)"
+  old: "if contexts(want) != contexts(have) or unbound else []"
+  new: "if contexts(want) != contexts(have) else []"
+- id: LG8
+  file: src/tld/ops/repo_admin.py
+  why: "_live_contexts drops the integration_id (killed by test_kept_live_checks_keep_their_integration_id)"
+  old: "return [dict(c) for c in checks if"
+  new: "return [{\"context\": c.get(\"context\")} for c in checks if"
+- id: LG9
+  file: src/tld/ops/repo_admin.py
+  why: "release.environment equal to the agent environment is kept (killed by test_pol_warnings_and_the_agent_environment_are_separate_findings)"
+  old: "    if isinstance(env, str) and env.casefold() == AGENT_ENV.casefold():"
+  new: "    if False:"
+- id: LG10
+  file: src/tld/ops/repo_admin.py
+  why: "the merge-time same-login check is off (killed by test_equal_organisation_logins_stand_the_release_check_down)"
+  old: "if isinstance(agent, str) and isinstance(reviewer, str) and agent.casefold() == reviewer.casefold():"
+  new: "if False:"
+- id: LG11
+  file: src/tld/ops/repo_admin_policy.py
+  why: "derive_logins accepts a bot login that is not a plain login (killed by test_derive_logins)"
+  old: "if LOGIN_RE.fullmatch(bot):"
+  new: "if bot:"
+- id: LG12
+  file: src/tld/ops/repo_admin_policy.py
+  why: "derive_logins accepts an owner login that is not a plain login (killed by test_derive_logins)"
+  old: "if LOGIN_RE.fullmatch(owner):"
+  new: "if owner:"

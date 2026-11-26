@@ -1,0 +1,40 @@
+## The organisation-level file of the repo-admin policy. Keep it in a private repository (for example <org>/git-ops)
+## and list it in `extends` of the organisation's policy, after the shared base, pinned by commit.
+## Everything below is an example: remove the leading "# " of the sections you want managed and edit the values.
+## Check the file with: tld ops repo-admin validate-policy --kind base <this file>
+## No irreversible switch belongs here (delete_unused, delete_unlisted, delete_merged, webhooks.delete, the keys of
+## tokens.fine_grained): an extended file may not turn one on; set it only in the policy file you run.
+
+# org_settings:                      # changed with PATCH /orgs/{org}
+#   default_repository_permission: read
+#   members_can_create_public_repositories: false
+#   web_commit_signoff_required: false
+#   two_factor_requirement_enabled: true   # read only: a difference is reported, you change it by hand
+#
+# members:
+#   require_two_factor: true         # report members without two-factor authentication
+#   max_owners: 3
+#
+# apps:                              # report installed apps that are not listed (GitHub has no 'last used' for apps)
+#   allow: []                        # app slugs, e.g. ["dependabot", "codecov"]
+#
+# tokens:
+#   fine_grained: {}                 # both keys of fine_grained are irreversible: set them in the policy file you run
+#
+# secrets:
+#   required: []                     # e.g. ["SOME_TOKEN"]: a repository without it, own or from the organisation, is reported
+#   keep: []                         # never reported as unused
+#
+# variables:
+#   required: []
+#   keep: []
+#
+# profile:                           # the org base profile (tld.extends): audited in every repository that has .tld/toolkit.yaml
+#   base: your-org/.github/tld/profile-base.yaml   # REQUIRED in this section: <owner>/<repo>/<path>, no pin
+#   pin: latest-tag                  # latest-tag (newest version tag of the base repository) | a full 40-hex commit; never a tag name
+#   guarded_overrides: report        # report | ignore: list the guarded keys a repository overrides (information)
+#
+# git_ops:                           # the central git-ops repository
+#   repo: your-org/git-ops
+#   workflow: tld-git-ops.yml
+#   allowlist: allowlist.yml         # the file in the central repository that names every audited repository

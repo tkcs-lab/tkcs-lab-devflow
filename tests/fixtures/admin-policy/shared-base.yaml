@@ -1,0 +1,16 @@
+# Shared base of the repo-admin policy: the settings every repository of the organisations that extend it should have.
+# The file is public. It holds no organisation-level section (org_settings, members, apps, tokens, secrets, variables
+# stay in a private file), no credential and no irreversible switch. A repository's own differences go into its override
+# file. Check it before you commit it with:
+#   tld ops repo-admin validate-policy --kind base --public <this file>
+# Pin it from a policy as <owner>/<repo>/<path>@<40-hex commit>; tld ops repo-admin latest-pin prints the pin.
+
+repo_settings: {allow_auto_merge: true, delete_branch_on_merge: true, allow_update_branch: true, allow_merge_commit: true, allow_squash_merge: false, allow_rebase_merge: false}
+security: {vulnerability_alerts: true, automated_security_fixes: true, secret_scanning: true, secret_push_protection: true, private_vulnerability_reporting: true}
+actions: {default_workflow_permissions: read, can_approve_pull_request_reviews: false}
+rulesets: {default_branch: {admin_bypass: true}, tags: true}
+agent: {branch_policy: default_branch}
+release: {environment: tld-release}
+workflow_lint: {pin_actions: third_party, require_permissions: true, forbid_pull_request_target: true}
+config_dirs: {forbid: [".archon", ".agents"]}
+workflows: [{template: release}, {template: land}]

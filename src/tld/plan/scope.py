@@ -120,20 +120,37 @@ def phase_touches(manifest: dict) -> dict[str, list[str]]:
     return out
 
 
-def load_ignore(profile: str | None) -> list[str]:
-    """`scope.ignore` of the profile, plus the changelog file when the profile has `docs.changelog`
-    (the worker brief demands that line from every phase, so it is expected everywhere)."""
+def _trusted_profile(repo: str | None) -> dict | None:
+    """The profile on the remote default branch (raw), or None when no trusted copy is reachable. The working copy is
+    not read for `scope.ignore` or the changelog file: a merged phase could name `**` and silence every later phase."""
+    if not repo:
+        return None
+    try:
+        from tld.guard import trust
+        t = trust.trusted(str(repo))
+    except Exception:  # noqa: BLE001 - the check must never fail the merge
+        return None
+    return t.profile if t.available and isinstance(t.profile, dict) else None
+
+
+def load_ignore(profile: str | None, repo: str | None = None) -> list[str]:
+    """`scope.ignore` (from the default branch's profile when one is reachable, else the working copy), plus the
+    changelog file when the profile has `docs.changelog` (the worker brief demands that line from every phase, so
+    it is expected everywhere)."""
     if not profile:
         return []
-    try:
-        data = yaml.safe_load(Path(profile).read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
+    from tld.profile import resolve as rs
+    loaded = rs.load(profile, trusted=False, fetch=False)
+    if loaded.errors:
         raise ScopeError("profile unreadable")
+    data = loaded.profile
     ignore: list[str] = []
-    scope = data.get("scope") if isinstance(data, dict) else None
+    trusted = _trusted_profile(repo)
+    source = trusted if trusted is not None else data  # the default branch's copy, else the working copy
+    scope = source.get("scope") if isinstance(source, dict) else None
     if isinstance(scope, dict) and isinstance(scope.get("ignore"), list):
         ignore += [g for g in scope["ignore"] if isinstance(g, str)]
-    docs = data.get("docs") if isinstance(data, dict) else None
+    docs = source.get("docs") if isinstance(source, dict) else None
     changelog = docs.get("changelog") if isinstance(docs, dict) else None
     if isinstance(changelog, dict) and isinstance(changelog.get("file"), str):
         ignore.append(changelog["file"])
@@ -159,7 +176,7 @@ def run_check(repo: str, plan: str, phase: str, base: str, head: str, label: str
             raise ScopeError("phase not in the manifest")
         if not touches[phase]:
             raise ScopeError("phase declares no touches")
-        ignore = load_ignore(profile)
+        ignore = load_ignore(profile, repo)
         paths = changed_paths(repo, base, head)
         others = {pid: ts for pid, ts in touches.items() if pid != phase}
         found = classify(paths, touches[phase], others, ignore)

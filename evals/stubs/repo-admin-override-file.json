@@ -1,0 +1,17 @@
+{
+  "model": "stub",
+  "turns": 3,
+  "cost_usd": 0.0,
+  "guard": true,
+  "result_text": "repo-admin: .tld/admin-policy.yaml is this repository's override file; run repo-admin with <path of the organisation's policy file>",
+  "actions": [
+    {
+      "id": "t1",
+      "kind": "shell",
+      "tool": "shell",
+      "command": "cat .tld/admin-policy.yaml",
+      "error": null,
+      "output": ""
+    }
+  ]
+}

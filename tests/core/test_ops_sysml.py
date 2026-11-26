@@ -24,6 +24,7 @@ NEW = "package Extra {\n  part def Cache { doc /* a cache */ }\n}\n"
 PROPOSAL = "# x\n\n## Why\n\nBecause.\n\n## What Changes\n\nThe api doc.\n\n## Impact\n\nNone.\n"
 DATE = datetime.date(2026, 1, 2)
 MSG = "tld ops sysml: "
+BASE = "git:\n  main_branch: main\nverify:\n  fast: ['true']\n  dod: ['true']\n"  # the keys no default can supply
 
 
 def write(root: Path, rel: str, text: str) -> None:
@@ -31,7 +32,7 @@ def write(root: Path, rel: str, text: str) -> None:
     (root / rel).write_text(text)
 
 
-def make_repo(root: Path, models: dict[str, str] | None = None, profile: str | None = "sysml:\n  subset: 1\n") -> Path:
+def make_repo(root: Path, models: dict[str, str] | None = None, profile: str | None = BASE + "sysml:\n  subset: 1\n") -> Path:
     if profile is not None:
         write(root, ".tld/toolkit.yaml", profile)
     for rel, text in (models if models is not None else {"core/api.sysml": API, "core/db.sysml": DB}).items():
@@ -99,28 +100,41 @@ def test_no_profile(tmp_path, capsys):
 
 def test_explicit_profile_path(tmp_path, capsys):
     root = make_repo(tmp_path / "r", profile=None)
-    write(tmp_path, "other.yaml", "sysml:\n  subset: 1\n")
+    write(tmp_path, "other.yaml", BASE + "sysml:\n  subset: 1\n")
     code, out, _ = run(root, "check", "--profile", str(tmp_path / "other.yaml"), capsys=capsys)
     assert code == 0 and out == "sysml: ok (4 elements)\n"
 
 
-@pytest.mark.parametrize("profile", ["profile: {}\n", "sysml: {}\n", "sysml: 3\n", ": : :\n\t- [", "", "- a\n"])
-def test_no_sysml_block(tmp_path, capsys, profile):
-    root = make_repo(tmp_path / "r", profile=profile)
+def test_absent_sysml_section_message(tmp_path, capsys):
+    root = make_repo(tmp_path / "r", profile=BASE)
     code, out, err = run(root, "check", capsys=capsys)
     assert (code, out) == (2, "")
-    assert err == "toolkit.yaml: missing required key 'sysml.subset' (add a sysml block; see docs/guides/sysml.md)\n"
+    assert err == ("toolkit.yaml: /sysml needs a 'sysml' section (an empty 'sysml:' uses subset 1; "
+                   "see docs/guides/sysml.md)\n")
 
 
-@pytest.mark.parametrize("value,shown", [("2", "2"), ("true", "True"), ("'1'", "'1'"), ("1.0", "1.0"), ("null", "None")])
-def test_subset_must_be_the_integer_1(tmp_path, capsys, value, shown):
-    root = make_repo(tmp_path / "r", profile=f"sysml:\n  subset: {value}\n")
+def test_an_empty_sysml_section_uses_subset_1(tmp_path, capsys):
+    root = make_repo(tmp_path / "r", profile=BASE + "sysml:\n")
+    code, out, _ = run(root, "check", capsys=capsys)
+    assert code == 0 and out == "sysml: ok (4 elements)\n"
+
+
+@pytest.mark.parametrize("profile", ["sysml: 3\n", ": : :\n\t- [", "- a\n"])
+def test_an_unusable_profile_is_reported(tmp_path, capsys, profile):
+    root = make_repo(tmp_path / "r", profile=profile)
     code, out, err = run(root, "check", capsys=capsys)
-    assert (code, out, err) == (2, "", f"{MSG}sysml.subset must be 1 (got {shown})\n")
+    assert (code, out) == (2, "") and err.startswith("toolkit.yaml: ")
+
+
+@pytest.mark.parametrize("value", ["2", "true", "'1'", "1.0", "null"])
+def test_subset_must_be_the_integer_1(tmp_path, capsys, value):
+    root = make_repo(tmp_path / "r", profile=BASE + f"sysml:\n  subset: {value}\n")
+    code, out, err = run(root, "check", capsys=capsys)
+    assert (code, out) == (2, "") and err.startswith("toolkit.yaml: 'sysml.subset': ")
 
 
 def test_subset_value_is_escaped_and_bounded(tmp_path, capsys):
-    root = make_repo(tmp_path / "r", profile='sysml:\n  subset: "\\e[31m' + "x" * 900 + '"\n')
+    root = make_repo(tmp_path / "r", profile=BASE + 'sysml:\n  subset: "\\e[31m' + "x" * 900 + '"\n')
     code, _, err = run(root, "check", capsys=capsys)
     assert code == 2 and "\x1b" not in err and err.count("\n") == 1 and len(err) < 700
 
@@ -331,7 +345,7 @@ def test_render_with_symlinked_sysml_dir_exits_2(tmp_path, capsys):
     real = make_repo(tmp_path / "real")
     root = tmp_path / "r"
     root.mkdir()
-    write(root, ".tld/toolkit.yaml", "sysml:\n  subset: 1\n")
+    write(root, ".tld/toolkit.yaml", BASE + "sysml:\n  subset: 1\n")
     (root / "sysml").symlink_to(real / "sysml")
     for sub in (["check"], ["render"], ["new-change", "x"], ["archive", "x"]):
         code, out, err = run(root, *sub, capsys=capsys)
