@@ -238,3 +238,26 @@ def test_detected_text_reaches_the_pull_request_only_through_the_cell(ra):
 
 def test_cell_defuses_the_hash_like_the_at_sign(ra):
     assert ra._cell("#1 @a") == "\\#\u200b1 @\u200ba"
+
+
+def test_own_release_workflow_keeps_the_organisations_repos_scoping(ra):
+    policy = {**POLICY, "workflows": [{"template": "release"}, {"template": "land", "repos": ["other-*"]}, {"template": "land"}]}
+    own = prof("", "release: {workflow: ship.yml, version_files: [{path: VERSION, pattern: '(.*)'}]}\n")
+    ctx, _ = inherited(ra, policy, routes=served(), files={"app": {TOOLKIT: own}})
+    [f] = proposals(ra, ctx)
+    assert content(f)["workflows"] == [{"template": "land"}]  # the entry scoped to other-* is not proposed for app
+    scoped = {**POLICY, "workflows": [{"template": "release"}, {"template": "land", "repos": ["other-*"]}]}
+    ctx, _ = inherited(ra, scoped, routes=served(), files={"app": {TOOLKIT: own}})
+    assert content(proposals(ra, ctx)[0])["workflows"] == []
+
+
+def test_notes_are_separate_lines_with_the_release_line_first(ra):
+    runs = {n: [("test", "success")] + [(f"flaky{i}", "failure") for i in range(30)] for n in (1, 2, 3)}
+    ctx, fake = inherited(ra, POLICY, routes={**served(runs=runs), **base_pr_routes()}, files={"app": {"README.md": "x"}})
+    [f] = proposals(ra, ctx)
+    lines = f.action.note.split("\n")
+    assert lines[0].startswith("release parameters:") and lines[1].startswith("required_status_checks:") and len(lines) > 30
+    assert ra.apply_findings(ctx, [f], yes=True, allow_delete=False, out=lambda _l: None) == 0
+    body = [w for w in fake.writes if w[1].endswith("/pulls")][0][2]["body"]
+    assert body.index("release parameters") < body.index("required_status_checks") < body.index("flaky29")
+    assert body.count("\n- ") >= 30  # one bullet per line, each cut on its own

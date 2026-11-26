@@ -73,7 +73,10 @@ def test_logins_derived(ra):
     repo = ctx.all_repos[0]
     lg = ctx.logins(repo)
     assert (lg.agent, lg.reviewer, lg.same) == ("bot", "owner", False)
-    assert ra.check_agent(ctx) == [] and ra.check_release(ctx) == []  # the derived logins match the live state
+    found = ra.check_agent(ctx) + ra.check_release(ctx)  # the derived logins match the live state: only the naming findings
+    assert sorted((f.subject, f.severity) for f in found) == [
+        ("login:derived:agent.agent_login", "warn"), ("login:derived:release.reviewer_login", "warn")]
+    assert "taken from the repository profile" in found[0].message and "bot" in found[0].message
     assert ("GET", PERM) in [("GET", p) for p in fake.reads] and "/users/owner" in fake.reads
     assert len(toolkit_reads(fake)) == 1  # the profile is read once for both checks
     only, _ = inherited(ra, POLICY, files={"app": {TOOLKIT: prof(", bot_login: bot, codeowners: [owner]")}})
@@ -141,3 +144,30 @@ def test_release_template_stands_down_without_a_release_section(ra):
     plain, _ = base.world(ra, dict(policy), files={"app": {TOOLKIT: prof("")}})
     [i] = ra.check_files(plain)
     assert i.action  # without inheritance the profile is not read
+
+
+def test_a_derived_login_is_named_in_its_fixes(ra):
+    routes = {**agent_routes(), **release_routes(), ("GET", "/users/mallory"): {"login": "mallory", "id": 66}}
+    ctx, _ = inherited(ra, POLICY, routes=routes, files={"app": {TOOLKIT: prof(", owner_login: mallory, bot_login: bot")}})
+    found = ra.check_release(ctx)
+    [named] = [f for f in found if f.subject == "login:derived:release.reviewer_login"]
+    assert "mallory" in named.message and "git.owner_login" in named.message
+    [env] = [f for f in found if f.subject == "environment:tld-release"]
+    assert "mallory (taken from the repository profile) as the one required reviewer" in env.message and "the owner" not in env.message
+    explicit, _ = inherited(ra, {**POLICY, "release": {"environment": "tld-release", "reviewer_login": "owner"}}, routes=routes,
+                            files={"app": {TOOLKIT: prof(", owner_login: mallory")}})
+    found = ra.check_release(explicit)
+    assert not [f for f in found if f.subject.startswith("login:derived")]
+    assert "and the owner as the one required reviewer" in [f for f in found if f.subject == "environment:tld-release"][0].message
+
+
+def test_release_without_an_agent_section_compares_with_the_profile_bot(ra):
+    policy = {"release": {"environment": "tld-release", "reviewer_login": "Bot"}}
+    ctx, fake = inherited(ra, policy, routes=release_routes(), files={"app": {TOOLKIT: prof(", bot_login: bot")}})
+    assert ctx.logins(ctx.all_repos[0]).same
+    assert [(f.subject, f.severity) for f in ra.check_release(ctx)] == [("login:same", "warn")]
+    assert not [p for p in fake.reads if p.startswith("/users/")] and fake.writes == []
+    other, _ = inherited(ra, policy, routes=release_routes(), files={"app": {TOOLKIT: prof(", bot_login: robot")}})
+    assert not other.logins(other.all_repos[0]).same
+    none, _ = inherited(ra, policy, routes=release_routes(), files={"app": {"README.md": "x"}})
+    assert not none.logins(none.all_repos[0]).same  # no profile: nothing to compare with
