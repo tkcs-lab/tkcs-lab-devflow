@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Audit and update GitHub organisation and repository settings from a policy file.
 
-    repo_admin.py validate-policy POLICY
+    repo_admin.py validate-policy POLICY [--kind auto|run|override|base] [--public] [--resolved] [--explain] [--offline]
+                                  [--org-policy FILE --repo-name NAME]
+    repo_admin.py latest-pin OWNER/REPO/PATH
     repo_admin.py whoami [--org ORG]
     repo_admin.py audit --policy POLICY [--repo NAME]... [--check NAME]... [--format md|json] [--out FILE]
     repo_admin.py apply --policy POLICY [--repo NAME]... [--check NAME]... [--only ID]...
@@ -351,6 +353,8 @@ def validate_policy(policy, base_dir: Path | None = None, kind: str = "run", whe
             errors.append(f"'{where_wf}.path': the file name must end in .yml or .yaml, or set 'dest'")
     errors += _param_errors("workflow_params.release", "release", policy.get("workflow_params", {}).get("release", {}))
     if kind == "run":
+        from tld.ops import repo_admin_extends
+        errors += repo_admin_extends.parse_list(policy.get("extends"))[1]
         repos = policy.get("repos", {})
         if "override_path" in repos:
             rel = Path(repos["override_path"])
@@ -365,7 +369,11 @@ def validate_policy(policy, base_dir: Path | None = None, kind: str = "run", whe
     return errors
 
 
-def load_policy(path: str) -> dict:
+def load_policy(path: str, client=None) -> dict:
+    """Read, validate and (with a non-empty `extends`) resolve the policy file that is run.
+
+    Without `extends` the file is the policy. With it, the pinned files are fetched through `client` (default: the
+    token's own) and merged under the file; any error stops the run, nothing is guessed."""
     p = Path(path)
     if not p.is_file():
         raise SystemExit(f"repo_admin: no policy at '{p}'")
@@ -373,9 +381,21 @@ def load_policy(path: str) -> dict:
         policy = yaml.safe_load(p.read_text())
     except yaml.YAMLError as exc:
         raise SystemExit(f"repo_admin: policy is not valid YAML: {exc}")
+    if isinstance(policy, dict) and policy and "org" not in policy:
+        raise SystemExit(f"repo_admin: '{p}' is a repository override file (it has no 'org'); "
+                         "run the audit with the organisation's policy file")
     errors = validate_policy(policy, p.resolve().parent)
     if errors:
         raise SystemExit("\n".join(f"policy: {e}" for e in errors))
+    if policy.get("extends"):
+        from tld.ops import repo_admin_extends
+        try:
+            res = repo_admin_extends.resolve(client if client is not None else _client(), policy)
+        except (ApiError, ValueError) as exc:
+            raise SystemExit(f"policy: cannot resolve 'extends': {clean(exc)}")
+        if res.errors or res.policy is None:
+            raise SystemExit("\n".join(f"policy: {clean(e)}" for e in res.errors))
+        policy = res.policy
     policy["_dir"] = str(p.resolve().parent)
     return policy
 
@@ -1559,11 +1579,13 @@ def _cell(text: str, limit: int = 220) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def render_markdown(org: str, findings: list[Finding], repo_count: int, now: dt.datetime) -> str:
+def render_markdown(org: str, findings: list[Finding], repo_count: int, now: dt.datetime, extends=None) -> str:
     counts = {s: sum(1 for f in findings if f.severity == s) for s in SEVERITIES}
     lines = [f"# Repository admin audit: {org}", "",
              f"{now:%Y-%m-%d %H:%M} UTC, {repo_count} repositories in scope. "
              + ", ".join(f"{counts[s]} {s}" for s in SEVERITIES if counts[s]) + ("." if findings else "Nothing to report."), ""]
+    if extends:
+        lines[3:3] = ["", f"Extends: {', '.join(extends)}."]
     titles = {"fix": "Out of policy, apply can change it", "warn": "Out of policy, needs a person",
               "info": "For information", "unavailable": "Could not check", "error": "Failed"}
     for sev in SEVERITIES:
@@ -1664,22 +1686,136 @@ def _client() -> Client:
     return Client(find_token(), os.environ.get("GITHUB_API_URL", API))
 
 
+OWN_FILE = "the repository this file goes into"
+ORG_LINE = re.compile(r"(?m)^[\"']?org[\"']?\s*:")
+
+
+def _flatten(doc, prefix: str = "") -> list[str]:
+    """The dotted leaf keys of a document (lists and scalars are leaves)."""
+    if isinstance(doc, dict) and doc:
+        return [leaf for k, v in doc.items() for leaf in _flatten(v, f"{prefix}.{k}" if prefix else str(k))]
+    return [prefix]
+
+
+def clean(text: object, limit: int = 400) -> str:
+    """Text that may come from a fetched file or a server: control characters become '?' and the length is capped,
+    so it cannot forge a line or move the cursor of a terminal or log."""
+    text = text if isinstance(text, str) else str(text)
+    out = "".join(c if c.isprintable() else "?" for c in text)
+    return out if len(out) <= limit else out[:limit] + "..."
+
+
+def _validate_fail(errors: list[str]) -> int:
+    for e in errors:
+        print(f"policy: {clean(e)}", file=sys.stderr)
+    return 1
+
+
 def cmd_validate(args) -> int:
+    from tld.ops import repo_admin_extends
+    if args.public and args.kind != "base":
+        print("validate-policy: --public needs --kind base", file=sys.stderr)
+        return 2
+    if bool(args.org_policy) != bool(args.repo_name):
+        print("validate-policy: --org-policy needs --repo-name" if args.org_policy else
+              "validate-policy: --repo-name needs --org-policy", file=sys.stderr)
+        return 2
+    explain = args.explain
+    resolved = args.resolved or explain
     p = Path(args.policy)
     if not p.is_file():
         print(f"repo_admin: no policy at '{p}'", file=sys.stderr)
         return 1
     try:
-        policy = yaml.safe_load(p.read_text())
-    except yaml.YAMLError as exc:
-        print(f"policy: not valid YAML: {exc}", file=sys.stderr)
+        text = p.read_text()
+    except (OSError, UnicodeError):
+        print(f"policy: '{p}' cannot be read as UTF-8 text", file=sys.stderr)
         return 1
-    errors = validate_policy(policy, p.resolve().parent)
-    for e in errors:
-        print(f"policy: {e}", file=sys.stderr)
-    if not errors:
-        print(f"policy: OK ({p})")
-    return 1 if errors else 0
+    kind = args.kind
+    if kind == "auto":
+        kind = "run" if ORG_LINE.search(text) else "override"
+    if kind == "run":
+        try:
+            policy = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            print(f"policy: not valid YAML: {exc}", file=sys.stderr)
+            return 1
+    else:  # a base or an override comes from somewhere else: the shape check first (credentials, anchors, size)
+        policy, errors = repo_admin_extends.shape_errors(text, str(p))
+        if policy is None:
+            return _validate_fail(errors)
+        if args.kind == "auto" and "org" in policy:
+            kind = "run"
+    where = str(p) if kind != "run" else ""
+    errors = validate_policy(policy, p.resolve().parent, kind=kind, where=where,
+                             public=OWN_FILE if args.public else None)
+    if errors:
+        return _validate_fail(errors)
+    view, sources = policy, {}
+    if kind == "run" and policy.get("extends") and not args.offline:
+        try:
+            res = repo_admin_extends.resolve(_client(), policy)
+        except (ApiError, ValueError) as exc:
+            return _validate_fail([f"cannot resolve 'extends': {exc}"])
+        if res.errors or res.policy is None:
+            return _validate_fail(res.errors)
+        view, sources = res.policy, res.sources
+    else:
+        sources = {k: (kind if kind != "run" else "run") for k in _flatten(policy) if k}
+    if resolved and kind == "override" and args.org_policy:
+        org_path = Path(args.org_policy)
+        if not org_path.is_file():
+            print(f"repo_admin: no policy at '{org_path}'", file=sys.stderr)
+            return 1
+        try:
+            org_doc = load_policy(str(org_path)) if not args.offline else yaml.safe_load(org_path.read_text())
+        except SystemExit as exc:
+            print(clean(exc), file=sys.stderr)
+            return 1
+        except (ApiError, yaml.YAMLError) as exc:
+            return _validate_fail([f"cannot read '{org_path}': {exc}"])
+        if not isinstance(org_doc, dict):
+            return _validate_fail([f"'{org_path}': the policy must be a YAML mapping"])
+        if args.offline:
+            if org_doc.get("extends"):
+                return _validate_fail([f"'{org_path}' has 'extends'; its bases are not fetched with --offline, "
+                                       "so the effective policy cannot be shown"])
+            bad = validate_policy(org_doc, org_path.resolve().parent)
+            if bad:
+                return _validate_fail(bad)
+        org_sources = org_doc.get("_sources") or {k: "run" for k in _flatten(org_doc) if k}
+        eff = repo_admin_policy.apply_override(org_doc, policy)
+        view, _ = repo_admin_policy.clamp_guarded(org_doc, eff, repo_admin_policy.allowed_for(org_doc, args.repo_name))
+        sources = dict(org_sources)
+        mine = {k for k in _flatten({k: v for k, v in policy.items() if k != "workflow_params"}) if k}
+        mine |= {k for k in _flatten(policy.get("workflow_params") or {}, "workflow_params") if k}
+        if policy.get("workflow_params"):
+            mine.add("workflows")
+        sources.update({k: f"override {args.repo_name}" for k in mine})
+    if resolved:
+        shown = {k: v for k, v in view.items() if not str(k).startswith("_")}
+        if explain:
+            leaves = repo_admin_policy.explain_lines(shown, sources)
+            print("\n".join(clean(line, 2000) for line in leaves))
+        else:
+            sys.stdout.write(yaml.safe_dump(shown, sort_keys=False))
+    suffix = {"run": "", "override": ", repository override", "base": ", base"}[kind]
+    print(f"policy: OK ({p}{suffix})", file=sys.stderr if resolved else sys.stdout)
+    return 0
+
+
+def cmd_latest_pin(args) -> int:
+    from tld.ops import repo_admin_extends
+    try:
+        sha, tag = repo_admin_extends.latest_pin(_client(), args.source)
+    except (LookupError, ValueError) as exc:
+        print(clean(exc), file=sys.stderr)
+        return 1
+    except (ApiError, ValueError) as exc:
+        print(f"latest-pin: {clean(exc)}", file=sys.stderr)
+        return 1
+    print(json.dumps({"sha": sha, "tag": tag}))
+    return 0
 
 
 def cmd_whoami(args) -> int:
@@ -1700,12 +1836,13 @@ def cmd_whoami(args) -> int:
 
 
 def _run(args) -> tuple[Ctx, list[Finding]]:
-    policy = load_policy(args.policy)
+    client = _client()
+    policy = load_policy(args.policy, client)
     for name in args.repo:
         owner, _, short = name.rpartition("/")
         if not re.fullmatch(r"[A-Za-z0-9._-]+", short) or (owner and owner.lower() != policy["org"].lower()):
             raise SystemExit(f"repo_admin: --repo '{name}': give a repository name or {policy['org']}/name")
-    ctx = Ctx(_client(), policy, args.repo)
+    ctx = Ctx(client, policy, args.repo)
     return ctx, run_checks(ctx, args.check or None)
 
 
@@ -1717,10 +1854,13 @@ def cmd_audit(args) -> int:
         print(f"repo_admin: {exc}", file=sys.stderr)
         return 1
     if args.format == "json":
-        text = json.dumps({"org": ctx.org, "generated_at": ctx.now.isoformat(), "repositories": repo_count,
-                           "findings": [f.to_dict() for f in findings]}, indent=2) + "\n"
+        report = {"org": ctx.org, "generated_at": ctx.now.isoformat(), "repositories": repo_count}
+        if ctx.p.get("_extends"):
+            report["extends"] = list(ctx.p["_extends"])
+        report["findings"] = [f.to_dict() for f in findings]
+        text = json.dumps(report, indent=2) + "\n"
     else:
-        text = render_markdown(ctx.org, findings, repo_count, ctx.now)
+        text = render_markdown(ctx.org, findings, repo_count, ctx.now, ctx.p.get("_extends") or None)
     if args.out:
         Path(args.out).write_text(text)
     else:
@@ -1749,8 +1889,18 @@ def cmd_apply(args) -> int:
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="repo_admin.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
-    v = sub.add_parser("validate-policy", help="check a policy file")
+    v = sub.add_parser("validate-policy", help="check a policy file (run file, repository override or shared base)")
     v.add_argument("policy")
+    v.add_argument("--kind", choices=["auto", "run", "override", "base"], default="auto",
+                   help="auto: run when the file has `org`, else override")
+    v.add_argument("--public", action="store_true", help="with --kind base: the file goes into a public repository")
+    v.add_argument("--resolved", action="store_true", help="print the merged policy (resolves `extends` unless --offline)")
+    v.add_argument("--explain", action="store_true", help="print each merged value with its source (implies --resolved)")
+    v.add_argument("--offline", action="store_true", help="do not fetch the files `extends` names")
+    v.add_argument("--org-policy", metavar="FILE", help="with an override file: show its effective policy over this organisation policy")
+    v.add_argument("--repo-name", metavar="NAME", help="the repository the override file belongs to (with --org-policy)")
+    lp = sub.add_parser("latest-pin", help="print the commit (and tag) to pin an `extends` entry to")
+    lp.add_argument("source", metavar="OWNER/REPO/PATH")
     w = sub.add_parser("whoami", help="show which account the token belongs to and its role in the organisation")
     w.add_argument("--org")
     for name, helptext in (("audit", "read-only: list what differs from the policy"),
@@ -1771,7 +1921,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    handlers = {"validate-policy": cmd_validate, "whoami": cmd_whoami, "audit": cmd_audit, "apply": cmd_apply}
+    handlers = {"validate-policy": cmd_validate, "latest-pin": cmd_latest_pin, "whoami": cmd_whoami, "audit": cmd_audit, "apply": cmd_apply}
     return handlers[args.command](args)
 
 

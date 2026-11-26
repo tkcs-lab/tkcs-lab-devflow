@@ -84,7 +84,7 @@ modules). `tld --version` prints the running version, the one a profile's `tld.v
 | `tld ops upstream-sync plan\|prepare ...` | `tld.ops.upstream_sync` | sync a fork to an upstream release |
 | `tld ops deps-prepare --base REF --branch NAME --group REF... [--bot-ref REF...]` | `tld.ops.deps_prepare` | combine dependency update groups onto one local branch, lockfiles left for the lock commands; exit 3 nothing applied |
 | `tld ops deps-body FILE` | `tld.ops.deps_body` | render the combined dependency pull request body from validated entries |
-| `tld ops repo-admin validate-policy\|whoami\|audit\|apply ...` | `tld.ops.repo_admin` | audit and update organisation and repository settings |
+| `tld ops repo-admin validate-policy\|whoami\|audit\|apply\|latest-pin ...` | `tld.ops.repo_admin` | audit and update organisation and repository settings |
 | `tld ops docs-index check\|inventory\|move ...` | `tld.ops.docs_index` | the docs index rules and doc moves (`move` also rewrites the profile's paths; a dry run unless `--apply`) |
 | `tld ops spec init\|new-change\|list\|validate\|archive [--profile FILE] [--root DIR]` | `tld.ops.spec` | the pinned OpenSpec CLI (installed once per `spec.version` into the cache, run with an allowlisted environment) |
 | `tld ops sysml new-change\|check\|render\|archive [--profile FILE] [--root DIR]` | `tld.ops.sysml` | the architecture model in a documented subset of the SysML v2 notation: create and check a change, draw `docs/architecture.svg` and `docs/architecture.md`, archive a change into the model (pure Python; exit 1 findings or drift, 2 cannot run) |
