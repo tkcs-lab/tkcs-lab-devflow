@@ -87,7 +87,7 @@ a policy file; [guide](docs/guides/admin.md)) and `tld:git-ops` (delete a remote
 - **Seatbelt: the hooks.** `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths` and the
   `dod-gate` (on by default, like `plan-gate` and `board-gate`) deny the action before it runs and tell the agent what to do instead; `model-check` only warns when a session runs on the most expensive level, and `env-check` only warns when a cloud session runs in an environment the profile does not list (`runtime.environments`). The protect lists,
   `hooks.disable` and the gates are clamped to the resolved profile on the remote default branch. They need `python3` 3.11+ and PyYAML in
-  the session, and every repository in a Project that enables `tld` needs at least `git.main_branch` in its profile.
+  the session, and every repository in a Project that enables `tld` needs a main branch the hooks can resolve (the profile's `git.main_branch`, or the one `origin/HEAD` names).
 
 See [docs/architecture/hooks.md](docs/architecture/hooks.md) and [SECURITY.md](SECURITY.md).
 
