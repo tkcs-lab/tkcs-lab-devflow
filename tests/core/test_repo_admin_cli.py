@@ -214,3 +214,11 @@ def test_offline_org_policy_with_extends_is_refused(cmd, tmp_path):
     code, _, err = cmd(["validate-policy", "{file}", "--resolved", "--offline", "--org-policy", str(org), "--repo-name", "app"],
                        doc={"security": {"secret_scanning": True}}, name="o.yaml")
     assert code == 1 and "bases are not fetched" in err
+
+
+def test_latest_pin_turns_a_timeout_into_a_clean_error(cmd, ra, monkeypatch):
+    def boom(client, source):
+        raise TimeoutError("timed out")
+    monkeypatch.setattr(ra.repo_admin_extends, "latest_pin", boom)
+    code, out, err = cmd(["latest-pin", f"acme/.github/{BASE_PATH}"], fake=tag_world([("v1", "1" * 40)], with_file=["1" * 40]))
+    assert code == 1 and out == "" and err == "latest-pin: timed out\n"

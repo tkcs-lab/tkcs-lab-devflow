@@ -33,6 +33,7 @@ import dataclasses
 import datetime as dt
 import fnmatch
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -2313,7 +2314,7 @@ def cmd_latest_pin(args) -> int:
     except (LookupError, ValueError) as exc:
         print(clean(exc), file=sys.stderr)
         return 1
-    except (ApiError, ValueError) as exc:
+    except (ApiError, OSError, http.client.HTTPException) as exc:  # a timeout or a dropped connection is not a URLError
         print(f"latest-pin: {clean(exc)}", file=sys.stderr)
         return 1
     print(json.dumps({"sha": sha, "tag": tag}))
