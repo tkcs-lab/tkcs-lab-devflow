@@ -11,7 +11,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p2-detect-pure
 
-- pending
+- worker: tag_workflow_creates_release uses a one-pass line scanner instead of the regex stated in plan 3.9, which backtracked exponentially on ordinary push workflows
+- retry: sent back once after the security review for the exponential regex; the second review passed with no findings
+- review: security notes for later phases: release_params should ignore tag prefixes outside the safe-parameter pattern; required check names can come from any source (name-only, as today); pr_notes output must go through _cell escaping in the PR body writer, with a test
 
 ## p3-extends
 
