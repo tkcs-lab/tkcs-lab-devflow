@@ -69,7 +69,7 @@ loosen a guarded setting that the organisation policy (or a file it extends) set
 run file allows it. A guarded key the organisation omits is not guarded, so list every key you care about. An
 override's `agent.agent_login`, `release.reviewer_login` and `release.environment` apply with a warning (the agent
 environment `tld-agent` is always dropped); its required status checks, workflow templates and `config_dirs.forbid`
-additions are not guarded. Only the policy file that is run can turn on a deletion or a revocation. The guarded keys
+additions are not guarded. Only the policy file that is run can turn on an irreversible deletion or revocation (the switches listed under "Irreversible switches" in docs/guides/admin.md); file deletions through reviewed pull requests (`config_dirs.forbid`, including one set by a base, and a workflow's `remove`) can come from a base or an override. The guarded keys
 are listed in [docs/guides/admin.md](docs/guides/admin.md).
 
 ## The curl installer
