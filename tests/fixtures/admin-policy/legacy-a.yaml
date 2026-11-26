@@ -1,6 +1,4 @@
-# repo-admin policy of the tkcs-lab-devflow repository itself (docs/guides/admin.md).
-# Only the sections below are managed; every other section of the starter is left out on purpose.
-# Run with an owner token: cli/tld ops repo-admin audit --policy .tld/admin-policy.yaml
+# Whole repo-admin policy of the first reference organisation (placeholder names), as it was before the policy inherited.
 
 org: acme-a
 repos:

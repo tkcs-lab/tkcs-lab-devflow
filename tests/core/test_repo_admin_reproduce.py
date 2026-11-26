@@ -261,9 +261,9 @@ def test_override_with_only_the_checks_audits_the_repository_fully(ra, profiles,
     assert new - old == FINDINGS_DELTA
     assert {check for check, *_ in new} >= set(names)
     # the release workflow has no parameters in this override: it is left alone (an information finding), the rest is the same
-    old_files = {(f.subject, f.severity) for f in ra.check_files(old_ctx) if "tld-release.yml" not in f.subject}
+    old_files = {(f.subject, f.severity) for f in ra.check_files(old_ctx) if f.severity != "info"}
     new_files = {(f.subject, f.severity) for f in ra.check_files(new_ctx) if f.severity != "info"}
-    assert {s for s in old_files if s[1] != "info"} <= new_files
+    assert {s for s in old_files if "tld-release.yml" not in s[0]} == {s for s in new_files if "tld-release.yml" not in s[0]}
     standdown = [f for f in ra.check_files(new_ctx) if f.subject.endswith(":standdown")]
     assert [(f.subject, f.severity) for f in standdown] == [("workflow:.github/workflows/tld-release.yml:standdown", "info")]
 
