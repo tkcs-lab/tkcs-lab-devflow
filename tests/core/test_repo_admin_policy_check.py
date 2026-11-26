@@ -238,3 +238,8 @@ def test_cell_defuses_references_and_entities(ra):
 def test_explicit_empty_checks_ignore_live_checks_in_the_body(ra):
     bodies = {b["name"]: b for b in ra.ruleset_bodies({"default_branch": {"required_status_checks": []}}, ["x"])}
     assert "required_status_checks" not in {r["type"] for r in bodies["tld-main"]["rules"]}
+
+
+def test_cell_breaks_bare_urls(ra):
+    cell = ra._cell("check https://evil.example/x and www.evil.example")
+    assert "://" not in cell and "www.evil" not in cell

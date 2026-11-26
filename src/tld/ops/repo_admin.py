@@ -2097,6 +2097,8 @@ def _cell(text: str, limit: int = 220) -> str:
     """One table cell. Names come from the repositories, so markdown, HTML and @mentions are defused."""
     text = " ".join(str(text).split())
     text = re.sub(r"([\\|`\[\]<>#&])", r"\\\1", text).replace("@", "@​").replace("#", "#​")
+    text = text.replace("://", ":\u200b//")  # a bare URL in a name would be clickable in a pull request
+    text = re.sub(r"(?i)\bwww\.", lambda m: m.group(0) + "\u200b", text)
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
