@@ -484,3 +484,43 @@ def test_check_base_text_refuses_a_key_of_the_wrong_type():
 
 # The spec scenario "Pin held only by a pull request" (plan 3.13 names the test after it).
 test_pin_held_only_by_a_pull_request = test_commit_only_a_pull_request_holds_is_refused
+
+
+def test_parse_extends_label_and_hint():
+    ref = base.parse_extends(f"{SOURCE}@{SHA}", label="'extends[2]'", hint="tld ops repo-admin latest-pin {source}")
+    assert ref.source == SOURCE and ref.sha == SHA
+    with pytest.raises(base.BaseError) as shape:
+        base.parse_extends("nope", label="'extends[2]'", hint="x {source}")
+    assert str(shape.value) == "'extends[2]': must be <owner>/<repo>/<path>@<40-hex commit SHA> (got 'nope')"
+    with pytest.raises(base.BaseError) as tag:
+        base.parse_extends(f"{SOURCE}@v1", label="'extends[2]'", hint="tld ops repo-admin latest-pin {source}")
+    assert str(tag.value) == ("'extends[2]': '@v1' is not a commit SHA; pin the base by its full 40-hex commit "
+                              f"(a tag can move): run tld ops repo-admin latest-pin {SOURCE}")
+    with pytest.raises(base.BaseError) as default:
+        base.parse_extends(f"{SOURCE}@v1")
+    assert str(default.value) == ("toolkit.yaml: 'tld.extends': '@v1' is not a commit SHA; pin the base by its full 40-hex "
+                                  f"commit (a tag can move): run tld profile base latest {SOURCE}")
+    with pytest.raises(base.BaseError) as default_shape:
+        base.parse_extends("nope")
+    assert str(default_shape.value) == "toolkit.yaml: 'tld.extends': must be <owner>/<repo>/<path>@<40-hex commit SHA> (got 'nope')"
+
+
+@pytest.mark.parametrize("text", [
+    "x: " + "y" * base.MAX_BYTES,  # size
+    b"a: \xff\xfe\n",  # not UTF-8
+    "﻿a: 1\n",  # BOM
+    "a: &x 1\nb: *x\n",  # anchors
+    "a: " + "[" * 10 + "1" + "]" * 10 + "\n",  # depth
+    "api_token: hello\n",  # credential-named key
+    "note: ghp_" + "a" * 36 + "\n",  # scan_text hit
+    "a: [1\n",  # invalid YAML
+    "- a\n- b\n",  # not a mapping
+    "a: 1\n",  # accepted shape
+])
+def test_check_base_shape_alone(text):
+    shape = base.check_base_shape(text, "toolkit.yaml: base l: ")
+    full = base.check_base_text(text, "l")
+    if shape[1]:
+        assert shape[0] is None and shape[1] == full[1]
+    else:
+        assert shape[0] == {"a": 1}

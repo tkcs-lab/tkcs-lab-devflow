@@ -104,9 +104,11 @@ def _show(value: object) -> str:
     return "".join(c if c.isprintable() else "?" for c in text)[:200]
 
 
-def parse_extends(value: object) -> BaseRef:
-    """`tld.extends` as a BaseRef. A tag or branch is refused: only a full commit cannot move."""
-    shape = BaseError(f"toolkit.yaml: 'tld.extends': must be <owner>/<repo>/<path>@<40-hex commit SHA> (got '{_show(value)}')")
+def parse_extends(value: object, label: str = "toolkit.yaml: 'tld.extends'",
+                  hint: str = "tld profile base latest {source}") -> BaseRef:
+    """`tld.extends` as a BaseRef. A tag or branch is refused: only a full commit cannot move.
+    `label` starts both messages and `hint` is the command the tag message points to (`{source}` is filled in)."""
+    shape = BaseError(f"{label}: must be <owner>/<repo>/<path>@<40-hex commit SHA> (got '{_show(value)}')")
     if not isinstance(value, str) or "@" not in value:
         raise shape
     source, _, ref = value.rpartition("@")
@@ -114,8 +116,8 @@ def parse_extends(value: object) -> BaseRef:
     if parts is None or not ref:
         raise shape
     if not SHA40_RE.fullmatch(ref):
-        raise BaseError(f"toolkit.yaml: 'tld.extends': '@{_show(ref)}' is not a commit SHA; pin the base by its full "
-                        f"40-hex commit (a tag can move): run tld profile base latest {parts[0]}/{parts[1]}/{parts[2]}")
+        raise BaseError(f"{label}: '@{_show(ref)}' is not a commit SHA; pin the base by its full "
+                        f"40-hex commit (a tag can move): run {hint.format(source='/'.join(parts))}")
     return BaseRef(*parts, ref.lower())
 
 
@@ -203,9 +205,9 @@ def _scan_events(text: str, pre: str) -> tuple[list[str], bool]:
     return errors, True
 
 
-def check_base_text(text: str | bytes, label: str) -> tuple[dict | None, list[str]]:
-    """(the parsed base, []) or (None, the refusals). `label` is `<source>@<sha7>` (or a file name)."""
-    pre = f"toolkit.yaml: base {label}: "
+def check_base_shape(text: str | bytes, pre: str) -> tuple[dict | None, list[str]]:
+    """(the parsed mapping, []) or (None, the refusals): size, UTF-8, no BOM, no anchors, bounded depth, no credential.
+    Every message starts with `pre`."""
     raw = text if isinstance(text, bytes) else text.encode("utf-8", "surrogatepass")
     if len(raw) > MAX_BYTES:
         return None, [f"{pre}is larger than {MAX_BYTES} bytes"]
@@ -213,7 +215,7 @@ def check_base_text(text: str | bytes, label: str) -> tuple[dict | None, list[st
         decoded = raw.decode("utf-8")
     except UnicodeDecodeError:
         return None, [f"{pre}is not UTF-8"]
-    if decoded.startswith("﻿"):
+    if decoded.startswith("\ufeff"):
         return None, [f"{pre}starts with a byte order mark; a base is UTF-8 without BOM"]
     errors, parsed = _scan_events(decoded, pre)
     for line, name, desc in secret_scan.scan_text(decoded, skip_marked=False):
@@ -227,6 +229,15 @@ def check_base_text(text: str | bytes, label: str) -> tuple[dict | None, list[st
         return None, [f"{pre}is not valid YAML"]
     if not isinstance(data, dict):
         return None, [f"{pre}must be a mapping at the top"]
+    return data, []
+
+
+def check_base_text(text: str | bytes, label: str) -> tuple[dict | None, list[str]]:
+    """(the parsed base, []) or (None, the refusals). `label` is `<source>@<sha7>` (or a file name)."""
+    pre = f"toolkit.yaml: base {label}: "
+    data, errors = check_base_shape(text, pre)
+    if data is None:
+        return None, errors
     errors = _key_errors(data, label)
     if not errors:  # the types and enums of every key it sets (a missing required key is fine: a base is partial)
         from tld.profile import validate as pv
