@@ -285,21 +285,34 @@ def derive_logins(profile: dict | None) -> tuple[str | None, str | None, list[st
     git = profile.get("git") if isinstance(profile.get("git"), dict) else {}
     reasons: list[str] = []
     bot = git.get("bot_login")
-    agent = bot if isinstance(bot, str) and bot else None
-    if agent is None:
+    agent = None
+    if isinstance(bot, str) and bot:
+        if LOGIN_RE.match(bot):
+            agent = bot
+        else:
+            reasons.append("git.bot_login is not a plain login")
+    else:
         reasons.append("no git.bot_login")
     owner = git.get("owner_login")
-    reviewer = owner if isinstance(owner, str) and owner else None
-    if reviewer is None:
+    reviewer = None
+    if isinstance(owner, str) and owner:
+        if LOGIN_RE.match(owner):
+            reviewer = owner
+        else:
+            reasons.append("git.owner_login is not a plain login")
+    else:
         owners = git.get("codeowners")
         if isinstance(owners, list) and len(owners) == 1:
             one = owners[0]
-            if isinstance(one, str) and LOGIN_RE.match(one) and "/" not in one and one != agent:
+            if isinstance(one, str) and LOGIN_RE.match(one):
                 reviewer = one
             else:
                 reasons.append("git.codeowners entry is not a plain login")
         else:
             reasons.append("no git.owner_login and not exactly one git.codeowners entry")
+    if reviewer is not None and agent is not None and reviewer.casefold() == agent.casefold():
+        reviewer = None
+        reasons.append("reviewer equals the agent login")
     return agent, reviewer, reasons
 
 

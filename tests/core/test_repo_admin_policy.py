@@ -283,8 +283,17 @@ def test_derive_logins():
     assert rp.derive_logins({"git": {"bot_login": "bot"}}) == ("bot", None, ["no git.owner_login and not exactly one git.codeowners entry"])
     assert rp.derive_logins({"git": {"bot_login": "bot", "codeowners": ["a", "b"]}})[2] == [
         "no git.owner_login and not exactly one git.codeowners entry"]
-    for bad in ("acme/team", "@x", "bot", "-x", ""):
+    for bad in ("acme/team", "@x", "-x", ""):
         assert rp.derive_logins({"git": {"bot_login": "bot", "codeowners": [bad]}}) == ("bot", None, ["git.codeowners entry is not a plain login"])
+    # the reviewer is never the agent, whatever the case (GitHub logins are case-insensitive)
+    assert rp.derive_logins({"git": {"bot_login": "bot", "codeowners": ["BoT"]}}) == ("bot", None, ["reviewer equals the agent login"])
+    assert rp.derive_logins({"git": {"bot_login": "bot", "codeowners": ["bot"]}}) == ("bot", None, ["reviewer equals the agent login"])
+    assert rp.derive_logins({"git": {"bot_login": "bot", "owner_login": "bot"}}) == ("bot", None, ["reviewer equals the agent login"])
+    assert rp.derive_logins({"git": {"bot_login": "Bot", "owner_login": "bOT"}}) == ("Bot", None, ["reviewer equals the agent login"])
+    # an invalid login is no login
+    assert rp.derive_logins({"git": {"bot_login": "bo/t", "owner_login": "own"}}) == (None, "own", ["git.bot_login is not a plain login"])
+    assert rp.derive_logins({"git": {"bot_login": "bot", "owner_login": "o wn"}}) == ("bot", None, ["git.owner_login is not a plain login"])
+    assert rp.derive_logins({"git": {"bot_login": "bot", "owner_login": "acme/team"}})[1] is None
     assert rp.derive_logins({}) == (None, None, ["no git.bot_login", "no git.owner_login and not exactly one git.codeowners entry"])
     # owner_login wins over codeowners
     assert rp.derive_logins({"git": {"bot_login": "bot", "owner_login": "own", "codeowners": ["x"]}})[1] == "own"
