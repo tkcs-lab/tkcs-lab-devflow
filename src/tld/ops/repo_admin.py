@@ -216,6 +216,7 @@ class Action:
     destructive: bool = False
     repo: str = ""
     changes: list = dataclasses.field(default_factory=list)
+    note: str = ""  # kind 'files': a line for the pull request body (a value the script detected, for the owner to confirm)
 
     def describe(self) -> str:
         if self.kind == "api":
@@ -466,6 +467,8 @@ def _check_logins(org: dict, eff: dict, override: dict) -> tuple[dict, list]:
     release_set = override.get("release")
     if isinstance(release_set, dict):
         for key in release_set:
+            if key == "environment" and isinstance(release_set[key], str) and release_set[key].casefold() == AGENT_ENV.casefold():
+                continue  # the drop below reports it, under the subject release:environment
             if key != "reviewer_login" and release_set[key] != repo_admin_policy._get(org, f"release.{key}"):
                 warns.append((f"release:{clean(key, 40)}", f"the override sets release.{clean(key, 40)} away from the organisation's value"))
     agent, reviewer = repo_admin_policy._get(out, "agent.agent_login"), repo_admin_policy._get(out, "release.reviewer_login")
@@ -479,7 +482,13 @@ def _check_logins(org: dict, eff: dict, override: dict) -> tuple[dict, list]:
                 gone.append(dotted)
             else:
                 repo_admin_policy._set(out, dotted, copy.deepcopy(value))
+        agent, reviewer = repo_admin_policy._get(out, "agent.agent_login"), repo_admin_policy._get(out, "release.reviewer_login")
+        still = isinstance(agent, str) and isinstance(reviewer, str) and agent.casefold() == reviewer.casefold()
+        if still:  # the organisation's own logins are equal: the agent may not review its own release
+            out["release"].pop("reviewer_login", None)
         warns.append(("login:same", "the reviewer login equals the agent login; " + (
+            "the organisation's logins are equal too, so release.reviewer_login is dropped and the release check stands down "
+            "for this repository" if still else
             f"{' and '.join(gone)} ha{'s' if len(gone) == 1 else 've'} no organisation value, so the check that needs "
             f"{'it' if len(gone) == 1 else 'them'} stands down for this repository" if gone
             else "the organisation's logins apply")))
@@ -1018,8 +1027,10 @@ ROLE_ABOVE_WRITE = ("admin", "maintain")
 ROLE_BELOW_WRITE = ("triage", "read", "none")
 
 
-def ruleset_bodies(cfg: dict) -> list[dict]:
-    """The rulesets the policy asks for, as request bodies of POST/PUT /repos/{owner}/{repo}/rulesets."""
+def ruleset_bodies(cfg: dict, live_checks: list | None = None) -> list[dict]:
+    """The rulesets the policy asks for, as request bodies of POST/PUT /repos/{owner}/{repo}/rulesets. The status checks
+    are `required_status_checks` of the default branch when that key is present (an explicit [] removes the rule);
+    when it is absent, `live_checks` (the contexts the live ruleset already requires) are kept."""
     out = []
     main = cfg.get("default_branch")
     if main is not None:
@@ -1028,11 +1039,11 @@ def ruleset_bodies(cfg: dict) -> list[dict]:
                      "required_approving_review_count": 1, "dismiss_stale_reviews_on_push": True,
                      "require_last_push_approval": True, "require_code_owner_review": False,
                      "required_review_thread_resolution": False}}]
-        checks = main.get("required_status_checks", [])
+        checks = main["required_status_checks"] if "required_status_checks" in main else (live_checks or [])
         if checks:
             rules.append({"type": "required_status_checks", "parameters": {
                 "strict_required_status_checks_policy": False,
-                "required_status_checks": [{"context": c} for c in checks]}})
+                "required_status_checks": [c if isinstance(c, dict) else {"context": c} for c in checks]}})
         bypass = ([{"actor_id": ADMIN_ROLE_ID, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"}]
                   if main.get("admin_bypass") else [])
         out.append({"name": MAIN_RULESET, "target": "branch", "enforcement": "active", "bypass_actors": bypass,
@@ -1054,7 +1065,10 @@ def _param_diffs(kind: str, want: dict, have: dict) -> list[str]:
     update_allows_fetch_and_merge), so a missing key matches a wanted False."""
     if kind == "required_status_checks":
         contexts = lambda p: sorted(c.get("context") for c in p.get("required_status_checks") or [])  # noqa: E731
-        keys = ["required_status_checks"] if contexts(want) != contexts(have) else []
+        bound = {c.get("context"): c.get("integration_id") for c in have.get("required_status_checks") or []}
+        unbound = [c for c in want.get("required_status_checks") or []  # a kept live check must stay bound to its integration
+                   if "integration_id" in c and bound.get(c.get("context")) != c["integration_id"]]
+        keys = ["required_status_checks"] if contexts(want) != contexts(have) or unbound else []
         if bool(have.get("strict_required_status_checks_policy")) != want["strict_required_status_checks_policy"]:
             keys.append("strict_required_status_checks_policy")
         return keys
@@ -1092,6 +1106,15 @@ def ruleset_diffs(want: dict, have: dict) -> tuple[list[str], bool]:
     return diffs, False
 
 
+def _live_contexts(have: dict) -> list[dict]:
+    """The status checks a live ruleset requires, verbatim (the context and, when set, the integration that must report it)."""
+    for rule in (have or {}).get("rules") or []:
+        if isinstance(rule, dict) and rule.get("type") == "required_status_checks":
+            checks = (rule.get("parameters") or {}).get("required_status_checks") or []
+            return [dict(c) for c in checks if isinstance(c, dict) and isinstance(c.get("context"), str)]
+    return []
+
+
 def check_rulesets(ctx: Ctx) -> list[Finding]:
     shared = []
     if not ctx.inherited:
@@ -1102,22 +1125,30 @@ def check_rulesets(ctx: Ctx) -> list[Finding]:
 
     def one(repo):
         fn, out = repo["full_name"], []
+        cfg = ctx.pol(repo).get("rulesets") if ctx.inherited else None
         if ctx.inherited:
-            cfg = ctx.pol(repo).get("rulesets")
-            bodies = ruleset_bodies(cfg) if cfg else []
-        else:
-            bodies = shared
-        if not bodies:
+            if not (cfg and ruleset_bodies(cfg)):
+                return []
+        elif not shared:
             return []
         listing = ctx.c.paginate(f"/repos/{fn}/rulesets", {"includes_parents": "false"})
         mine = {r.get("name"): r for r in listing or [] if r.get("source_type", "Repository") == "Repository"}
+        live: dict = {}  # live rulesets read before the bodies are built (a failed read is the failure finding, no fix)
+        bodies = shared
+        if ctx.inherited:
+            main = cfg.get("default_branch")
+            live_checks = None
+            if main is not None and "required_status_checks" not in main and MAIN_RULESET in mine:
+                live[MAIN_RULESET] = ctx.c.get(f"/repos/{fn}/rulesets/{mine[MAIN_RULESET]['id']}")
+                live_checks = _live_contexts(live[MAIN_RULESET])
+            bodies = ruleset_bodies(cfg, live_checks)
         for want in bodies:
             name, cur = want["name"], mine.get(want["name"])
             if cur is None:
                 out.append(Finding("rulesets", fn, name, f"ruleset {name} is missing", "fix",
                                    api("POST", f"/repos/{fn}/rulesets", want)))
                 continue
-            have = ctx.c.get(f"/repos/{fn}/rulesets/{cur['id']}")
+            have = live[name] if name in live else ctx.c.get(f"/repos/{fn}/rulesets/{cur['id']}")
             diffs, unknown = ruleset_diffs(want, have or {})
             if diffs:
                 out.append(Finding("rulesets", fn, name, f"ruleset {name}: {'; '.join(diffs)}", "fix",
@@ -1677,6 +1708,11 @@ def check_files(ctx: Ctx) -> list[Finding]:
                     out.append(Finding("files", fn, f"workflow:{dest}", f"workflow {dest} should not exist", "fix",
                                        Action("files", repo=fn, changes=[{"op": "delete", "path": dest}])))
                 continue
+            if ctx.inherited and wf.get("template") == "release" and not {**(wf.get("params") or {}),
+                                                                          **((pol.get("workflow_params") or {}).get("release") or {})}:
+                out.append(Finding("files", fn, f"workflow:{dest}:standdown", "release workflow: no release parameters for this "
+                                   "repository yet; it is not installed or rewritten (the policy check proposes them)", "info"))
+                continue
             params = {"main_branch": snap.branch, **defaults, **{k.lower(): v for k, v in wf.get("params", {}).items()}}
             # The default branch name comes from the repository, not from the policy: it is put into YAML and shell too.
             bad = [k for k, v in params.items() if not SAFE_PARAM.fullmatch(v) or ".." in v or (k == "main_branch" and not v)]
@@ -1763,13 +1799,63 @@ def check_lint(ctx: Ctx) -> list[Finding]:
     return per_repo(ctx, "lint", one)
 
 
+def _show(value) -> str:
+    """A value from a policy or override file, for a message: one line, no control characters, bounded."""
+    try:
+        text = json.dumps(value, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        text = str(value)
+    return clean(text, 80)
+
+
+def check_policy(ctx: Ctx) -> list[Finding]:
+    """The inherited policy itself: what the run file loosens, and per repository the problems of its override file,
+    the loosenings that were put back, the login notes, a whole old policy to convert, workflow parameters for no template."""
+    if not ctx.inherited:
+        return []
+    out: list[Finding] = []
+    for item in ctx.p.get("_run_loosenings") or []:
+        key, base_value, value = item
+        out.append(Finding("policy", ctx.org, f"loosen:{clean(key, 80)}", clean(
+            f"the policy file sets {clean(key, 80)} to {_show(value)}, looser than its base's {_show(base_value)}", MAX_MESSAGE), "warn"))
+
+    def one(repo):
+        fn, found = repo["full_name"], []
+        ov = ctx.override(repo)
+        for n, problem in enumerate(ov.problems, 1):
+            found.append(Finding("policy", fn, "override:invalid" if n == 1 else f"override:invalid:{n}",
+                                 clean(f"{ov.path}: {problem}", MAX_MESSAGE), "error"))
+        for item in ctx.loosenings(repo):
+            now = "no valid value" if item.value is None else _show(item.value)
+            found.append(Finding("policy", fn, f"loosen:{clean(item.key, 80)}", clean(
+                f"the override sets {clean(item.key, 80)} to {now}, looser than the organisation's {_show(item.org_value)}; "
+                "the organisation value applies", MAX_MESSAGE), "warn"))
+        for subject, message in ctx.pol_warnings(repo):
+            found.append(Finding("policy", fn, clean(subject, 80), clean(message, MAX_MESSAGE), "warn"))
+        if ov.legacy and ov.doc is not None:
+            change = {"op": "put", "path": ov.path, "content": repo_admin_policy.render_override(ov.doc), "mode": "100644"}
+            found.append(Finding("policy", fn, "override:convert", clean(
+                f"{ov.path} is a whole policy; with inheritance it holds only the repository's differences", MAX_MESSAGE), "fix",
+                Action("files", repo=fn, changes=[change], note="; ".join(ov.notes))))
+        eff = ctx.pol(repo)
+        listed = {e.get("template") for e in eff.get("workflows") or [] if isinstance(e, dict)}
+        for template in sorted(str(t) for t in (eff.get("workflow_params") or {})):
+            if template not in listed:
+                found.append(Finding("policy", fn, f"workflow_params:{clean(template, 40)}", clean(
+                    f"workflow_params.{clean(template, 40)} names a template that is not in this repository's workflows; "
+                    "its parameters are not used", MAX_MESSAGE), "warn"))
+        return found
+
+    return out + per_repo(ctx, "policy", one)
+
+
 CHECKS = {
     "org": check_org, "members": check_members, "apps": check_apps, "tokens": check_tokens,
     "repo": check_repo, "security": check_security, "actions": check_actions, "protection": check_protection,
     "rulesets": check_rulesets, "agent": check_agent, "release": check_release,
     "secrets": check_secrets, "variables": check_variables, "labels": check_labels,
     "webhooks": check_webhooks, "keys": check_keys, "branches": check_branches, "files": check_files,
-    "lint": check_lint, "profile": check_profile, "git_ops": check_git_ops,
+    "lint": check_lint, "profile": check_profile, "git_ops": check_git_ops, "policy": check_policy,
 }
 
 
@@ -1789,7 +1875,7 @@ def run_checks(ctx: Ctx, names=None) -> list[Finding]:
 def _cell(text: str, limit: int = 220) -> str:
     """One table cell. Names come from the repositories, so markdown, HTML and @mentions are defused."""
     text = " ".join(str(text).split())
-    text = re.sub(r"([\\|`\[\]<>])", r"\\\1", text).replace("@", "@​")
+    text = re.sub(r"([\\|`\[\]<>#&])", r"\\\1", text).replace("@", "@​")
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
@@ -1814,8 +1900,10 @@ def render_markdown(org: str, findings: list[Finding], repo_count: int, now: dt.
     return "\n".join(lines)
 
 
-def apply_files(client, repo: str, changes: list[dict], default_branch: str, commit: str, tree: str, today: dt.date) -> str:
-    """One commit on a new branch from the default branch's head, and one pull request. Returns the PR URL."""
+def apply_files(client, repo: str, changes: list[dict], default_branch: str, commit: str, tree: str, today: dt.date,
+                notes=()) -> str:
+    """One commit on a new branch from the default branch's head, and one pull request. Returns the PR URL. `notes` are
+    detected values the owner confirms; each is escaped and bounded as a table cell is."""
     merged: dict[str, dict] = {}
     for c in changes:  # one entry per path: the tree API refuses duplicates; an install wins over a removal
         if c["path"] not in merged or c["op"] == "put":
@@ -1843,10 +1931,13 @@ def apply_files(client, repo: str, changes: list[dict], default_branch: str, com
                 raise
     else:
         raise ApiError(422, f"no free branch name from {base}", "POST", f"/repos/{repo}/git/refs")
+    detected = "".join(f"{line}\n" for line in ["Detected values (the owner confirms them):", "", *(f"- {_cell(clean(n, 500), 500)}" for n in notes)]) \
+        if notes else ""
     pr = client.send("POST", f"/repos/{repo}/pulls", {
         "title": "chore: apply repository policy", "head": name, "base": default_branch,
         "body": f"Changes from the organisation policy (`repo_admin.py apply`):\n\n{summary}\n\n"
-                "Review them; this pull request is never merged by the script."})
+                + (detected + "\n" if detected else "")
+                + "Review them; this pull request is never merged by the script."})
     return pr.get("html_url", f"{repo}#{pr.get('number', '?')}")
 
 
@@ -1881,7 +1972,8 @@ def apply_findings(ctx: Ctx, findings: list[Finding], yes: bool, allow_delete: b
             try:
                 full = next(r for r in ctx.all_repos if r["full_name"] == repo)
                 snap = ctx.snapshot(full)
-                url = apply_files(ctx.c, repo, changes, snap.branch, snap.commit, snap.tree, ctx.now.date())
+                notes = [f.action.note for f in group if f.action.note]
+                url = apply_files(ctx.c, repo, changes, snap.branch, snap.commit, snap.tree, ctx.now.date(), notes)
                 out(f"  opened {url}")
             except (ApiError, StopIteration) as exc:
                 failures += 1
