@@ -1,0 +1,56 @@
+# Whole repo-admin policy of the second reference organisation (placeholder names), as it was before the policy inherited.
+org: acme-b
+repos:
+  include: [app-b]
+repo_settings:
+  allow_auto_merge: true
+  delete_branch_on_merge: true
+  allow_update_branch: true
+  allow_merge_commit: true
+  allow_squash_merge: false
+  allow_rebase_merge: false
+security:
+  vulnerability_alerts: true
+  automated_security_fixes: true
+  secret_scanning: true
+  secret_push_protection: true
+  private_vulnerability_reporting: true
+actions:
+  default_workflow_permissions: read
+  can_approve_pull_request_reviews: false
+rulesets:
+  default_branch:
+    required_status_checks:
+      - test
+      - "Test (Python 3.11, core suite)"
+      - "Test (Python 3.12, core suite)"
+      - "Test (Python 3.14, core suite)"
+      - static-analysis
+      - org-smoke
+      - "Sync client (Python 3.11)"
+      - "Sync client (Python 3.13)"
+      - website-build
+      - node-package
+    admin_bypass: true
+  tags: true
+agent:
+  agent_login: bot-b
+  branch_policy: default_branch
+release:
+  reviewer_login: owner-b
+  environment: tld-release
+config_dirs:
+  forbid: [".archon", ".agents"]
+  known: [.claude-plugin]
+workflow_lint:
+  pin_actions: third_party
+  require_permissions: true
+  forbid_pull_request_target: true
+workflows:
+  - template: release
+    params:
+      tag_prefix: "v"
+      version_style: pep440
+      create_release: "false"
+      check_script: scripts/release_check.py
+  - template: land

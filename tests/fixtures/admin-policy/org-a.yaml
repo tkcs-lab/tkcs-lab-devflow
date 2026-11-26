@@ -1,0 +1,3 @@
+# Run file of the placeholder organisation acme-a: the test replaces the two placeholders by pins.
+org: acme-a
+extends: ["@BASE_PIN@", "@ORG_PIN@"]

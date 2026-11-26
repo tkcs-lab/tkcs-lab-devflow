@@ -1,0 +1,35 @@
+# repo-admin policy of the tkcs-lab-devflow repository itself (docs/guides/admin.md).
+# Only the sections below are managed; every other section of the starter is left out on purpose.
+# Run with an owner token: cli/tld ops repo-admin audit --policy .tld/admin-policy.yaml
+
+org: acme-a
+repos:
+  include: [app-a]
+  skip_archived: true
+  skip_forks: true
+repo_settings:
+  delete_branch_on_merge: true
+  allow_update_branch: true
+  allow_auto_merge: true
+security:
+  vulnerability_alerts: true
+  automated_security_fixes: true
+  secret_scanning: true
+  secret_push_protection: true
+  private_vulnerability_reporting: true
+actions:
+  default_workflow_permissions: read
+  can_approve_pull_request_reviews: false
+rulesets:
+  default_branch:
+    required_status_checks: ["test (3.11)", "test (3.13)"]
+    admin_bypass: true           # the one owner (admin role) may merge their own pull request; the agent (write) cannot
+  tags: true
+agent:
+  agent_login: bot-a
+  branch_policy: default_branch
+release:
+  reviewer_login: owner-a
+  environment: tld-release
+workflows:
+  - template: land

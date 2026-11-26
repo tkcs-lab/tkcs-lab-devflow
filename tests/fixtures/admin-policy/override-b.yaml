@@ -1,0 +1,22 @@
+# Repository override of app-b: its own status checks, config directory and release parameters.
+rulesets:
+  default_branch:
+    required_status_checks:
+      - test
+      - "Test (Python 3.11, core suite)"
+      - "Test (Python 3.12, core suite)"
+      - "Test (Python 3.14, core suite)"
+      - static-analysis
+      - org-smoke
+      - "Sync client (Python 3.11)"
+      - "Sync client (Python 3.13)"
+      - website-build
+      - node-package
+config_dirs:
+  known: [.claude-plugin]
+workflow_params:
+  release:
+    tag_prefix: "v"
+    version_style: pep440
+    create_release: "false"
+    check_script: scripts/release_check.py
