@@ -60,7 +60,7 @@ repository's override file (a file without `org`), the `repo-admin` skill stops 
 
 | Command | |
 |---|---|
-| `validate-policy POLICY` | Check the file. Exit 1 with one message per problem. It resolves `extends` through the API (needs the token; `--offline` skips it). `--kind auto\|run\|override\|base` (default `auto`: run when the file has `org`, else override), `--public` (with `--kind base`: the file goes into a public repository), `--resolved`, `--explain`, `--org-policy FILE` with `--repo-name NAME`: see below |
+| `validate-policy POLICY` | Check the file. Exit 1 with one message per problem; exit 2 when `--public` is used without `--kind base`, or when only one of `--org-policy` and `--repo-name` is given. It resolves `extends` through the API (needs the token; `--offline` skips it). `--kind auto\|run\|override\|base` (default `auto`: run when the file has `org`, else override), `--public` (with `--kind base`: the file goes into a public repository), `--resolved`, `--explain`, `--org-policy FILE` with `--repo-name NAME`: see below |
 | `latest-pin OWNER/REPO/PATH` | Print `{"sha": ..., "tag": ...}`, the commit to pin an `extends` entry to |
 | `whoami [--org ORG]` | Print the account the token belongs to and its role in the organisation. Exit 3 when it is not an owner. |
 | `audit --policy P` | Read only. `--format md` (default) or `json`, `--out FILE`, `--repo NAME` and `--check NAME` (repeatable), `--no-detect` (no proposals from the repositories). Exit 0 nothing out of policy, 3 differences, 1 a check failed (the report is then incomplete). |
