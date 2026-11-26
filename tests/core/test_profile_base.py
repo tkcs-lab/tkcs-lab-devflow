@@ -317,6 +317,24 @@ def test_tagged_commit_off_the_default_branch_is_accepted(project, origin):
     assert base.fetch(project, ref_for(tagged)) == GOOD + "# release\n"
 
 
+def test_a_tag_that_points_at_a_different_commit_than_the_pin_is_refused(project, origin):
+    commit(origin)
+    git(origin, "checkout", "-q", "-b", "release")
+    tagged = commit(origin, GOOD + "# release\n", "release")
+    git(origin, "tag", "-a", "-m", "v3", "v3")
+    later = commit(origin, GOOD + "# after the tag\n", "a commit after the tag, held by no tag")
+    git(origin, "checkout", "-q", "main")
+    git(origin, "branch", "-q", "-D", "release")
+    assert later != tagged
+    ref = ref_for(later)
+    with pytest.raises(base.BaseError) as exc:
+        base.fetch(project, ref)
+    assert str(exc.value) == (f"toolkit.yaml: 'tld.extends': the commit {later[:7]} is not on a tag or the default "
+                              f"branch of acme/.github")
+    assert base.cached(base.common_dir(project), ref) is None
+    assert base.fetch(project, ref_for(tagged)) == GOOD + "# release\n"  # the tagged commit itself is accepted
+
+
 def test_a_refused_base_is_not_cached(project, origin):
     sha = commit(origin, GOOD + f"# {_token()}\n")
     ref = ref_for(sha)
