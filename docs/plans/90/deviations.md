@@ -80,7 +80,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p14-retire
 
-- pending
+- worker: none reported by the worker
+- retry: sent back twice by the security review: the docs presented the base floor as enforced by the hooks and understated what making the org .github repository public exposes; fixed and the wording checked against the code
+- review: open for the fix round: SECURITY.md and hooks.md name only release.workflow as unprotected with an empty trusted profile and should also name git_ops.workflow
 
 ## Final review
 
