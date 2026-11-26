@@ -55,7 +55,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p9-mutants
 
-- pending
+- worker: twelve extra mutants LG1 to LG12 for the safety rules (same-login check on the effective pair, override params limit, derived-login warnings, integration_id keep-live, agent environment drop, login patterns) beyond the plan list; the test files test_repo_admin_derive.py and test_repo_admin_kinds.py were added to the repo_admin.py tests map; every why names its killing test; tld unavailable for the worker
+- scope: scope: tests/core/test_repo_admin_policy_check.py (one test added to kill the surviving mutant RB2)
+- retry: blocked once on the surviving mutant RB2 and sent on with permission for one extra test; sent back once more after the security review to add the safety-rule mutants and name the killing tests; merged in two steps (head fdd8f6e then 757386e) because the first merge used a stale ref
 
 ## p10-playbook-docs-evals
 
