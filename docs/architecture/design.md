@@ -32,7 +32,7 @@ repository's keys over the keys of the org base it extends (`tld.extends`, pinne
 `tld.profile.base`, cached under the git directory and checked before anything reads it) over a table of built-in
 defaults (`tld.profile.defaults`, pure; files and git facts reach it through an `Env`). `tld.profile.merge` holds the
 merge rules and the **guarded keys** (hooks, protect lists, gates, the security posture, required roles): a repository
-can never weaken them against its base, and the resolver clamps them to the default branch's resolved profile, because
+cannot weaken them against its base (validation and the audit refuse it), and the resolver clamps them to the default branch's resolved profile, because
 the profile is no longer a protected path. A minimal profile is `tld.extends` plus `verify.fast` and `verify.dod`; a
 missing optional key means "not used here", and an unknown key is an error so that a typo is never silent. A playbook
 never guesses a value the resolved profile lacks: it names the missing key and stops

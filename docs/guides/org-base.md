@@ -53,8 +53,8 @@ commit that only a pull request holds is refused. `tld profile base latest <owne
 `{"sha": ..., "tag": ...}` (the newest tagged commit that has the file, else the default branch head with `"tag": null`).
 `tld profile base fetch [PROFILE]` caches the pinned base under the git directory (`tld profile base fetch --ref REF`
 reads the pin of that ref's profile); it is never fetched twice, works offline afterwards and a corrupt entry is refetched.
-Without the cache and without network the playbooks stop (they never run without the base's required roles); hooks use
-the cache only and fall back to the stricter built-ins.
+Without the cache and without network the playbooks stop (`tld roles required` and the playbooks that load the profile; `deps_prepare` and `release_prepare` still ignore a missing
+base); hooks use the cache only and, without it, drop everything the base adds (its extra protect paths included).
 
 A bump is a pull request that changes one line: `/tld:setup update`, the audit's pin-bump pull request
 (`profile-pin-old`, title `chore: bump the tld base to <tag>`) or by hand. Its `## Security` line must name
@@ -63,7 +63,7 @@ to the default branch's profile.
 
 ## Guarded keys
 
-A repository can add to a base, never weaken it: `hooks.disable` (a hook the base switches on), the protect lists, the
+`tld profile validate` and the audit refuse a repository that weakens a base (the hooks clamp to the default branch's profile, not to the base's floor): `hooks.disable` (a hook the base switches on), the protect lists, the
 three gates' `enabled`, `roles.posture.security` (critical above standard above low) and the roles the base requires.
 `tld profile validate` names the rule broken. The base lists the keys a repository may weaken in `tld.allow_override`
 (`hooks.disable.<hook>`, `hooks.protect_paths`, `hooks.protect_paths_allow`, `hooks.<gate>.enabled`,

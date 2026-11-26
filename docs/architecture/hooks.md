@@ -443,7 +443,7 @@ the defaults read at the trusted commit, never the working tree. **The base is r
 fetches (the trust lookup already spends up to 12 of the 15 seconds a hook may take). When the base is not cached, nothing from
 it applies: `hooks.disable` is the repository's own list, protect lists are the built-ins plus the repository's, the gates
 follow the defaults (on), and the notice says `the base <source>@<sha7> is not cached here; run tld profile validate to
-fetch it`. That is more protection, never less; `tld profile validate` (the playbooks' first step) fills the cache. A
+fetch it`. That is more protection for `hooks.disable`, `protect_paths_allow` and the gates, but **less** for a base's own extra `hooks.protect_paths` entries, which do not apply until the base is cached (the trusted copy is resolved the same way, so the clamp does not restore them); `tld profile validate` (the playbooks' first step) fills the cache. A
 planted file in `.git/tld/base/` is the same documented limit as `trusted.json`: `.git/tld/**` is always protected, and a
 cache entry whose hash does not match is treated as missing.
 
@@ -482,8 +482,10 @@ The list must be a list of names; anything else, in the working tree or the trus
 Parsing).
 
 **Under a base.** A base that switches a hook or gate on, requires a role or protects a path forbids the repository to
-weaken it unless the base lists the key in `tld.allow_override` (`tld profile validate` reports it as an error, the
-clamp enforces it at run time); see [org-base.md](../guides/org-base.md).
+weaken it unless the base lists the key in `tld.allow_override`. `tld profile validate` and the audit report it as an
+error; the hooks do **not** re-check the base's floor at run time: they keep the stricter of the working copy and the
+default branch's resolved profile, so a weaker value already on the default branch (or any value with no trusted copy)
+stands until validate or the audit reports it. See [org-base.md](../guides/org-base.md).
 
 It is a profile change: the pull request must name `.tld/toolkit.yaml` under Security, the clamp keeps the old value until it is merged, and a person reviews it. Prefer a narrower tool
 first: `hooks.protect_paths_allow` for one more allowed path, a `secret-scan:allow` line mark for one false positive.
@@ -514,10 +516,10 @@ How a command is parsed, and the commands of the playbooks the guards must allow
 - **The base cache.** `<git dir>/tld/base/` holds the exact bytes of the pinned base. A session that can run a command can
   write there: a file whose hash does not match its record is treated as missing, but a session that rewrites both the file
   and its record is not seen. This is the same documented limit as `trusted.json`, and `.git/tld/**` is always protected
-  against the edit tools. An uncached base only adds protection in a hook. Anyone who can merge in the base repository
+  against the edit tools. An uncached base drops the base's extra protect paths in a hook. Anyone who can merge in the base repository
   changes every repository after a pin bump; the audit treats the base repository like any other and a pin bump is a
   reviewed pull request.
-- **Known limits of the base work** (recorded as open items of plan 90): the commands that setup copies from CI into
+- **Known limits of the base work** (also: without a trusted copy a branch can switch a gate off in its own working copy, `tld roles required` has no trusted floor when no default-branch copy is reachable, `deps_prepare` and `release_prepare` still ignore a missing base, and the Security-line markup refusal is best-effort) (recorded as open items of plan 90): the commands that setup copies from CI into
   `verify.fast` and `verify.dod` are not confirmed first and `verify.fast` runs before the pull request exists; the
   `tld-git-ops.yml` workflow does not yet check that the repository GitHub returns for a renamed repository is the one
   requested (it edits a guarded workflow, so it is an owner decision); the trust lookup runs in repositories that never had a
