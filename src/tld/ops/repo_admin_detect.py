@@ -150,10 +150,12 @@ def pr_notes(checks: list[str] | None, excluded: dict[str, str], params: dict[st
     lines = ["required_status_checks: " + (", ".join(checks) if checks else "none proposed")]
     for name, why in sorted(excluded.items()):
         lines.append(f"excluded: {name or '(all)'} ({why})")
-    if params:
-        lines.append("release parameters: " + " ".join(f"{k}={v}" for k, v in params.items()))
-    lines.extend(notes)
-    return lines
+    return lines + release_lines(params, notes)
+
+
+def release_lines(params: dict[str, str] | None, notes: list[str]) -> list[str]:
+    """The release parameters line (when there are parameters) and then the notes."""
+    return (["release parameters: " + " ".join(f"{k}={v}" for k, v in params.items())] if params else []) + list(notes)
 
 
 @dataclass(frozen=True)

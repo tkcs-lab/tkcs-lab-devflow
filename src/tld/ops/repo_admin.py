@@ -1919,7 +1919,12 @@ def _live_main_checks(ctx: Ctx, fn: str) -> list[dict]:
         raise
 
 
-def _detected(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> tuple[dict, list[str]]:
+def _for_repo(entry: dict, name: str) -> bool:
+    """True when a workflows entry applies to the repository (no `repos` globs, or one matches its name)."""
+    return not entry.get("repos") or any(fnmatch.fnmatchcase(name, g) for g in entry["repos"])
+
+
+def _detected(ctx: Ctx, repo: dict, eff: dict) -> tuple[dict, list[str]]:
     """(the override mapping detected from the repository, the lines for the pull request) when something is missing."""
     rs = eff.get("rulesets") if isinstance(eff.get("rulesets"), dict) else {}
     branch = rs.get("default_branch")
@@ -1937,7 +1942,7 @@ def _detected(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> tuple[dict, list
     if need_release:
         entries = [{k: v for k, v in w.items() if k in ("template", "params", "remove")}
                    for w in eff.get("workflows") or [] if isinstance(w, dict) and isinstance(w.get("template"), str)
-                   and (not w.get("repos") or any(fnmatch.fnmatchcase(repo["name"], g) for g in w["repos"]))]
+                   and _for_repo(w, repo["name"])]
         workflows = repo_admin_detect.own_release_workflow(got.profile_release_workflow, entries)
         if workflows is not None:
             notes.append(f"the profile's release workflow is {got.profile_release_workflow}, not the template's: "
@@ -1945,7 +1950,7 @@ def _detected(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> tuple[dict, list
             notes += [f"the proposed workflows list leaves out the workflow with path {w['path']}: the override stops managing it "
                       "in this repository (a list replaces the organisation's)" for w in eff.get("workflows") or []
                       if isinstance(w, dict) and isinstance(w.get("path"), str) and not isinstance(w.get("template"), str)
-                      and (not w.get("repos") or any(fnmatch.fnmatchcase(repo["name"], g) for g in w["repos"]))]
+                      and _for_repo(w, repo["name"])]
         else:
             params, notes = repo_admin_detect.release_params(list(got.tags), list(got.manifests), got.tag_workflow)
             unsafe = sorted(k for k, v in params.items() if not SAFE_PARAM.fullmatch(v) or ".." in v)
@@ -1956,9 +1961,10 @@ def _detected(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> tuple[dict, list
     if kept:
         notes.append(f"required_status_checks are not proposed: {MAIN_RULESET} already requires {len(kept)} "
                      "(kept with their app binding while the key is absent)")
-    head = repo_admin_detect.pr_notes(checks, excluded, None, [])
-    tail = repo_admin_detect.pr_notes(checks, excluded, params, notes)[len(head):]
-    return repo_admin_detect.detected_override(checks, params, workflows), tail + (head if need_checks else [])
+    lines = repo_admin_detect.release_lines(params, notes)
+    if need_checks:
+        lines += repo_admin_detect.pr_notes(checks, excluded, None, [])
+    return repo_admin_detect.detected_override(checks, params, workflows), lines
 
 
 def _override_findings(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> list[Finding]:
@@ -1978,7 +1984,7 @@ def _override_findings(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> list[Fi
         existing = repo_admin_policy.drop_derived(ov.doc, agent, reviewer)
     if ctx.detect:
         try:
-            detected, lines = _detected(ctx, repo, ov, eff)
+            detected, lines = _detected(ctx, repo, eff)
         except ApiError as exc:
             out.append(failure("policy", fn, exc))
     proposal = repo_admin_policy.propose_override(existing, detected)
