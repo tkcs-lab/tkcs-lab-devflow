@@ -5,7 +5,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p1-policy-model
 
-- pending
+- worker: worker reported none; it chose to ignore unknown top-level keys in key_errors (schema reports them)
+- retry: sent back twice after the security review: derive_logins let the agent account become the release reviewer (case, owner login unchecked, trailing newline in login pattern); fixed with fullmatch, casefold and a reviewer-equals-agent rule
+- review: security notes for later phases: clamp RUN_ONLY/ORG_LEVEL keys in apply_override, fail closed on odd guarded values, guard release.reviewer_login against the agent login, 39 char login cap, anchor schema login patterns with \Z (p4)
 
 ## p2-detect-pure
 
