@@ -1139,3 +1139,8 @@ mutants:
   why: "ruleset_bodies ignores live_checks"
   old: "else (live_checks or [])"
   new: "else []"
+- id: RB2
+  file: src/tld/ops/repo_admin.py
+  why: "ruleset_bodies treats an explicit empty list like an absent key (killed by test_explicit_empty_checks_ignore_live_checks_in_the_body)"
+  old: "main[\"required_status_checks\"] if \"required_status_checks\" in main else (live_checks or [])"
+  new: "(main.get(\"required_status_checks\") or live_checks or [])"

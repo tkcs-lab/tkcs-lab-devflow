@@ -231,3 +231,8 @@ def test_equal_organisation_logins_stand_the_release_check_down(ra):
 def test_cell_defuses_references_and_entities(ra):
     cell = ra._cell("see #12 and &amp; @someone")
     assert "\\#\u200b12" in cell and "#12" not in cell and "\\&amp;" in cell and "@someone" not in cell
+
+
+def test_explicit_empty_checks_ignore_live_checks_in_the_body(ra):
+    bodies = {b["name"]: b for b in ra.ruleset_bodies({"default_branch": {"required_status_checks": []}}, ["x"])}
+    assert "required_status_checks" not in {r["type"] for r in bodies["tld-main"]["rules"]}
