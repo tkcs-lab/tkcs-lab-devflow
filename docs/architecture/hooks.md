@@ -38,12 +38,12 @@ shims; `CLAUDE_PROJECT_DIR` and `stop_hook_active` are read only here.
 | `no-force-push` | PreToolUse: `Bash` | `git push` with `--force`, `-f`, `--force-with-lease`, `--force-if-includes`, a `+` refspec; deleting a branch by push | History on origin is append-only; branches are deleted by the owner | `git push -f origin x`, `git push origin :old`; `git push -u origin x`, `git branch -d old` |
 | `no-git-tag` | PreToolUse: `Bash`, GitHub MCP `actions_run_trigger` | creating, moving, deleting or pushing tags; dispatching the release workflow without `dry_run=true` and without the release marker (never with `skip_checks` other than `false`, never with inputs it cannot read); a real git-ops run without the confirm marker | Tags are cut only by the release workflow, which the owner approves in GitHub | `git tag v2`, `git push --tags`; `git tag -l`, `git describe`, `git ls-remote --tags` |
 | `secret-scan` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | content that looks like a credential | A secret in a file ends up in history | a GitHub token or a private key block; `API_KEY = os.environ["API_KEY"]` |
-| `protect-paths` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` | edits to paths the profile lists | Some files are changed by people or by tools, not by hand | `echo x > .env`; `echo x > .env.example` |
-| `plan-gate` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, the GitHub MCP content-write tools (`push_files`, `create_or_update_file`, `delete_file`); UserPromptSubmit (opt-in) | writes into the repository from a session no tld command started | A chat message must not start an implementation | `echo x > README.md`; `ls` |
-| `board-gate` | UserPromptSubmit, PostToolUse (`Bash`, the `board_set`, `board_ask`, timer, worker, pull-request and issue-comment tools), Stop (opt-in) | ending a turn before the status record is written, or after an ask, a worker change, a pull request or a push left it unwritten, or an ask before its timer is armed, once each | A session that skips its record is not on the board | stop after `/tld:docs x` with no record write; stop after `board_set` succeeded |
+| `protect-paths` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` | edits to paths the resolved profile lists, and to the workflows only tld's own steps write | Some files are changed by people or by tools, not by hand | `echo x > .env`; `echo x > .env.example` |
+| `plan-gate` | PreToolUse: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, the GitHub MCP content-write tools (`push_files`, `create_or_update_file`, `delete_file`); UserPromptSubmit (on by default) | writes into the repository from a session no tld command started | A chat message must not start an implementation | `echo x > README.md`; `ls` |
+| `board-gate` | UserPromptSubmit, PostToolUse (`Bash`, the `board_set`, `board_ask`, timer, worker, pull-request and issue-comment tools), Stop (on by default) | ending a turn before the status record is written, or after an ask, a worker change, a pull request or a push left it unwritten, or an ask before its timer is armed, once each | A session that skips its record is not on the board | stop after `/tld:docs x` with no record write; stop after `board_set` succeeded |
 | `model-check` | SessionStart, UserPromptSubmit | nothing (a `systemMessage` warning only) | The most expensive level is easy to forget | strong session + `/tld:implement x` warns; strong session + `/tld:make-plan x` does not |
 | `env-check` | SessionStart, UserPromptSubmit | nothing (a `systemMessage` warning only) | A session started in the wrong environment works with the wrong network, variables and credentials | a cloud session whose `TLD_ENVIRONMENT` is `Default` with a profile that lists `TLD` warns; with `TLD` it is silent |
-| `dod-gate` | Stop | stopping while `verify.dod` is red (opt-in) | Work is not done until the definition of done passes | stop with a failing test; stop after `/dod` is green |
+| `dod-gate` | Stop | stopping while `verify.dod` is red (on by default) | Work is not done until the definition of done passes | stop with a failing test; stop after `/dod` is green |
 
 A denial is exit code 2 with the reason on stderr, which Claude Code hands back to the agent. Every message says what to do
 instead, for example `Open a pull request from your feature branch and stop; a human reviews and merges it.`
@@ -138,7 +138,7 @@ It also matches GitLab tokens (`glpat-`), Stripe restricted keys (`rk_live_`), a
 is a whole token rather than the ending — `API_KEY_1`, `SECRET_KEY_BASE` — while leaving a label such as
 `secret_name` and any `public` / `pubkey` name alone (S16).
 
-For a test fixture or a documented example, build the value at run time, or end the line with `secret-scan:allow`; the mark must be the last thing on the line. `scan_text(text, skip_marked=False)` scans every line and ignores the mark; `tld roles reflektor-html` uses it.
+For a test fixture or a documented example, build the value at run time, or end the line with `secret-scan:allow`; the mark must be the last thing on the line. `scan_text(text, skip_marked=False)` scans every line and ignores the mark; `tld roles reflektor-html` uses it, and so does the check of a base profile (`tld profile base check`), so a mark never hides a token in a base; a base is also refused for any key whose name looks like a secret, whatever its value.
 A line of more than a million characters is not checked for generic assignments. A secret a Bash command writes to
 a file is now scanned too (S16): the hook reads the heredoc / herestring body and the words of a command that
 redirects to a file or pipes to `tee` (`echo ghp_… > f`, `cat <<EOF > .env`). A secret that only passes through a
@@ -179,33 +179,47 @@ changelog file, so a release is two separate pull requests: the changelog, and t
 which section an edit lands in, and a Bash write is checked only for `release-only`. The key is read from the trusted
 copy of the profile when there is one.
 
-Default list (a list in the profile replaces it): `.tld/toolkit.yaml`, `.env`, `.env.*`, `*.lock`, `package-lock.json`,
-`go.sum`, `.github/workflows/**`. Always protected: `.git/config`, `.git/hooks/**`, `.git/tld/**` (the markers), `.git/refs/**`,
-`.git/packed-refs`, `.git/info/**` and `.git/objects/**` (what the trusted ref and its profile are read from; S18), and
-anything under `$CLAUDE_PLUGIN_ROOT` (the installed plugin). Protected on their absolute path, wherever the write lands
-(S8): `~/.gitconfig` and `~/.config/git/**` (git's own configuration), and the files the Claude adapter adds —
-`~/.claude/**`, `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/**` and `.mcp.json`, since a
-session that edits Claude Code's own configuration could switch the hooks off. Always allowed, whatever the profile says: `.env.example`, `.env.sample`,
-`.env.template`, `.env.dist`; add your own with `hooks.protect_paths_allow`. A denied profile-listed path is not edited by hand: the session reports "protected-change: <path> - <why>" with the diff, the owner approves it, and it lands as one pull request to the main branch (playbooks/policies/protected-changes.md). The always-protected paths keep their old text. **The tld workflow files (S13).** `tld-land.yml` (it uses `TLD_AGENT_TOKEN`) and `tld-release.yml` in `.github/workflows/`
-are protected whatever the profile says. `tld guard allow-workflow-install <file>` (run by `/land` step 4) lets that one
-file through for 15 minutes, until `tld guard end-allow`; `repo-admin` installs through the API and needs no marker.
+Default list (a list in the profile replaces it): `.env`, `.env.*`, `*.lock`, `package-lock.json`, `go.sum`. The profile
+(`.tld/toolkit.yaml`) and ordinary workflows (`.github/workflows/**`) are **not** on it any more: a session may edit them,
+and the pull request that does must name each changed profile or workflow file under **Security** (`tld plan summary-check
+--changed`, checked by `implement` and `quick`), and the security review treats the diff as a trust-boundary change.
+Always protected in code, whatever the lists say: `.git/config`, `.git/hooks/**`, `.git/tld/**` (the markers), `.git/refs/**`,
+`.git/packed-refs`, `.git/info/**` and `.git/objects/**` (what the trusted ref and its profile are read from; S18), anything under
+`$CLAUDE_PLUGIN_ROOT` (the installed plugin), and the **guarded workflows** (`guarded_workflows(ctx)`): the land and release
+workflows by name (`tld-land.yml`, `tld-release.yml`), `tld-git-ops.yml` and the workflow files the trusted profile names as
+`release.workflow` (tld's own is `release.yml`, which holds the release token) and `git_ops.workflow`. Protected on their
+absolute path, wherever the write lands (S8): `~/.gitconfig` and `~/.config/git/**` (git's own configuration), and the files the
+Claude adapter adds — `~/.claude/**`, `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/**` and `.mcp.json`,
+since a session that edits Claude Code's own configuration could switch the hooks off. Always allowed, whatever the profile says:
+`.env.example`, `.env.sample`, `.env.template`, `.env.dist`; add your own with `hooks.protect_paths_allow`. A denied
+profile-listed path is not edited by hand: the session reports "protected-change: <path> - <why>" with the diff, the owner
+approves it, and it lands as one pull request to the main branch (playbooks/policies/protected-changes.md); a repository or base
+that adds the profile or workflows back to the list gets the same flow for them. `tld guard allow-workflow-install <file>`
+(run by `/land` step 4) lets one guarded workflow file through for 15 minutes, until `tld guard end-allow`; `repo-admin`
+installs through the API and needs no marker.
+
+**Why the list shrank, and what replaces it.** A branch's edited workflow runs as soon as it is pushed, with the repository's
+Actions secrets, before anyone reads it; secrets held in an environment limited to the default branch stay safe (the release,
+agent and git-ops tokens). So the audit has a `secrets_scope` check, the guarded workflows stay protected in code, and the
+Security rule above makes each such change visible in the pull request. The rule is a review aid, not a control: a pull
+request body can still be wrong about what it changes; the owner's review and the rulesets are the control
+([SECURITY.md](../../SECURITY.md)).
 
 Patterns: one without a slash matches the file name at any depth (`*.lock`); one with a slash is anchored at the
 repository root (`.github/workflows/**`); `**` crosses directories, `*` and `?` do not; a trailing slash means a directory.
 Paths outside the repository are not this hook's business.
 
-**The `/setup` exemption.** `/setup` has to write `.tld/toolkit.yaml`. Before its first write it runs
+**The `/setup` exemption.** `/setup` writes `.tld/toolkit.yaml`; the path is no longer on the default list, so the marker matters only where a repository or a base lists the profile again. Before its first write it runs
 `"${CLAUDE_PLUGIN_ROOT}/cli/tld" guard allow-profile`, which writes the marker
 `protect-paths-profile.json` into `<git dir>/tld/` (so it is per checkout and never committed). For two hours from
 that moment the hook lets the path `.tld/toolkit.yaml` (exactly) through and nothing else: `.env*`, lockfiles and
 workflow files stay denied. After its last write `/setup` runs `tld guard end-allow`, which removes the marker; a marker that
-is forgotten lapses after the two-hour TTL. The deny message for the profile says it is changed by people or by
-`/setup`. This is a convention like the `dod-gate` marker below: any session that can run a command can write the
+is forgotten lapses after the two-hour TTL. This is a convention like the `dod-gate` marker below: any session that can run a command can write the
 marker. Branch protection and the pull request review stay the hard control.
 
 ### `dod-gate`
 
-Opt-in, off by default. When `hooks.dod_gate.enabled` is true, the Stop hook runs the profile's `verify.dod` commands
+On by default (`hooks.dod_gate.enabled: false` switches it off, unless a base turns it on without allowing that). A repository with no profile is never gated. The Stop hook runs the `verify.dod` commands
 (each in its `cwd`, all of them, so the report is complete) and, if any fails, blocks the stop and hands the failing
 commands and the tail of their output back to the agent. Rules that keep it from getting in the way:
 
@@ -218,6 +232,13 @@ commands and the tail of their output back to the agent. Rules that keep it from
   (default 3) it lets the session stop and shows the user a message saying that the definition of done is still red, which
   commands failed and why it gave up. If the counter cannot be saved and `stop_hook_active` is set, it also lets the
   session stop. After a give-up the gate comes back only when the tree changes.
+- **The commands come from the default branch.** `verify.dod` and `hooks.dod_gate.max_attempts` are read from the resolved
+  profile on the remote's default branch when that copy is available, and from the working tree only when no such copy is
+  available (no origin, no network, nothing fetched yet). The profile is no longer protected and the commands run without a
+  prompt, so a branch must not be able to replace them; a notice says when the working copy differs. This departs from the
+  plan's text, which left the gate reading the working tree. Known limits: with an origin but no reachable trusted copy the
+  working tree's `verify.dod` runs (the offline fallback), the trust lookup also runs in repositories that never had a
+  profile, and a trusted profile that is empty or not a mapping falls back to the working copy.
 - **Missing keys fail loudly.** With the gate on and no `verify.dod`, or no `git.main_branch`, it blocks with
   `toolkit.yaml: missing required key '...'`. A profile error of any kind (a malformed `hooks.dod_gate`, a `max_attempts`
   outside 1..10, a malformed `hooks.disable`) counts as a failed attempt and its message ends with `(attempt N of M)`.
@@ -258,7 +279,7 @@ command is meant for a lower one.
 
 ### `plan-gate`
 
-Opt-in, off by default: set `hooks.plan_gate.enabled` to `true`. A plain chat message must not start an implementation:
+On by default (`hooks.plan_gate.enabled: false` switches it off, unless a base turns it on without allowing that). A plain chat message must not start an implementation:
 while a session has no plan, a write into the repository is denied and the agent is told to answer or research only and
 to propose `/tld:make-plan` (the `ask` skill, `/tld:ask`, says how).
 
@@ -282,17 +303,18 @@ to propose `/tld:make-plan` (the `ask` skill, `/tld:ask`, says how).
   prompt containing `tld guard allow-plan` gets no context, and a prompt with a line starting `tld-worker: ` (no slash
   command, with a session id) also opens the session. A quick session opens like any other command; its workers open through the tld-worker: line and rule 0.
 - **Lifetime.** The session record (`<git dir>/tld/plan-gate/`, named by a hash of the session id) lapses 24 hours after
-  last use; every use refreshes it. No session id and no marker: the gate allows. `enabled` is read from the working
-  tree (like `dod-gate`), `hooks.disable` from the trusted copy; a malformed `hooks.plan_gate` fails open with a notice.
+  last use; every use refreshes it. No session id and no marker: the gate allows. `enabled` is the resolved value and a gate the default branch turns on stays on (the trusted
+  copy OR the working copy, see the clamp below); `hooks.disable` is the trusted list; a malformed value counts as on and never raises.
 
 Decisions: (1) opens per session from the prompt hook, not from a marker the playbooks write: a skill the model starts
 itself would open it, a marker survives in a reused container, `end-allow` would close it half-way. (2) A prompt is never
-blocked. (3) It shares `write_targets` with `protect-paths`. (4) It covers the GitHub content-write tools. (5) `enabled` from
-the working tree, `disable` from the trusted copy.
+blocked. (3) It shares `write_targets` with `protect-paths`. (4) It covers the GitHub content-write tools. (5) A gate is on when the default branch's resolved profile or the working
+copy has it on (this replaces the earlier rule that read `enabled` from the working tree only, which a branch could use to
+switch the gate off now that the profile is not protected).
 
 ### `board-gate`
 
-Opt-in, off by default: set `hooks.board_gate.enabled` to `true`. The gate covers the commands that always write a status
+On by default (`hooks.board_gate.enabled: false` switches it off, unless a base turns it on without allowing that). The gate covers the commands that always write a status
 record (`make-plan`, `implement`, `quick`, `review`, `setup`, `migrate`, `land`, `deps`, `upstream`, `ci`, `questions`), `docs` only in its
 `init` and `tidy` modes and `spec` and `sysml` only in their `init` mode (`/tld:docs` and `/tld:docs check` write none, so they neither open the state nor block). A
 session that one of them started must write its status record to the board once before it ends a turn. The gate also
@@ -316,7 +338,7 @@ nudge, not a control.
   `opened_at` is refreshed on every save, so it lapses after 24 hours without any save. Each save writes a uniquely named temporary file and replaces the state atomically, and the load, change and save of one hook event run under a file lock (no lock where `flock` is missing), so parallel tool calls do not lose updates. No session id: nothing is written and nothing blocks.
 - **Fails open.** No board configured, a malformed `hooks.board_gate`, an unreadable state file, any error: allow. The hook
   never calls the board. The timer rule needs no board; the first-record and change rules do. `stop_hook_active` no longer
-  lets a stop through, because every rule blocks once per sequence, so with no new ask or change in between, a chain of stops ends after at most two blocks (the timer rule, then the first-record or the change rule). `enabled` is read from the working tree, `hooks.disable` from the trusted copy, and only on
+  lets a stop through, because every rule blocks once per sequence, so with no new ask or change in between, a chain of stops ends after at most two blocks (the timer rule, then the first-record or the change rule). `enabled` follows the same trusted-OR-working rule as the other gates, `hooks.disable` is the trusted list, read only on
   `Stop`, so a malformed `hooks.disable` can never make it block.
 - **The block messages** (the guard runner puts `tld board-gate: ` in front; `{command}` comes from the state file):
   - `MESSAGE`: `this session was started by /tld:{command} and has not written its status record to the board. Write it now: use the board_set tool, or when that tool is missing or fails run "tld board client set <id> - " with the record on stdin (the id comes from "tld board record-id"). If the board cannot be reached, say so in your final reply and stop. If the playbook says to write no record yet, say so and stop. This check blocks only once.`
@@ -365,34 +387,33 @@ then gives up). Not marking is the default, so work done outside any command is 
 
 ## Configuration
 
-All hook settings are optional and live in the profile's `hooks` section. The scripts apply the defaults themselves
-(they are not part of `tld profile validate --resolved`).
+All hook settings are optional and live in the profile's `hooks` section; the resolved profile fills the defaults below
+(`tld profile validate --resolved` prints the whole `hooks` section; the hook scripts read it through the same resolver).
 
 ```yaml
 hooks:
   disable: []                # names of hooks to switch off in this repository
   protect_paths:             # replaces the default list when set
-    - .tld/toolkit.yaml
     - .env
     - ".env.*"
     - "*.lock"
     - package-lock.json
     - go.sum
-    - ".github/workflows/**"
   protect_paths_allow: []    # exceptions on top of the built-in ones
   dod_gate:
-    enabled: false           # opt in
+    enabled: true            # on by default; false switches it off
     max_attempts: 3          # 1..10; a value outside that range is a profile error
   plan_gate:
-    enabled: false           # opt in: no writes into the repository from a session no tld command started
+    enabled: true            # no writes into the repository from a session no tld command started
   board_gate:
-    enabled: false           # opt in: a record-writing tld command cannot end its turn before it wrote its board record once
+    enabled: true            # a record-writing tld command cannot end its turn before it wrote its board record once
 ```
 
 Project facts the hooks read from elsewhere in the profile: `git.main_branch` (`no-merge` when it sees a `git push` or a
-call that could write to the main branch, and `dod-gate`), and `verify.dod` (`dod-gate`). A hook needs a key only when
-it needs the fact: `gh pr merge` is denied in a repository with no profile. A `git push` (any branch) is also denied
-there, because deciding whether it targets the main branch needs `git.main_branch`. When the key is missing the hook
+call that could write to the main branch, and `dod-gate`; it is detected from `origin/HEAD` when the profile does not write
+it), `verify.dod` (`dod-gate`) and `release.workflow` and `git_ops.workflow` (the guarded workflows). A hook needs a key only
+when it needs the fact: `gh pr merge` is denied in a repository with no profile. A `git push` (any branch) is also denied
+there, because deciding whether it targets the main branch needs `git.main_branch`. When the key cannot be resolved the hook
 blocks with `toolkit.yaml: missing required key 'git.main_branch'`, the same message the commands give. Plugins are enabled
 per Claude Project, so every repository in a Project that enables `tld` needs a profile with at least that key.
 
@@ -407,14 +428,35 @@ hooks:
   disable: [protect-paths]   # any of no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate, plan-gate, model-check, board-gate, env-check
 ```
 
-`hooks.disable` and the protect lists are read from the **trusted copy** of the profile, not from the working tree, so a
-session cannot switch a guardrail off by editing its own files, moving a local ref or repointing origin (S1, S18, S19).
-The trusted copy is the profile on the **remote's default branch**, the one `git ls-remote --symref <origin url> HEAD`
-reports — never the working tree's `git.main_branch`, which any branch can set. Its commit is fetched when missing
-(`git fetch --no-tags <origin url> +refs/heads/<default>:refs/tld/trusted`) and the result is cached for ten minutes
-in `<git dir>/tld/trusted.json`: origin's URL, the default branch and the commit SHA. The profile is read from that SHA,
-and `refs/tld/trusted` must still point at it. The hook's git calls run with `GIT_NO_REPLACE_OBJECTS=1`, without hooks
-and without the `ext::` transport, and ignore `GIT_DIR`-style variables.
+`hooks.disable`, the protect lists and the gate settings are read from the **trusted copy** of the profile, not from the
+working tree alone, so a session cannot switch a guardrail off by editing its own files, moving a local ref or repointing
+origin (S1, S18, S19). The trusted copy is the profile on the **remote's default branch**, the one `git ls-remote --symref
+<origin url> HEAD` reports — never the working tree's `git.main_branch`, which any branch can set. Its commit is fetched when
+missing (`git fetch --no-tags <origin url> +refs/heads/<default>:refs/tld/trusted`) and the result is cached for ten minutes
+in `<git dir>/tld/trusted.json`: origin's URL, the default branch and the commit SHA. The profile is read from that SHA, and
+`refs/tld/trusted` must still point at it. The hook's git calls run with `GIT_NO_REPLACE_OBJECTS=1`, without hooks and
+without the `ext::` transport, and ignore `GIT_DIR`-style variables.
+
+**The trusted copy is resolved, not raw.** The default branch's profile goes through the same resolver as the working copy
+(`tld.profile.resolve.for_hook`): its own keys over the base it pins over the built-in defaults, with the files that decide
+the defaults read at the trusted commit, never the working tree. **The base is read from the cache only.** A hook never
+fetches (the trust lookup already spends up to 12 of the 15 seconds a hook may take). When the base is not cached, nothing from
+it applies: `hooks.disable` is the repository's own list, protect lists are the built-ins plus the repository's, the gates
+follow the defaults (on), and the notice says `the base <source>@<sha7> is not cached here; run tld profile validate to
+fetch it`. That is more protection, never less; `tld profile validate` (the playbooks' first step) fills the cache. A
+planted file in `.git/tld/base/` is the same documented limit as `trusted.json`: `.git/tld/**` is always protected, and a
+cache entry whose hash does not match is treated as missing.
+
+**The clamp.** `merge.clamp(trusted, merged, branch)` takes the stricter of the working copy and the default branch's
+resolved profile for every guarded key: `hooks.disable` is the trusted list (a branch cannot add a disable), a gate is on
+when either copy has it on, `roles.posture.security` takes the higher rank, `hooks.protect_paths` the union,
+`hooks.protect_paths_allow` the intersection with the trusted list, and every trusted `roles.required` entry keeps its
+points and `blocking`. Each weakened key gets a warning, `toolkit.yaml: warning: '<key>' is weaker here than on <branch>
+(the remote default branch); the <branch> value applies until this change is merged`. The profile is no longer protected,
+so this is what keeps a phase worker from dropping a required role or turning a gate off for the final review. With no
+trusted copy (no origin, offline) there is no clamp, the warning says `no trusted copy of the profile (<problem>); guarded
+keys are taken from this working tree`, and the hooks keep the rule of the next paragraph. A branch that points `tld.extends`
+elsewhere, or removes it, keeps its own non-guarded values; its guarded keys are still clamped.
 
 The URL recorded at the first lookup is kept: when origin's URL (after `insteadOf` rewriting) is a different one later
 — `git config remote.origin.url`, a `url.*.insteadOf`, a swap of remotes by renaming — the trusted copy is treated as
@@ -426,7 +468,7 @@ made it they deny writes to `refs/tld/*`, `refs/replace/*`, `refs/remotes/origin
 (`update-ref`, `branch -f`, `fetch` refspecs, `symbolic-ref`, a push to `.` or another local path, any push to
 `refs/tld/`, `refs/replace/` or `refs/remotes/`), `git replace` except its listing forms, and shell writes into the git
 directory's `refs`, `packed-refs`, `objects`, `info`, `hooks`, `config` and `tld`. When the working tree's `hooks`
-section differs from the trusted one the guard shows a notice and applies only the trusted list.
+section differs from the trusted one the guard shows a notice and applies only the stricter value.
 
 When no trusted copy can be read — no remote, no network, no commit yet, a remote without a default branch, a moved
 URL or ref — **nothing is disabled** and the protect lists are the built-in defaults plus the working tree's
@@ -439,7 +481,11 @@ stay the control.
 The list must be a list of names; anything else, in the working tree or the trusted copy, is a profile error (see
 Parsing).
 
-It is a profile change, and `.tld/toolkit.yaml` is protected from edits by sessions, so a person does it. Prefer a narrower tool
+**Under a base.** A base that switches a hook or gate on, requires a role or protects a path forbids the repository to
+weaken it unless the base lists the key in `tld.allow_override` (`tld profile validate` reports it as an error, the
+clamp enforces it at run time); see [org-base.md](../guides/org-base.md).
+
+It is a profile change: the pull request must name `.tld/toolkit.yaml` under Security, the clamp keeps the old value until it is merged, and a person reviews it. Prefer a narrower tool
 first: `hooks.protect_paths_allow` for one more allowed path, a `secret-scan:allow` line mark for one false positive.
 `no-merge`, `no-force-push` and `no-git-tag` have no narrower switch on purpose.
 
@@ -465,6 +511,17 @@ How a command is parsed, and the commands of the playbooks the guards must allow
   word is denied), and `curl` / `gh api` are checked only for the merge, approve, ref, contents and dispatch endpoints.
 - **Writes the agent does not make through its tools:** a secret in Bash output or in a command line that is not written
   to a file, or in a commit message.
+- **The base cache.** `<git dir>/tld/base/` holds the exact bytes of the pinned base. A session that can run a command can
+  write there: a file whose hash does not match its record is treated as missing, but a session that rewrites both the file
+  and its record is not seen. This is the same documented limit as `trusted.json`, and `.git/tld/**` is always protected
+  against the edit tools. An uncached base only adds protection in a hook. Anyone who can merge in the base repository
+  changes every repository after a pin bump; the audit treats the base repository like any other and a pin bump is a
+  reviewed pull request.
+- **Known limits of the base work** (recorded as open items of plan 90): the commands that setup copies from CI into
+  `verify.fast` and `verify.dod` are not confirmed first and `verify.fast` runs before the pull request exists; the
+  `tld-git-ops.yml` workflow does not yet check that the repository GitHub returns for a renamed repository is the one
+  requested (it edits a guarded workflow, so it is an owner decision); the trust lookup runs in repositories that never had a
+  profile; and the dod-gate falls back to the working copy when no trusted copy is reachable.
 - **A hook switched off** in the trusted copy of the profile on the remote default branch, or a profile edited by
   someone who may edit it. A branch that changes `git.main_branch` in its own working tree only adds a protected name:
   the trusted branch is the one the remote reports.

@@ -27,12 +27,20 @@ and no runtime tool or model name appears in the core content.
 
 `.tld/toolkit.yaml` holds every project fact ([profile-reference.md](../reference/profile-reference.md)); the schema
 is `src/tld/schema/profile.schema.json`, checked by a small hand-rolled validator (`tld profile validate`, no
-`jsonschema` dependency). Required keys are few (`docs.must_read`, `git.main_branch`, `git.branch_pattern`,
-`verify.fast`, `verify.dod`, `stacks`); a missing optional key means "not used here", and an unknown key is an
-error so that a typo is never silent. A playbook never guesses a value: it names the missing key and stops
-([policies/profile.md](../../playbooks/policies/profile.md)). `tld.version` (D9) is a version specifier checked
-against the running tld, so a profile written for 1.x stops cleanly under 2.0. `/setup` writes the profile from a
-survey, at text level (`tld profile patch`), so comments survive; the survey proposes and a person decides.
+`jsonschema` dependency). Every reader gets the **resolved profile** from one loader, `tld.profile.resolve`: the
+repository's keys over the keys of the org base it extends (`tld.extends`, pinned by a full commit, fetched once by
+`tld.profile.base`, cached under the git directory and checked before anything reads it) over a table of built-in
+defaults (`tld.profile.defaults`, pure; files and git facts reach it through an `Env`). `tld.profile.merge` holds the
+merge rules and the **guarded keys** (hooks, protect lists, gates, the security posture, required roles): a repository
+can never weaken them against its base, and the resolver clamps them to the default branch's resolved profile, because
+the profile is no longer a protected path. A minimal profile is `tld.extends` plus `verify.fast` and `verify.dod`; a
+missing optional key means "not used here", and an unknown key is an error so that a typo is never silent. A playbook
+never guesses a value the resolved profile lacks: it names the missing key and stops
+([policies/profile.md](../../playbooks/policies/profile.md)); `tld profile validate --explain` says where each value
+came from. This replaced the earlier rule that no value had a default, which made every repository copy the template.
+`tld.version` (D9) is a version specifier checked against the running tld, so a profile written for 1.x stops cleanly
+under 2.0. `/setup` writes the profile from a survey, at text level (`tld profile patch`), so comments survive; the survey
+proposes and a person decides ([org-base.md](../guides/org-base.md)).
 
 ### Playbooks
 

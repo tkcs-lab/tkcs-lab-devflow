@@ -23,6 +23,30 @@ page or a tool result). Two layers, with different jobs:
   ([docs/architecture/hooks.md](docs/architecture/hooks.md#what-the-hooks-do-not-protect)). The protect lists and
   `hooks.disable` come from the profile on the remote's default branch (the branch the remote reports, fetched and
   pinned by commit SHA and origin URL), so a branch, a local ref or a repointed origin cannot switch a hook off.
+  Every guarded key (`hooks.disable`, the protect lists, the three gates, the security posture, required roles) is
+  clamped to the stricter of the working copy and the default branch's resolved profile, because the profile is no
+  longer protected from edits by default.
+- **Workflows and the profile are editable by sessions.** `.tld/toolkit.yaml` and ordinary workflows are no longer on the
+  default protect list; the release, land and git-ops workflows (and the profile's `release.workflow`) stay protected in
+  code. A workflow edited on a pushed branch runs at once with the repository's Actions secrets, before anyone reads it,
+  so secrets belong in environments limited to the default branch (`tld ops repo-admin` reports others as `secrets_scope`).
+  A pull request that changes the profile or a workflow must name each file under **Security**, which `tld plan
+  summary-check --changed` checks and the security review reads at the final review. That check is a review aid, not a
+  control: a person still reads the diff.
+- **The org base profile is policy for every agent.** A repository may extend one base, pinned by a full commit that must
+  be a version tag's commit or an ancestor of the base repository's default branch. The base takes only allow-listed keys
+  (never `verify` commands, prompt text or feature sections), cannot chain, is refused when it holds token-like text,
+  anchors or aliases, and is cached by hash under the git directory; hooks read the cache only and, without it, fall back
+  to the stricter built-ins. A repository cannot weaken a guarded key of its base unless the base lists it in
+  `tld.allow_override`. The residual risk is who can merge in the base repository: they change every repository after a
+  pin bump, so the audit treats the base repository like any other and a bump is a reviewed pull request
+  ([docs/guides/org-base.md](docs/guides/org-base.md)).
+- **Known limits of this design** (open items recorded in plan 90, not claims of protection): setup copies test and CI
+  commands found in the repository into `verify.fast` and `verify.dod` without a confirm of their own; the git-ops
+  workflow does not yet check that GitHub's answer for a renamed repository is the one requested; the trusted-copy lookup
+  also runs in repositories that never had a profile; the dod-gate takes `verify.dod` from the working tree when no
+  default-branch copy is reachable (offline); and a session that can run commands can rewrite the base cache and its
+  hash record, the same limit as the trusted-copy cache.
 - **Untrusted text is data.** Only the owner and collaborators can give an instruction or answer an ask
   ([playbooks/policies/untrusted-text.md](playbooks/policies/untrusted-text.md)). An ask is answered only by the
   owner, logged in on the board; the session token cannot answer one ([docs/guides/board-server.md](docs/guides/board-server.md)).

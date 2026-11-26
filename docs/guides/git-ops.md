@@ -4,7 +4,7 @@ A Claude Code session on the web cannot delete a remote branch: its git proxy re
 the environment is never used for GitHub hosts. The toolkit therefore ships one GitHub Actions workflow,
 `tld-git-ops`, to run in a central private repository. A session starts it, and it deletes the branch with a
 fine-grained token that only that repository's `git-ops` environment holds. The `git-ops` skill drives it; the
-profile key `git_ops.repo` names the central repository.
+profile key `git_ops.repo` names the central repository (default `<owner>/git-ops`).
 
 It does not touch tags. Tags have one route: the release workflow `tld-release` in the repository itself, which
 the owner runs by hand and approves; the `tld-tags` ruleset lets only the admin role create one (see [admin.md](admin.md)).
@@ -65,13 +65,25 @@ default branch, never from the dispatched ref.
 `action=delete-branch`, `name=chore/git-ops-test`, `dry_run` ticked; read the summary; then untick `dry_run`.
 This proves the token works and that a branch name with a slash is handled.
 
-**5. In each project,** after the plugin is updated, add to `.tld/toolkit.yaml`:
+**5. In each project,** after the plugin is updated, nothing is needed when the central repository is
+`<the repository's owner>/git-ops`: `git_ops.repo` defaults to it when the repository has an origin, and
+`git_ops.workflow` to `tld-git-ops.yml`. Write the section only to name another central repository:
 
 ```yaml
 git_ops:
-  repo: your-org/git-ops           # required inside the section
-  workflow: tld-git-ops.yml    # optional; this is the default
+  repo: your-org/git-ops           # default: <origin owner>/git-ops
+  workflow: tld-git-ops.yml        # default
 ```
+
+`git_ops: false` turns the skill off for the project; it then stops with `toolkit.yaml: /git-ops is switched off ('git_ops: false')`.
+The org audit checks the central repository ([admin.md](admin.md)): the `git-ops-workflow` and `git-ops-allowlist` checks
+open a pull request into it, and the `git-ops` environment (limited to `main`) and the `GIT_OPS_TOKEN` secret in it are
+manual steps (see [org-base.md](org-base.md#the-owners-manual-steps)).
+
+**Known limit (owner decision pending).** GitHub follows the old name of a renamed repository, so a request for the old
+name can reach the renamed one. The workflow should read `full_name` from the repository lookup and refuse unless it equals
+the requested repository ignoring case. That edits `tld-git-ops.yml`, a guarded workflow, so it was reported as a
+protected change and is not applied yet; until it is, keep the allowlist to repositories whose names did not change.
 
 ## Use it
 

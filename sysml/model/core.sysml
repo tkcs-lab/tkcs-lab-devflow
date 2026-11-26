@@ -8,7 +8,10 @@ package Core {
         port commands : CommandSurface;
     }
     part def Profile {
-        doc /* Validates, resolves and patches the project profile against its schema. */
+        doc /* Resolves the project profile (the repository's keys, the pinned org base and the built-in defaults), validates the result against its schema and patches it. */
+    }
+    part def ProfileBase {
+        doc /* Fetches the pinned org base profile by commit, caches it under the git directory and refuses a base that holds anything but allowed keys or token-like text. */
     }
     part def Plan {
         doc /* Validates plan manifests and tracks phase status, scope drift and active runs. */
@@ -36,6 +39,11 @@ package Core {
     dependency from Roles to Plan;
     dependency from Roles to Profile;
     dependency from Profile to Plan;
+    dependency from Profile to ProfileBase;
+    dependency from Profile to Guard;
+    dependency from ProfileBase to Guard;
+    dependency from Guard to Profile;
+    dependency from Plan to Profile;
     dependency from Ops to Profile;
     dependency from Ops to SysmlLib;
 }

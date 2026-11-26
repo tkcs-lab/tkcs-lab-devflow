@@ -5,6 +5,35 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+### Added
+
+- One org base profile: a repository extends it with `tld.extends: <owner>/<repo>/<path>@<40-hex commit>` and writes only `verify.fast` and `verify.dod` (a minimal profile) plus what is its own. The base takes only allow-listed keys, is pinned by a full commit (a version tag's commit or an ancestor of the default branch head), is cached under the git directory, and is refused when it holds token-like text, anchors or aliases. A repository can never weaken the base's guarded keys (hooks, protect lists, gates, security posture, required roles) unless the base lists them in `tld.allow_override`. A profile with `tld.extends` needs tld 1.7 or later. See docs/guides/org-base.md.
+- `tld profile base check FILE`, `fetch [PROFILE] [--ref REF]` and `latest SOURCE` check a base file, fill the cache and print the commit and tag to pin.
+- Built-in defaults replace most required profile keys: `git.branch_pattern`, `git.branch_types`, `git.merge_style` (`merge-commit`), `git.main_branch` (from `origin/HEAD`), `docs.must_read`, `stacks`, `land.max_prs` (10), `git_ops.repo` (`<origin owner>/git-ops`), `deps`, `spec`, `sysml` and `release.workflow` inside their sections (an empty `spec:` turns the feature on), and `docs.index`, `docs.adr_*`, `docs.changelog`, `admin.policy` and `docs.website` when their file exists. `false` turns a defaulted feature off.
+- `tld profile validate --explain` prints each resolved value with its source, and `--ref REF` reads the profile and the files that decide the defaults from a git ref.
+- `tld plan summary-check --changed LIST` requires the `**Security:**` line of a pull request to name every workflow and profile file the pull request changes, and refuses risky markup in the Summary then; `implement` and `quick` pass it.
+- `tld migrate . --defaults` finds a docs index, ADR directory or changelog off its default path and asks one batch: rename it (links are rewritten) or keep it with an explicit key. It also lists keys now equal to a default.
+- `/tld:setup` takes `--base`, reads `TLD_BASE_PROFILE` or probes `<origin owner>/.github/tld/profile-base.yaml`, writes the pinned `tld.extends`, reads code owners, the version line and audit commands from the repository, and asks at most once (test commands it cannot find, a confirm per blocking role or audit command it proposes); the security posture is no longer asked.
+- The org audit checks the base (`profile-no-extends`, `profile-invalid-extends`, `profile-pin-old` with a pin-bump pull request, `profile-guarded-override`), the merge settings against `git.merge_style` (`profile-merge-style`), the central git-ops repository (`git-ops-workflow`, `git-ops-allowlist`, `git-ops-environment`, `git-ops-token`) and where Actions secrets are held (`secrets_scope`).
+
+### Changed
+
+- The plan, board and definition-of-done gates are on by default for a repository with a profile; `enabled: false` turns one off unless the base forbids it. The dod-gate reads `verify.dod` and `max_attempts` from the default branch's profile when one is available.
+- The profile and ordinary workflows are no longer on the default protect list; the release, land and git-ops workflows stay protected in code. A pull request that changes `.tld/toolkit.yaml` or a workflow names it under Security, and the security review treats such a diff as a trust-boundary change. Guarded profile keys are clamped to the default branch's resolved profile, with a warning.
+- The messages for `/deps`, `/spec`, `/sysml`, a missing main branch, `/git-ops` and the admin audit changed (an empty section turns a feature on); the profile reference, hooks, setup and admin docs describe the resolved profile.
+- `/tld:setup` no longer proposes `git.branch_types` or `git.merge_style`; `tld roles required` stops when the base, or the default branch's base, is not cached.
+
+### Behaviour changes on upgrade
+
+1. **Gates on.** `plan_gate`, `board_gate` and `dod_gate` are on for every repository with a profile and no `hooks` value. A session no tld command started cannot write; an editing session runs `verify.dod` at stop. Turn one off with `enabled: false` (refused under a base without `tld.allow_override`).
+2. **`docs.plan_dir`** defaults to `docs`, except a repository with a `docs/plans` directory resolves to `docs/plans`, so in-flight plans keep working. `tld migrate --defaults` writes the explicit key.
+3. **`land.max_prs` is 10** (was: no cap). Write another number, or `false` for no cap.
+4. **Protect list.** The profile and ordinary workflows are no longer protected by default; a repository with its own `hooks.protect_paths` is unchanged; `protect_paths_allow` entries for workflows become moot. Pull requests touching them must name them under Security.
+5. **`git.merge_style`** is `merge-commit` unless written; a squash repository must write it. The audit checks the merge settings where its policy says so.
+6. **`git.branch_types`** is no longer detected: `[feature, fix, chore]` unless written, and `validate-manifest` always checks it; `tld migrate --defaults` writes the types existing manifests use.
+7. **Docs paths** apply when the file exists: an existing `docs/README.md` turns on the index steps, `CHANGELOG.md` the changelog line and version-heading guard, `docs/adr/` the ADR steps, `.tld/admin-policy.yaml` the audit, `scripts/build_site.py` the website. Each is turned off with `false`.
+8. **Messages** change (see above); `deps`, `spec`, `sysml` and `release.workflow` default inside their sections.
+
 ## [1.6.0] - 2026-11-25
 
 ### Added

@@ -20,8 +20,10 @@ release:
       pattern: '^version = "(\d+\.\d+\.\d+)"$'   # regex, multiline, exactly one capture group: the version
 ```
 
-The profile is a protected path, so you add both blocks yourself (manual step ma1 of the plan); a session
-cannot. Keys: [profile-reference.md](../reference/profile-reference.md). `tld profile validate` checks that each
+A session may add both blocks in a pull request (the profile is no longer a protected path), but the pull request
+must name `.tld/toolkit.yaml` under Security, and the release workflow itself (`release.workflow`, `tld-release.yml` by
+default) stays protected in code: a person installs or changes it. `release.workflow` defaults to `tld-release.yml` when the
+`release` section is written. Keys: [profile-reference.md](../reference/profile-reference.md). `tld profile validate` checks that each
 pattern matches exactly once.
 
 ## The flow

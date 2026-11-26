@@ -7,7 +7,7 @@
 ## ADDED Requirements
 
 ### Requirement: Default-on gate
-The system SHALL run the dod-gate Stop hook unless the resolved profile sets `hooks.dod_gate.enabled` to false or `dod-gate` is disabled through the profile's `disable` list, and SHALL let a session stop without any check when the repository has no profile.
+The system SHALL run the dod-gate Stop hook unless the resolved profile sets `hooks.dod_gate.enabled` to false or `dod-gate` is disabled through the profile's `disable` list, and SHALL let a session stop without any check when the repository has no profile. The gate SHALL read `verify.dod` and `max_attempts` from the profile on the remote's default branch when that copy is available, and from the working tree only when no such copy is available.
 
 #### Scenario: On by default
 - **WHEN** the profile has no `hooks.dod_gate` and a Stop event arrives with failing `verify.dod` commands in a session that changed files
@@ -16,6 +16,10 @@ The system SHALL run the dod-gate Stop hook unless the resolved profile sets `ho
 #### Scenario: Switched off
 - **WHEN** `hooks.dod_gate.enabled` is false and a Stop event arrives with failing `verify.dod` commands
 - **THEN** the hook exits 0 and runs nothing
+
+#### Scenario: Commands come from the default branch
+- **WHEN** a branch's profile changes `verify.dod` and the default branch's copy is available
+- **THEN** the hook runs the default branch's commands
 
 #### Scenario: Disabled by name
 - **WHEN** `dod-gate` is in the disable list read from the main branch
