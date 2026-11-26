@@ -437,7 +437,7 @@ The system SHALL refuse an extended file that holds anything credential-like, se
 - **THEN** it is refused
 
 ### Requirement: Audit with repository override files
-The system SHALL, for a policy with `extends`, read each repository's override file (`repos.override_path`, with a default) from its default branch, apply it to the organisation policy and audit the repository on its effective policy; an override may set only repository-level keys and release parameters `tag_prefix`, `version_style`, `check_script` and `create_release`; a base may set no per-repository key; a repository without an override file is audited with the organisation policy alone.
+The system SHALL, for a policy with `extends`, read each audited repository's override file from its default branch and run the repository-level checks on its effective policy; an override may set only repository-level keys, its `workflow_params.release` and `workflows[].params` may hold only `tag_prefix`, `version_style`, `check_script` and `create_release`; a base may not set per-repository keys; a repository without an override file is audited with the organisation policy alone.
 
 #### Scenario: Override merged
 - **WHEN** a repository's override sets a repository-level key
@@ -468,7 +468,7 @@ The system SHALL, for a policy with `extends`, read each repository's override f
 - **THEN** every repository-level check of that repository runs on the inherited values plus those checks
 
 ### Requirement: Hold guarded settings against overrides
-The system SHALL report, as a warning per setting, an override that loosens a guarded setting that the organisation policy sets and apply the organisation's value, unless the run file allows it for that repository; a guarded key the organisation omits is not guarded; overrides of `agent.agent_login`, `release.reviewer_login` and `release.environment` apply with a warning (`tld-agent` is dropped); `apply` keeps its dry run, `--yes` and `--allow-delete` rules.
+The system SHALL report, as a warning per setting, an override that loosens a guarded setting the organisation policy sets and apply the organisation's value instead, unless the policy that is run allows it for that repository, and SHALL leave the dry run, `--yes` and `--allow-delete` rules of `apply` unchanged. A guarded key the organisation omits is not guarded. Overrides of the logins and `release.environment` apply with a warning (`tld-agent` is dropped).
 
 #### Scenario: Loosening held
 - **WHEN** an override switches off a security feature the organisation policy requires
