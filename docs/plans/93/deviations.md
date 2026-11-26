@@ -50,6 +50,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - scope: scope: tests/core/test_repo_admin_policy_check.py
 - final: the detected proposal gives own_release_workflow only the templated workflow entries, so a proposed override list leaves out the organisation path workflows of that repository without saying so (final review blocking 2)
 - final: a new warn subject override:propose:invalid (a detected proposal that fails validation or would loosen a guarded key is dropped) is not in the plan (final review blocking 3)
+- worker: fix-1: with live required checks on the tld-main ruleset the detected proposal proposes no required_status_checks and says so in the notes, instead of listing the checks it would drop; the worker had no tld, so roles and dod were run by the orchestrator
+- scope: scope: docs/guides/admin.md (fix-1 added the policy row subjects; allowed by the fix brief)
 
 ## p8-reproduce
 
