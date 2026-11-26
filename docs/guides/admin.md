@@ -129,8 +129,8 @@ checks has to review override pull requests for them.
 **Absent is not empty.** With `extends`, a `rulesets.default_branch` without
 `required_status_checks` keeps the checks the live ruleset requires, with their app binding (only an explicit `[]`
 removes the rule), and a missing `tld-main` is created without a check rule. The release template without
-`workflow_params.release` or `params`, or in a repository whose profile has no `release` section, is not installed or
-rewritten: an `info` finding says so. A repository whose override file cannot be listed on a truncated tree is read
+`workflow_params.release` or `params`, or in a repository whose profile has no `release` section or exists but cannot be read or resolved, is not
+installed or rewritten: an `info` finding says so. A repository whose override file cannot be listed on a truncated tree is read
 directly, never treated as absent. The `tld-release` environment is checked in every repository whose effective
 policy gives it a `release` section, so a base with one makes it a requirement everywhere.
 

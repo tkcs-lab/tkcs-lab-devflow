@@ -111,20 +111,33 @@ def _env(ctx, repo: dict, snap) -> Env:
 def repo_profile(ctx, repo: dict) -> dict | None:
     """A repository's resolved profile at its default branch (the steps `check_profile` runs, offline), or None when
     it has none, cannot be read, names a base that is refused, or does not resolve. Memoised per repository."""
+    return _load(ctx, repo)[0]
+
+
+def profile_unresolved(ctx, repo: dict) -> bool:
+    """True when the repository has a profile file that cannot be read, is refused or does not resolve."""
+    profile, exists = _load(ctx, repo)
+    return exists and profile is None
+
+
+def _load(ctx, repo: dict) -> tuple[dict | None, bool]:
     return ctx.memo(("profile", repo["full_name"]), lambda: _read_profile(ctx, repo))
 
 
-def _read_profile(ctx, repo: dict) -> dict | None:
+def _read_profile(ctx, repo: dict) -> tuple[dict | None, bool]:
+    """(the resolved profile or None, whether a profile file is listed in the default branch)."""
+    exists = False
     try:
         snap = ctx.snapshot(repo)
         if snap.empty:
-            return None
+            return None, False
+        exists = any(e.get("type") == "blob" and e["path"] == PROFILE_PATH for e in snap.entries)
         text = _profile_text(ctx, repo, snap)
         if text is None:
-            return None
+            return None, exists
         raw = yaml.safe_load(text)
         if not isinstance(raw, dict):
-            return None
+            return None, exists
         tld = raw.get("tld")
         extends = tld.get("extends") if isinstance(tld, dict) else None
         data = ref = None
@@ -132,11 +145,11 @@ def _read_profile(ctx, repo: dict) -> dict | None:
             ref = resolve_mod.parse_pin(extends)
             data, errors = base_mod.check_base_text(_base_text(ctx, ref), ref.label)
             if errors:
-                return None
+                return None, exists
         res = resolve_mod.resolve(raw, base=data, base_ref=ref, trusted=None, env=_env(ctx, repo, snap))
     except (base_mod.BaseError, _ra().ApiError, yaml.YAMLError):
-        return None
-    return res.profile if not res.errors else None
+        return None, exists
+    return (res.profile if not res.errors else None), exists
 
 
 # ---------------------------------------------------------------------------------------- the check

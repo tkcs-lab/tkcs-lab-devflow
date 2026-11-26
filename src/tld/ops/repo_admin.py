@@ -1801,6 +1801,10 @@ def check_files(ctx: Ctx) -> list[Finding]:
                 continue
             if ctx.inherited and wf.get("template") == "release":
                 prof = repo_admin_profile.repo_profile(ctx, repo)
+                if repo_admin_profile.profile_unresolved(ctx, repo):
+                    out.append(Finding("files", fn, f"workflow:{dest}:standdown", "release workflow: the repository's profile "
+                                       "cannot be read or resolved; it is not installed or rewritten (see the profile check)", "info"))
+                    continue
                 if isinstance(prof, dict) and not isinstance(prof.get("release"), dict):
                     out.append(Finding("files", fn, f"workflow:{dest}:standdown", "release workflow: the repository's profile has "
                                        "no release section; it is not installed or rewritten", "info"))

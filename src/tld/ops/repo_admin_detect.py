@@ -1,7 +1,7 @@
-"""repo_admin_detect.py: pure detection of a repository's override values (plan 93, section 3.9).
+"""repo_admin_detect.py: detection of a repository's override values (plan 93, section 3.9).
 
-Everything here works on plain data and imports nothing from tld.ops.repo_admin. The proposal is
-only a proposal: the owner confirms it in the pull request.
+The functions work on plain data and import nothing from tld.ops.repo_admin; only `gather` calls the API, through
+the context it is given. The proposal is only a proposal: the owner confirms it in the pull request.
 """
 from __future__ import annotations
 
