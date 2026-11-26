@@ -38,8 +38,9 @@ page or a tool result). Two layers, with different jobs:
   be a version tag's commit or an ancestor of the base repository's default branch. The base takes only allow-listed keys
   (never `verify` commands, prompt text or feature sections), cannot chain, is refused when it holds token-like text,
   anchors or aliases, and is cached by hash under the git directory; hooks read the cache only and, without it, drop what the base adds
-  (its extra protect paths included). `tld profile validate` refuses (and the audit reports, as info) a repository that weakens a guarded
-  key of its base unless the base lists it in `tld.allow_override`; at run time the hooks only keep the stricter of the
+  (its extra protect paths included). `tld profile validate` refuses a repository that weakens a guarded
+  key of its base unless the base lists it in `tld.allow_override` (the audit reports the refusal as `profile-invalid-extends` at
+  warn, and an override the base allows as `profile-guarded-override` at info); at run time the hooks only keep the stricter of the
   working copy and the default branch's profile, and with no trusted copy (offline) a branch can switch a gate off in its
   own working copy. The residual risk is who can merge in the base repository: they change every repository after a
   pin bump, so the audit treats the base repository like any other and a bump is a reviewed pull request
