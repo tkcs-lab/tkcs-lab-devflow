@@ -226,6 +226,8 @@ def test_equal_organisation_logins_stand_the_release_check_down(ra):
     assert "stands down" in msg and "release.reviewer_login" in msg and "organisation's logins apply" not in msg
     ctx, _ = inherited(ra, {"agent": {"agent_login": "bot"}, "release": {"reviewer_login": "BOT"}})
     assert ra.check_release(ctx) == []
+    subjects = [f.subject for f in ra.check_agent(ctx)]
+    assert "login:same" in subjects and "login:agent" not in subjects  # the agent's role is not checked either
 
 
 def test_cell_defuses_references_and_entities(ra):

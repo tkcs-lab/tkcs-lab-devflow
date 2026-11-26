@@ -111,8 +111,10 @@ may let a repository loosen a key: `repos.allow_loosen: {"<repo name glob>": ["<
 loosening of its bases is reported, not put back; it is the owner's file.
 An override of `agent.agent_login`, `release.reviewer_login` or `release.environment` is applied with a warning
 (`login:<key>`, `release:<key>`); `release.environment` equal to the agent's environment (`tld-agent`) is always
-dropped with a warning, and when the effective agent and reviewer logins are equal (without case) the release check
-stands down and the agent role part is skipped (`login:same`).
+dropped with a warning, and when the effective agent and reviewer logins are equal (without case) the organisation's
+logins apply (`login:same`). Where the organisation sets no login, a dropped reviewer login stands the release check
+down and a dropped agent login is derived from the repository's profile as when it is absent. Where the organisation's
+own logins are equal, the reviewer login is dropped, the release check stands down and the agent role part is skipped.
 
 **Irreversible switches.** A base or an override cannot turn on `secrets.delete_unused`, `variables.delete_unused`,
 `labels.delete_unused`, `labels.delete_unlisted`, `webhooks.delete`, `deploy_keys.delete_unused`,

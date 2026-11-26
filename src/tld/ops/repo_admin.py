@@ -487,12 +487,18 @@ def _check_logins(org: dict, eff: dict, override: dict) -> tuple[dict, list]:
         still = isinstance(agent, str) and isinstance(reviewer, str) and agent.casefold() == reviewer.casefold()
         if still:  # the organisation's own logins are equal: the agent may not review its own release
             out["release"].pop("reviewer_login", None)
-        warns.append(("login:same", "the reviewer login equals the agent login; " + (
-            "the organisation's logins are equal too, so release.reviewer_login is dropped and the release check stands down "
-            "for this repository" if still else
-            f"{' and '.join(gone)} ha{'s' if len(gone) == 1 else 've'} no organisation value, so the check that needs "
-            f"{'it' if len(gone) == 1 else 'them'} stands down for this repository" if gone
-            else "the organisation's logins apply")))
+        if still:
+            tail = ("the organisation's logins are equal too, so release.reviewer_login is dropped, the release check stands "
+                    "down and the agent's role is not checked for this repository")
+        elif gone:
+            parts = [("agent.agent_login has no organisation value, so it is derived from the repository's profile or the "
+                      "agent role check stands down") if d == "agent.agent_login" else
+                     "release.reviewer_login has no organisation value, so it is dropped and the release check stands down"
+                     for d in gone]
+            tail = "; ".join(parts) + " for this repository"
+        else:
+            tail = "the organisation's logins apply"
+        warns.append(("login:same", "the reviewer login equals the agent login; " + tail))
     env = repo_admin_policy._get(out, "release.environment")
     if isinstance(env, str) and env.casefold() == AGENT_ENV.casefold():
         fallback = repo_admin_policy._get(org, "release.environment")
@@ -659,7 +665,12 @@ class Ctx:
                 reviewer, reviewer_derived = d_reviewer, d_reviewer is not None
             compare = agent if has_agent else d_agent
         same = False
-        if has_release and compare and reviewer and compare.casefold() == reviewer.casefold():
+        org_agent, org_reviewer = (repo_admin_policy._get(self.p, k) for k in ("agent.agent_login", "release.reviewer_login"))
+        if (dropped and isinstance(org_agent, str) and isinstance(org_reviewer, str)
+                and org_agent.casefold() == org_reviewer.casefold()):
+            same = True  # the organisation's own logins are equal: the merge dropped the reviewer, the agent role is not checked
+            reasons = reasons + [SAME_LOGIN]
+        elif has_release and compare and reviewer and compare.casefold() == reviewer.casefold():
             same, reviewer, reviewer_derived = True, None, False  # fail closed on the effective pair only
             reasons = reasons + [SAME_LOGIN]
         return Logins(agent, reviewer, reasons, same, dropped, agent_derived, reviewer_derived)
