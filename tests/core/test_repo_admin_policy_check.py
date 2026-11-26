@@ -25,7 +25,7 @@ def test_organisation_level_key_in_an_override(ra):
     found = ra.check_policy(ctx)
     [bad] = [f for f in found if f.subject == "override:invalid"]
     assert (bad.scope, bad.severity) == ("acme/app", "error") and "organisation-level" in bad.message
-    assert bad.message.startswith(f"{OVERRIDE}: ")
+    assert bad.message.startswith(f"acme/app:{OVERRIDE}: ") and bad.message.count(OVERRIDE) == 1
     [fix] = ra.check_repo(ctx)  # audited with the organisation policy alone
     assert fix.action.body == {"allow_auto_merge": True}
 
@@ -226,6 +226,8 @@ def test_equal_organisation_logins_stand_the_release_check_down(ra):
     assert "stands down" in msg and "release.reviewer_login" in msg and "organisation's logins apply" not in msg
     ctx, _ = inherited(ra, {"agent": {"agent_login": "bot"}, "release": {"reviewer_login": "BOT"}})
     assert ra.check_release(ctx) == []
+    subjects = [f.subject for f in ra.check_agent(ctx)]
+    assert "login:same" in subjects and "login:agent" not in subjects  # the agent's role is not checked either
 
 
 def test_cell_defuses_references_and_entities(ra):
@@ -236,3 +238,14 @@ def test_cell_defuses_references_and_entities(ra):
 def test_explicit_empty_checks_ignore_live_checks_in_the_body(ra):
     bodies = {b["name"]: b for b in ra.ruleset_bodies({"default_branch": {"required_status_checks": []}}, ["x"])}
     assert "required_status_checks" not in {r["type"] for r in bodies["tld-main"]["rules"]}
+
+
+def test_cell_breaks_bare_urls(ra):
+    cell = ra._cell("check https://evil.example/x and www.evil.example")
+    assert "://" not in cell and "www.evil" not in cell
+
+
+def test_key_the_organisation_omits(ra):
+    org = {"org": "a", "security": {"secret_scanning": True}}
+    eff, loose, _warns = ra.effective_policy(org, {"security": {"secret_push_protection": False}}, "app")
+    assert eff["security"]["secret_push_protection"] is False and loose == []

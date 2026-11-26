@@ -1,7 +1,7 @@
-"""repo_admin_detect.py: pure detection of a repository's override values (plan 93, section 3.9).
+"""repo_admin_detect.py: detection of a repository's override values (plan 93, section 3.9).
 
-Everything here works on plain data and imports nothing from tld.ops.repo_admin. The proposal is
-only a proposal: the owner confirms it in the pull request.
+The functions work on plain data and import nothing from tld.ops.repo_admin; only `gather` calls the API, through
+the context it is given. The proposal is only a proposal: the owner confirms it in the pull request.
 """
 from __future__ import annotations
 
@@ -150,10 +150,12 @@ def pr_notes(checks: list[str] | None, excluded: dict[str, str], params: dict[st
     lines = ["required_status_checks: " + (", ".join(checks) if checks else "none proposed")]
     for name, why in sorted(excluded.items()):
         lines.append(f"excluded: {name or '(all)'} ({why})")
-    if params:
-        lines.append("release parameters: " + " ".join(f"{k}={v}" for k, v in params.items()))
-    lines.extend(notes)
-    return lines
+    return lines + release_lines(params, notes)
+
+
+def release_lines(params: dict[str, str] | None, notes: list[str]) -> list[str]:
+    """The release parameters line (when there are parameters) and then the notes."""
+    return (["release parameters: " + " ".join(f"{k}={v}" for k, v in params.items())] if params else []) + list(notes)
 
 
 @dataclass(frozen=True)

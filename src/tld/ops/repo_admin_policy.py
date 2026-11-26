@@ -19,7 +19,7 @@ PRIVATE_ONLY = ("org_settings", "members", "apps", "tokens", "secrets", "variabl
 ORG_LEVEL = PRIVATE_ONLY + ("labels", "webhooks", "deploy_keys", "branches", "branch_protection", "profile", "git_ops")
 OVERRIDABLE = ("repo_settings", "security", "actions", "rulesets", "agent", "release", "workflow_lint", "config_dirs",
                "workflows", "workflow_params")
-PER_REPO_ONLY = ("rulesets.default_branch.required_status_checks", "workflow_params", "config_dirs.known", "workflows[].params")
+PER_REPO_ONLY = ("rulesets.default_branch.required_status_checks", "config_dirs.known", "workflow_params", "workflows[].params")
 IRREVERSIBLE = (
     "secrets.delete_unused", "variables.delete_unused", "labels.delete_unused", "labels.delete_unlisted",
     "webhooks.delete", "deploy_keys.delete_unused", "branches.delete_merged",
@@ -45,7 +45,7 @@ GUARDED_KEYS = tuple(sorted({*TRUE_KEYS, *FALSE_KEYS, *ORDERED, *EQUAL_KEYS, *LI
 
 LOGIN_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$")
 
-_MISSING = object()
+MISSING = object()
 
 
 def kind_of(doc: dict) -> str:
@@ -56,16 +56,16 @@ def kind_of(doc: dict) -> str:
 # --------------------------------------------------------------------------- dotted access
 
 
-def _get(doc, dotted: str):
+def get_path(doc, dotted: str):
     node = doc
     for part in dotted.split("."):
         if not isinstance(node, dict) or part not in node:
-            return _MISSING
+            return MISSING
         node = node[part]
     return node
 
 
-def _set(doc: dict, dotted: str, value) -> None:
+def set_path(doc: dict, dotted: str, value) -> None:
     parts = dotted.split(".")
     node = doc
     for part in parts[:-1]:
@@ -87,6 +87,11 @@ def _leaves(doc, prefix=()):
         return
     for key, value in doc.items():
         yield from _leaves(value, prefix + (str(key),))
+
+
+def leaf_keys(doc, prefix: str = "") -> list[str]:
+    """The dotted leaf keys of a document under `prefix` (lists, scalars and empty mappings are leaves)."""
+    return [".".join(((prefix,) if prefix else ()) + path) for path, _ in _leaves(doc)]
 
 
 def _walk_nulls(value, path: str, out: list[str]) -> None:
@@ -128,12 +133,12 @@ def key_errors(doc, kind: str, where: str, public: str | None = None) -> list[st
             errors.append(f"{where}: '{key}' is organisation-private and {public} is public; keep org_settings, members, "
                           "apps, tokens, secrets and variables in a file of a private repository")
     if kind == "base":
-        for key in ("rulesets.default_branch.required_status_checks", "config_dirs.known", "workflow_params"):
-            if _get(doc, key) is not _MISSING:
+        for key in (k for k in PER_REPO_ONLY if "[" not in k):  # the dotted keys; workflows[].params is checked below
+            if get_path(doc, key) is not MISSING:
                 errors.append(f"{where}: '{key}' is per repository; set it in each repository's override file")
         for key in IRREVERSIBLE:
-            value = _get(doc, key)
-            if value is not _MISSING and _turns_on(key, value):
+            value = get_path(doc, key)
+            if value is not MISSING and _turns_on(key, value):
                 errors.append(f"{where}: '{key}' turns on an irreversible change; set it only in the policy file you run")
     workflows = doc.get("workflows")
     if isinstance(workflows, list):
@@ -180,10 +185,10 @@ def merge_layers(layers: list[tuple[str, dict]]) -> tuple[dict, dict[str, str]]:
         for name, doc in layers:
             node = doc
             for part in path:
-                node = node.get(part, _MISSING) if isinstance(node, dict) else _MISSING
-                if node is _MISSING:
+                node = node.get(part, MISSING) if isinstance(node, dict) else MISSING
+                if node is MISSING:
                     break
-            if node is not _MISSING and _leaf(node):
+            if node is not MISSING and _leaf(node):
                 label = name
         sources[".".join(path)] = label
     return merged, sources
@@ -192,8 +197,8 @@ def merge_layers(layers: list[tuple[str, dict]]) -> tuple[dict, dict[str, str]]:
 def clamp_irreversible(merged: dict, run_doc: dict) -> dict:
     """revoke_expired defaults to true; a base that supplies tokens.fine_grained must not switch it on for the run file."""
     out = copy.deepcopy(merged)
-    fine = _get(out, "tokens.fine_grained")
-    if _get(run_doc, "tokens.fine_grained") is _MISSING and isinstance(fine, dict) and "revoke_expired" not in fine:
+    fine = get_path(out, "tokens.fine_grained")
+    if get_path(run_doc, "tokens.fine_grained") is MISSING and isinstance(fine, dict) and "revoke_expired" not in fine:
         fine["revoke_expired"] = False
     return out
 
@@ -241,8 +246,8 @@ def loosened(org: dict, eff: dict) -> list[Loosening]:
     """Guarded keys the organisation sets and the effective policy makes looser."""
     out = []
     for key in GUARDED_KEYS:
-        org_value, value = _get(org, key), _get(eff, key)
-        if org_value is _MISSING or value is _MISSING:
+        org_value, value = get_path(org, key), get_path(eff, key)
+        if org_value is MISSING or value is MISSING:
             continue
         if _loose(key, org_value, value):
             out.append(Loosening(key, copy.deepcopy(org_value), copy.deepcopy(value)))
@@ -259,9 +264,35 @@ def clamp_guarded(org: dict, eff: dict, allowed: set[str]) -> tuple[dict, list[L
         found.append(item)
         if item.key in LIST_KEYS:
             kept = list(item.value)
-            _set(out, item.key, kept + [x for x in item.org_value if x not in kept])
+            set_path(out, item.key, kept + [x for x in item.org_value if x not in kept])
         else:
-            _set(out, item.key, copy.deepcopy(item.org_value))
+            set_path(out, item.key, copy.deepcopy(item.org_value))
+    return out, found
+
+
+def _same_kind(key: str, org_value, value) -> bool:
+    if key in LIST_KEYS:
+        return isinstance(value, list)
+    if key in ORDERED:
+        return value in ORDERED[key]
+    return isinstance(value, bool) if isinstance(org_value, bool) else type(value) is type(org_value)
+
+
+def restore_guarded(org: dict, eff: dict, allowed: set, show=str) -> tuple[dict, list[Loosening]]:
+    """Fail closed: a guarded key the organisation sets must keep a value of the expected kind. When the effective value
+    is missing or of another type (an override that blanked a section), the organisation's value is put back. `show`
+    turns the offending value into the text kept in the Loosening."""
+    out, found = copy.deepcopy(eff), []
+    for key in GUARDED_KEYS:
+        if key in allowed:
+            continue
+        org_value, value = get_path(org, key), get_path(out, key)
+        if org_value is MISSING:
+            continue
+        if value is not MISSING and _same_kind(key, org_value, value):
+            continue
+        found.append(Loosening(key, copy.deepcopy(org_value), None if value is MISSING else show(value)))
+        set_path(out, key, copy.deepcopy(org_value))
     return out, found
 
 

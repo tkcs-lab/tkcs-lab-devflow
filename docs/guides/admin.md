@@ -60,7 +60,7 @@ repository's override file (a file without `org`), the `repo-admin` skill stops 
 
 | Command | |
 |---|---|
-| `validate-policy POLICY` | Check the file. Exit 1 with one message per problem. It resolves `extends` through the API (needs the token; `--offline` skips it). `--kind auto\|run\|override\|base` (default `auto`: run when the file has `org`, else override), `--public` (with `--kind base`: the file goes into a public repository), `--resolved`, `--explain`, `--org-policy FILE` with `--repo-name NAME`: see below |
+| `validate-policy POLICY` | Check the file. Exit 1 with one message per problem; exit 2 when `--public` is used without `--kind base`, or when only one of `--org-policy` and `--repo-name` is given. It resolves `extends` through the API (needs the token; `--offline` skips it). `--kind auto\|run\|override\|base` (default `auto`: run when the file has `org`, else override), `--public` (with `--kind base`: the file goes into a public repository), `--resolved`, `--explain`, `--org-policy FILE` with `--repo-name NAME`: see below |
 | `latest-pin OWNER/REPO/PATH` | Print `{"sha": ..., "tag": ...}`, the commit to pin an `extends` entry to |
 | `whoami [--org ORG]` | Print the account the token belongs to and its role in the organisation. Exit 3 when it is not an owner. |
 | `audit --policy P` | Read only. `--format md` (default) or `json`, `--out FILE`, `--repo NAME` and `--check NAME` (repeatable), `--no-detect` (no proposals from the repositories). Exit 0 nothing out of policy, 3 differences, 1 a check failed (the report is then incomplete). |
@@ -96,8 +96,8 @@ credential. `tld ops repo-admin latest-pin <owner>/<repo>/<path>` prints the pin
 overridable sections; its `workflow_params.release` and its `workflows[].params` may hold only `tag_prefix`,
 `version_style`, `check_script` and `create_release`, and a `workflows` entry only `template`, `params` and `remove`.
 A base lists templates without parameters (`workflows: [{template: release}, {template: land}]`); a repository writes
-`workflow_params` instead of restating the list, or lists only its own templates (lists replace). A file of a public
-repository may not set the private sections.
+`workflow_params` instead of restating the list, or lists only its own templates (lists replace). A file of a repository that is public, internal or of
+unknown visibility may not set the private sections.
 
 **Guarded keys.** An override may not loosen these; the organisation's value is put back and the `policy` check warns
 (`loosen:<key>`): `security.*`, `rulesets.tags`, `workflow_lint.require_permissions`,
@@ -111,8 +111,10 @@ may let a repository loosen a key: `repos.allow_loosen: {"<repo name glob>": ["<
 loosening of its bases is reported, not put back; it is the owner's file.
 An override of `agent.agent_login`, `release.reviewer_login` or `release.environment` is applied with a warning
 (`login:<key>`, `release:<key>`); `release.environment` equal to the agent's environment (`tld-agent`) is always
-dropped with a warning, and when the effective agent and reviewer logins are equal (without case) the release check
-stands down and the agent role part is skipped (`login:same`).
+dropped with a warning, and when the effective agent and reviewer logins are equal (without case) the organisation's
+logins apply (`login:same`). Where the organisation sets no login, a dropped reviewer login stands the release check
+down and a dropped agent login is derived from the repository's profile as when it is absent. Where the organisation's
+own logins are equal, the reviewer login is dropped, the release check stands down and the agent role part is skipped.
 
 **Irreversible switches.** A base or an override cannot turn on `secrets.delete_unused`, `variables.delete_unused`,
 `labels.delete_unused`, `labels.delete_unlisted`, `webhooks.delete`, `deploy_keys.delete_unused`,
@@ -127,21 +129,25 @@ checks has to review override pull requests for them.
 **Absent is not empty.** With `extends`, a `rulesets.default_branch` without
 `required_status_checks` keeps the checks the live ruleset requires, with their app binding (only an explicit `[]`
 removes the rule), and a missing `tld-main` is created without a check rule. The release template without
-`workflow_params.release` or `params`, or in a repository whose profile has no `release` section, is not installed or
-rewritten: an `info` finding says so. A repository whose override file cannot be listed on a truncated tree is read
+`workflow_params.release` or `params`, or in a repository whose profile has no `release` section or exists but cannot be read or resolved, is not
+installed or rewritten: an `info` finding says so. A repository whose override file cannot be listed on a truncated tree is read
 directly, never treated as absent. The `tld-release` environment is checked in every repository whose effective
 policy gives it a `release` section, so a base with one makes it a requirement everywhere.
 
-**Derived logins.** `agent.agent_login` and `release.reviewer_login` need not be set: they are taken from the
+**Derived logins.** When the effective policy has an `agent` or a `release` section, `agent.agent_login` and
+`release.reviewer_login` need not be set (without the section nothing is derived or checked): they are taken from the
 repository's resolved profile (`git.bot_login`; `git.owner_login`, else the one `git.codeowners` entry). The profile
 is read at the default branch, so it is written by the repository and is untrusted: each derived login is a
 `login:derived:<key>` warning that names the account the changes will use. An explicit value wins and the profile is
-then not read. With no value, a `warn` finding says so, the agent role part is skipped (the environment and secret
-part still run) and the release check is skipped for that repository. The `profile` and `git_ops` sections and the
-profile of a repository come from plan 90: this feature needs that code.
+not read for it (it is still read for a release section without an agent section, to compare the reviewer with
+`git.bot_login`). With no agent login, a `warn` finding says so (`login:agent`) and only the agent role part is skipped (the
+environment and secret part still run). With no reviewer login, a `warn` finding says so (`login:reviewer`) and only
+the release check is skipped for that repository. Deriving needs the profile features of the
+same tld: the `profile` and `git_ops` sections, the resolved profile of a repository and its `git.bot_login`,
+`git.owner_login` and `git.codeowners` keys (the changelog names the release that ships them).
 
 **Detection.** For a repository whose effective policy has `rulesets.default_branch` without
-`required_status_checks`, or the release template without parameters, or that has no override file, the `policy`
+`required_status_checks`, or the release template without parameters, the `policy`
 check reads the newest ten merged pull requests of the default branch (check runs and commit statuses), its tags,
 its manifests and its workflows, and proposes an override file (`override:propose`, a `fix` finding) that `apply`
 opens as one pull request; the owner merges it, or corrects the values in it. It never writes to a branch. A check is
@@ -204,7 +210,7 @@ repository. The OK line ends `, repository override` or `, base` for those kinds
 | `lint` | `workflow_lint`: actions not pinned to a commit SHA, workflows without top-level `permissions`, `pull_request_target` | nothing: read only |
 | `profile` | `profile-no-extends` and `profile-invalid-extends` (a repository with a profile but no valid `tld.extends`, or one that names another base; warn, the step is to run setup in update mode), `profile-pin-old` (the pin is not the newest tagged commit, or not the commit `profile.pin` names), `profile-guarded-override` (info: the repository's own profile overrides guarded keys the base allows), `profile-merge-style` (the repository's merge settings do not match `git.merge_style`; the starter policy allows merge commits only) | `profile-pin-old`: a pull request, through the API, that rewrites only the `extends:` line, titled `chore: bump the tld base to <tag>`; the rest is reported |
 | `git_ops` | `git-ops-workflow` and `git-ops-allowlist` (the shipped `tld-git-ops.yml` and an allowlist naming every audited repository are missing or differ in the central repository), `git-ops-environment` and `git-ops-token` (the `git-ops` environment limited to the default branch and the `GIT_OPS_TOKEN` secret in it: open items with manual steps, never created) | a pull request into the central repository for the workflow and the allowlist; the rest is manual |
-| `policy` | Only for a policy that has `extends`. The run file's own loosening of its bases (`loosen:<key>`, warn); per repository: problems of the override file (`override:invalid`, error; the repository is then audited with the organisation policy alone), guarded settings an override tried to loosen (`loosen:<key>`, warn; the organisation value applies unless `repos.allow_loosen` lets it), changed logins and `release.*` values, a whole old policy in the override file (`override:convert`), `workflow_params` for a template the repository does not list. The subjects are `override:propose:invalid` (warn: a proposal detected from the repository failed validation or would loosen a guarded key, and was dropped), `override:invalid:N`, `login:*`, `release:*` and `workflow_params:<template>`; `override:propose` is the proposed override pull request (a detected proposal, `fix`) or, when nothing could be proposed, an `info` finding. A detection proposes no `required_status_checks` when the live `tld-main` already requires some, and its pull request names every `path` workflow that a proposed `workflows` list leaves out | `override:convert`: a pull request that replaces the file with the repository's differences only; the pull request body lists what was dropped under "Detected values (the owner confirms them)" |
+| `policy` | Only for a policy that has `extends`. The run file's own loosening of its bases (`loosen:<key>`, warn); per repository: problems of the override file (`override:invalid`, error; the repository is then audited with the organisation policy alone), guarded settings an override tried to loosen (`loosen:<key>`, warn; the organisation value applies unless `repos.allow_loosen` lets it), changed logins and `release.*` values, a whole old policy in the override file (`override:convert`), `workflow_params` for a template the repository does not list. The subjects are `override:propose:invalid` (warn: a proposal detected from the repository failed validation or would loosen a guarded key, and was dropped), `override:invalid:N`, `login:<section>.<key>`, `login:same`, `release:<key>` and `workflow_params:<template>`; `login:derived:<key>`, `login:agent`, `login:reviewer` and `login:same` also come from the `agent` and `release` checks, not only from this one; `override:propose` is the proposed override pull request (a detected proposal, `fix`) or, when nothing could be proposed, an `info` finding. A detection proposes no `required_status_checks` when the live `tld-main` already requires some, and its pull request names every `path` workflow that a proposed `workflows` list leaves out | `override:convert`: a pull request that replaces the file with the repository's differences only; the pull request body lists what was dropped under "Detected values (the owner confirms them)" |
 | `secrets_scope` (runs with the `git_ops` section) | A repository or organisation Actions secret, or a secret of an environment any branch may deploy to; an environment limited to the default branch is not reported. A pushed branch's workflow runs with repository-level secrets before anyone reads it, so only environment secrets limited to the default branch are safe from it | nothing: reported with the manual steps |
 
 How "unused" is decided, and where it can be wrong:
@@ -253,7 +259,7 @@ Every key is optional except `org`. The schema is the exact source of truth.
 | `branch_protection.branch` | A name, or `default` (the default) |
 | `branch_protection.require_pull_request`, `branch_protection.approvals`, `branch_protection.require_status_checks`, `branch_protection.strict` | Defaults true, 1, none, false |
 | `branch_protection.enforce_admins`, `branch_protection.linear_history`, `branch_protection.allow_force_pushes`, `branch_protection.allow_deletions` | Defaults false |
-| `rulesets.default_branch.required_status_checks`, `rulesets.default_branch.admin_bypass` | Checks that must pass (none: no checks rule); `admin_bypass: true` lets the admin role bypass `tld-main` through a pull request. Default false (the starter keeps it; this repository sets it true so its single owner can merge their own pull requests) |
+| `rulesets.default_branch.required_status_checks`, `rulesets.default_branch.admin_bypass` | Checks that must pass (none: no checks rule); `admin_bypass: true` lets the admin role bypass `tld-main` through a pull request. Default false (the single-repository starter keeps it, the shared base starter sets true; this repository sets it true so its single owner can merge their own pull requests) |
 | `rulesets.tags` | true: the tag ruleset `tld-tags` (only the admin role may tag) |
 | `agent.agent_login` | **Required in `agent`.** The account sessions push as |
 | `release.reviewer_login` | **Required in `release`.** The owner: the one required reviewer of the release environment |
@@ -300,7 +306,9 @@ requests and the owner approves them.
   pull request without a second reviewer. The bypass is in `pull_request` mode: no direct push, force push or
   deletion. It skips every rule of `tld-main` for that pull request, the required checks included, so the owner
   waits for green CI. The agent account keeps `write` and is never a bypass actor. Leave it `false` where a second
-  human can review (the starter does).
+  human can review (the single-repository starter `admin-policy.yaml` does). The shared base starter
+  `admin-policy-base.yaml` sets it `true`, so an organisation that extends it gets `true` unless its own policy file sets `false`
+  (a guarded key: an override cannot turn it on then).
   Because of `require_last_push_approval`, the owner's approval counts only when the latest push to the pull request
   came from someone else. **Do not press "Update branch" on an agent's pull request**: that push is the owner's, so no
   approval of the owner can merge it until the agent pushes again. Ask the agent to bring the branch up to date (the

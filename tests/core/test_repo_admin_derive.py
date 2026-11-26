@@ -191,3 +191,18 @@ def test_equal_logins_in_the_profile_do_not_switch_off_the_organisations_account
     found = ra.check_agent(a)
     assert "role:realbot" in [f.subject for f in found]  # the agent role is still checked
     assert not [f for f in found if f.subject == "login:same"]
+
+
+test_derived_login_named = test_a_derived_login_is_named_in_its_fixes
+test_equal_logins = test_equal_effective_logins_stand_down
+
+
+def test_release_template_stands_down_when_the_profile_does_not_resolve(ra):
+    policy = {"workflows": [{"template": "release", "params": {"tag_prefix": "v"}}]}
+    ctx, _ = inherited(ra, policy, files={"app": {TOOLKIT: "docs: {must_read: []}\n"}})  # exists, does not resolve
+    [f] = ra.check_files(ctx)
+    assert (f.subject, f.severity, f.action) == ("workflow:.github/workflows/tld-release.yml:standdown", "info", None)
+    assert "cannot be read or resolved" in f.message
+    ctx, _ = inherited(ra, policy, files={"app": {"README.md": "x"}})
+    [g] = ra.check_files(ctx)
+    assert g.action  # no profile file at all: the template is installed as before

@@ -122,8 +122,9 @@ def test_offline_does_not_fetch(cmd):
     fake = world()
     code, out, _ = cmd(["validate-policy", "{file}", "--offline"], fake=fake, doc=run(BASE_PIN, ORG_PIN))
     assert code == 0 and out.startswith("policy: OK (") and fake.reads == []
-    code, out, _ = cmd(["validate-policy", "{file}", "--offline", "--resolved"], fake=fake, doc=run(BASE_PIN))
-    assert fake.reads == [] and yaml.safe_load(out)["extends"] == [BASE_PIN]
+    for flag in ("--resolved", "--explain"):  # the unresolved file is not the effective policy
+        code, out, err = cmd(["validate-policy", "{file}", "--offline", flag], fake=fake, doc=run(BASE_PIN))
+        assert code == 1 and out == "" and "bases are not fetched" in err and fake.reads == []
     code, _, err = cmd(["validate-policy", "{file}", "--offline"], fake=fake, doc=run(f"acme/.github/{BASE_PATH}@v1"))
     assert code == 1 and "latest-pin" in err and fake.reads == []
 
@@ -214,3 +215,11 @@ def test_offline_org_policy_with_extends_is_refused(cmd, tmp_path):
     code, _, err = cmd(["validate-policy", "{file}", "--resolved", "--offline", "--org-policy", str(org), "--repo-name", "app"],
                        doc={"security": {"secret_scanning": True}}, name="o.yaml")
     assert code == 1 and "bases are not fetched" in err
+
+
+def test_latest_pin_turns_a_timeout_into_a_clean_error(cmd, ra, monkeypatch):
+    def boom(client, source):
+        raise TimeoutError("timed out")
+    monkeypatch.setattr(ra.repo_admin_extends, "latest_pin", boom)
+    code, out, err = cmd(["latest-pin", f"acme/.github/{BASE_PATH}"], fake=tag_world([("v1", "1" * 40)], with_file=["1" * 40]))
+    assert code == 1 and out == "" and err == "latest-pin: timed out\n"
