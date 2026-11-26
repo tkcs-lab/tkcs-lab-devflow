@@ -22,6 +22,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 - worker: none reported by the worker
 - retry: sent back once: a --ref value starting with a dash was read by git as an option; fixed by resolving the ref to a commit hash first, with three smaller hardening fixes in resolve.py
+- final: the test that keeps the profile modules small gives base.py a bound of 600 lines (it has 574) instead of the 480 of the p4 brief, because base.py was already over 480 lines when p4 reached it and no phase splits it; accepted by the orchestrator as a size-hygiene limit with no safety effect, to be split in a later change
 
 ## p5-hooks
 
@@ -86,7 +87,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: first final review: changes, one blocking finding (the 600-line bound for base.py was not recorded); recorded under p4-resolve
 
 ## Finishing
 
