@@ -91,4 +91,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Finishing
 
-- pending
+- final: fix round: 18 fixed, 4 declined
+- final: declined: F18 (the version bump belongs to the release step), F19 and F20 (ask to keep the profile and ordinary workflows on the default protect list, the opposite of plan 3.5, documented as a known limit) and F22 (report only)
+- final: scope: the per-phase scope check tool ran after each local merge and so recorded every phase as not checked (an orchestrator ordering error); recomputed afterwards from the merge commits, every path outside a phase touches list is an extension the orchestrator approved and recorded under that phase (docs rows in profile-reference.md and admin.md, the validate-manifest, spec, sysml and graders tests, base.py and resolve.py fixes, eval stubs); no unapproved scope drift was found
+- final: new non-blocking findings from the fix round review, not fixed (no second round): scope.ignore and the changelog file read from the default branch lose the file-checked changelog default; the clamp comparison uses the current directory with --ref; validate-manifest prints no clamp warnings; docs for scope.ignore and .github/actions/ wording; one loosened test assertion
