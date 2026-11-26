@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from conftest import BIN, _load
+from conftest import BIN, FIXTURES, _load
 
 reflektor = _load("tld.roles.reflektor")
 report_check = _load("tld.board.report_check")
@@ -157,13 +157,144 @@ def test_allow_mark_with_line_splitter_is_refused(sep):
     payload = json.dumps({"s": f"{TOKEN} secret-scan:allow{sep}x"}, ensure_ascii=False)
     assert reasons(page(payload)) == []
     got = reflektor.verify_html(page(payload))
-    assert got and ("line-splitting" in got[0] or "credential" in got[0])
+    assert len(got) == 1 and "github-token" in got[0]
 
 
-@pytest.mark.parametrize("sep", ["\u2028", "\u0085", "\x0b", "\x1f"])
-def test_line_splitter_alone_is_refused(sep):
-    payload = json.dumps({"s": f"a{sep}b"}, ensure_ascii=False)
-    assert reflektor.verify_html(page(payload)) == [reflektor.REASON_SPLIT]
+SEPS = ["\u2028", "\u2029", "\x85", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x1f"]
+VALUE = "".join(["Zx9Qm2Lp7", "Rt4Vw8Ky3", "Nb6Hd"])
+AWS_SECRET = "".join(["A1b2C3d4E5", "f6G7h8I9j0", "K1l2M3n4O5", "p6Q7r8S9t0"])
+FIXTURE = FIXTURES / "reflektor-separator-payload.json"
+
+
+@pytest.mark.parametrize("ascii", [False, True])
+@pytest.mark.parametrize("sep", SEPS)
+def test_line_splitter_alone_is_accepted(sep, ascii):
+    text = page(json.dumps({"s": f"a{sep}b"}, ensure_ascii=ascii))
+    assert reflektor.verify_html(text) == []
+    assert reflektor.prepare_page(text) == (text, 0)
+
+
+CREDENTIALS = [
+    (lambda sep: f"x{sep}{TOKEN}", "github-token"),
+    (lambda sep: "-----BEGIN" + sep + "RSA PRIVATE KEY-----", "private-key"),
+    (lambda sep: f"api_token ={sep}'{VALUE}'", "high-entropy-assignment"),
+    (lambda sep: f"aws_secret_access_key ={sep}{AWS_SECRET}", "aws-secret-key"),
+    (lambda sep: "a" * 1_500_000 + f" api_token ={sep}'{VALUE}'", "high-entropy-assignment"),
+]
+
+
+@pytest.mark.parametrize("as_key", [False, True])
+@pytest.mark.parametrize("idx", range(len(CREDENTIALS)))
+@pytest.mark.parametrize("sep", SEPS)
+def test_credential_next_to_a_separator_is_refused(sep, idx, as_key, tmp_path):
+    make, name = CREDENTIALS[idx]
+    v = make(sep)
+    payload = json.dumps({v: 1} if as_key else {"s": v}, ensure_ascii=False)
+    got = reflektor.verify_html(page(payload))
+    assert len(got) == 1 and "credential" in got[0] and name in got[0]
+    if idx < 3 and not as_key:
+        f = write(tmp_path / "c.html", hardless(payload))
+        before = f.read_bytes()
+        with pytest.raises(PrepareError) as e:
+            reflektor.harden_html(f)
+        assert "credential" in e.value.message
+        assert f.read_bytes() == before
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\u2029", "\x85"])
+@pytest.mark.parametrize("which", ["after", "before"])
+def test_credential_split_over_two_strings_is_refused(sep, which):
+    v = VALUE + sep if which == "after" else sep + VALUE
+    payload = json.dumps({"api_token": v}, ensure_ascii=False, separators=(",", ":"))
+    got = reflektor.verify_html(page(payload))
+    assert len(got) == 1 and "credential" in got[0] and "high-entropy-assignment" in got[0]
+
+
+HARMLESS = [
+    lambda sep: "-----BEGIN" + sep + "RSA PUBLIC KEY-----",
+    lambda sep: f"x{sep}ghp_example",
+    lambda sep: f"api_token ={sep}'example-value-here'",
+    lambda sep: f"aws_secret_access_key ={sep}your-key-here",
+    lambda sep: "a" * 1_500_000 + f" api_token ={sep}'example-value-here'",
+]
+
+
+@pytest.mark.parametrize("idx", range(len(HARMLESS)))
+@pytest.mark.parametrize("sep", SEPS)
+def test_harmless_text_next_to_a_separator_passes(sep, idx):
+    v = HARMLESS[idx](sep)
+    assert reflektor.verify_html(page(json.dumps({"s": v}, ensure_ascii=False))) == []
+
+
+@pytest.mark.parametrize("sep", SEPS)
+def test_credential_across_a_separator_on_a_marked_line_is_refused(sep):
+    v = f"api_token ={sep}'{VALUE}' {MARK}"
+    got = reflektor.verify_html(page(json.dumps({"s": v}, ensure_ascii=False)))
+    assert len(got) == 1 and "high-entropy-assignment" in got[0]
+
+
+def test_a_credential_elsewhere_is_not_cleared_by_a_separator_string():
+    got = reflektor.verify_html(page(json.dumps({"a": TOKEN, "b": "x\u2028y"}, ensure_ascii=False)))
+    assert len(got) == 1 and "github-token" in got[0]
+
+
+def test_raw_separator_outside_a_string_is_invalid_payload():
+    assert reflektor.verify_html(page('{"a":\u20281}')) == ["invalid payload (not JSON)"]
+
+
+@pytest.mark.parametrize("before", [False, True])
+@pytest.mark.parametrize("sep", SEPS)
+def test_window_reaches_1970_characters_on_each_side(sep, before):
+    if before:
+        v = "api_token =" + " " * 1970 + sep + f"'{VALUE}'"
+    else:
+        v = f"api_token ={sep}" + " " * 1970 + f"'{VALUE}'"
+    got = reflektor.verify_html(page(json.dumps({"s": v}, ensure_ascii=False)))
+    assert len(got) == 1 and "high-entropy-assignment" in got[0]
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\x0b"])
+def test_every_separator_gets_a_window(sep):
+    v = "a" + sep + "b" * 5000 + f" api_token ={sep}'{VALUE}'"
+    got = reflektor.verify_html(page(json.dumps({"s": v}, ensure_ascii=False)))
+    assert len(got) == 1 and "high-entropy-assignment" in got[0]
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\x0b"])
+def test_too_many_escaped_separators_are_refused(sep):
+    assert reflektor.verify_html(page(json.dumps({"s": "a" + sep * 1000}))) == []
+    assert reflektor.verify_html(page(json.dumps({"s": "a" + sep * 1001}))) == [reflektor.REASON_SPLIT]
+
+
+def test_too_many_separators_are_refused():
+    assert reflektor.verify_html(page(json.dumps({"s": "a\u2028" * 1000}, ensure_ascii=False))) == []
+    got = reflektor.verify_html(page(json.dumps({"s": "a\u2028" * 1001}, ensure_ascii=False)))
+    assert got == [reflektor.REASON_SPLIT]
+
+
+def test_changed_file_with_separators_is_hardened_and_sent(tmp_path, capfd):
+    payload = FIXTURE.read_text(encoding="utf-8").rstrip("\n")
+    f = write(tmp_path / "r.html", hardless(payload))
+    assert reflektor.main(["html", "--file", str(f)]) == 0
+    text = f.read_text(encoding="utf-8")
+    assert text == page(payload)
+    assert report_check.check(text) == []
+    assert "\u2028" in text and "\u2029" in text
+    assert capfd.readouterr().err == ""
+    ans, _h = make_answer(tmp_path, ["REPORT-HTML @H@"], html=page(payload), name="sep")
+    dest = tmp_path / "ds"
+    dest.mkdir()
+    assert reflektor.send_copy(ans, dest).read_text(encoding="utf-8") == page(payload)
+
+
+def test_separator_fixture_has_the_pr_104_shape():
+    payload = FIXTURE.read_text(encoding="utf-8").rstrip("\n")
+    assert "\n" not in payload
+    assert sum(payload.count(c) for c in "\u2028\u2029") == 4
+    files = json.loads(payload)["diff"]["files"]
+    assert len(files) == 3
+    for k in ("oldContent", "newContent"):
+        assert "\u202e\u200b\u2028\u2029\ue000" in files[1][k]
 
 
 def test_allow_mark_behind_newline_escape_is_refused():
@@ -184,7 +315,8 @@ def test_allow_mark_in_a_key_and_plain_is_refused():
 
 def test_token_in_a_key_with_splitter_is_refused():
     payload = json.dumps({f"{TOKEN} secret-scan:allow\u2028x": 1}, ensure_ascii=False)
-    assert reflektor.verify_html(page(payload))
+    got = reflektor.verify_html(page(payload))
+    assert len(got) == 1 and "github-token" in got[0]
 
 
 def test_secret_in_a_key_is_found():
