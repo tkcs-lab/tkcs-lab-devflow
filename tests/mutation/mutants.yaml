@@ -1129,13 +1129,13 @@ mutants:
 - id: AI7
   file: src/tld/ops/repo_admin_policy.py
   why: "key_errors skips the irreversible rule for a base (killed by test_key_errors_base_irreversible)"
-  old: "if value is not _MISSING and _turns_on(key, value):"
+  old: "if value is not MISSING and _turns_on(key, value):"
   new: "if False:"
 - id: AI8
   file: src/tld/ops/repo_admin_policy.py
   why: "clamp_guarded does not restore a shrunk list (killed by test_clamp_guarded_restores_and_allows)"
-  old: "_set(out, item.key, kept + [x for x in item.org_value if x not in kept])"
-  new: "_set(out, item.key, kept)"
+  old: "set_path(out, item.key, kept + [x for x in item.org_value if x not in kept])"
+  new: "set_path(out, item.key, kept)"
 - id: AX1
   file: src/tld/ops/repo_admin_detect.py
   why: "status_checks keeps a name that failed on one sample (killed by test_flaky_failed_skipped_and_partial_checks_are_excluded)"

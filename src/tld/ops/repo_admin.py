@@ -430,39 +430,13 @@ OVERRIDE_PATH = ".tld/admin-policy.yaml"
 MAX_MESSAGE = 300
 
 
-def _restore_guarded(org: dict, eff: dict, allowed: set) -> tuple[dict, list]:
-    """Fail closed: a guarded key the organisation sets must keep a value of the expected kind. When the effective value
-    is missing or of another type (an override that blanked a section), the organisation's value is put back."""
-    out, found = copy.deepcopy(eff), []
-    for key in repo_admin_policy.GUARDED_KEYS:
-        if key in allowed:
-            continue
-        org_value, value = repo_admin_policy._get(org, key), repo_admin_policy._get(out, key)
-        if org_value is repo_admin_policy._MISSING:
-            continue
-        if value is not repo_admin_policy._MISSING and _same_kind(key, org_value, value):
-            continue
-        found.append(repo_admin_policy.Loosening(key, copy.deepcopy(org_value),
-                                                 None if value is repo_admin_policy._MISSING else clean(value, 80)))
-        repo_admin_policy._set(out, key, copy.deepcopy(org_value))
-    return out, found
-
-
-def _same_kind(key: str, org_value, value) -> bool:
-    if key in repo_admin_policy.LIST_KEYS:
-        return isinstance(value, list)
-    if key in repo_admin_policy.ORDERED:
-        return value in repo_admin_policy.ORDERED[key]
-    return isinstance(value, bool) if isinstance(org_value, bool) else type(value) is type(org_value)
-
-
 def _check_logins(org: dict, eff: dict, override: dict) -> tuple[dict, list]:
     """The reviewer may never be the agent (compared without case). An explicit override of a login or of release.*
     away from the organisation's value is reported."""
     out, warns = copy.deepcopy(eff), []
     for section, key in (("agent", "agent_login"), ("release", "reviewer_login")):
         mine = (override.get(section) or {}) if isinstance(override.get(section), dict) else {}
-        if key in mine and mine[key] != repo_admin_policy._get(org, f"{section}.{key}"):
+        if key in mine and mine[key] != repo_admin_policy.get_path(org, f"{section}.{key}"):
             warns.append((f"login:{section}.{key}", f"the override sets {section}.{key} to {clean(mine[key], 80)!r}, "
                                                     "not the organisation's value"))
     release_set = override.get("release")
@@ -470,20 +444,20 @@ def _check_logins(org: dict, eff: dict, override: dict) -> tuple[dict, list]:
         for key in release_set:
             if key == "environment" and isinstance(release_set[key], str) and release_set[key].casefold() == AGENT_ENV.casefold():
                 continue  # the drop below reports it, under the subject release:environment
-            if key != "reviewer_login" and release_set[key] != repo_admin_policy._get(org, f"release.{key}"):
+            if key != "reviewer_login" and release_set[key] != repo_admin_policy.get_path(org, f"release.{key}"):
                 warns.append((f"release:{clean(key, 40)}", f"the override sets release.{clean(key, 40)} away from the organisation's value"))
-    agent, reviewer = repo_admin_policy._get(out, "agent.agent_login"), repo_admin_policy._get(out, "release.reviewer_login")
+    agent, reviewer = repo_admin_policy.get_path(out, "agent.agent_login"), repo_admin_policy.get_path(out, "release.reviewer_login")
     if isinstance(agent, str) and isinstance(reviewer, str) and agent.casefold() == reviewer.casefold():
         gone = []
         for dotted in ("agent.agent_login", "release.reviewer_login"):
-            value = repo_admin_policy._get(org, dotted)
+            value = repo_admin_policy.get_path(org, dotted)
             section, key = dotted.split(".")
-            if value is repo_admin_policy._MISSING:  # nothing to fall back on: the part that needs the login stands down
+            if value is repo_admin_policy.MISSING:  # nothing to fall back on: the part that needs the login stands down
                 out[section].pop(key, None)
                 gone.append(dotted)
             else:
-                repo_admin_policy._set(out, dotted, copy.deepcopy(value))
-        agent, reviewer = repo_admin_policy._get(out, "agent.agent_login"), repo_admin_policy._get(out, "release.reviewer_login")
+                repo_admin_policy.set_path(out, dotted, copy.deepcopy(value))
+        agent, reviewer = repo_admin_policy.get_path(out, "agent.agent_login"), repo_admin_policy.get_path(out, "release.reviewer_login")
         still = isinstance(agent, str) and isinstance(reviewer, str) and agent.casefold() == reviewer.casefold()
         if still:  # the organisation's own logins are equal: the agent may not review its own release
             out["release"].pop("reviewer_login", None)
@@ -499,9 +473,9 @@ def _check_logins(org: dict, eff: dict, override: dict) -> tuple[dict, list]:
         else:
             tail = "the organisation's logins apply"
         warns.append(("login:same", "the reviewer login equals the agent login; " + tail))
-    env = repo_admin_policy._get(out, "release.environment")
+    env = repo_admin_policy.get_path(out, "release.environment")
     if isinstance(env, str) and env.casefold() == AGENT_ENV.casefold():
-        fallback = repo_admin_policy._get(org, "release.environment")
+        fallback = repo_admin_policy.get_path(org, "release.environment")
         if isinstance(fallback, str) and fallback.casefold() != AGENT_ENV.casefold():
             out["release"]["environment"] = fallback
         else:
@@ -534,7 +508,7 @@ def effective_policy(org: dict, override_doc, repo_name: str) -> tuple[dict, lis
     doc = _usable(override_doc)
     allowed = repo_admin_policy.allowed_for(org, repo_name)
     eff, loose = repo_admin_policy.clamp_guarded(org, repo_admin_policy.apply_override(org, doc), allowed)
-    eff, more = _restore_guarded(org, eff, allowed)
+    eff, more = repo_admin_policy.restore_guarded(org, eff, allowed, lambda v: clean(v, 80))
     eff, warns = _check_logins(org, eff, doc)
     return eff, loose + more, warns
 
@@ -665,7 +639,7 @@ class Ctx:
                 reviewer, reviewer_derived = d_reviewer, d_reviewer is not None
             compare = agent if has_agent else d_agent
         same = False
-        org_agent, org_reviewer = (repo_admin_policy._get(self.p, k) for k in ("agent.agent_login", "release.reviewer_login"))
+        org_agent, org_reviewer = (repo_admin_policy.get_path(self.p, k) for k in ("agent.agent_login", "release.reviewer_login"))
         if (dropped and isinstance(org_agent, str) and isinstance(org_reviewer, str)
                 and org_agent.casefold() == org_reviewer.casefold()):
             same = True  # the organisation's own logins are equal: the merge dropped the reviewer, the agent role is not checked
@@ -1997,9 +1971,9 @@ def _override_findings(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> list[Fi
     existing, detected, lines = ov.doc, {}, []
     if legacy:
         agent, reviewer, _ = repo_admin_policy.derive_logins(repo_admin_profile.repo_profile(ctx, repo))
-        if repo_admin_policy._get(ctx.p, "agent.agent_login") is not repo_admin_policy._MISSING:
+        if repo_admin_policy.get_path(ctx.p, "agent.agent_login") is not repo_admin_policy.MISSING:
             agent = None  # the organisation's own value wins, so the override's login is not redundant
-        if repo_admin_policy._get(ctx.p, "release.reviewer_login") is not repo_admin_policy._MISSING:
+        if repo_admin_policy.get_path(ctx.p, "release.reviewer_login") is not repo_admin_policy.MISSING:
             reviewer = None
         existing = repo_admin_policy.drop_derived(ov.doc, agent, reviewer)
     if ctx.detect:
@@ -2220,13 +2194,6 @@ OWN_FILE = "the repository this file goes into"
 ORG_LINE = re.compile(r"(?m)^[\"']?org[\"']?\s*:")
 
 
-def _flatten(doc, prefix: str = "") -> list[str]:
-    """The dotted leaf keys of a document (lists and scalars are leaves)."""
-    if isinstance(doc, dict) and doc:
-        return [leaf for k, v in doc.items() for leaf in _flatten(v, f"{prefix}.{k}" if prefix else str(k))]
-    return [prefix]
-
-
 def clean(text: object, limit: int = 400) -> str:
     """Text that may come from a fetched file or a server: control characters become '?' and the length is capped,
     so it cannot forge a line or move the cursor of a terminal or log."""
@@ -2291,7 +2258,7 @@ def cmd_validate(args) -> int:
             return _validate_fail(res.errors)
         view, sources = res.policy, res.sources
     else:
-        sources = {k: (kind if kind != "run" else "run") for k in _flatten(policy) if k}
+        sources = {k: (kind if kind != "run" else "run") for k in repo_admin_policy.leaf_keys(policy) if k}
     if resolved and kind == "override" and args.org_policy:
         org_path = Path(args.org_policy)
         if not org_path.is_file():
@@ -2313,11 +2280,11 @@ def cmd_validate(args) -> int:
             bad = validate_policy(org_doc, org_path.resolve().parent)
             if bad:
                 return _validate_fail(bad)
-        org_sources = org_doc.get("_sources") or {k: "run" for k in _flatten(org_doc) if k}
+        org_sources = org_doc.get("_sources") or {k: "run" for k in repo_admin_policy.leaf_keys(org_doc) if k}
         view, _, _ = effective_policy(org_doc, policy, args.repo_name)
         sources = dict(org_sources)
-        mine = {k for k in _flatten({k: v for k, v in policy.items() if k != "workflow_params"}) if k}
-        mine |= {k for k in _flatten(policy.get("workflow_params") or {}, "workflow_params") if k}
+        mine = {k for k in repo_admin_policy.leaf_keys({k: v for k, v in policy.items() if k != "workflow_params"}) if k}
+        mine |= {k for k in repo_admin_policy.leaf_keys(policy.get("workflow_params") or {}, "workflow_params") if k}
         if policy.get("workflow_params"):
             mine.add("workflows")
         sources.update({k: f"override {args.repo_name}" for k in mine})
