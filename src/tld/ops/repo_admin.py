@@ -2048,8 +2048,9 @@ def check_policy(ctx: Ctx) -> list[Finding]:
         fn, found = repo["full_name"], []
         ov = ctx.override(repo)
         for n, problem in enumerate(ov.problems, 1):
+            named = problem.startswith(f"{fn}:{ov.path}:") or problem.startswith(f"{ov.path}:")  # validate_policy names the file
             found.append(Finding("policy", fn, "override:invalid" if n == 1 else f"override:invalid:{n}",
-                                 clean(f"{ov.path}: {problem}", MAX_MESSAGE), "error"))
+                                 clean(problem if named else f"{ov.path}: {problem}", MAX_MESSAGE), "error"))
         for item in ctx.loosenings(repo):
             now = "no valid value" if item.value is None else _show(item.value)
             found.append(Finding("policy", fn, f"loosen:{clean(item.key, 80)}", clean(

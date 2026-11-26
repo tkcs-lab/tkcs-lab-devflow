@@ -241,3 +241,11 @@ def test_the_validate_view_uses_the_same_function(ra):
 
 
 test_login_or_environment_overridden = test_an_explicit_login_override_is_reported
+
+
+def test_override_problem_messages_name_the_file_once(ra):
+    ctx, _ = inherited(ra, {"agent": {"agent_login": "bot"}},
+                       files={"app": {OVERRIDE: "org_settings:\n  x: 1\n"}})
+    repo = ctx.all_repos[0]
+    found = [f for f in ra.check_policy(ctx) if f.subject.startswith("override:invalid")]
+    assert found and all(f.message.count(OVERRIDE) == 1 for f in found), [f.message for f in found]

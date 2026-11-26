@@ -25,7 +25,7 @@ def test_organisation_level_key_in_an_override(ra):
     found = ra.check_policy(ctx)
     [bad] = [f for f in found if f.subject == "override:invalid"]
     assert (bad.scope, bad.severity) == ("acme/app", "error") and "organisation-level" in bad.message
-    assert bad.message.startswith(f"{OVERRIDE}: ")
+    assert bad.message.startswith(f"acme/app:{OVERRIDE}: ") and bad.message.count(OVERRIDE) == 1
     [fix] = ra.check_repo(ctx)  # audited with the organisation policy alone
     assert fix.action.body == {"allow_auto_merge": True}
 
