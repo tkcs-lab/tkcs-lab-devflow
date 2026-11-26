@@ -132,16 +132,17 @@ def fs_env(root: Path | str, owner: str | None = None, branch: str | None = None
 
 
 def tree_env(project: Path | str, rev: str, owner: str | None = None, branch: str | None = None) -> Env:
-    """An Env that reads the files of commit `rev` (one `git ls-tree` call), never the working tree."""
-    r = _git(project, "ls-tree", "-r", "--name-only", rev)
+    """An Env that reads the files of commit `rev` (one `git ls-tree` call for the few paths the file-checked
+    defaults ask about, not the whole tree), never the working tree."""
+    wanted = ["docs/plans", *(path for _, _, path in defaults.FILE_CHECKED)]
+    r = _git(project, "ls-tree", "--name-only", rev, "--", *wanted)
     files = set(r.stdout.splitlines()) if r is not None and r.returncode == 0 else set()
-    dirs = {d for f in files for d in (str(p) for p in Path(f).parents)}
 
     def read(path: str) -> str | None:
         out = _git(project, "show", f"{rev}:{path}")
         return out.stdout if out is not None and out.returncode == 0 else None
 
-    return Env(exists=lambda p: p in files or p in dirs, read=read, origin_owner=owner, main_branch=branch)
+    return Env(exists=lambda p: p in files, read=read, origin_owner=owner, main_branch=branch)
 
 
 # ----------------------------------------------------------------------------------------------- resolve

@@ -273,7 +273,7 @@ def test_a_ref_resolves_once_and_only_the_sha_reaches_git(tmp_path, monkeypatch)
     out = rs.load(repo / ".tld" / "toolkit.yaml", ref="HEAD", root=repo, trusted=False)
     assert out.errors == []
     sha = git(repo, "rev-parse", "HEAD")
-    assert ("show", f"{sha}:.tld/toolkit.yaml") in seen and ("ls-tree", "-r", "--name-only", sha) in seen
+    assert ("show", f"{sha}:.tld/toolkit.yaml") in seen and any(a[:3] == ("ls-tree", "--name-only", sha) for a in seen)
     assert not any("HEAD" in a and a[0] in ("show", "ls-tree") for a in seen)
 
 
@@ -483,3 +483,21 @@ def test_load_flags_an_uncached_base_and_an_uncached_trusted_base(tmp_path):
     assert out.errors == [] and out.base_missing is False
     assert out.trusted_base_missing is not None and out.trusted_base_missing.sha == "d" * 40
     assert out.trusted_branch == "main"
+
+
+def test_tree_env_asks_git_only_about_the_default_paths(tmp_path, monkeypatch):
+    repo = make_repo(tmp_path, MINIMAL)
+    (repo / "docs" / "plans").mkdir(parents=True)
+    (repo / "docs" / "plans" / "a.md").write_text("x\n")
+    (repo / "docs" / "adr").mkdir()
+    (repo / "docs" / "adr" / "README.md").write_text("x\n")
+    (repo / "deep" / "tree").mkdir(parents=True)
+    (repo / "deep" / "tree" / "f.txt").write_text("x\n")
+    commit_all(repo)
+    calls = []
+    real = rs._git
+    monkeypatch.setattr(rs, "_git", lambda root, *a: calls.append(a) or real(root, *a))
+    env = rs.tree_env(repo, "HEAD")
+    assert env.exists("docs/plans") and env.exists("docs/adr") and not env.exists("docs/README.md")
+    assert not env.exists("deep/tree/f.txt")
+    assert len(calls) == 1 and "-r" not in calls[0] and "--" in calls[0]
