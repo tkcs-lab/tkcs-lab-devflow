@@ -31,6 +31,17 @@ endpoint that answered 401, 403 or 404, so you know which permission to grant.
 
 ## Use it in a project
 
+There are four kinds of file (the layers of one effective policy):
+
+| Kind | Where it lives | `org` | Holds |
+|---|---|---|---|
+| **run file** | the policy file you give to `--policy`, in a private checkout | required | the organisation's own settings, `extends`, `repos` |
+| **shared base** | any file `extends` names, in any repository (public too) | absent | settings every organisation shares |
+| **organisation file** | a private file `extends` names (for example in `<org>/git-ops`) | absent | the organisation-level sections: `org_settings`, `members`, `apps`, `tokens`, `secrets`, `variables` and the rest |
+| **repository override** | `.tld/admin-policy.yaml` in each repository | absent | that repository's differences only |
+
+A small organisation (or a single repository) needs only the first one:
+
 1. Copy [`src/tld/templates/admin-policy.yaml`](../../src/tld/templates/admin-policy.yaml)
    to `.tld/admin-policy.yaml` (or anywhere in the repository), set `org` and edit.
 2. Set `admin.policy: .tld/admin-policy.yaml` in `.tld/toolkit.yaml` (see [profile-reference.md](../reference/profile-reference.md)).
@@ -38,21 +49,113 @@ endpoint that answered 401, 403 or 404, so you know which permission to grant.
    [`schema/admin-policy.schema.json`](../../src/tld/schema/admin-policy.schema.json). An unknown key is an error.
 4. Run the `repo-admin` skill, or the script yourself.
 
-One policy file governs one organisation. A section you leave out is not managed. To treat some
-repositories differently, use `repos.include` and `repos.exclude` and keep a second policy file.
+Many repositories share most of their policy. Then an organisation keeps three files: its policy (run file, with
+`org` and `extends`), its private file (the organisation-level sections), and the shared base (the starters are
+`admin-policy.yaml`, `admin-policy-org.yaml` and `admin-policy-base.yaml` in `src/tld/templates/`); every repository
+keeps a small override file. A section you leave out is not managed. `repos.include` and `repos.exclude` (in the run
+file only) choose the repositories. The audit is always run with the organisation's policy file: given a
+repository's override file (a file without `org`), the `repo-admin` skill stops and names the file to use.
 
 ## Commands
 
 | Command | |
 |---|---|
-| `validate-policy POLICY` | Check the file. Exit 1 with one message per problem. |
+| `validate-policy POLICY` | Check the file. Exit 1 with one message per problem. It resolves `extends` through the API (needs the token; `--offline` skips it). `--kind auto\|run\|override\|base` (default `auto`: run when the file has `org`, else override), `--public` (with `--kind base`: the file goes into a public repository), `--resolved`, `--explain`, `--org-policy FILE` with `--repo-name NAME`: see below |
+| `latest-pin OWNER/REPO/PATH` | Print `{"sha": ..., "tag": ...}`, the commit to pin an `extends` entry to |
 | `whoami [--org ORG]` | Print the account the token belongs to and its role in the organisation. Exit 3 when it is not an owner. |
-| `audit --policy P` | Read only. `--format md` (default) or `json`, `--out FILE`, `--repo NAME` and `--check NAME` (repeatable). Exit 0 nothing out of policy, 3 differences, 1 a check failed (the report is then incomplete). |
-| `apply --policy P` | Recompute the findings and print the calls it would make. Nothing changes without `--yes`. `--only ID` (repeatable, ids from the audit) limits it, `--allow-delete` allows the irreversible ones. Exit 1 when a change failed. |
+| `audit --policy P` | Read only. `--format md` (default) or `json`, `--out FILE`, `--repo NAME` and `--check NAME` (repeatable), `--no-detect` (no proposals from the repositories). Exit 0 nothing out of policy, 3 differences, 1 a check failed (the report is then incomplete). |
+| `apply --policy P` | Recompute the findings and print the calls it would make. Nothing changes without `--yes`. `--only ID` (repeatable, ids from the audit) limits it, `--allow-delete` allows the irreversible ones, `--no-detect` as for `audit`. Exit 1 when a change failed. |
 
 `--repo owner/name` (every `--repo` in that form) fetches just those repositories instead of listing
 the organisation. The organisation-level "unused secret or variable" checks then stand down, because they
 must see every repository.
+
+## Inheriting the policy
+
+Order, later wins: the files `extends` lists (in that order), the run file, then the repository's override file.
+Mappings merge key by key; lists and scalars replace. The first two layers are the **organisation policy**; with the
+override it is the **effective policy** of one repository. A policy without `extends` behaves exactly as before.
+
+**`extends`** (run file only) is a list of one to four pins, each `<owner>/<repo>/<path>@<40-hex commit>`; a tag or a
+branch is refused (put the tag in a trailing comment). The file is read through the API with your token, so a private
+file works without a checkout, and the commit must be on the default branch of its repository. An extended file
+cannot extend another. Files are checked for credentials, anchors, shape and key class; a base never holds a
+credential. `tld ops repo-admin latest-pin <owner>/<repo>/<path>` prints the pin to write.
+
+**Key classes.**
+
+| Class | Keys | Where it may be set |
+|---|---|---|
+| run only | `org`, `extends`, `repos` | the run file |
+| organisation-private | `org_settings`, `members`, `apps`, `tokens`, `secrets`, `variables` | the run file, or a file of a private repository |
+| organisation-level | the private ones plus `labels`, `webhooks`, `deploy_keys`, `branches`, `branch_protection`, `profile`, `git_ops` | the run file or any extended file; never an override |
+| overridable | `repo_settings`, `security`, `actions`, `rulesets`, `agent`, `release`, `workflow_lint`, `config_dirs`, `workflows`, `workflow_params` | the run file, a base and an override |
+| per repository | `rulesets.default_branch.required_status_checks`, `workflow_params`, `config_dirs.known`, `workflows[].params` | an override or the run file; never a base |
+
+`null` is refused in a base and an override, so an override cannot delete a section. An override may set only the
+overridable sections; its `workflow_params.release` and its `workflows[].params` may hold only `tag_prefix`,
+`version_style`, `check_script` and `create_release`, and a `workflows` entry only `template`, `params` and `remove`.
+A base lists templates without parameters (`workflows: [{template: release}, {template: land}]`); a repository writes
+`workflow_params` instead of restating the list, or lists only its own templates (lists replace). A file of a public
+repository may not set the private sections.
+
+**Guarded keys.** An override may not loosen these; the organisation's value is put back and the `policy` check warns
+(`loosen:<key>`): `security.*`, `rulesets.tags`, `workflow_lint.require_permissions`,
+`workflow_lint.forbid_pull_request_target` (must stay true); `rulesets.default_branch.admin_bypass` and
+`actions.can_approve_pull_request_reviews` (must stay false); `actions.default_workflow_permissions`,
+`workflow_lint.pin_actions` and `agent.branch_policy` (not weaker); `repo_settings.allow_merge_commit`,
+`allow_squash_merge`, `allow_rebase_merge` (equal to the organisation's); `config_dirs.forbid` and
+`config_dirs.require` (a list may not shrink). Only keys the organisation policy sets are guarded: **an organisation
+must list every guarded key it cares about**, because a key it omits is not guarded against an override. The run file
+may let a repository loosen a key: `repos.allow_loosen: {"<repo name glob>": ["<guarded key>"]}`. The run file's own
+loosening of its bases is reported, not put back; it is the owner's file.
+An override of `agent.agent_login`, `release.reviewer_login` or `release.environment` is applied with a warning
+(`login:<key>`, `release:<key>`); `release.environment` equal to the agent's environment (`tld-agent`) is always
+dropped with a warning, and when the effective agent and reviewer logins are equal (without case) the release check
+stands down and the agent role part is skipped (`login:same`).
+
+**Irreversible switches.** A base or an override cannot turn on `secrets.delete_unused`, `variables.delete_unused`,
+`labels.delete_unused`, `labels.delete_unlisted`, `webhooks.delete`, `deploy_keys.delete_unused`,
+`branches.delete_merged`, `tokens.fine_grained.max_unused_days` or `tokens.fine_grained.revoke_expired`; only the policy
+file you run can, and `revoke_expired` (default true) is set to false when a base supplies `tokens.fine_grained` and
+the run file does not. `--yes` and `--allow-delete` are unchanged. Pull-request deletions through
+`config_dirs.forbid` are not held by `--allow-delete`: they are reviewed pull requests, and a base may set
+`config_dirs.forbid`, which opens one in every repository.
+
+**Absent is not empty.** With `extends`, a `rulesets.default_branch` without
+`required_status_checks` keeps the checks the live ruleset requires, with their app binding (only an explicit `[]`
+removes the rule), and a missing `tld-main` is created without a check rule. The release template without
+`workflow_params.release` or `params`, or in a repository whose profile has no `release` section, is not installed or
+rewritten: an `info` finding says so. A repository whose override file cannot be listed on a truncated tree is read
+directly, never treated as absent. The `tld-release` environment is checked in every repository whose effective
+policy gives it a `release` section, so a base with one makes it a requirement everywhere.
+
+**Derived logins.** `agent.agent_login` and `release.reviewer_login` need not be set: they are taken from the
+repository's resolved profile (`git.bot_login`; `git.owner_login`, else the one `git.codeowners` entry). The profile
+is read at the default branch, so it is written by the repository and is untrusted: each derived login is a
+`login:derived:<key>` warning that names the account the changes will use. An explicit value wins and the profile is
+then not read. With no value, a `warn` finding says so, the agent role part is skipped (the environment and secret
+part still run) and the release check is skipped for that repository. The `profile` and `git_ops` sections and the
+profile of a repository come from plan 90: this feature needs that code.
+
+**Detection.** For a repository whose effective policy has `rulesets.default_branch` without
+`required_status_checks`, or the release template without parameters, or that has no override file, the `policy`
+check reads the newest ten merged pull requests of the default branch (check runs and commit statuses), its tags,
+its manifests and its workflows, and proposes an override file (`override:propose`, a `fix` finding) that `apply`
+opens as one pull request; the owner merges it, or corrects the values in it. It never writes to a branch. A check is
+proposed only when it concluded `success` on every sampled pull request, with at least three; excluded checks are
+listed with the first reason: flaky, failed, skipped, pending, or seen on only some of the pull requests (a path
+filter or a new check). `check_script` is never guessed. A repository that writes its own release workflow (its
+profile names one other than `tld-release.yml`) gets a `workflows` list without the release template. The proposal
+keeps every key the repository wrote, and repeats on every audit until it is merged (a repository with fewer than
+three merged pull requests repeats indefinitely); `--no-detect` skips it. A whole old policy in a repository file
+(it has `org`) is converted to an override in the same pull request (`override:convert`).
+
+**Reading the result.** `validate-policy <run file> --resolved` prints the merged policy; `--explain` prints one line
+per value with its source (`run`, `base <label>` or `override <repo>`); with an override file,
+`validate-policy <override> --org-policy <organisation policy> --repo-name <name> --resolved` prints that
+repository's effective policy. `--kind base --public` checks a base file locally before it goes into a public
+repository. The OK line ends `, repository override` or `, base` for those kinds.
 
 ## Safety
 

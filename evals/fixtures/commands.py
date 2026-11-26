@@ -3,6 +3,8 @@ judgement, so the task checks the command still reads the profile and stops wher
 
 `build(dest, command=...)`:
 - `land`: no `git.bot_login`, so land stops with the missing-key message.
+- `repo-admin`: the profile's `admin.policy` is a repository override file (no `org`), so repo-admin stops and
+  names the organisation's policy file as the one to run.
 - `spec`: no `spec` block, so `spec init` stops with the missing-key message.
 - `sysml`: no `sysml` block, so `sysml init` stops with the missing-key message.
 - `deps`: no `deps` block, so deps stops with the missing-key message.
@@ -57,6 +59,10 @@ def build(dest: Path, command: str = "land") -> dict:
     if command == "land":
         files[".tld/toolkit.yaml"] = _profile()
         expected["stop_message"] = "toolkit.yaml: missing required key 'git.bot_login'"
+    elif command == "repo-admin":
+        files[".tld/toolkit.yaml"] = _profile("\nadmin:\n  policy: .tld/admin-policy.yaml\n")
+        files[".tld/admin-policy.yaml"] = "repo_settings:\n  allow_auto_merge: true\n"
+        expected["stop_message"] = "is this repository's override file"
     elif command == "spec":
         files[".tld/toolkit.yaml"] = _profile()
         expected["stop_message"] = "toolkit.yaml: /spec needs a 'spec' section (an empty 'spec:' uses version 2.1.0; see docs/guides/spec.md)"
