@@ -482,7 +482,13 @@ def _check_logins(org: dict, eff: dict, override: dict) -> tuple[dict, list]:
                 gone.append(dotted)
             else:
                 repo_admin_policy._set(out, dotted, copy.deepcopy(value))
+        agent, reviewer = repo_admin_policy._get(out, "agent.agent_login"), repo_admin_policy._get(out, "release.reviewer_login")
+        still = isinstance(agent, str) and isinstance(reviewer, str) and agent.casefold() == reviewer.casefold()
+        if still:  # the organisation's own logins are equal: the agent may not review its own release
+            out["release"].pop("reviewer_login", None)
         warns.append(("login:same", "the reviewer login equals the agent login; " + (
+            "the organisation's logins are equal too, so release.reviewer_login is dropped and the release check stands down "
+            "for this repository" if still else
             f"{' and '.join(gone)} ha{'s' if len(gone) == 1 else 've'} no organisation value, so the check that needs "
             f"{'it' if len(gone) == 1 else 'them'} stands down for this repository" if gone
             else "the organisation's logins apply")))
@@ -1037,7 +1043,7 @@ def ruleset_bodies(cfg: dict, live_checks: list | None = None) -> list[dict]:
         if checks:
             rules.append({"type": "required_status_checks", "parameters": {
                 "strict_required_status_checks_policy": False,
-                "required_status_checks": [{"context": c} for c in checks]}})
+                "required_status_checks": [c if isinstance(c, dict) else {"context": c} for c in checks]}})
         bypass = ([{"actor_id": ADMIN_ROLE_ID, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"}]
                   if main.get("admin_bypass") else [])
         out.append({"name": MAIN_RULESET, "target": "branch", "enforcement": "active", "bypass_actors": bypass,
@@ -1059,7 +1065,10 @@ def _param_diffs(kind: str, want: dict, have: dict) -> list[str]:
     update_allows_fetch_and_merge), so a missing key matches a wanted False."""
     if kind == "required_status_checks":
         contexts = lambda p: sorted(c.get("context") for c in p.get("required_status_checks") or [])  # noqa: E731
-        keys = ["required_status_checks"] if contexts(want) != contexts(have) else []
+        bound = {c.get("context"): c.get("integration_id") for c in have.get("required_status_checks") or []}
+        unbound = [c for c in want.get("required_status_checks") or []  # a kept live check must stay bound to its integration
+                   if "integration_id" in c and bound.get(c.get("context")) != c["integration_id"]]
+        keys = ["required_status_checks"] if contexts(want) != contexts(have) or unbound else []
         if bool(have.get("strict_required_status_checks_policy")) != want["strict_required_status_checks_policy"]:
             keys.append("strict_required_status_checks_policy")
         return keys
@@ -1097,12 +1106,12 @@ def ruleset_diffs(want: dict, have: dict) -> tuple[list[str], bool]:
     return diffs, False
 
 
-def _live_contexts(have: dict) -> list[str]:
-    """The status-check contexts a live ruleset requires."""
+def _live_contexts(have: dict) -> list[dict]:
+    """The status checks a live ruleset requires, verbatim (the context and, when set, the integration that must report it)."""
     for rule in (have or {}).get("rules") or []:
         if isinstance(rule, dict) and rule.get("type") == "required_status_checks":
             checks = (rule.get("parameters") or {}).get("required_status_checks") or []
-            return [c["context"] for c in checks if isinstance(c, dict) and isinstance(c.get("context"), str)]
+            return [dict(c) for c in checks if isinstance(c, dict) and isinstance(c.get("context"), str)]
     return []
 
 
@@ -1866,7 +1875,7 @@ def run_checks(ctx: Ctx, names=None) -> list[Finding]:
 def _cell(text: str, limit: int = 220) -> str:
     """One table cell. Names come from the repositories, so markdown, HTML and @mentions are defused."""
     text = " ".join(str(text).split())
-    text = re.sub(r"([\\|`\[\]<>])", r"\\\1", text).replace("@", "@​")
+    text = re.sub(r"([\\|`\[\]<>#&])", r"\\\1", text).replace("@", "@​")
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 

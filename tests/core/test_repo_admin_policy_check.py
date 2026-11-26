@@ -202,3 +202,32 @@ def test_policy_check_is_silent_without_inheritance(ra):
     ctx, fake = world(ra, BIG_POLICY)
     assert ra.check_policy(ctx) == [] and not [p for p in fake.reads if p.endswith(OVERRIDE)]
     assert "policy" in ra.CHECKS
+
+
+def test_kept_live_checks_keep_their_integration_id(ra):
+    ctx, _ = live_world(ra, MAIN_LIVE)
+    [fix] = [f for f in ra.check_rulesets(ctx) if f.subject == "tld-main"]
+    rules = {r["type"]: r for r in fix.action.body["rules"]}
+    assert rules["required_status_checks"]["parameters"]["required_status_checks"] == [
+        {"context": "a", "integration_id": 15368}, {"context": "b", "integration_id": 15368}]
+    # a live check that lost its integration no longer matches the kept, bound one
+    want = {"strict_required_status_checks_policy": False, "required_status_checks": [{"context": "a", "integration_id": 7}]}
+    have = {"strict_required_status_checks_policy": False, "required_status_checks": [{"context": "a"}]}
+    assert ra._param_diffs("required_status_checks", want, have) == ["required_status_checks"]
+    plain = {"strict_required_status_checks_policy": False, "required_status_checks": [{"context": "a"}]}
+    assert ra._param_diffs("required_status_checks", plain, {**have, "required_status_checks": [{"context": "a", "integration_id": 7}]}) == []
+
+
+def test_equal_organisation_logins_stand_the_release_check_down(ra):
+    org = {"org": "a", "agent": {"agent_login": "bot"}, "release": {"reviewer_login": "BOT"}}
+    eff, _loose, warns = ra.effective_policy(org, {}, "app")
+    assert "reviewer_login" not in eff["release"] and eff["agent"]["agent_login"] == "bot"
+    [msg] = [m for s, m in warns if s == "login:same"]
+    assert "stands down" in msg and "release.reviewer_login" in msg and "organisation's logins apply" not in msg
+    ctx, _ = inherited(ra, {"agent": {"agent_login": "bot"}, "release": {"reviewer_login": "BOT"}})
+    assert ra.check_release(ctx) == []
+
+
+def test_cell_defuses_references_and_entities(ra):
+    cell = ra._cell("see #12 and &amp; @someone")
+    assert "\\#12" in cell and "\\&amp;" in cell and "@someone" not in cell
