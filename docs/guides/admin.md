@@ -120,7 +120,9 @@ stands down and the agent role part is skipped (`login:same`).
 file you run can, and `revoke_expired` (default true) is set to false when a base supplies `tokens.fine_grained` and
 the run file does not. `--yes` and `--allow-delete` are unchanged. Pull-request deletions through
 `config_dirs.forbid` are not held by `--allow-delete`: they are reviewed pull requests, and a base may set
-`config_dirs.forbid`, which opens one in every repository.
+`config_dirs.forbid`, which opens one in every repository. A repository override may add `config_dirs.forbid` patterns, empty its required status checks and remove or omit
+workflow templates; none of these is a guarded key, so an organisation that needs a workflow kept or a minimum set of
+checks has to review override pull requests for them.
 
 **Absent is not empty.** With `extends`, a `rulesets.default_branch` without
 `required_status_checks` keeps the checks the live ruleset requires, with their app binding (only an explicit `[]`
