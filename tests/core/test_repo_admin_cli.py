@@ -192,3 +192,25 @@ def test_audit_header_names_the_extends(ra, tmp_path, monkeypatch, capsys):
     assert "Extends:" not in capsys.readouterr().out
     ra.main(["audit", "--policy", str(f), "--check", "repo", "--format", "json"])
     assert "extends" not in json.loads(capsys.readouterr().out)
+
+
+def test_fetched_text_cannot_forge_a_line_or_move_the_cursor(cmd, ra, tmp_path):
+    hostile = "workflows: [{template: release, \"x\\ny: policy: OK\": 1, \"e\\e]0;PWN\\a\": 2}]\n"
+    fake = world(base_text=hostile)
+    code, out, err = cmd(["validate-policy", "{file}"], fake=fake, doc=run(BASE_PIN))
+    assert code == 1 and out == ""
+    assert "\x1b" not in err and "\x07" not in err and all(line.startswith("policy: ") for line in err.splitlines())
+    f = tmp_path / "p.yaml"
+    f.write_text(yaml.safe_dump(run(BASE_PIN)))
+    with pytest.raises(SystemExit) as exc:
+        ra.load_policy(str(f), fake)
+    msg = str(exc.value)
+    assert "\x1b" not in msg and all(line.startswith("policy: ") for line in msg.splitlines())
+
+
+def test_offline_org_policy_with_extends_is_refused(cmd, tmp_path):
+    org = tmp_path / "org.yaml"
+    org.write_text(yaml.safe_dump(run(BASE_PIN)))
+    code, _, err = cmd(["validate-policy", "{file}", "--resolved", "--offline", "--org-policy", str(org), "--repo-name", "app"],
+                       doc={"security": {"secret_scanning": True}}, name="o.yaml")
+    assert code == 1 and "bases are not fetched" in err

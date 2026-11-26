@@ -389,9 +389,12 @@ def load_policy(path: str, client=None) -> dict:
         raise SystemExit("\n".join(f"policy: {e}" for e in errors))
     if policy.get("extends"):
         from tld.ops import repo_admin_extends
-        res = repo_admin_extends.resolve(client if client is not None else _client(), policy)
+        try:
+            res = repo_admin_extends.resolve(client if client is not None else _client(), policy)
+        except (ApiError, ValueError) as exc:
+            raise SystemExit(f"policy: cannot resolve 'extends': {clean(exc)}")
         if res.errors or res.policy is None:
-            raise SystemExit("\n".join(f"policy: {e}" for e in res.errors))
+            raise SystemExit("\n".join(f"policy: {clean(e)}" for e in res.errors))
         policy = res.policy
     policy["_dir"] = str(p.resolve().parent)
     return policy
@@ -1694,9 +1697,17 @@ def _flatten(doc, prefix: str = "") -> list[str]:
     return [prefix]
 
 
+def clean(text: object, limit: int = 400) -> str:
+    """Text that may come from a fetched file or a server: control characters become '?' and the length is capped,
+    so it cannot forge a line or move the cursor of a terminal or log."""
+    text = text if isinstance(text, str) else str(text)
+    out = "".join(c if c.isprintable() else "?" for c in text)
+    return out if len(out) <= limit else out[:limit] + "..."
+
+
 def _validate_fail(errors: list[str]) -> int:
     for e in errors:
-        print(f"policy: {e}", file=sys.stderr)
+        print(f"policy: {clean(e)}", file=sys.stderr)
     return 1
 
 
@@ -1744,7 +1755,7 @@ def cmd_validate(args) -> int:
     if kind == "run" and policy.get("extends") and not args.offline:
         try:
             res = repo_admin_extends.resolve(_client(), policy)
-        except ApiError as exc:
+        except (ApiError, ValueError) as exc:
             return _validate_fail([f"cannot resolve 'extends': {exc}"])
         if res.errors or res.policy is None:
             return _validate_fail(res.errors)
@@ -1759,12 +1770,19 @@ def cmd_validate(args) -> int:
         try:
             org_doc = load_policy(str(org_path)) if not args.offline else yaml.safe_load(org_path.read_text())
         except SystemExit as exc:
-            print(exc, file=sys.stderr)
+            print(clean(exc), file=sys.stderr)
             return 1
         except (ApiError, yaml.YAMLError) as exc:
             return _validate_fail([f"cannot read '{org_path}': {exc}"])
         if not isinstance(org_doc, dict):
             return _validate_fail([f"'{org_path}': the policy must be a YAML mapping"])
+        if args.offline:
+            if org_doc.get("extends"):
+                return _validate_fail([f"'{org_path}' has 'extends'; its bases are not fetched with --offline, "
+                                       "so the effective policy cannot be shown"])
+            bad = validate_policy(org_doc, org_path.resolve().parent)
+            if bad:
+                return _validate_fail(bad)
         org_sources = org_doc.get("_sources") or {k: "run" for k in _flatten(org_doc) if k}
         eff = repo_admin_policy.apply_override(org_doc, policy)
         view, _ = repo_admin_policy.clamp_guarded(org_doc, eff, repo_admin_policy.allowed_for(org_doc, args.repo_name))
@@ -1791,10 +1809,10 @@ def cmd_latest_pin(args) -> int:
     try:
         sha, tag = repo_admin_extends.latest_pin(_client(), args.source)
     except (LookupError, ValueError) as exc:
-        print(exc, file=sys.stderr)
+        print(clean(exc), file=sys.stderr)
         return 1
-    except ApiError as exc:
-        print(f"latest-pin: {exc}", file=sys.stderr)
+    except (ApiError, ValueError) as exc:
+        print(f"latest-pin: {clean(exc)}", file=sys.stderr)
         return 1
     print(json.dumps({"sha": sha, "tag": tag}))
     return 0
