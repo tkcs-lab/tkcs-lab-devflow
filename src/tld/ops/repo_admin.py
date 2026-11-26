@@ -40,6 +40,7 @@ import shutil
 import subprocess
 import sys
 import time
+import typing
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -48,7 +49,7 @@ from pathlib import Path
 import yaml
 
 from tld.net import SameHostRedirects, opener as net_opener
-from tld.ops import repo_admin_extends, repo_admin_policy
+from tld.ops import repo_admin_detect, repo_admin_extends, repo_admin_policy, repo_admin_profile
 from tld.ops.repo_admin_gitops import check_git_ops
 from tld.ops.repo_admin_profile import check_profile
 
@@ -532,6 +533,21 @@ def effective_policy(org: dict, override_doc, repo_name: str) -> tuple[dict, lis
     return eff, loose + more, warns
 
 
+SAME_LOGIN = "reviewer equals the agent login"  # the reason derive_logins gives
+
+
+class Logins(typing.NamedTuple):
+    """agent / reviewer: the effective logins (None when missing or refused); reasons: why one is missing; same: both
+    were equal, so the reviewer is refused; dropped: the policy merge already dropped the reviewer for that."""
+    agent: str | None
+    reviewer: str | None
+    reasons: list
+    same: bool = False
+    dropped: bool = False
+    agent_derived: bool = False  # taken from the repository's profile (repository-controlled), not from a policy
+    reviewer_derived: bool = False
+
+
 @dataclasses.dataclass
 class Override:
     """What a repository's override file holds: `doc` is None when there is none or when it has problems."""
@@ -545,8 +561,9 @@ class Override:
 class Ctx:
     """The client, the policy and the caches one run shares."""
 
-    def __init__(self, client, policy: dict, only_repos=(), now: dt.datetime | None = None):
+    def __init__(self, client, policy: dict, only_repos=(), now: dt.datetime | None = None, detect: bool = True):
         self.c, self.p, self.org = client, policy, policy["org"]
+        self.detect = detect  # False: the policy check proposes nothing from the repositories (--no-detect)
         self.only = set(only_repos)
         self.now = now or dt.datetime.now(dt.timezone.utc)
         self._cache: dict = {}
@@ -579,12 +596,15 @@ class Ctx:
         if rel.is_absolute() or ".." in rel.parts or path.startswith("/"):
             return bad("repos.override_path must be a path below the repository root")
         snap = self.snapshot(repo)
-        if snap.empty or not any(e.get("type") == "blob" and e.get("path") == path for e in snap.entries):
+        listed = any(e.get("type") == "blob" and e.get("path") == path for e in snap.entries)
+        if snap.empty or not (listed or snap.truncated):
             return Override(None, path)
         try:
             text = self.c.get_text(f"/repos/{fn}/contents/{urllib.parse.quote(path, safe='/')}", {"ref": snap.commit})
         except ApiError as exc:
-            return bad(f"{path} cannot be read (HTTP {exc.status})")
+            if exc.status == 404 and not listed:  # a tree too large to list: the path itself says whether the file exists
+                return Override(None, path)
+            return bad(f"{path} cannot be read (HTTP {exc.status})" + ("" if listed else "; the file tree is too large to list it"))
         if not isinstance(text, str) or not text.strip():
             return Override(None, path)
         doc, errors = repo_admin_extends.shape_errors(text, f"override {where}")
@@ -609,6 +629,40 @@ class Ctx:
         if not self.inherited:
             return self.p
         return self.memo(("pol", repo["full_name"]), lambda: self._effective(repo))
+
+    def logins(self, repo: dict) -> "Logins":
+        """The effective agent and reviewer logins of one repository: the explicit values of its effective policy, else
+        the ones derived from its resolved profile (read only when a value is missing)."""
+        return self.memo(("logins", repo["full_name"]), lambda: self._logins(repo))
+
+    def _logins(self, repo: dict) -> "Logins":
+        pol = self.pol(repo)
+        has_agent, has_release = isinstance(pol.get("agent"), dict), isinstance(pol.get("release"), dict)
+        agent = (pol.get("agent") or {}).get("agent_login") if has_agent else None
+        reviewer = (pol.get("release") or {}).get("reviewer_login") if has_release else None
+        agent, reviewer = (v if isinstance(v, str) and v else None for v in (agent, reviewer))
+        dropped = any(subject == "login:same" for subject, _ in self.pol_warnings(repo))  # the merge dropped the reviewer
+        reasons: list[str] = []
+        agent_derived = reviewer_derived = False
+        compare = agent  # a release section without an agent section still compares with the profile's git.bot_login
+        if (has_agent and agent is None) or (has_release and reviewer is None and not dropped) or (has_release and not has_agent):
+            profile = repo_admin_profile.repo_profile(self, repo)
+            d_agent, _, reasons = repo_admin_policy.derive_logins(profile)
+            reasons = [r for r in reasons if r != SAME_LOGIN]
+            # The reviewer candidate must not depend on the profile's own bot_login: only the effective pair is compared.
+            git = profile.get("git") if isinstance(profile, dict) else None
+            bare = {**profile, "git": {k: v for k, v in git.items() if k != "bot_login"}} if isinstance(git, dict) else profile
+            _, d_reviewer, _ = repo_admin_policy.derive_logins(bare)
+            if has_agent and agent is None:
+                agent, agent_derived = d_agent, d_agent is not None
+            if has_release and reviewer is None and not dropped:
+                reviewer, reviewer_derived = d_reviewer, d_reviewer is not None
+            compare = agent if has_agent else d_agent
+        same = False
+        if has_release and compare and reviewer and compare.casefold() == reviewer.casefold():
+            same, reviewer, reviewer_derived = True, None, False  # fail closed on the effective pair only
+            reasons = reasons + [SAME_LOGIN]
+        return Logins(agent, reviewer, reasons, same, dropped, agent_derived, reviewer_derived)
 
     def loosenings(self, repo: dict) -> list:
         """The guarded settings an override of this repository tried to loosen and that were put back."""
@@ -1170,7 +1224,7 @@ def _part(check: str, fn: str, out: list, fn_part) -> None:
 
 
 def environment_findings(ctx: Ctx, check: str, fn: str, repo: dict, name: str, mode: str = "default_branch",
-                         reviewers: list[dict] | None = None) -> tuple[list[Finding], bool]:
+                         reviewers: list[dict] | None = None, reviewer_label: str = "the owner") -> tuple[list[Finding], bool]:
     """(findings, the environment exists) for an environment whose deployment branches are only the default branch
     (mode default_branch) or the protected branches, and, when `reviewers` is given, exactly those required reviewers
     ([{"type": "User", "id": n}])."""
@@ -1202,7 +1256,7 @@ def environment_findings(ctx: Ctx, check: str, fn: str, repo: dict, name: str, m
         body = {"deployment_branch_policy": want, **({"reviewers": reviewers} if reviewers is not None else {})}
         out.append(Finding(check, fn, f"environment:{name}", f"environment {name} {what}; policy wants "
                            + ("only the default branch" if custom else "protected branches only")
-                           + (" and the owner as the one required reviewer" if reviewers is not None else ""), "fix",
+                           + (f" and {reviewer_label} as the one required reviewer" if reviewers is not None else ""), "fix",
                            api("PUT", env_path, body)))
     if custom:
         policies = []
@@ -1244,15 +1298,30 @@ def secret_findings(ctx: Ctx, check: str, fn: str, env_name: str, secret: str, e
 
 
 def _env_and_secret(ctx: Ctx, check: str, fn: str, repo: dict, out: list, env_name: str, secret: str, needed_by: str,
-                    mode: str = "default_branch", reviewers=None) -> None:
+                    mode: str = "default_branch", reviewers=None, reviewer_label: str = "the owner") -> None:
     exists = [False]
 
     def env_part():
-        found, exists[0] = environment_findings(ctx, check, fn, repo, env_name, mode, reviewers)
+        found, exists[0] = environment_findings(ctx, check, fn, repo, env_name, mode, reviewers, reviewer_label)
         return found
 
     _part(check, fn, out, env_part)
     _part(check, fn, out, lambda: secret_findings(ctx, check, fn, env_name, secret, exists[0], needed_by))
+
+
+def derived_finding(check: str, fn: str, key: str, login: str, source: str) -> Finding:
+    """A login that comes from the repository's own profile is repository-controlled: every use of it is named."""
+    return Finding(check, fn, f"login:derived:{key}", clean(
+        f"{key} {clean(login, 80)} is taken from the repository profile ({source}); the changes below name this account",
+        MAX_MESSAGE), "warn", manual=f"check that {clean(login, 80)} is the right account, or set {key} in the organisation policy "
+                                   "or the repository's override")
+
+
+def _why(reasons: list, who: str) -> str:
+    """The reasons of derive_logins that concern one login ('agent' or 'reviewer'), for a message."""
+    words = ("bot_login",) if who == "agent" else ("owner_login", "codeowners", SAME_LOGIN)
+    found = [r for r in reasons if r == "no profile" or any(w in r for w in words)]
+    return clean("; ".join(found) or "no value in the repository's profile", 200)
 
 
 def check_agent(ctx: Ctx) -> list[Finding]:
@@ -1280,9 +1349,25 @@ def check_agent(ctx: Ctx) -> list[Finding]:
         cfg = ctx.pol(repo).get("agent")
         if not cfg:
             return []
-        login = cfg.get("agent_login")  # absent only with inheritance: the login may come from the profile (a later phase)
         mode = cfg.get("branch_policy", "default_branch")
         fn, out = repo["full_name"], []
+        if not ctx.inherited:
+            login = cfg.get("agent_login")
+        else:  # the explicit login, else the one derived from the repository's profile
+            lg = ctx.logins(repo)
+            login = lg.agent
+            if lg.same:  # never change the role of the account that also reviews the release
+                login = None
+                out.append(Finding("agent", fn, "login:same", clean(
+                    f"the reviewer login equals the agent login {clean(lg.agent, 80)}; the agent's role is not checked and "
+                    "the release check stands down for this repository", MAX_MESSAGE), "warn",
+                    manual="give the agent its own account: set git.bot_login in the repository's profile or agent.agent_login in its override"))
+            elif login is None:
+                out.append(Finding("agent", fn, "login:agent", clean(
+                    f"agent.agent_login is not set and cannot be derived ({_why(lg.reasons, 'agent')})", MAX_MESSAGE), "warn",
+                    manual="set git.bot_login in the repository's profile or agent.agent_login in its override"))
+        if ctx.inherited and login and lg.agent_derived:
+            out.append(derived_finding("agent", fn, "agent.agent_login", login, "git.bot_login"))
         if login:
             _part("agent", fn, out, lambda: role(fn, login))
         _env_and_secret(ctx, "agent", fn, repo, out, AGENT_ENV, AGENT_SECRET, "the land workflow", mode)
@@ -1310,15 +1395,30 @@ def check_release(ctx: Ctx) -> list[Finding]:
         cfg = ctx.pol(repo).get("release")
         if not cfg:
             return []
+        fn, out = repo["full_name"], []
         if ctx.inherited:
-            if not cfg.get("reviewer_login"):  # comparing reviewers with none would loosen the check
-                return []
-            uid = user_of(cfg["reviewer_login"])
+            lg = ctx.logins(repo)
+            if lg.reviewer is None:  # comparing reviewers with none would loosen the check: it stands down
+                if lg.dropped:
+                    return []  # the policy merge dropped it and the policy check says why
+                if lg.same:
+                    return [Finding("release", fn, "login:same", clean(
+                        "the reviewer login equals the agent login; the release check stands down for this repository",
+                        MAX_MESSAGE), "warn", manual="give the agent its own account (git.bot_login or agent.agent_login)")]
+                return [Finding("release", fn, "login:reviewer", clean(
+                    f"release.reviewer_login is not set and cannot be derived ({_why(lg.reasons, 'reviewer')}); the release "
+                    "check stands down for this repository", MAX_MESSAGE), "warn",
+                    manual="set git.owner_login in the repository's profile or release.reviewer_login in its override")]
+            uid = user_of(lg.reviewer)
+            if lg.reviewer_derived:
+                out.append(derived_finding("release", fn, "release.reviewer_login", lg.reviewer,
+                                           "git.owner_login or the one git.codeowners entry"))
         else:
             uid = user_id
-        fn, out = repo["full_name"], []
         _env_and_secret(ctx, "release", fn, repo, out, cfg.get("environment", RELEASE_ENV), RELEASE_SECRET,
-                        "the release workflow", reviewers=[{"type": "User", "id": uid}])
+                        "the release workflow", reviewers=[{"type": "User", "id": uid}],
+                        reviewer_label=f"{clean(lg.reviewer, 80)} (taken from the repository profile)" if ctx.inherited and lg.reviewer_derived
+                        else "the owner")
         return out
 
     return per_repo(ctx, "release", one)
@@ -1713,6 +1813,12 @@ def check_files(ctx: Ctx) -> list[Finding]:
                 out.append(Finding("files", fn, f"workflow:{dest}:standdown", "release workflow: no release parameters for this "
                                    "repository yet; it is not installed or rewritten (the policy check proposes them)", "info"))
                 continue
+            if ctx.inherited and wf.get("template") == "release":
+                prof = repo_admin_profile.repo_profile(ctx, repo)
+                if isinstance(prof, dict) and not isinstance(prof.get("release"), dict):
+                    out.append(Finding("files", fn, f"workflow:{dest}:standdown", "release workflow: the repository's profile has "
+                                       "no release section; it is not installed or rewritten", "info"))
+                    continue
             params = {"main_branch": snap.branch, **defaults, **{k.lower(): v for k, v in wf.get("params", {}).items()}}
             # The default branch name comes from the repository, not from the policy: it is put into YAML and shell too.
             bad = [k for k, v in params.items() if not SAFE_PARAM.fullmatch(v) or ".." in v or (k == "main_branch" and not v)]
@@ -1808,6 +1914,91 @@ def _show(value) -> str:
     return clean(text, 80)
 
 
+def _need_release_params(eff: dict, repo_name: str) -> bool:
+    """True when the effective workflows list has the release template for this repository and nothing gives it parameters."""
+    shared = (eff.get("workflow_params") or {}).get("release") or {}
+    return any(isinstance(w, dict) and w.get("template") == "release" and not w.get("remove")
+               and (not w.get("repos") or any(fnmatch.fnmatchcase(repo_name, g) for g in w["repos"]))
+               and not {**(w.get("params") or {}), **shared} for w in eff.get("workflows") or [])
+
+
+def _detected(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> tuple[dict, list[str]]:
+    """(the override mapping detected from the repository, the lines for the pull request) when something is missing."""
+    rs = eff.get("rulesets") if isinstance(eff.get("rulesets"), dict) else {}
+    branch = rs.get("default_branch")
+    need_checks = isinstance(branch, dict) and "required_status_checks" not in branch
+    need_release = _need_release_params(eff, repo["name"])
+    if not (need_checks or need_release):
+        return {}, []
+    got = repo_admin_detect.gather(ctx, repo, want_checks=need_checks)
+    checks, excluded = repo_admin_detect.status_checks(list(got.samples)) if need_checks else (None, {})
+    params, notes, workflows = None, [], None
+    if need_release:
+        entries = [{k: v for k, v in w.items() if k in ("template", "params", "remove")}
+                   for w in eff.get("workflows") or [] if isinstance(w, dict) and isinstance(w.get("template"), str)
+                   and (not w.get("repos") or any(fnmatch.fnmatchcase(repo["name"], g) for g in w["repos"]))]
+        workflows = repo_admin_detect.own_release_workflow(got.profile_release_workflow, entries)
+        if workflows is not None:
+            notes.append(f"the profile's release workflow is {got.profile_release_workflow}, not the template's: "
+                         "workflows lists no release template")
+        else:
+            params, notes = repo_admin_detect.release_params(list(got.tags), list(got.manifests), got.tag_workflow)
+            unsafe = sorted(k for k, v in params.items() if not SAFE_PARAM.fullmatch(v) or ".." in v)
+            if unsafe:  # half a set of parameters would render the wrong workflow: none is proposed
+                notes += [f"{k} was detected but has characters other than letters, digits and . _ / -; no release parameters "
+                          "are proposed" for k in unsafe]
+                params = {}
+    head = repo_admin_detect.pr_notes(checks, excluded, None, [])
+    tail = repo_admin_detect.pr_notes(checks, excluded, params, notes)[len(head):]
+    return repo_admin_detect.detected_override(checks, params, workflows), tail + (head if need_checks else [])
+
+
+def _override_findings(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> list[Finding]:
+    """The one finding for the repository's override path: the conversion of a whole old policy, a proposal detected
+    from the repository, or both in one put. A proposal never replaces an override with problems."""
+    fn, out = repo["full_name"], []
+    legacy = ov.legacy and ov.doc is not None
+    if ov.problems:
+        return out
+    existing, detected, lines = ov.doc, {}, []
+    if legacy:
+        agent, reviewer, _ = repo_admin_policy.derive_logins(repo_admin_profile.repo_profile(ctx, repo))
+        if repo_admin_policy._get(ctx.p, "agent.agent_login") is not repo_admin_policy._MISSING:
+            agent = None  # the organisation's own value wins, so the override's login is not redundant
+        if repo_admin_policy._get(ctx.p, "release.reviewer_login") is not repo_admin_policy._MISSING:
+            reviewer = None
+        existing = repo_admin_policy.drop_derived(ov.doc, agent, reviewer)
+    if ctx.detect:
+        try:
+            detected, lines = _detected(ctx, repo, ov, eff)
+        except ApiError as exc:
+            out.append(failure("policy", fn, exc))
+    proposal = repo_admin_policy.propose_override(existing, detected)
+    if detected:
+        errors = validate_policy(proposal, kind="override", where=f"{fn}:{ov.path}")
+        if not errors and effective_policy(ctx.p, detected, repo["name"])[1]:
+            errors = ["it would loosen a guarded setting of the organisation"]
+        if errors:
+            out.append(Finding("policy", fn, "override:propose:invalid", clean(
+                f"the detected proposal for {ov.path} was dropped: {errors[0]}", MAX_MESSAGE), "warn"))
+            proposal, lines = existing or {}, []
+    changed = proposal != (existing or {})
+    if not legacy and not changed:
+        if ov.doc is None and lines and not out:
+            out.append(Finding("policy", fn, "override:propose", clean(
+                f"nothing could be proposed for {ov.path}: " + "; ".join(lines), MAX_MESSAGE), "info"))
+        return out
+    change = {"op": "put", "path": ov.path, "content": repo_admin_policy.render_override(proposal), "mode": "100644"}
+    action = Action("files", repo=fn, changes=[change], note="\n".join((["; ".join(ov.notes)] if legacy and ov.notes else []) + lines))
+    if legacy:
+        out.append(Finding("policy", fn, "override:convert", clean(
+            f"{ov.path} is a whole policy; with inheritance it holds only the repository's differences", MAX_MESSAGE), "fix", action))
+    else:
+        out.append(Finding("policy", fn, "override:propose", clean(
+            f"{ov.path} proposed from the repository's merged pull requests, tags and manifest", MAX_MESSAGE), "fix", action))
+    return out
+
+
 def check_policy(ctx: Ctx) -> list[Finding]:
     """The inherited policy itself: what the run file loosens, and per repository the problems of its override file,
     the loosenings that were put back, the login notes, a whole old policy to convert, workflow parameters for no template."""
@@ -1832,12 +2023,8 @@ def check_policy(ctx: Ctx) -> list[Finding]:
                 "the organisation value applies", MAX_MESSAGE), "warn"))
         for subject, message in ctx.pol_warnings(repo):
             found.append(Finding("policy", fn, clean(subject, 80), clean(message, MAX_MESSAGE), "warn"))
-        if ov.legacy and ov.doc is not None:
-            change = {"op": "put", "path": ov.path, "content": repo_admin_policy.render_override(ov.doc), "mode": "100644"}
-            found.append(Finding("policy", fn, "override:convert", clean(
-                f"{ov.path} is a whole policy; with inheritance it holds only the repository's differences", MAX_MESSAGE), "fix",
-                Action("files", repo=fn, changes=[change], note="; ".join(ov.notes))))
         eff = ctx.pol(repo)
+        found += _override_findings(ctx, repo, ov, eff)
         listed = {e.get("template") for e in eff.get("workflows") or [] if isinstance(e, dict)}
         for template in sorted(str(t) for t in (eff.get("workflow_params") or {})):
             if template not in listed:
@@ -1875,7 +2062,7 @@ def run_checks(ctx: Ctx, names=None) -> list[Finding]:
 def _cell(text: str, limit: int = 220) -> str:
     """One table cell. Names come from the repositories, so markdown, HTML and @mentions are defused."""
     text = " ".join(str(text).split())
-    text = re.sub(r"([\\|`\[\]<>#&])", r"\\\1", text).replace("@", "@​")
+    text = re.sub(r"([\\|`\[\]<>#&])", r"\\\1", text).replace("@", "@​").replace("#", "#​")
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
@@ -1972,7 +2159,7 @@ def apply_findings(ctx: Ctx, findings: list[Finding], yes: bool, allow_delete: b
             try:
                 full = next(r for r in ctx.all_repos if r["full_name"] == repo)
                 snap = ctx.snapshot(full)
-                notes = [f.action.note for f in group if f.action.note]
+                notes = [n for f in group for n in f.action.note.split("\n") if n]
                 url = apply_files(ctx.c, repo, changes, snap.branch, snap.commit, snap.tree, ctx.now.date(), notes)
                 out(f"  opened {url}")
             except (ApiError, StopIteration) as exc:
@@ -2147,7 +2334,7 @@ def _run(args) -> tuple[Ctx, list[Finding]]:
         owner, _, short = name.rpartition("/")
         if not re.fullmatch(r"[A-Za-z0-9._-]+", short) or (owner and owner.lower() != policy["org"].lower()):
             raise SystemExit(f"repo_admin: --repo '{name}': give a repository name or {policy['org']}/name")
-    ctx = Ctx(client, policy, args.repo)
+    ctx = Ctx(client, policy, args.repo, detect=not getattr(args, "no_detect", False))
     return ctx, run_checks(ctx, args.check or None)
 
 
@@ -2214,6 +2401,8 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--policy", required=True)
         p.add_argument("--repo", action="append", default=[], help="only this repository (name or owner/name); repeatable")
         p.add_argument("--check", action="append", choices=sorted(CHECKS), help="only this check; repeatable")
+        p.add_argument("--no-detect", action="store_true", help="do not propose override values from the repositories "
+                       "(merged pull requests, tags, workflows)")
         if name == "audit":
             p.add_argument("--format", choices=["md", "json"], default="md")
             p.add_argument("--out", help="write the report to this file")

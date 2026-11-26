@@ -230,4 +230,4 @@ def test_equal_organisation_logins_stand_the_release_check_down(ra):
 
 def test_cell_defuses_references_and_entities(ra):
     cell = ra._cell("see #12 and &amp; @someone")
-    assert "\\#12" in cell and "\\&amp;" in cell and "@someone" not in cell
+    assert "\\#\u200b12" in cell and "#12" not in cell and "\\&amp;" in cell and "@someone" not in cell

@@ -14,11 +14,16 @@ DETECT_MIN_PRS = 3
 
 FAILED = ("failure", "timed_out", "startup_failure", "action_required")
 SKIPPED = ("skipped", "neutral", "cancelled", "stale")
-TAG_RE = re.compile(r"^(\D*?)(\d+\.\d+\.\d+)(.*)$")
-SEMVER_SUFFIX = re.compile(r"^-[0-9A-Za-z.-]+$")
-PEP440_SUFFIX = re.compile(r"^(a|b|rc)\d+$")
+TAG_RE = re.compile(r"(\D*?)(\d+\.\d+\.\d+)(.*)")
+SEMVER_SUFFIX = re.compile(r"-[0-9A-Za-z.-]+")
+PEP440_SUFFIX = re.compile(r"(a|b|rc)\d+")
 PUSH_LINE = re.compile(r"^([ \t]*)push:[ \t]*(?:#.*)?$")
 TAGS_LINE = re.compile(r"^[ \t]+tags:")
+HEAD_RE = re.compile(r"[0-9a-f]{40}")
+SAFE_NAME = re.compile(r"[^\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]{1,100}")
+MAX_TAGS = 100  # one page of the tags list
+MAX_WORKFLOW_BYTES = 65536  # of each workflow text that is scanned
+MANIFESTS = ("pyproject.toml", "package.json", "Cargo.toml", "go.mod")
 RELEASE_MARKERS = ("gh release create", "action-gh-release", "create-release")
 OWN_TEMPLATE_FILE = "tld-release.yml"
 
@@ -99,16 +104,16 @@ def tag_workflow_creates_release(texts: list[str]) -> bool:
 
 def release_params(tags: list[str], manifests: list[str], tag_workflow: bool) -> tuple[dict[str, str], list[str]]:
     """Release parameters shown by the tags and manifests; check_script is never guessed."""
-    found = [m.groups() for m in (TAG_RE.match(t) for t in tags) if m]
+    found = [m.groups() for m in (TAG_RE.fullmatch(t) for t in tags) if m]
     if not found:
         return {}, ["no version-like tags"]
     counts = Counter(prefix for prefix, _, _ in found)
     top = max(counts.values())
     prefix = min(p for p, n in counts.items() if n == top)
     suffixes = [s for p, _, s in found if p == prefix]
-    if any(SEMVER_SUFFIX.match(s) for s in suffixes):
+    if any(SEMVER_SUFFIX.fullmatch(s) for s in suffixes):
         style = "semver"
-    elif any(PEP440_SUFFIX.match(s) for s in suffixes):
+    elif any(PEP440_SUFFIX.fullmatch(s) for s in suffixes):
         style = "pep440"
     else:
         style = "pep440" if "pyproject.toml" in manifests else "semver"
@@ -149,3 +154,73 @@ def pr_notes(checks: list[str] | None, excluded: dict[str, str], params: dict[st
         lines.append("release parameters: " + " ".join(f"{k}={v}" for k, v in params.items()))
     lines.extend(notes)
     return lines
+
+
+@dataclass(frozen=True)
+class Gathered:
+    """What the API shows about one repository: the merged pull requests' runs, the tags, the top-level manifests,
+    whether a tag workflow creates the release, and the release workflow its profile names (None without one)."""
+    samples: tuple[Sample, ...]
+    tags: tuple[str, ...]
+    manifests: tuple[str, ...]
+    tag_workflow: bool
+    profile_release_workflow: str | None
+
+
+def _name(value) -> str | None:
+    """A check name or tag that may be written into a policy: printable, one line, at most 100 characters."""
+    return value if isinstance(value, str) and SAFE_NAME.fullmatch(value) else None
+
+
+def _runs(ctx, fn: str, sha: str) -> tuple[Run, ...]:
+    """The check runs and commit statuses of one head, at most 100 of each (one request each, never paged)."""
+    found: list[Run] = []
+    data = ctx.c.get(f"/repos/{fn}/commits/{sha}/check-runs", {"filter": "all", "per_page": "100"})
+    for item in ((data or {}).get("check_runs") or [])[:100] if isinstance(data, dict) else []:
+        name = _name(item.get("name")) if isinstance(item, dict) else None
+        if name is None:
+            continue
+        done = item.get("status") == "completed"
+        conclusion = item.get("conclusion") if done else None
+        found.append(Run(name, conclusion if isinstance(conclusion, str) else None))
+    data = ctx.c.get(f"/repos/{fn}/commits/{sha}/status")
+    for item in ((data or {}).get("statuses") or [])[:100] if isinstance(data, dict) else []:
+        name = _name(item.get("context")) if isinstance(item, dict) else None
+        if name is None:
+            continue
+        state = item.get("state")
+        found.append(Run(name, "success" if state == "success" else "failure" if state in ("failure", "error") else None))
+    return tuple(found)
+
+
+def gather(ctx, repo: dict, want_checks: bool = True) -> Gathered:
+    """The API reads of section 3.9: one list of pull requests, two reads per sampled head (DETECT_PRS at most), one
+    page of tags, and the files the snapshot and the memoised workflow reads already hold. An ApiError propagates."""
+    from tld.ops import repo_admin_profile
+    fn = repo["full_name"]
+    samples: list[Sample] = []
+    if want_checks:
+        branch = ctx.snapshot(repo).branch
+        pulls = ctx.c.get(f"/repos/{fn}/pulls", {"state": "closed", "base": branch, "sort": "updated",
+                                                  "direction": "desc", "per_page": "50"})
+        for pr in pulls if isinstance(pulls, list) else []:
+            if len(samples) >= DETECT_PRS:
+                break
+            if not isinstance(pr, dict) or not pr.get("merged_at"):
+                continue
+            head, number = (pr.get("head") or {}).get("sha") if isinstance(pr.get("head"), dict) else None, pr.get("number")
+            if not isinstance(head, str) or not HEAD_RE.fullmatch(head) or type(number) is not int:
+                continue
+            samples.append(Sample(number, _runs(ctx, fn, head)))
+    data = ctx.c.get(f"/repos/{fn}/tags", {"per_page": str(MAX_TAGS)})
+    tags = tuple(n for n in (_name(t.get("name")) for t in (data if isinstance(data, list) else [])[:MAX_TAGS]
+                             if isinstance(t, dict)) if n)
+    snap = ctx.snapshot(repo)
+    manifests = tuple(sorted(e["path"] for e in snap.entries if e.get("type") == "blob" and e.get("path") in MANIFESTS))
+    files, _ = ctx.automation_files(repo)
+    tag_workflow = tag_workflow_creates_release([t[:MAX_WORKFLOW_BYTES] for path, t in files
+                                                 if path.startswith(".github/workflows/")])
+    profile = repo_admin_profile.repo_profile(ctx, repo)
+    release = profile.get("release") if isinstance(profile, dict) else None
+    workflow = release.get("workflow") if isinstance(release, dict) else None
+    return Gathered(tuple(samples), tags, manifests, tag_workflow, workflow if isinstance(workflow, str) else None)
