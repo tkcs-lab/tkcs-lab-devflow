@@ -1169,8 +1169,8 @@ mutants:
 - id: AP1
   file: src/tld/ops/repo_admin_profile.py
   why: "repo_profile ignores the check_base_text errors (killed by test_repo_profile_is_none_when_unreadable_or_refused)"
-  old: "            if errors:\n                return None\n        res = resolve_mod"
-  new: "            if False:\n                return None\n        res = resolve_mod"
+  old: "            if errors:\n                return None, exists\n        res = resolve_mod"
+  new: "            if False:\n                return None, exists\n        res = resolve_mod"
 - id: RB1
   file: src/tld/ops/repo_admin.py
   why: "ruleset_bodies ignores live_checks (killed by test_absent_checks_are_kept_in_the_put_body)"
