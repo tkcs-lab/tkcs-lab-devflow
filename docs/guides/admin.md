@@ -140,8 +140,9 @@ is read at the default branch, so it is written by the repository and is untrust
 `login:derived:<key>` warning that names the account the changes will use. An explicit value wins and the profile is
 not read for it (it is still read for a release section without an agent section, to compare the reviewer with
 `git.bot_login`). With no value, a `warn` finding says so, the agent role part is skipped (the environment and secret
-part still run) and the release check is skipped for that repository. The `profile` and `git_ops` sections and the
-profile of a repository come from plan 90: this feature needs that code.
+part still run) and the release check is skipped for that repository. Deriving needs the profile features of the
+same tld: the `profile` and `git_ops` sections, the resolved profile of a repository and its `git.bot_login`,
+`git.owner_login` and `git.codeowners` keys (the changelog names the release that ships them).
 
 **Detection.** For a repository whose effective policy has `rulesets.default_branch` without
 `required_status_checks`, or the release template without parameters, the `policy`
