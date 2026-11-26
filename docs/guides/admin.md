@@ -138,7 +138,8 @@ policy gives it a `release` section, so a base with one makes it a requirement e
 repository's resolved profile (`git.bot_login`; `git.owner_login`, else the one `git.codeowners` entry). The profile
 is read at the default branch, so it is written by the repository and is untrusted: each derived login is a
 `login:derived:<key>` warning that names the account the changes will use. An explicit value wins and the profile is
-then not read. With no value, a `warn` finding says so, the agent role part is skipped (the environment and secret
+not read for it (it is still read for a release section without an agent section, to compare the reviewer with
+`git.bot_login`). With no value, a `warn` finding says so, the agent role part is skipped (the environment and secret
 part still run) and the release check is skipped for that repository. The `profile` and `git_ops` sections and the
 profile of a repository come from plan 90: this feature needs that code.
 
