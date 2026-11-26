@@ -63,6 +63,11 @@ page or a tool result). Two layers, with different jobs:
 Not in scope of the design: sessions without the plugin, a person at a terminal, a compromised owner account, and
 the security of the runtime itself.
 
+The repo-admin audit reads files pinned by commit from other repositories (`extends`) and each repository's override
+file with the owner's token. Each is checked for credentials and key class before it is merged. An override cannot
+loosen a guarded setting or turn on an irreversible change, and only the policy file that is run can
+([docs/guides/admin.md](docs/guides/admin.md)).
+
 ## The curl installer
 
 `install.sh` (the curl line in [docs/guides/delivery.md](docs/guides/delivery.md)) downloads the release wheel

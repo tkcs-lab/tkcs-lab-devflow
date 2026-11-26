@@ -24,7 +24,7 @@ The system SHALL let an organisation policy name, in `extends`, one to four file
 - **THEN** it validates, audits and applies exactly as before, reads no override file and makes no request that the old command did not make
 
 ### Requirement: Keep an inherited file safe
-The system SHALL refuse an extended file that holds anything credential-like, sets `extends` itself, turns on an irreversible change, or, when its repository is public, holds an organisation-private section, and SHALL never let any file but the policy that is run switch on a deletion or a revocation.
+The system SHALL refuse an extended file that holds anything credential-like, sets `extends` itself, turns on an irreversible change, or, when its repository is public or internal (or its visibility cannot be told), holds an organisation-private section, and SHALL never let any file but the policy that is run switch on a deletion or a revocation.
 
 #### Scenario: Token-like text
 - **WHEN** an extended file contains a line that looks like a credential or a key whose name looks like one
@@ -43,7 +43,7 @@ The system SHALL refuse an extended file that holds anything credential-like, se
 - **THEN** it is refused
 
 ### Requirement: Audit with repository override files
-The system SHALL, for a policy with `extends`, read each audited repository's override file (at the path `repos.override_path` names, which has a default) from its default branch, apply it to the organisation policy and run the repository-level checks on the effective policy of that repository, where the override may set only repository-level keys, a base may not set per-repository keys, and a repository without an override file is audited with the organisation policy alone.
+The system SHALL, for a policy with `extends`, read each audited repository's override file (at the path `repos.override_path` names, which has a default) from its default branch, apply it to the organisation policy and run the repository-level checks on the effective policy of that repository, where the override may set only repository-level keys, its `workflow_params.release` and `workflows[].params` may hold only `tag_prefix`, `version_style`, `check_script` and `create_release`, a base may not set per-repository keys, and a repository without an override file is audited with the organisation policy alone.
 
 #### Scenario: Override merged
 - **WHEN** a repository's override sets a repository-level key
@@ -61,6 +61,10 @@ The system SHALL, for a policy with `extends`, read each audited repository's ov
 - **WHEN** an extended file sets the required status checks of the default-branch ruleset, `workflow_params` or `config_dirs.known`
 - **THEN** it is refused and the message says to set the key in each repository's override file
 
+#### Scenario: Release parameters limited
+- **WHEN** an override's `workflow_params.release` or a `workflows[].params` entry sets a key other than `tag_prefix`, `version_style`, `check_script` or `create_release`
+- **THEN** the audit reports an error for that repository and audits it with the organisation policy
+
 #### Scenario: Whole legacy file
 - **WHEN** a repository's file is a whole policy with `org`
 - **THEN** the audit uses it as an override after dropping what the organisation policy already says, and proposes a pull request that replaces it by that minimal override
@@ -70,7 +74,7 @@ The system SHALL, for a policy with `extends`, read each audited repository's ov
 - **THEN** every repository-level check of that repository runs on the inherited values plus those checks
 
 ### Requirement: Hold guarded settings against overrides
-The system SHALL report, as a warning per setting, an override that loosens a guarded setting of the organisation policy and apply the organisation's value instead, unless the policy that is run allows that setting for that repository, and SHALL leave the dry run, `--yes` and `--allow-delete` rules of `apply` unchanged for inherited policies.
+The system SHALL report, as a warning per setting, an override that loosens a guarded setting that the organisation policy sets and apply the organisation's value instead, unless the policy that is run allows that setting for that repository, and SHALL leave the dry run, `--yes` and `--allow-delete` rules of `apply` unchanged for inherited policies. A guarded key that the organisation policy omits is not guarded. An override of `agent.agent_login`, `release.reviewer_login` or `release.environment` applies with a warning, except that a `release.environment` equal to the agent environment (`tld-agent`) is dropped with a warning.
 
 #### Scenario: Loosening held
 - **WHEN** an override switches off a security feature the organisation policy requires
@@ -79,6 +83,14 @@ The system SHALL report, as a warning per setting, an override that loosens a gu
 #### Scenario: Loosening allowed by the run file
 - **WHEN** the policy that is run lists the setting for the repository under `repos.allow_loosen`
 - **THEN** the override value applies and no warning is made
+
+#### Scenario: Key the organisation omits
+- **WHEN** an override sets a guarded key that neither the organisation policy nor the files it extends set
+- **THEN** the override value applies and no loosening is reported
+
+#### Scenario: Login or environment overridden
+- **WHEN** an override sets `agent.agent_login`, `release.reviewer_login` or `release.environment` to a value other than the organisation's
+- **THEN** the value applies and the audit warns, except that a `release.environment` equal to `tld-agent` is dropped, the organisation's or the default environment applies, and the audit warns
 
 #### Scenario: Run file loosening reported
 - **WHEN** the policy that is run sets a guarded setting looser than the files it extends
@@ -94,6 +106,14 @@ The system SHALL take the agent login from the repository's resolved profile bot
 #### Scenario: Logins derived
 - **WHEN** the effective policy has an `agent` and a `release` section without logins and the repository's profile names a bot login and an owner
 - **THEN** the agent and release checks use those logins
+
+#### Scenario: Derived login named
+- **WHEN** a login comes from the repository's profile
+- **THEN** the audit warns for that repository (`login:derived:<key>`) and names the account the changes will name
+
+#### Scenario: Equal logins
+- **WHEN** the effective agent and reviewer logins are equal when compared without case
+- **THEN** the audit warns and the organisation's logins apply; a login the organisation does not set (or equal organisation logins) is dropped and the check that needs it stands down for that repository
 
 #### Scenario: Explicit login wins
 - **WHEN** the effective policy states a login
@@ -128,4 +148,4 @@ The system SHALL propose, as one pull request per repository that writes or amen
 
 #### Scenario: Absent value stands down
 - **WHEN** the override has no required status checks or no release parameters yet
-- **THEN** the live status-check rule is kept and the release workflow is neither installed nor rewritten
+- **THEN** the live status-check rule is kept, with the `integration_id` of each live required check, and the release workflow is neither installed nor rewritten
