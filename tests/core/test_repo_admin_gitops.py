@@ -286,6 +286,7 @@ def test_entries_bash_reads_differently_are_reported_and_kept(ra, entry):
     assert unusual.severity == "warn" and unusual.manual and "repos[1]" in unusual.message
     (fix,) = [f for f in rows if f.severity == "fix"]  # app is not covered by the entry, so it is added
     assert json.loads(fix.action.changes[0]["content"])["repos"] == ["git-ops", entry, "app"]
+    assert "\u200b" not in fix.action.changes[0]["content"] and "\uff0a" not in fix.action.changes[0]["content"]  # shown as escapes
 
 
 @pytest.mark.parametrize("entry", ["S*", "SECRET", "Sec?et"])
@@ -294,6 +295,15 @@ def test_globs_are_matched_without_regard_to_case(ra, entry):
     found, _, _ = audit(ra, allow_files(repos=["app", "git-ops", entry]), policy=policy, names=("app", "git-ops", "secret"))
     (outside,) = [f for f in by_check(found, "git-ops-allowlist") if f.subject == "allowlist:outside"]
     assert "secret" in outside.message
+
+
+def test_a_wrong_owner_is_not_fixed_while_a_glob_reaches_outside_repositories(ra):
+    files = complete()
+    files["git-ops-allowlist.json"] = json.dumps({"owner": "other", "repos": ["app", "git-ops", "sec*"], "protected_branches": ["main"]})
+    policy = {**POLICY, "repos": {"exclude": ["secret"]}}
+    found, _, _ = audit(ra, files, policy=policy, names=("app", "git-ops", "secret"))
+    rows = by_check(found, "git-ops-allowlist")
+    assert [f for f in rows if f.action] == [] and {"allowlist:outside", "allowlist:owner"} <= {f.subject for f in rows}
 
 
 @pytest.mark.parametrize("entry", ["@(*)", "*", "!(x)", "?*"])

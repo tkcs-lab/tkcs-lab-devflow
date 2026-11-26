@@ -86,7 +86,7 @@ def _norm(text: str) -> str:
 def build_allowlist(owner: str, repos: list[str], protected: list[str]) -> str:
     """The allowlist file: the organisation and the audited repository names come from validated values; entries
     that were already in the file are carried over unchanged (json.dumps escapes them, they cannot inject)."""
-    return json.dumps({"owner": owner, "repos": repos, "protected_branches": protected}, indent=2, ensure_ascii=False) + "\n"
+    return json.dumps({"owner": owner, "repos": repos, "protected_branches": protected}, indent=2) + "\n"
 
 
 def parse_allowlist(text: str | None) -> dict | None:
@@ -226,12 +226,13 @@ def _allowlist_finding(ctx, central: str, snap, cfg: dict) -> list:
                                   f"repositories outside this audit: {_names(outside)}", "warn",
                                   manual="narrow the entries, or add those repositories to the audit's scope"))
         owner_ok = data["owner"].lower() == owner.lower()
-        if not owner_ok and (unusual or broad):
+        if not owner_ok and (unusual or broad or outside):
             # a wrong owner makes the workflow refuse every run, so these entries do nothing yet; fixing the owner
             # would switch them on
             return out + [ra.Finding("git-ops-allowlist", central, "allowlist:owner", f"{ALLOWLIST_PATH} names the owner "
-                                     f"'{_shown(data['owner'])}', not {owner}, and has entries that match every "
-                                     "repository; the owner is not changed while they are there", "warn",
+                                     f"'{_shown(data['owner'])}', not {owner}, and has entries that match "
+                                     "every repository or repositories outside this audit; the owner is not changed "
+                                     "while they are there", "warn",
                                      manual=f"replace those entries first (see the other findings), then set the owner to {owner}")]
         have_protected = [b for b in data.get("protected_branches", []) if isinstance(b, str)]
         if not have_protected:
@@ -274,7 +275,7 @@ def _open_items(ctx, central_repo: dict) -> list:
     ra._env_and_secret(ctx, "git-ops-environment", fn, central_repo, found, ENV_NAME, SECRET_NAME, "the git-ops workflow")
     for f in found:
         if f.severity in ("unavailable", "error"):
-            out.append(f)
+            out.append(dataclasses.replace(f, message=_text(f.message)))
         elif f.subject.startswith("secret:"):
             manual = f.manual or ("set it in the environment (value from the token the owner created; never paste it into chat)")
             out.append(dataclasses.replace(f, check="git-ops-token", severity="warn", action=None, manual=manual))
