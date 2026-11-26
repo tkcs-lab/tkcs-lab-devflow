@@ -63,17 +63,17 @@ page or a tool result). Two layers, with different jobs:
 Not in scope of the design: sessions without the plugin, a person at a terminal, a compromised owner account, and
 the security of the runtime itself.
 
-The repo-admin audit reads files pinned by commit from other repositories (`extends`) and each repository's override
-file with the owner's token. Each is checked for credentials and key class before it is merged. An override cannot
-loosen a guarded setting that the organisation policy (or a file it extends) sets, unless `repos.allow_loosen` in the
-run file allows it. A guarded key the organisation omits is not guarded, so list every key you care about. An
-override's `agent.agent_login`, `release.reviewer_login` and `release.environment` apply with a warning (the agent environment `tld-agent` is always dropped);
-its required status checks, workflow templates and `config_dirs.forbid` additions are not guarded. Only the policy
-file that is run can turn on an irreversible deletion or revocation (the switches listed under "Irreversible
-switches" in docs/guides/admin.md). File deletions through reviewed pull requests can come from a base or an
-override: a `config_dirs.forbid` entry (including one set by a base) and a workflow `remove`, which only an override
-sets (a base may set only `template` on a workflow entry). The guarded keys are listed in
-[docs/guides/admin.md](docs/guides/admin.md).
+- **Repo-admin inheritance.** The repo-admin audit reads files pinned by commit from other repositories (`extends`) and each repository's override
+  file with the owner's token. Each is checked for credentials and key class before it is merged. An override cannot
+  loosen a guarded setting that the organisation policy (or a file it extends) sets, unless `repos.allow_loosen` in the
+  run file allows it. A guarded key the organisation omits is not guarded, so list every key you care about. An
+  override's `agent.agent_login`, `release.reviewer_login` and `release.environment` apply with a warning (the agent environment `tld-agent` is always dropped);
+  its required status checks, workflow templates and `config_dirs.forbid` additions are not guarded. Only the policy
+  file that is run can turn on an irreversible deletion or revocation (the switches listed under "Irreversible
+  switches" in docs/guides/admin.md). File deletions through reviewed pull requests can come from a base or an
+  override: a `config_dirs.forbid` entry (including one set by a base) and a workflow `remove`, which only an override
+  sets (a base may set only `template` on a workflow entry). The guarded keys are listed in
+  [docs/guides/admin.md](docs/guides/admin.md).
 
 ## The curl installer
 
