@@ -106,6 +106,8 @@ tests:
   - tests/core/test_repo_admin_policy_check.py
   - tests/core/test_repo_admin_rulesets.py
   - tests/core/test_repo_admin_unchanged.py
+  - tests/core/test_repo_admin_derive.py
+  - tests/core/test_repo_admin_kinds.py
   src/tld/ops/repo_admin_policy.py:
   - tests/core/test_repo_admin_policy.py
   - tests/core/test_repo_admin_extends.py
@@ -1061,82 +1063,82 @@ mutants:
   new: '    if True:'
 - id: AI1
   file: src/tld/ops/repo_admin_policy.py
-  why: "kind_of returns override for a document with org"
+  why: "kind_of returns override for a document with org (killed by test_kind_of)"
   old: "return \"run\" if \"org\" in doc else \"override\""
   new: "return \"override\""
 - id: AI2
   file: src/tld/ops/repo_admin_policy.py
-  why: "the organisation-level message check is skipped for override keys"
+  why: "the organisation-level message check is skipped for override keys (killed by test_key_errors_override_org_level)"
   old: "elif kind == \"override\" and key in ORG_LEVEL:"
   new: "elif False and key in ORG_LEVEL:"
 - id: AI3
   file: src/tld/ops/repo_admin_policy.py
-  why: "clamp_irreversible never sets revoke_expired"
+  why: "clamp_irreversible never sets revoke_expired (killed by test_clamp_irreversible)"
   old: "fine[\"revoke_expired\"] = False"
   new: "pass"
 - id: AI4
   file: src/tld/ops/repo_admin_policy.py
-  why: "loosened treats an ordered key as loosened in the stricter direction"
+  why: "loosened treats an ordered key as loosened in the stricter direction (killed by test_loosened_each_group)"
   old: "order.index(value) < order.index(org_value)"
   new: "order.index(value) > order.index(org_value)"
 - id: AI5
   file: src/tld/ops/repo_admin_policy.py
-  why: "key_errors does not refuse a private section in a public base"
+  why: "key_errors does not refuse a private section in a public base (killed by test_key_errors_base_public_private_sections)"
   old: "elif kind == \"base\" and public and key in PRIVATE_ONLY:"
   new: "elif False and public and key in PRIVATE_ONLY:"
 - id: AI6
   file: src/tld/ops/repo_admin_policy.py
-  why: "allowed_for matches no glob"
+  why: "allowed_for matches no glob (killed by test_allowed_for_globs)"
   old: "if fnmatch.fnmatchcase(repo_name, glob):"
   new: "if False:"
 - id: AI7
   file: src/tld/ops/repo_admin_policy.py
-  why: "key_errors skips the irreversible rule for a base"
+  why: "key_errors skips the irreversible rule for a base (killed by test_key_errors_base_irreversible)"
   old: "if value is not _MISSING and _turns_on(key, value):"
   new: "if False:"
 - id: AI8
   file: src/tld/ops/repo_admin_policy.py
-  why: "clamp_guarded does not restore a shrunk list"
+  why: "clamp_guarded does not restore a shrunk list (killed by test_clamp_guarded_restores_and_allows)"
   old: "_set(out, item.key, kept + [x for x in item.org_value if x not in kept])"
   new: "_set(out, item.key, kept)"
 - id: AX1
   file: src/tld/ops/repo_admin_detect.py
-  why: "status_checks keeps a name that failed on one sample"
+  why: "status_checks keeps a name that failed on one sample (killed by test_flaky_failed_skipped_and_partial_checks_are_excluded)"
   old: "return f\"failed on #{number}\""
   new: "return None"
 - id: AX2
   file: src/tld/ops/repo_admin_detect.py
-  why: "status_checks keeps a name missing from some samples"
+  why: "status_checks keeps a name missing from some samples (killed by test_flaky_failed_skipped_and_partial_checks_are_excluded)"
   old: "if seen < len(samples):"
   new: "if False:"
 - id: AX3
   file: src/tld/ops/repo_admin_detect.py
-  why: "status_checks keeps a skipped name"
+  why: "status_checks keeps a skipped name (killed by test_flaky_failed_skipped_and_partial_checks_are_excluded)"
   old: "return f\"skipped on #{number}\""
   new: "return None"
 - id: AE1
   file: src/tld/ops/repo_admin_extends.py
-  why: "the compare status check in fetch_layer also accepts ahead"
+  why: "the compare status check in fetch_layer also accepts ahead (killed by test_pin_is_not_on_the_default_branch)"
   old: "if status not in (\"behind\", \"identical\"):"
   new: "if status not in (\"behind\", \"identical\", \"ahead\"):"
 - id: AE2
   file: src/tld/ops/repo_admin_extends.py
-  why: "shape_errors returns the parsed text with no checks"
+  why: "shape_errors returns the parsed text with no checks (killed by test_token_like_text)"
   old: "return base_mod.check_base_shape(text, f\"{label}: \")"
   new: "return __import__(\"yaml\").safe_load(text), []"
 - id: AE3
   file: src/tld/ops/repo_admin_extends.py
-  why: "fetch_layer always passes public=None"
+  why: "fetch_layer always passes public=None (killed by test_organisation_private_section_in_a_public_repository)"
   old: "public = None if private else f\"{ref.owner}/{ref.repo}\""
   new: "public = None"
 - id: AP1
   file: src/tld/ops/repo_admin_profile.py
-  why: "repo_profile ignores the check_base_text errors"
+  why: "repo_profile ignores the check_base_text errors (killed by test_repo_profile_is_none_when_unreadable_or_refused)"
   old: "            if errors:\n                return None\n        res = resolve_mod"
   new: "            if False:\n                return None\n        res = resolve_mod"
 - id: RB1
   file: src/tld/ops/repo_admin.py
-  why: "ruleset_bodies ignores live_checks"
+  why: "ruleset_bodies ignores live_checks (killed by test_absent_checks_are_kept_in_the_put_body)"
   old: "else (live_checks or [])"
   new: "else []"
 - id: RB2
@@ -1144,3 +1146,63 @@ mutants:
   why: "ruleset_bodies treats an explicit empty list like an absent key (killed by test_explicit_empty_checks_ignore_live_checks_in_the_body)"
   old: "main[\"required_status_checks\"] if \"required_status_checks\" in main else (live_checks or [])"
   new: "(main.get(\"required_status_checks\") or live_checks or [])"
+- id: LG1
+  file: src/tld/ops/repo_admin.py
+  why: "the same-login check on the effective pair is off (killed by test_equal_effective_logins_stand_down)"
+  old: "if has_release and compare and reviewer and compare.casefold() == reviewer.casefold():"
+  new: "if False:"
+- id: LG2
+  file: src/tld/ops/repo_admin.py
+  why: "the same-login check compares with case (killed by test_equal_effective_logins_stand_down)"
+  old: "compare.casefold() == reviewer.casefold():\n            same,"
+  new: "compare == reviewer:\n            same,"
+- id: LG3
+  file: src/tld/ops/repo_admin.py
+  why: "the derived reviewer comes from the profile that still holds bot_login (killed by test_equal_effective_logins_stand_down)"
+  old: "derive_logins(bare)"
+  new: "derive_logins(profile)"
+- id: LG4
+  file: src/tld/ops/repo_admin.py
+  why: "a repository override may set any workflow param (killed by test_override_workflow_params_are_limited_to_the_four_keys)"
+  old: "if key not in OVERRIDE_PARAMS]"
+  new: "if False]"
+- id: LG5
+  file: src/tld/ops/repo_admin.py
+  why: "no warning for a derived agent login (killed by test_logins_derived)"
+  old: "if ctx.inherited and login and lg.agent_derived:"
+  new: "if False:"
+- id: LG6
+  file: src/tld/ops/repo_admin.py
+  why: "no warning for a derived reviewer login (killed by test_logins_derived)"
+  old: "if lg.reviewer_derived:"
+  new: "if False:"
+- id: LG7
+  file: src/tld/ops/repo_admin.py
+  why: "_param_diffs ignores the integration_id of a kept live check (killed by test_kept_live_checks_keep_their_integration_id)"
+  old: "if contexts(want) != contexts(have) or unbound else []"
+  new: "if contexts(want) != contexts(have) else []"
+- id: LG8
+  file: src/tld/ops/repo_admin.py
+  why: "_live_contexts drops the integration_id (killed by test_kept_live_checks_keep_their_integration_id)"
+  old: "return [dict(c) for c in checks if"
+  new: "return [{\"context\": c.get(\"context\")} for c in checks if"
+- id: LG9
+  file: src/tld/ops/repo_admin.py
+  why: "release.environment equal to the agent environment is kept (killed by test_pol_warnings_and_the_agent_environment_are_separate_findings)"
+  old: "    if isinstance(env, str) and env.casefold() == AGENT_ENV.casefold():"
+  new: "    if False:"
+- id: LG10
+  file: src/tld/ops/repo_admin.py
+  why: "the merge-time same-login check is off (killed by test_equal_organisation_logins_stand_the_release_check_down)"
+  old: "if isinstance(agent, str) and isinstance(reviewer, str) and agent.casefold() == reviewer.casefold():"
+  new: "if False:"
+- id: LG11
+  file: src/tld/ops/repo_admin_policy.py
+  why: "derive_logins accepts a bot login that is not a plain login (killed by test_derive_logins)"
+  old: "if LOGIN_RE.fullmatch(bot):"
+  new: "if bot:"
+- id: LG12
+  file: src/tld/ops/repo_admin_policy.py
+  why: "derive_logins accepts an owner login that is not a plain login (killed by test_derive_logins)"
+  old: "if LOGIN_RE.fullmatch(owner):"
+  new: "if owner:"
