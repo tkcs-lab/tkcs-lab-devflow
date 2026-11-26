@@ -1,0 +1,6 @@
+# Repository override of app-a: its own status checks, and no release workflow.
+rulesets:
+  default_branch:
+    required_status_checks: ["test (3.11)", "test (3.13)"]
+workflows:
+  - template: land
