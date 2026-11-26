@@ -134,7 +134,8 @@ installed or rewritten: an `info` finding says so. A repository whose override f
 directly, never treated as absent. The `tld-release` environment is checked in every repository whose effective
 policy gives it a `release` section, so a base with one makes it a requirement everywhere.
 
-**Derived logins.** `agent.agent_login` and `release.reviewer_login` need not be set: they are taken from the
+**Derived logins.** When the effective policy has an `agent` or a `release` section, `agent.agent_login` and
+`release.reviewer_login` need not be set (without the section nothing is derived or checked): they are taken from the
 repository's resolved profile (`git.bot_login`; `git.owner_login`, else the one `git.codeowners` entry). The profile
 is read at the default branch, so it is written by the repository and is untrusted: each derived login is a
 `login:derived:<key>` warning that names the account the changes will use. An explicit value wins and the profile is
