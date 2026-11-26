@@ -64,7 +64,7 @@ The system SHALL accept `tld.extends` as `<owner>/<repo>/<path>@<40-hex commit>`
 - **THEN** an error says only a base profile may set it
 
 ### Requirement: Fetch and cache the base
-The system SHALL fetch the base by its commit over git from `https://github.com/<owner>/<repo>.git` into a cache under the git directory, store the exact bytes with their hash, and read the cache before any network call. A commit is never fetched twice.
+The system SHALL fetch the base by its commit over git from `https://github.com/<owner>/<repo>.git` into a cache under the git directory, store the exact bytes with their hash, and read the cache before any network call. A commit is never fetched twice. The fetch SHALL accept a pin only when its commit is the commit of a version tag or an ancestor of the default branch head, so a commit that only a pull request holds is refused.
 
 #### Scenario: First fetch is cached
 - **WHEN** a profile with a pinned base is loaded for the first time with network access
@@ -77,6 +77,10 @@ The system SHALL fetch the base by its commit over git from `https://github.com/
 #### Scenario: Fetch fails without a cache
 - **WHEN** the base is not cached and cannot be fetched
 - **THEN** an error under `'tld.extends'` names the base and its commit, says to run again with network access, and the exit code is 1
+
+#### Scenario: Pin held only by a pull request
+- **WHEN** the pinned commit is neither a version tag's commit nor an ancestor of the default branch head
+- **THEN** the fetch is refused, nothing is cached and the exit code is 1
 
 #### Scenario: Corrupt cache entry
 - **WHEN** a cached base does not match its recorded hash

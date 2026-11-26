@@ -8,15 +8,17 @@
 
 The model is text in `sysml/model/**.sysml`. It is written in a documented subset of the SysML v2 textual notation,
 intended to parse in SysML v2 tools; tld does not check it against one. tld checks its own subset (pure Python, no
-network, no other tool). Add the block to the profile (a protected file: the owner approves it) and merge it:
+network, no other tool). Add the block to the profile (the pull request names `.tld/toolkit.yaml` under Security) and merge it:
 
 ```yaml
 sysml:
-  subset: 1   # the integer 1; anything else stops with "sysml.subset must be 1"
+  subset: 1   # the integer 1, the default; anything else stops with "sysml.subset must be 1"
 ```
 
+An empty `sysml:` block switches the commands on with that default.
+
 Without the block nothing changes: make-plan, implement and every other command behave as before. `tld ops sysml`
-stops with `toolkit.yaml: missing required key 'sysml.subset' (add a sysml block; see docs/guides/sysml.md)`.
+stops with `toolkit.yaml: /sysml needs a 'sysml' section (an empty 'sysml:' uses subset 1; see docs/guides/sysml.md)`.
 
 ## The subset
 

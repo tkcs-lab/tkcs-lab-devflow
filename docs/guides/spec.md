@@ -6,15 +6,17 @@ With a `spec` block in the profile, `/tld:make-plan` also writes the spec change
 
 ## Opt in
 
-Add the block to the profile (a protected file: the owner approves it) and merge it to the default branch:
+Add the block to the profile (the pull request names `.tld/toolkit.yaml` under Security) and merge it to the default branch:
 
 ```yaml
 spec:
-  version: "2.1.0"   # exact OpenSpec release, MAJOR.MINOR.PATCH; no range, no tag
+  version: "2.1.0"   # exact OpenSpec release, MAJOR.MINOR.PATCH; no range, no tag; this is the default
 ```
 
+An empty `spec:` block switches the commands on with that default.
+
 Without the block nothing changes: make-plan, implement and every other command behave as before and never mention
-specs. `tld ops spec` stops with `toolkit.yaml: missing required key 'spec.version' (add a spec block; see docs/guides/spec.md)`.
+specs. `tld ops spec` stops with `toolkit.yaml: /spec needs a 'spec' section (an empty 'spec:' uses version 2.1.0; see docs/guides/spec.md)`.
 
 ## Needs
 

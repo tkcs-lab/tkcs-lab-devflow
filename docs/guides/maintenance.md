@@ -19,7 +19,7 @@ then `verify.fast` and `verify.dod` run and code and tests are ported to the new
 skipping or deleting a test). Every group that ends green goes into one branch `chore/deps-<yyyymmdd>`,
 built the same way from the default branch and verified once, and one combined pull request whose body
 (`tld ops deps-body`) lists security updates first, each with its Dependabot pull request and versions. A
-group that stays red after two fix attempts, breaks the combination, changes a protected path other than an
+group that stays red after two fix attempts, breaks the combination, changes a path `/deps` protects (the profile and the workflows) other than an
 action version, or runs out of time is left out and named in the body; its Dependabot pull request stays
 open for you. `/deps` never pushes to, updates or comments on a Dependabot pull request: Dependabot closes
 each one once its update is on the default branch. The delay for ordinary updates is Dependabot's own
