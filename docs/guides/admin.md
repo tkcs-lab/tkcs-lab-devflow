@@ -96,8 +96,8 @@ credential. `tld ops repo-admin latest-pin <owner>/<repo>/<path>` prints the pin
 overridable sections; its `workflow_params.release` and its `workflows[].params` may hold only `tag_prefix`,
 `version_style`, `check_script` and `create_release`, and a `workflows` entry only `template`, `params` and `remove`.
 A base lists templates without parameters (`workflows: [{template: release}, {template: land}]`); a repository writes
-`workflow_params` instead of restating the list, or lists only its own templates (lists replace). A file of a public
-repository may not set the private sections.
+`workflow_params` instead of restating the list, or lists only its own templates (lists replace). A file of a repository that is public, internal or of
+unknown visibility may not set the private sections.
 
 **Guarded keys.** An override may not loosen these; the organisation's value is put back and the `policy` check warns
 (`loosen:<key>`): `security.*`, `rulesets.tags`, `workflow_lint.require_permissions`,
