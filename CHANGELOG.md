@@ -15,6 +15,7 @@ entry of the released version at the top of the GitHub release, above the list o
 - `tld migrate . --defaults` finds a docs index, ADR directory or changelog off its default path and asks one batch: rename it (links are rewritten) or keep it with an explicit key. It also lists keys now equal to a default.
 - `/tld:setup` takes `--base`, reads `TLD_BASE_PROFILE` or probes `<origin owner>/.github/tld/profile-base.yaml`, writes the pinned `tld.extends`, reads code owners, the version line and audit commands from the repository, and asks at most once (test commands it cannot find, a confirm per blocking role or audit command it proposes); the security posture is no longer asked.
 - The org audit checks the base (`profile-no-extends`, `profile-invalid-extends`, `profile-pin-old` with a pin-bump pull request, `profile-guarded-override`), the merge settings against `git.merge_style` (`profile-merge-style`), the central git-ops repository (`git-ops-workflow`, `git-ops-allowlist`, `git-ops-environment`, `git-ops-token`) and where Actions secrets are held (`secrets_scope`).
+- The admin audit has a `policy` check for an inherited policy: it reports what the run file or a repository override loosens, override problems, login changes and a whole old policy to convert (a pull request writes the minimal override). With `extends`, a ruleset without `required_status_checks` keeps the live checks, and a release workflow without parameters is neither installed nor rewritten.
 
 ### Changed
 
