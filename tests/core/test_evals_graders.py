@@ -675,3 +675,16 @@ def test_migrate_dry_run_task_fails_a_run_that_asks():
     assert spec["max"] == 0
     assert not GRADERS["asks_at_most"](ctx(actions=[ask(["docs.index"])], max=spec["max"])).passed
     assert GRADERS["asks_at_most"](ctx(actions=[], max=spec["max"])).passed
+
+
+def test_nothing_to_ask():
+    """Spec scenario "Nothing to ask": a run that finds the commands asks nothing."""
+    assert GRADERS["asks_at_most"](ctx(actions=[], max=0)).passed
+    assert not GRADERS["asks_at_most"](ctx(actions=[ask(["verify_fast"])], max=0)).passed
+
+
+def test_one_batch():
+    """Spec scenario "One batch": verify.fast and verify.dod are asked together in one ask, not two."""
+    assert GRADERS["asks_at_most"](ctx(actions=[ask(["verify_fast", "verify_dod"])], max=1)).passed
+    assert not GRADERS["asks_at_most"](
+        ctx(actions=[ask(["verify_fast"]), ask(["verify_dod"], call_id="a2")], max=1)).passed

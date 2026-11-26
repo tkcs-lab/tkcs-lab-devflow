@@ -462,3 +462,7 @@ def test_check_base_text_refuses_a_key_of_the_wrong_type():
     assert data is None and errors and "roles.posture" in errors[0]
     data, errors = base.check_base_text("roles:\n  posture:\n    security: critical\n", "o/r@abcdef1")
     assert errors == [] and data["roles"]["posture"]["security"] == "critical"
+
+
+# The spec scenario "Pin held only by a pull request" (plan 3.13 names the test after it).
+test_pin_held_only_by_a_pull_request = test_commit_only_a_pull_request_holds_is_refused
