@@ -47,8 +47,9 @@ page or a tool result). Two layers, with different jobs:
 - **Known limits of this design** (open items recorded in docs/plans/90/deviations.md, not claims of protection): the
   profile's `release.workflow` and `git_ops.workflow` are protected in code only when a trusted copy is reachable (offline,
   the working copy names them; the fixed names `tld-land.yml`, `tld-release.yml` and `tld-git-ops.yml` always stay
-  protected); `deps_prepare` and `release_prepare` ignore a missing base; a trusted profile that is empty or not a mapping
-  falls back to the working copy; setup copies test and CI
+  protected); `deps_prepare` and `release_prepare` ignore a missing base; with a trusted profile that is `None` or `{}` a custom `release.workflow` is unprotected (the fixed workflow names
+  stay protected) while the gates stay on, and only the dod-gate falls back to the working copy, only when the trusted
+  profile is not a mapping; setup copies test and CI
   commands found in the repository into `verify.fast` and `verify.dod` without a confirm of their own; the git-ops
   workflow does not yet check that GitHub's answer for a renamed repository is the one requested; the trusted-copy lookup
   also runs in repositories that never had a profile; the dod-gate takes `verify.dod` from the working tree when no

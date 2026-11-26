@@ -18,7 +18,7 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ### Changed
 
-- The plan, board and definition-of-done gates are on by default for a repository with a profile; `enabled: false` turns one off unless the base forbids it. The dod-gate reads `verify.dod` and `max_attempts` from the default branch's profile when one is available.
+- The plan, board and definition-of-done gates are on by default for a repository with a profile; `enabled: false` turns one off (`tld profile validate` refuses that under a base that does not allow it; the hooks do not re-check the base). The dod-gate reads `verify.dod` and `max_attempts` from the default branch's profile when one is available.
 - The profile and ordinary workflows are no longer on the default protect list; the release, land and git-ops workflows stay protected in code. A pull request that changes `.tld/toolkit.yaml` or a workflow names it under Security, and the security review treats such a diff as a trust-boundary change. Guarded profile keys are clamped to the default branch's resolved profile, with a warning.
 - The messages for `/deps`, `/spec`, `/sysml`, a missing main branch, `/git-ops` and the admin audit changed (an empty section turns a feature on); the profile reference, hooks, setup and admin docs describe the resolved profile.
 - `/tld:setup` no longer proposes `git.branch_types` or `git.merge_style`; `tld roles required` stops when the base, or the default branch's base, is not cached.

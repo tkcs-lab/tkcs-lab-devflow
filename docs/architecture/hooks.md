@@ -238,7 +238,7 @@ commands and the tail of their output back to the agent. Rules that keep it from
   prompt, so a branch must not be able to replace them; a notice says when the working copy differs. This departs from the
   plan's text, which left the gate reading the working tree. Known limits: with an origin but no reachable trusted copy the
   working tree's `verify.dod` runs (the offline fallback), the trust lookup also runs in repositories that never had a
-  profile, and a trusted profile that is empty or not a mapping falls back to the working copy.
+  profile, and a trusted profile that is `None` or `{}` leaves a custom `release.workflow` unprotected (only the fixed names `tld-land.yml`, `tld-release.yml` and `tld-git-ops.yml` stay protected) while the gates stay on, and only the dod-gate falls back to the working copy, and only when the trusted profile is not a mapping (an empty `{}` is used as is).
 - **Missing keys fail loudly.** With the gate on and no `verify.dod`, or no `git.main_branch`, it blocks with
   `toolkit.yaml: missing required key '...'`. A profile error of any kind (a malformed `hooks.dod_gate`, a `max_attempts`
   outside 1..10, a malformed `hooks.disable`) counts as a failed attempt and its message ends with `(attempt N of M)`.
@@ -481,9 +481,9 @@ stay the control.
 The list must be a list of names; anything else, in the working tree or the trusted copy, is a profile error (see
 Parsing).
 
-**Under a base.** A base that switches a hook or gate on, requires a role or protects a path forbids the repository to
-weaken it unless the base lists the key in `tld.allow_override`. `tld profile validate` reports it as an
-error and the audit as info; the hooks do **not** re-check the base's floor at run time: they keep the stricter of the working copy and the
+**Under a base.** A base that switches a hook or gate on, requires a role or protects a path expects the repository not to
+weaken it unless the base lists the key in `tld.allow_override`. `tld profile validate` reports a refused override as an
+error; the audit reports it as `profile-invalid-extends` (warn) and an allowed one as `profile-guarded-override` (info); the hooks do **not** re-check the base's floor at run time: they keep the stricter of the working copy and the
 default branch's resolved profile, so a weaker value already on the default branch (or any value with no trusted copy)
 stands until validate or the audit reports it. See [org-base.md](../guides/org-base.md).
 
@@ -521,7 +521,7 @@ How a command is parsed, and the commands of the playbooks the guards must allow
   reviewed pull request.
 - **Offline, the profile's workflows.** `release.workflow` and `git_ops.workflow` are protected in code only from the trusted
   copy; with none, the working copy names them (the fixed names `tld-land.yml`, `tld-release.yml` and `tld-git-ops.yml`
-  stay protected). A trusted profile that is empty or not a mapping falls back to the working copy.
+  stay protected). Per consumer, a trusted profile that is `None` or `{}` leaves a custom `release.workflow` unprotected (only the fixed names `tld-land.yml`, `tld-release.yml` and `tld-git-ops.yml` stay protected) while the gates stay on, and only the dod-gate falls back to the working copy, and only when the trusted profile is not a mapping (an empty `{}` is used as is).
 - **Known limits of the base work** (also: without a trusted copy a branch can switch a gate off in its own working copy, `tld roles required` has no trusted floor when no default-branch copy is reachable, `deps_prepare` and `release_prepare` still ignore a missing base, and the Security-line markup refusal is best-effort) (recorded as open items of plan 90): the commands that setup copies from CI into
   `verify.fast` and `verify.dod` are not confirmed first and `verify.fast` runs before the pull request exists; the
   `tld-git-ops.yml` workflow does not yet check that the repository GitHub returns for a renamed repository is the one
