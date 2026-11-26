@@ -51,7 +51,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p8-reproduce
 
-- pending
+- worker: the derived-login warnings login:derived:agent.agent_login and login:derived:release.reviewer_login (from p7) appear only in the inherited run and are pinned as FINDINGS_DELTA; with an override that holds only the checks the release template stands down as info because it has no params; the non-info file findings are equal once the release workflow entries are dropped on both sides
+- retry: sent back once after the security review: a fixture comment named the real repository, and one test used a subset check where the plan asks for equal findings; both fixed
 
 ## p9-mutants
 
