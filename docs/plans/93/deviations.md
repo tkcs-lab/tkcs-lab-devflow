@@ -48,6 +48,8 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - worker: roles and dod playbook not run by the worker (tld unavailable); changelog and docs left to later phases
 - retry: sent back three times after the security reviews: derived logins gave no finding naming them; the detected workflows proposal dropped the organisation repos scoping; the reviewer-versus-agent comparison was skipped without an agent section and trusted the profile own same-login reason; all fixed, third review passed
 - scope: scope: tests/core/test_repo_admin_policy_check.py
+- final: the detected proposal gives own_release_workflow only the templated workflow entries, so a proposed override list leaves out the organisation path workflows of that repository without saying so (final review blocking 2)
+- final: a new warn subject override:propose:invalid (a detected proposal that fails validation or would loosen a guarded key is dropped) is not in the plan (final review blocking 3)
 
 ## p8-reproduce
 
@@ -74,7 +76,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## Final review
 
-- pending
+- final: blocking 1 (p7): the detected proposal sets required_status_checks without reading the live tld-main ruleset, so a merged proposal can drop live checks and their app binding; sent to fix-1
+- final: blocking 2 (p7): the proposal leaves out organisation path workflows without a note; sent to fix-1 with a pull request note
+- final: blocking 3 (p7): the override:propose:invalid subject is undocumented; sent to fix-1 to list it in the policy row of the admin guide
 
 ## Finishing
 
