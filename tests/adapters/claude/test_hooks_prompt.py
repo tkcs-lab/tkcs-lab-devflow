@@ -28,6 +28,10 @@ def test_invoked_command_reads_the_typed_line():
     assert ca.invoked_command("make-plan") is None
 
 
+def test_quick_is_an_invoked_command():
+    assert ca.invoked_command("/tld:quick x") == "quick"
+
+
 def test_expanded_command_with_reminders_is_invoked():
     assert ca.invoked_command(EXPANDED_PROMPT) == "make-plan"
 
@@ -127,6 +131,14 @@ def test_opening_prompt_opens_then_write_is_allowed(tmp_path):
     assert gate(repo, write).code == 0
 
 
+def test_quick_prompt_opens_then_write_is_allowed(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo", ON)
+    write = event("Write", repo, file_path=str(repo / "a.txt"), content="x")
+    assert gate(repo, write).code == 2
+    assert gate(repo, prompt_event(repo, "/tld:quick x")) == ca.Result(0)
+    assert gate(repo, write).code == 0
+
+
 def test_expanded_prompt_opens_then_write_is_allowed(tmp_path):
     repo = make_repo(tmp_path / "r", "feature/demo", ON)
     write = event("Write", repo, file_path=str(repo / "a.txt"), content="x")
@@ -152,6 +164,6 @@ def test_script_runs_as_a_subprocess(tmp_path):
 
 
 def test_gate_off_prints_nothing(tmp_path):
-    repo = make_repo(tmp_path / "r", "feature/demo")
+    repo = make_repo(tmp_path / "r", "feature/demo", hh.PROFILE_GATES_OFF)
     assert gate(repo, prompt_event(repo, "hello")) == ca.Result(0)
     assert gate(repo, event("Write", repo, file_path=str(repo / "a.txt"), content="x")) == ca.Result(0)

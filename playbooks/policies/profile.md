@@ -4,9 +4,10 @@ Everything specific to a repository (paths, commands, branch rules, CI workflows
 `.tld/toolkit.yaml` at the repository root. The playbooks contain no project facts of their own. Two rules
 follow from that:
 
-1. **Never guess a value.** If a key you need is missing, say which key and stop. Do not fall back to what a
-   similar project does, and do not infer a command from the repository layout.
-2. **A missing optional key means "not used here".** No `docs.adr_dir` means no ADRs: leave out every ADR
+1. **Never guess a value.** Every value comes from the resolved profile; a base value or a built-in default is
+   part of it. A key still missing from the resolved profile is named, and the run stops. Do not fall back to
+   what a similar project does, and do not infer a command from the repository layout.
+2. **A missing optional key in the resolved profile means "not used here".** No `docs.adr_dir` means no ADRs: leave out every ADR
    step and never mention them. No `docs.index` means no docs index: read `docs.must_read` and leave out
    every index step. No `docs.changelog`, or `docs.changelog.policy: release-only`, means no changelog step. No `ci.dispatchable` means nothing can be
    dispatched. No `tracking_issue` (in a manifest) means no issue comments and no `Closes` lines.
@@ -19,8 +20,10 @@ follow from that:
    Exit 1 prints one message per problem on stderr, each naming the key (for example
    `toolkit.yaml: missing required key 'verify.fast'`, or a `tld.version` the running tld does not satisfy).
    Show those messages verbatim and stop. Warnings are shown and do not stop you. On success it prints the
-   resolved profile as JSON with the schema's defaults (`docs.plan_dir` `docs/plans`, the `models` levels).
-   The `roles` defaults are applied by `tld roles`, not here. This is the profile you read from here on.
+   resolved profile as JSON: the repository's values, the values of the base named by `tld.extends`, and the
+   built-in defaults. The load fetches the base once (a base already in the cache is not fetched again).
+   `tld profile validate .tld/toolkit.yaml --explain` prints each value with its source (`repo`, `base ...`,
+   `default`). The `roles` defaults are applied by `tld roles`, not here. This is the profile you read from here on.
 3. **Load the stack guides.** For each name in `stacks`, read `stacks/<name>.md`. If one does not exist,
    say which and stop.
 4. **Load the project's own policy.** If `project_steward` is set, read that file now.
@@ -31,8 +34,10 @@ follow from that:
 | Key | Used for |
 |---|---|
 | `tld.version` | The tld releases the profile is written for; `tld profile validate` checks the running one |
+| `tld.extends` | `<owner>/<repo>/<path>@<40-hex sha>`: the base profile whose values this profile inherits |
+| `tld.allow_override` | Guarded keys a repository may override against its base; set only in the base, never in a repository |
 | `docs.must_read` | Read first by the planner; named in every worker brief and in the final review |
-| `docs.plan_dir` | Plans `<plan_dir>/<n>/plan.md` with `deviations.md` next to them, and reviews `<plan_dir>/<slug>-review.md` (default `docs/plans/`) |
+| `docs.plan_dir` | Plans `<plan_dir>/<n>/plan.md` with `deviations.md` next to them, and reviews `<plan_dir>/<slug>-review.md` (default `docs/plans` when that directory exists, else `docs`) |
 | `docs.index` | The docs index ([docs.md](docs.md)): read first, then only matching rows |
 | `docs.adr_dir`, `adr_index`, `adr_bar` | ADR steps, only when `adr_dir` is set |
 | `docs.changelog.file`, `.section` | The changelog line a user-visible change adds |

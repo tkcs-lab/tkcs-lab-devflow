@@ -402,6 +402,59 @@ def test_put_invalid_returns_422_with_errors(server):
     assert call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE, body={"if_version": 1})[0] == 400
 
 
+def handover_record():
+    return json.loads((FIXTURES / "status-records" / "good-command-handover.json").read_text())
+
+
+def test_put_handover_foreign_link_returns_422(server):
+    bad = handover_record()
+    bad["handover"]["issue_url"] = "https://github.com/someone/else/issues/7"
+    status, _, body = call(server, "PUT", "/api/records/tkcs-lab-devflow--make-plan--89abcdef", token=WRITE, body={"data": bad})
+    assert status == 422 and body["error"] == "invalid"
+    assert any("'handover.issue_url'" in e for e in body["errors"])
+
+
+def test_put_handover_round_trip(server, owner):
+    cookie, _ = owner
+    path = "/api/records/tkcs-lab-devflow--make-plan--89abcdef"
+    assert call(server, "PUT", path, token=WRITE, body={"data": handover_record()})[0] == 200
+    status, _, body = call(server, "GET", path, cookie=cookie)
+    assert status == 200 and body["data"] == handover_record()
+
+
+def test_put_tracking_issue_round_trip(server, owner):
+    cookie, _ = owner
+    path = "/api/records/tkcs-lab-devflow--make-plan--89abcdef"
+    for version, value in ((None, 7), (1, None)):
+        rec = handover_record()
+        rec["tracking_issue"] = value
+        body = {"data": rec} if version is None else {"data": rec, "if_version": version}
+        assert call(server, "PUT", path, token=WRITE, body=body)[0] == 200
+        status, _, got = call(server, "GET", path, cookie=cookie)
+        assert status == 200 and got["data"]["tracking_issue"] == value
+
+
+def test_put_tracking_issue_invalid_returns_422(server):
+    rec = handover_record()
+    rec["tracking_issue"] = 0
+    status, _, body = call(server, "PUT", "/api/records/tkcs-lab-devflow--make-plan--89abcdef", token=WRITE, body={"data": rec})
+    assert status == 422 and body["error"] == "invalid"
+    assert body["errors"] == ["'tracking_issue' must be null or a positive integer of at most 10 digits"]
+
+
+def test_older_board_refuses_tracking_issue_and_takes_the_record_without_it(server, monkeypatch):
+    from tld.board import record as board_record
+    monkeypatch.setattr(board_record, "OPTIONAL_FIELDS", ("handover",))
+    path = "/api/records/tkcs-lab-devflow--make-plan--89abcdef"
+    rec = handover_record()
+    rec["tracking_issue"] = 7
+    status, _, body = call(server, "PUT", path, token=WRITE, body={"data": rec})
+    assert status == 422 and body["error"] == "invalid"
+    assert body["errors"] == ["'tracking_issue' is not a known field"]
+    del rec["tracking_issue"]
+    assert call(server, "PUT", path, token=WRITE, body={"data": rec})[0] == 200
+
+
 def test_if_version_true_is_400(server):
     for bad in (True, "1", 0, 1.5):
         status, _, body = call(server, "PUT", "/api/records/f-running-ok--run--plan-f-running-ok", token=WRITE,

@@ -14,8 +14,9 @@ A cloud session (claude.ai/code) does **not** install plugins that a repository 
 3. Enable `tld`. The playbooks, role cards, checklists and stack guides ship inside it; the profile's `stacks`
    selects the guides.
 4. Commit `.tld/toolkit.yaml` to the repository ([profile-reference.md](../reference/profile-reference.md)). Plugins
-   are enabled per Project, so add a profile to **every** repository in the Project, even a minimal one with at
-   least `git.main_branch`: without it the guardrail hooks deny every `git push` there.
+   are enabled per Project, so add a profile to **every** repository in the Project, even a minimal one. The hooks
+   need a main branch they can resolve (the profile's `git.main_branch`, or the one `origin/HEAD` names); without
+   one they deny every `git push` there.
 5. In a new session the commands are `/tld:<cmd>` (`/tld:setup`, `/tld:make-plan`, ...), the skills and agents
    `tld:<name>` (`tld:runtime`, `tld:code-reviewer`). The hooks load with the plugin and need `python3` 3.11+ and
    PyYAML in the session (without PyYAML they behave as if there were no profile); see

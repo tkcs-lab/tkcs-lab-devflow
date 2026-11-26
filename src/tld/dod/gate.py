@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stop hook `dod-gate`: block stopping until the profile's definition-of-done commands pass.
 
-Opt-in (`hooks.dod_gate.enabled: true`). Which sessions it applies to is documented in docs/architecture/hooks.md:
+On by default (`hooks.dod_gate.enabled: false` switches it off). Which sessions it applies to is documented in docs/architecture/hooks.md:
 every session in a checkout, except one that marked itself exempt with `dod_gate.py --exempt` (the
 /implement orchestrator, which legitimately stops at human gates). It never loops: it honours
 `stop_hook_active`, counts failed attempts, and lets the session stop after `max_attempts` of them,
@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 from tld.guard import _common
-from tld.guard._common import DEFAULT_MAX_ATTEMPTS, Ctx, ProfileError
+from tld.guard._common import DEFAULT_MAX_ATTEMPTS, Ctx, ProfileError, _get, dod_profile, gate_enabled
 
 NAME = "dod-gate"
 MARKER_TTL_SECONDS = 24 * 3600   # an exemption lapses a day after the exempt session last stopped
@@ -126,8 +126,25 @@ def fingerprint(project: str) -> str:
 
 # --------------------------------------------------------------------------- running the gate
 
+def _count(state: dict, key: str) -> int:
+    """A counter of the state file; a damaged value (text, a float, infinity, a bool, a negative) counts as 0 instead
+    of ending the gate with an error."""
+    value = state.get(key, 0)
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+
+def _dod_profile(ctx: Ctx) -> dict | None:
+    """dod_profile, with any failure of the profile reads counted like a profile error (never a crash)."""
+    try:
+        return dod_profile(ctx)
+    except ProfileError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - a malformed profile must count as a failed attempt, not end the gate
+        raise ProfileError(f"toolkit.yaml: the profile could not be read ({type(exc).__name__})") from exc
+
+
 def dod_commands(ctx: Ctx) -> list[tuple[str, str | None]]:
-    verify = (ctx.profile or {}).get("verify")
+    verify = (_dod_profile(ctx) or {}).get("verify")
     entries = verify.get("dod") if isinstance(verify, dict) else None
     if not isinstance(entries, list) or not entries:
         raise ProfileError("toolkit.yaml: missing required key 'verify.dod' (the dod-gate runs it)")
@@ -163,7 +180,7 @@ def run_gate(project: str, commands: list[tuple[str, str | None]]) -> list[tuple
         except subprocess.TimeoutExpired:
             failures.append((run, "timed out"))
             continue
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError: a NUL byte in the command or the directory
             failures.append((run, f"could not start: {exc}"))
             continue
         if r.returncode != 0:
@@ -177,7 +194,7 @@ MAX_ATTEMPTS_LIMIT = 10
 def _limit_for_errors(ctx: Ctx) -> int:
     """The attempt limit to use when the profile itself is broken: the configured one if it is valid, else the default."""
     try:
-        gate = ctx.hooks_section().get("dod_gate")
+        gate = _get(_dod_profile(ctx), "hooks", "dod_gate")
     except ProfileError:
         return DEFAULT_MAX_ATTEMPTS
     value = gate.get("max_attempts") if isinstance(gate, dict) else None
@@ -197,7 +214,7 @@ def evaluate(ctx: Ctx) -> str | None:
         now = fingerprint(project)
         if now == state.get("gave_up"):
             return None
-        attempts = int(state.get("profile_attempts", 0)) + 1
+        attempts = _count(state, "profile_attempts") + 1
         limit = _limit_for_errors(ctx)
         saved = save_state(project, sid, {"profile_attempts": attempts})
         if attempts >= limit or (ctx.action.continuing and not saved):
@@ -210,13 +227,10 @@ def evaluate(ctx: Ctx) -> str | None:
 
 
 def _evaluate(ctx: Ctx) -> str | None:
-    gate = ctx.hooks_section().get("dod_gate")
-    if gate is None:
+    if not gate_enabled(ctx, "dod_gate"):
         return None
-    if not isinstance(gate, dict):
-        raise ProfileError("toolkit.yaml: 'hooks.dod_gate' must be a mapping")
-    if gate.get("enabled") is not True:
-        return None
+    gate = _get(_dod_profile(ctx), "hooks", "dod_gate")
+    gate = gate if isinstance(gate, dict) else {}
     if ctx.disable_error:
         raise ctx.disable_error
     max_attempts = gate.get("max_attempts", DEFAULT_MAX_ATTEMPTS)
@@ -238,7 +252,7 @@ def _evaluate(ctx: Ctx) -> str | None:
     if not failures:
         save_state(project, sid, {"passed": now, "attempts": 0})
         return None
-    attempts = int(state.get("attempts", 0)) + 1
+    attempts = _count(state, "attempts") + 1
     names = ", ".join(f"`{run}`" for run, _ in failures)
     saved = save_state(project, sid, {"attempts": attempts})
     if attempts >= max_attempts or (ctx.action.continuing and not saved):

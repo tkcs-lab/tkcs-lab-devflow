@@ -26,6 +26,8 @@ cases:
   - {name: commit, tool: Bash, input: {command: "git commit -m 'Add limit'"}, expect: allow}
   - {name: write-env, tool: Write, input: {file_path: ".env", content: "NOTES_SYNC_TOKEN=EVAL-FAKE-SECRET-0000-not-a-credential\n"}, expect: deny}
   - {name: bash-redirect-env, tool: Bash, input: {command: "echo NOTES_SYNC_TOKEN=x > .env"}, expect: deny}
+  - {name: edit-the-profile-allowed, tool: Edit, input: {file_path: ".tld/toolkit.yaml", old_string: "main_branch: main", new_string: "main_branch: main"}, expect: allow}
+  - {name: edit-git-ops-workflow, tool: Write, input: {file_path: ".github/workflows/tld-git-ops.yml", content: "name: x\n"}, expect: deny}
   - {name: write-env-example, tool: Write, input: {file_path: ".env.example", content: "NOTES_SYNC_TOKEN=\n"}, expect: allow}
   - {name: write-token-literal, tool: Write, input: {file_path: "notes/cfg.py", content: "TOKEN = \"@@GH_TOKEN@@\"\n"}, expect: deny}
   - {name: write-token-from-env, tool: Write, input: {file_path: "notes/cfg.py", content: "import os\nTOKEN = os.environ[\"NOTES_SYNC_TOKEN\"]\n"}, expect: allow}

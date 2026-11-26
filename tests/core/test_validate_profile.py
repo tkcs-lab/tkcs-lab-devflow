@@ -25,15 +25,9 @@ def test_minimal_profile_is_valid(vp):
 
 
 @pytest.mark.parametrize("path,message", [
-    (("docs",), "missing required key 'docs'"),
-    (("docs", "must_read"), "missing required key 'docs.must_read'"),
-    (("git",), "missing required key 'git'"),
-    (("git", "main_branch"), "missing required key 'git.main_branch'"),
-    (("git", "branch_pattern"), "missing required key 'git.branch_pattern'"),
     (("verify",), "missing required key 'verify'"),
     (("verify", "fast"), "missing required key 'verify.fast'"),
     (("verify", "dod"), "missing required key 'verify.dod'"),
-    (("stacks",), "missing required key 'stacks'"),
 ])
 def test_missing_required_key_is_named(vp, path, message):
     p = copy.deepcopy(MINIMAL)
@@ -42,6 +36,27 @@ def test_missing_required_key_is_named(vp, path, message):
         node = node[k]
     del node[path[-1]]
     assert message in errs(vp, p)
+
+
+@pytest.mark.parametrize("path", [("docs",), ("docs", "must_read"), ("git", "branch_pattern"), ("stacks",)])
+def test_a_key_with_a_built_in_default_may_be_left_out(vp, path):
+    p = copy.deepcopy(MINIMAL)
+    node = p
+    for k in path[:-1]:
+        node = node[k]
+    del node[path[-1]]
+    assert errs(vp, p) == []
+
+
+@pytest.mark.parametrize("path", [("git",), ("git", "main_branch")])
+def test_a_missing_main_branch_names_the_detection(vp, path):
+    p = copy.deepcopy(MINIMAL)
+    node = p
+    for k in path[:-1]:
+        node = node[k]
+    del node[path[-1]]
+    assert errs(vp, p) == ["missing required key 'git.main_branch' (it could not be detected: no origin/HEAD and "
+                           "no remote default branch)"]
 
 
 def test_unknown_key_is_an_error(vp):
@@ -79,8 +94,9 @@ def test_after_merge_allow_accepted(vp):
     assert errs(vp, p) == []
 
 
-def test_defaults_are_the_only_defaults(vp):
-    _, _, resolved = vp.validate(MINIMAL)
+def test_defaults_are_the_only_defaults(vp, tmp_path):
+    (tmp_path / "docs" / "plans").mkdir(parents=True)
+    _, _, resolved = vp.validate(MINIMAL, tmp_path)
     assert resolved["docs"]["plan_dir"] == "docs/plans"
     assert resolved["models"] == {"worker": "standard", "reviewer": "strong"}
     assert "adr_dir" not in resolved["docs"]
@@ -197,7 +213,9 @@ def test_cli_bad_yaml(tmp_path):
 
 
 def test_cli_resolved_json(tmp_path):
-    f = tmp_path / "toolkit.yaml"
+    (tmp_path / ".tld").mkdir()
+    (tmp_path / "docs" / "plans").mkdir(parents=True)
+    f = tmp_path / ".tld" / "toolkit.yaml"
     f.write_text(yaml.safe_dump(MINIMAL))
     out = run_cli(str(f), "--no-file-checks", "--resolved")
     assert out.returncode == 0
@@ -251,6 +269,11 @@ def test_bot_in_codeowners_is_an_error(vp):
         "'git.codeowners' must not contain 'git.bot_login': the agent cannot be its own code owner"]
 
 
+def test_bot_in_codeowners_in_another_case_is_an_error(vp):
+    assert errs(vp, _git(codeowners=["owner", "AGENT"], bot_login="agent")) == [
+        "'git.codeowners' must not contain 'git.bot_login': the agent cannot be its own code owner"]
+
+
 def test_codeowners_without_bot_login_is_an_error(vp):
     assert errs(vp, _git(codeowners=["owner"])) == ["'git.codeowners' needs 'git.bot_login'"]
 
@@ -274,7 +297,6 @@ def test_maintenance_fixture_is_valid(vp):
 
 
 @pytest.mark.parametrize("mutate,message", [
-    (lambda p: p["deps"].pop("cooldown_days"), "missing required key 'deps.cooldown_days'"),
     (lambda p: p["deps"].update(cooldown_days=31), "'deps.cooldown_days': must be at most 30"),
     (lambda p: p["upstream"].update(repo="nonsense"), "'upstream.repo': does not match"),
     (lambda p: p["upstream"].update(tag_pattern="(["), "'upstream.tag_pattern': not a valid regular expression"),
@@ -474,7 +496,6 @@ def test_resolved_profile_keeps_spec_version(vp):
 
 
 @pytest.mark.parametrize("spec,message", [
-    ({}, "missing required key 'spec.version'"),
     ({"version": 2.1}, "'spec.version': must be a string"),
     ({"version": "latest"}, "'spec.version': does not match"),
     ({"version": "v2.1.0"}, "'spec.version': does not match"),
@@ -516,7 +537,6 @@ def test_sysml_subset_validates(vp):
 
 
 @pytest.mark.parametrize("block,message", [
-    ({}, "missing required key 'sysml.subset'"),
     ({"subset": 2}, "sysml.subset"),
     ({"subset": "1"}, "sysml.subset"),
     ({"subset": 1.0}, "sysml.subset"),
@@ -540,3 +560,84 @@ def test_starter_template_sysml_block_validates_when_uncommented(vp):
     profile.update(yaml.safe_load("\n".join(block)))
     assert profile["sysml"]["subset"] == 1
     assert vp.validate(profile)[0] == []
+
+
+def test_an_empty_spec_block_validates(vp):
+    for block in (None, {}):
+        profile = copy.deepcopy(MINIMAL)
+        profile["spec"] = block
+        errors, _, resolved = vp.validate(profile)
+        assert errors == []
+        assert resolved["spec"] == {"version": "2.1.0"}
+
+
+@pytest.mark.parametrize("key,block", [("deps", {"cooldown_days": 3, "time_budget_minutes": 90}),
+                                       ("sysml", {"subset": 1})])
+def test_an_empty_deps_or_sysml_block_validates(vp, key, block):
+    profile = copy.deepcopy(MINIMAL)
+    profile[key] = None
+    errors, _, resolved = vp.validate(profile)
+    assert errors == [] and resolved[key] == block
+
+
+def test_docs_changelog_false_validates_and_resolves_without_the_key(vp):
+    profile = copy.deepcopy(MINIMAL)
+    profile["docs"]["changelog"] = False
+    errors, _, resolved = vp.validate(profile)
+    assert errors == []
+    assert "changelog" not in resolved["docs"]
+
+
+@pytest.mark.parametrize("path", [("docs", "index"), ("docs", "adr_dir"), ("docs", "website"), ("admin",),
+                                  ("git_ops",), ("land", "max_prs")])
+def test_every_off_switch_accepts_false_and_resolves_without_the_key(vp, path):
+    profile = copy.deepcopy(MINIMAL)
+    node = profile
+    for part in path[:-1]:
+        node = node.setdefault(part, {})
+    node[path[-1]] = False
+    errors, _, resolved = vp.validate(profile)
+    assert errors == []
+    node = resolved
+    for part in path[:-1]:
+        node = node[part]
+    assert path[-1] not in node
+
+
+def test_an_off_switch_rejects_true_and_other_values(vp):
+    for value in (True, 0, "x"):
+        profile = copy.deepcopy(MINIMAL)
+        profile["docs"]["changelog"] = value
+        assert errs(vp, profile) != []
+
+
+def test_tld_extends_passes_the_shape_check_as_a_string(vp):
+    profile = copy.deepcopy(MINIMAL)
+    profile["tld"] = {"extends": "acme/.github/tld/profile-base.yaml@" + "a" * 40}
+    assert vp.validate(profile, fetch=False)[0] == []  # shape only: an uncached base is skipped with a warning
+    profile["tld"] = {"extends": "v1.2"}  # no pattern in the schema: parse_extends reports the error text
+    assert errs(vp, profile) != []
+    profile["tld"] = {"allow_override": ["hooks.protect_paths"]}  # shape is fine, but only a base may set it
+    assert errs(vp, profile) == ["'tld.allow_override': only a base profile may set it"]
+    for bad in ({"extends": ""}, {"extends": 3}, {"allow_override": [""]}, {"allow_override": "x"}):
+        profile["tld"] = bad
+        assert errs(vp, profile) != []
+
+
+def test_check_without_required_skips_missing_keys_but_reports_unknown_keys(vp):
+    schema = json.loads(vp.SCHEMA.read_text())
+    raw = {"docs": {"bogus": 1}, "git": {"main_branch": 3}}
+    strict, lax = [], []
+    vp.check(raw, schema, schema, "", strict)
+    vp.check(raw, schema, schema, "", lax, required=False)
+    assert any("missing required key" in e for e in strict)
+    assert not any("missing required key" in e for e in lax)
+    assert any("unknown key 'docs.bogus'" in e for e in lax)
+    assert any("'git.main_branch'" in e for e in lax)
+
+
+def test_normalise_turns_null_sections_into_mappings_and_copies(vp):
+    original = {"deps": None, "spec": None, "sysml": None, "docs": None}
+    out = vp.normalise(original)
+    assert out == {"deps": {}, "spec": {}, "sysml": {}, "docs": None}
+    assert original["spec"] is None

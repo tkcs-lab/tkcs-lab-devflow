@@ -4,7 +4,7 @@ import json
 import pytest
 
 from hooks_helpers import PROFILE, claude_adapter, make_repo_with_origin, run_script
-from tld.guard import board_gate
+from tld.guard import board_gate, plan_gate
 
 ON = PROFILE + "hooks:\n  board_gate:\n    enabled: true\n"
 MCP_SET = "mcp__plugin_tld_tld-board__board_set"
@@ -113,12 +113,12 @@ def test_unknown_payload_exits_0_silently(repo):
     assert r.returncode == 0 and r.stderr == ""
 
 
-def test_a_malformed_hooks_disable_never_blocks(tmp_path, monkeypatch):
+def test_a_malformed_hooks_disable_does_not_switch_the_gate_off(tmp_path, monkeypatch):
     monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
     monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
     repo = make_repo_with_origin(tmp_path / "repo", "feature/demo", ON + "  disable: board-gate\n")
     run_script("board-gate", prompt(repo, "/tld:docs init x"))
-    assert run_script("board-gate", stop(repo)).returncode == 0
+    assert run_script("board-gate", stop(repo)).returncode == 2  # a malformed value counts as not disabled
 
 
 def mcp(text):
@@ -220,3 +220,7 @@ def test_only_a_boolean_true_marks_a_response_failed(tmp_path, tool, value):
 def test_a_deeply_nested_event_is_a_hook_problem_not_a_crash():
     r = claude_adapter.execute("board-gate", "[" * 200000)
     assert r.code in (0, 1)
+
+
+def test_opening_commands_are_known_commands():
+    assert set(plan_gate.OPENING) <= claude_adapter.known_commands()

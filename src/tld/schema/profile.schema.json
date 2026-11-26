@@ -64,6 +64,16 @@
           "minLength": 1,
           "pattern": "^\\s*(==|!=|>=|<=|>|<)\\s*\\d+(\\.\\d+)*\\s*(,\\s*(==|!=|>=|<=|>|<)\\s*\\d+(\\.\\d+)*\\s*)*$",
           "description": "A version specifier such as '>=1.0,<2', checked by tld profile validate against the running tld version."
+        },
+        "extends": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Base profile this repository extends: <owner>/<repo>/<path>@<40-hex commit>. parse_extends reports a malformed value."
+        },
+        "allow_override": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "description": "Base profile only: guarded keys a repository that extends it may weaken."
         }
       }
     },
@@ -94,14 +104,28 @@
           "default": "docs/plans/"
         },
         "index": {
-          "type": "string",
-          "minLength": 1,
-          "description": "The docs index: the one entry-level file that CLAUDE.md / AGENTS.md point to and sessions read first (playbooks/policies/docs.md)."
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "description": "The docs index: the one entry-level file that CLAUDE.md / AGENTS.md point to and sessions read first (playbooks/policies/docs.md)."
+            },
+            {
+              "const": false
+            }
+          ]
         },
         "adr_dir": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Present means ADRs are used."
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "description": "Present means ADRs are used."
+            },
+            {
+              "const": false
+            }
+          ]
         },
         "adr_index": {
           "type": "string",
@@ -113,55 +137,69 @@
           "description": "Where the criteria for needing an ADR are written (path or path#anchor)."
         },
         "changelog": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "file"
-          ],
-          "properties": {
-            "file": {
-              "type": "string",
-              "minLength": 1
-            },
-            "section": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Heading user-visible changes go under, for example '## [Unreleased]'. Required unless policy is release-only."
-            },
-            "policy": {
-              "enum": [
-                "unreleased",
-                "release-only"
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "file"
               ],
-              "description": "unreleased (default): sessions add lines under section and never open a version heading. release-only: the changelog is written when a release is cut; sessions do not edit it."
+              "properties": {
+                "file": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "section": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Heading user-visible changes go under, for example '## [Unreleased]'. Required unless policy is release-only."
+                },
+                "policy": {
+                  "enum": [
+                    "unreleased",
+                    "release-only"
+                  ],
+                  "description": "unreleased (default): sessions add lines under section and never open a version heading. release-only: the changelog is written when a release is cut; sessions do not edit it."
+                }
+              }
+            },
+            {
+              "const": false
             }
-          }
+          ]
         },
         "website": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "dir",
-            "build"
-          ],
-          "description": "The project's website. Present means the website-maintainer role can run.",
-          "properties": {
-            "dir": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Directory relative to the repo root; . for the root."
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "dir",
+                "build"
+              ],
+              "description": "The project's website. Present means the website-maintainer role can run.",
+              "properties": {
+                "dir": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Directory relative to the repo root; . for the root."
+                },
+                "build": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Command run from dir."
+                },
+                "links": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Link-check command run from dir."
+                }
+              }
             },
-            "build": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Command run from dir."
-            },
-            "links": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Link-check command run from dir."
+            {
+              "const": false
             }
-          }
+          ]
         }
       }
     },
@@ -267,7 +305,10 @@
         },
         "after_merge_allow": {
           "type": "array",
-          "items": {"type": "string", "minLength": 1},
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
           "description": "Command prefixes /implement runs after a merge without asking the owner first (S14)."
         }
       }
@@ -464,10 +505,17 @@
       "additionalProperties": false,
       "properties": {
         "max_prs": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 50,
-          "description": "Most pull requests one /land run orders."
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "description": "Most pull requests one /land run orders."
+            },
+            {
+              "const": false
+            }
+          ]
         }
       }
     },
@@ -498,34 +546,48 @@
       "description": "Optional. Repository uses a SysML architecture model."
     },
     "admin": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "policy": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Path of the repo-admin policy file (schema/admin-policy.schema.json), relative to the repo root."
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "policy": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Path of the repo-admin policy file (schema/admin-policy.schema.json), relative to the repo root."
+            }
+          }
+        },
+        {
+          "const": false
         }
-      }
+      ]
     },
     "git_ops": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "repo"
-      ],
-      "properties": {
-        "repo": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
-          "description": "owner/name of the central repository that holds the tld-git-ops workflow."
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repo"
+          ],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+              "description": "owner/name of the central repository that holds the tld-git-ops workflow."
+            },
+            "workflow": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+\\.ya?ml$",
+              "description": "File name of the workflow in that repository. Default tld-git-ops.yml (applied by the git-ops skill, not by the schema)."
+            }
+          }
         },
-        "workflow": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_.-]+\\.ya?ml$",
-          "description": "File name of the workflow in that repository. Default tld-git-ops.yml (applied by the git-ops skill, not by the schema)."
+        {
+          "const": false
         }
-      }
+      ]
     },
     "release": {
       "type": "object",
@@ -584,7 +646,7 @@
     "hooks": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Settings of the guardrail hooks the tld plugin ships (docs/architecture/hooks.md). Every key is optional; the hooks apply the defaults in 'x-hook-default' themselves, they are not part of --resolved.",
+      "description": "Settings of the guardrail hooks the tld plugin ships (docs/architecture/hooks.md). Every key is optional; the defaults in 'x-hook-default' are applied by the resolver and are part of --resolved.",
       "properties": {
         "disable": {
           "type": "array",
@@ -608,13 +670,11 @@
         "protect_paths": {
           "$ref": "#/$defs/stringList",
           "x-hook-default": [
-            ".tld/toolkit.yaml",
             ".env",
             ".env.*",
             "*.lock",
             "package-lock.json",
-            "go.sum",
-            ".github/workflows/**"
+            "go.sum"
           ],
           "description": "Globs of repo-relative paths protect-paths refuses to edit. A pattern without a slash matches the file name at any depth; ** crosses directories. A list here replaces the default."
         },
@@ -629,7 +689,7 @@
           "properties": {
             "enabled": {
               "type": "boolean",
-              "x-hook-default": false,
+              "x-hook-default": true,
               "description": "Opt in: block stopping until verify.dod passes."
             },
             "max_attempts": {
@@ -647,7 +707,7 @@
           "properties": {
             "enabled": {
               "type": "boolean",
-              "x-hook-default": false,
+              "x-hook-default": true,
               "description": "Opt in: a session that no tld command started cannot write into the repository; it is told to answer and propose /tld:make-plan."
             }
           }
@@ -658,7 +718,7 @@
           "properties": {
             "enabled": {
               "type": "boolean",
-              "x-hook-default": false,
+              "x-hook-default": true,
               "description": "Opt in: a session that a record-writing tld command started cannot end its turn before it has written its status record to the board once."
             }
           }

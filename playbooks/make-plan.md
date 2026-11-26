@@ -39,12 +39,12 @@ Rules that hold throughout: [policies/untrusted-text.md](policies/untrusted-text
    - "The reviewer level" is `models.reviewer`; "the worker level" is `models.worker` (C9).
 2. **DoD gate.** This playbook writes a plan, not code: mark the session exempt once with `tld dod exempt`.
 3. **Status record**: `kind: command`, `command: make-plan`, `attended: true`, document id from `tld board record-id --repo <owner>/<repo> --command make-plan --session <this session's id>`, items `research`, `decide`,
-   `write`, `review`, `hand-over`. Write it first (`starting`), but after the check of section 0 step 1 when the
+   `write`, `review`, `hand-over`. With a tracking issue every write from the moment it exists carries `tracking_issue` `<n>` (the first `starting` write comes before section 0 step 1 when the ask names no issue, so it may lack it); without one leave the field out. Write it first (`starting`), but after the check of section 0 step 1 when the
    ask names a tracking issue; then at every step and at the end (`done`, or `failed` with the reason). At
    `failed`, and when you stop for any reason other than a `stop` answered at "Is it already being planned?",
    post `Planning stopped: <short cause>.` on the tracking issue (if there is one). While an ask is open:
    `waiting_user` with `needs_you`; when `needs_you` goes from false to true, post `Waiting for you:
-   <needs_you_reason>.` on the tracking issue (if there is one). The five items are in the first write. Mark each running when its step starts and done when it ends, writing the record at each change. The record never lists the plan's phases.
+   <needs_you_reason>.` on the tracking issue (if there is one). The five items are in the first write. Mark each running when its step starts and done when it ends, writing the record at each change. The record never lists the plan's phases. When section 5 step 3 (or the small scope's hand-over) produced a hand-over, the final `done` write carries the record's `handover`.
 
 ## 0. Understand the ask
 
@@ -122,8 +122,10 @@ of the ask prefixed by `> ` when the ask has `## ` lines of its own) with the he
 `## Risks`, in plain words with no YAML. The `## Summary` is the one of section 2 (350 words at most, the labels
 `**Use it:**`, `**Scope:**`, `**Review focus:**`, and `**Security:**` and `**Performance:**` when they apply),
 written fresh by you. Sections 4 and 5 are skipped, so run the check here: write the body to a scratch file and
-run `tld plan summary-check <issue body file> --kind issue`; it must exit 0 before you rewrite the issue body
-(`github.issue_update`) from that file. Then post `Plan ready: single-session prompt (see the issue body).` Step 5 (Roles) still applies; the roles that ran are named in one line
+run `tld plan summary-check <issue body file> --kind issue`; it must exit 0. With a tracking issue, then run the hand-over scan below on the same scratch file; both must pass before you rewrite the issue body
+(`github.issue_update`) from that file. Then post `Plan ready: single-session prompt (see the issue body).`
+With a tracking issue, the final record carries a hand-over, built with `tld plan handover <issue body scratch file> --kind issue --repo <owner>/<repo> --plan-slug issue-<n> --issue-url https://github.com/<owner>/<repo>/issues/<n>` (no plan link, spec link or prefix: the prompt is in the final reply). Run it on the scratch body BEFORE `github.issue_update`, because it is the only secret scan of the Summary; keep its stdout for the final `done` write, and the alert reads `<project>: prompt ready: issue #<n>`. Exit 1: fix what each line names (a `summary:` line: fix the Summary, run `tld plan summary-check <issue body file> --kind issue` again, then run the scan again); at most two retries, then write the record `failed` with the reason and post `Planning stopped: <short cause>.`. A secret-like hit on text that was already pushed or posted (the ask, an earlier issue body) means stop: tell the owner to rotate the value and never just edit it out. Without a tracking issue there is no hand-over.
+Step 5 (Roles) still applies; the roles that ran are named in one line
 before the prompt. Section 3 still applies: manual steps go only at the very beginning and the very end of the
 prompt, with their step-by-step instructions.
 
@@ -164,7 +166,7 @@ the pull request in one go. In this order:
    `tld board record-id --repo <owner>/<repo> --run --plan-slug <slug>` where `<slug>` is `issue-<n>` (the tracking
    issue; without one, the part of the branch name after the first `/`), `plan_slug` that slug, `plan_url: null`,
    `feature_branch` the branch, `orchestrator_session` the worker's session id, `phases: []`,
-   `next_check_at: null`; written `starting` before the first change, `running` after the first commit, `pr_open`
+   `next_check_at: null`; `tracking_issue` the tracking issue's number (left out without one); written `starting` before the first change, `running` after the first commit, `pr_open`
    once the pull request is open (with `pr` filled and `needs_you` true, `needs_you_since` set and the reason
    `Review PR #<n>`), and on a stop `waiting_user` with `needs_you` true, `needs_you_since` and the reason
    `Answer: <question>` (a stop condition) or `failed` with `finished_at`, `needs_you` true, `needs_you_since` and
@@ -173,8 +175,8 @@ the pull request in one go. In this order:
    before the first change, the dod playbook, one pull request following the repository template whose body
    starts with `Closes #<n>` (the tracking issue; one more per issue the ask named) and then a `## Summary` of at
    most 175 words that says how the result differs from this prompt (labels `**Deviations:**`, `**Review focus:**`
-   and optionally `**Scope:**`; `None.` is allowed for Deviations; the worker's own words, nothing pasted), the
-   body written to a scratch file and checked with `tld plan summary-check <body file> --kind pr`, which must
+   and optionally `**Scope:**` and `**Security:**`, which is required and names each file when the diff changes a workflow or the profile (write `$` and `<` in words there: they are refused, even in inline code); `None.` is allowed for Deviations; the worker's own words, nothing pasted), the
+   body written to a scratch file and checked, with the changed paths (`git diff --name-only --no-renames origin/<main>...HEAD`) in a second scratch file, by `tld plan summary-check <body file> --kind pr --changed <changed list>`, which must
    exit 0 before `github.pr_create`; the comment
    `PR opened: <url>.`, and driving it to green per the pr-steward policy (and the steward file, if any).
 9. **After merge-ready**: the `manual_after` steps as unchecked items in the pull request body.
@@ -369,7 +371,9 @@ here so the worker only has to execute. Every phase passes all of these:
   without a question; any other command is put to the owner before implement runs it (S14).
 
 - **A phase never lists a protected path in `touches`**; its brief says: do not edit <path>, report
-  protected-change: <path> - <why> with the diff (policies/protected-changes.md).
+  protected-change: <path> - <why> with the diff (policies/protected-changes.md). The profile and ordinary
+  workflows are not protected by default and may be listed; the brief then says the pull request names them
+  under Security.
 - **`worker_level: fast`** is allowed only for a phase that is complexity `S`, whose brief gives the literal text
   or the literal edit for every change (docs, strings, config values, renames, fixture or baseline refreshes),
   contains no new control flow or function, and whose acceptance is a named test or a grep. The default is the
@@ -425,6 +429,8 @@ exits 1 otherwise; fix each one and run it again, never skip it. Then
 `tld plan validate-manifest <plan file> --profile .tld/toolkit.yaml --ref <feature branch>`. Fix every error;
 never push a plan it rejects.
 
+**The hand-over scan (large scope).** Before anything is committed, pushed or posted, run `tld plan handover <plan file> --kind plan --repo <owner>/<repo> --plan-slug <plan slug> --issue-url https://github.com/<owner>/<repo>/issues/<n> --plan-url <plan URL> --command-prefix <prefix>`; it is the only secret scan of the Summary. The plan URL is known in advance: `https://github.com/<owner>/<repo>/blob/<feature_branch>/<plan_dir>/<n>/plan.md`. Add `--spec-url https://github.com/<owner>/<repo>/tree/<feature_branch>/openspec/changes/<plan slug>` only with spec parts and when `openspec/changes/<plan slug>` exists in the working tree. Leave out `--issue-url` without a tracking issue. `<prefix>` is the runtime's form of the implement command (the runtime map's Names table; `implement` when it names none). Exit 1: fix what each line names (a `summary:` line: fix the plan's Summary, run the checks above again) and run it again; at most two retries, then write the record `failed` with the reason and post `Planning stopped: <short cause>.` Exit 0: keep its stdout for the final record write in section 5 step 3. A secret-like hit on content that was already pushed or posted (a revision of a pushed plan, the ask) means stop: tell the owner to rotate the value and never just edit it out.
+
 ## 5. Commit, push and hand over
 
 1. Commit the plan to the feature branch with a message saying what it is for, and push.
@@ -439,12 +445,13 @@ never push a plan it rejects.
    (that prefix is the only change). Write the new body to a scratch file and run
    `tld plan summary-check <issue body file> --kind issue`; it must exit 0 before you rewrite the body
    (`github.issue_update`) from that file. A revision updates the body the same way, with the check. Then post `Plan ready: <plan URL>. Next: implement <plan URL>.`
-3. Final reply, short: the tracking issue link; the plan URL in the exact form implement takes,
+3. **The hand-over.** Write the record `done` with the stdout of section 4's hand-over scan as its `handover`, every item done, `finished_at` set and `last_event` `plan ready: <plan URL>`. When the board refuses `handover` or `tracking_issue` as unknown fields, follow "An older board" in [policies/status-board.md](policies/status-board.md). Any other `invalid` that names `handover`: fix and write once more, and name the error in the final reply; any other `invalid` follows the record rules. Then `notify_human("<project>: plan ready: <plan slug>")` once; it never carries the Summary.
+4. Final reply, short: the tracking issue link; the plan URL in the exact form implement takes,
    `https://github.com/<owner>/<repo>/blob/<feature branch>/<plan_dir>/<n>/plan.md`; the `manual_before` items; a
    table of phases (id, title, complexity, depends_on, any `worker_level: strong` with its reason); what the
    reviewer flagged that you did not change, and why; without `docs.index` the line `No docs index: run docs
    init to build one (it cuts the tokens every session reads).`
-4. The manual steps reach the owner as asks, never as a page: implement puts every `manual_before` item to the
+5. The manual steps reach the owner as asks, never as a page: implement puts every `manual_before` item to the
    owner as one `confirm` question of its `Start <plan slug>` ask before anything starts, and a small scope's
    worker asks the same way. The steps themselves live in the plan's Manual steps section and the issue.
 

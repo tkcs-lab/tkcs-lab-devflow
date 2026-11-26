@@ -646,6 +646,7 @@ def test_cli_help_lists_the_options():
     r = subprocess.run(tld_cmd("plan", "summary-check", "--help"), capture_output=True, text=True)
     assert r.returncode == 0
     assert "--kind" in r.stdout and "{plan,issue,pr}" in r.stdout and "--deviations" in r.stdout
+    assert "--changed" in r.stdout
 
 
 def test_the_command_is_registered_in_the_cli():
@@ -660,3 +661,227 @@ def test_the_script_runs_as_a_module(tmp_path):
     r = subprocess.run([sys.executable, "-m", "tld.plan.summary", str(path), "--kind", "plan"],
                        capture_output=True, text=True, cwd=ROOT, env=env)
     assert (r.returncode, r.stdout) == (0, f"summary: OK ({PLAN_BASE} words)\n"), r.stderr
+
+
+# --- --findings --------------------------------------------------------------------------------------------------
+FROW = "- F{k} \u00b7 final-review \u00b7 a.py:1 \u00b7 a b c d \u00b7 {status}"
+
+
+def findings_doc(*statuses, heading="## Non-blocking findings"):
+    rows = "\n".join(FROW.format(k=i, status=st) for i, st in enumerate(statuses, 1))
+    return pr_doc() + f"\n{heading}\n\n{rows}\n"
+
+
+def test_a_valid_findings_section_with_findings_2_exits_0(tmp_path, capsys):
+    code, out, _ = run(tmp_path, capsys, findings_doc("fixed abc1234", "declined: not worth the risk"),
+                       "--findings", "2", kind="pr")
+    assert code == 0 and out.startswith("summary: OK")
+
+
+def test_a_missing_findings_section_with_findings_1_fails(tmp_path, capsys):
+    code, out, _ = run(tmp_path, capsys, pr_doc(), "--findings", "1", kind="pr")
+    assert code == 1 and "summary: no '## Non-blocking findings' section" in out
+
+
+def test_a_pr_without_the_section_and_without_findings_is_ok(tmp_path, capsys):
+    assert run(tmp_path, capsys, pr_doc(), kind="pr")[0] == 0
+
+
+def test_a_declined_row_with_a_two_word_reason_fails_without_findings(tmp_path, capsys):
+    code, out, _ = run(tmp_path, capsys, findings_doc("declined: no way"), kind="pr")
+    assert code == 1 and "summary: findings: row 1" in out
+
+
+def test_findings_with_kind_plan_is_an_argument_error(tmp_path, capsys):
+    path = tmp_path / "d.md"
+    path.write_text(plan_doc())
+    with pytest.raises(SystemExit) as exc:
+        summary.main([str(path), "--kind", "plan", "--findings", "1"])
+    assert exc.value.code == 2 and "--findings is only for --kind pr" in capsys.readouterr().err
+
+
+def test_a_negative_findings_is_an_argument_error(tmp_path, capsys):
+    path = tmp_path / "d.md"
+    path.write_text(pr_doc())
+    with pytest.raises(SystemExit) as exc:
+        summary.main([str(path), "--kind", "pr", "--findings", "-1"])
+    assert exc.value.code == 2 and "--findings must be 0 or more" in capsys.readouterr().err
+
+
+def test_two_findings_sections_are_reported(tmp_path, capsys):
+    text = findings_doc("fixed abc1234") + "\n## Non-blocking findings\n\nNone.\n"
+    code, out, _ = run(tmp_path, capsys, text, kind="pr")
+    assert code == 1 and "2 '## Non-blocking findings' sections" in out
+
+
+def test_the_count_reaches_the_checker(tmp_path, capsys):
+    code, out, _ = run(tmp_path, capsys, findings_doc("fixed abc1234", "fixed abc1235"), "--findings", "3", kind="pr")
+    assert code == 1 and "summary: findings: 2 rows, expected 3" in out
+
+
+def test_findings_0_with_none_exits_0(tmp_path, capsys):
+    text = pr_doc() + "\n## Non-blocking findings\n\nNone.\n"
+    assert run(tmp_path, capsys, text, "--findings", "0", kind="pr")[0] == 0
+
+
+def test_a_fenced_findings_heading_is_ignored(tmp_path, capsys):
+    text = pr_doc() + "\n```\n## Non-blocking findings\n```\n"
+    assert run(tmp_path, capsys, text, kind="pr")[0] == 0
+    code, out, _ = run(tmp_path, capsys, text, "--findings", "1", kind="pr")
+    assert code == 1 and "no '## Non-blocking findings' section" in out
+
+
+# --- --changed: workflow and profile files must be named under Security ------------------------------------------
+
+def pr_with_security(security):
+    body = "**Deviations:** None.\n"
+    if security is not None:
+        body += f"**Security:** {security}\n"
+    return f"Closes #1\n\n## Summary\n\n{body}**Review focus:** a b c\n"
+
+
+def changed_probs(security, changed):
+    return summary.check(pr_with_security(security), "pr", None, None, changed)[0]
+
+
+def test_changed_workflow_or_profile_not_named():
+    probs_ = changed_probs("the release path is untouched here", [".github/workflows/ci.yml", ".tld/toolkit.yaml"])
+    assert probs_ == ["**Security:** must name every workflow and profile file this pull request changes; "
+                      "not named: .github/workflows/ci.yml, .tld/toolkit.yaml"]
+
+
+def test_changed_missing_security_label():
+    probs_ = changed_probs(None, ["src/a.py", ".github/workflows/ci.yml", ".tld/toolkit.yaml"])
+    assert probs_ == ["**Security:** is missing or None. but the pull request changes "
+                      ".github/workflows/ci.yml, .tld/toolkit.yaml"]
+
+
+def test_changed_none_security():
+    assert changed_probs("None.", [".tld/toolkit.yaml"]) == [
+        "**Security:** is missing or None. but the pull request changes .tld/toolkit.yaml"]
+
+
+def test_changed_named_by_full_path():
+    assert changed_probs("edits .github/workflows/ci.yml and .tld/toolkit.yaml only",
+                         [".github/workflows/ci.yml", ".tld/toolkit.yaml"]) == []
+
+
+def test_changed_named_by_file_name():
+    assert changed_probs("edits ci.yml, and toolkit.yaml.", [".github/workflows/ci.yml", ".tld/toolkit.yaml"]) == []
+
+
+def test_changed_substring_does_not_count():
+    assert changed_probs("edits aci.yml and old-toolkit.yaml only", [".github/workflows/ci.yml", ".tld/toolkit.yaml"]) == [
+        "**Security:** must name every workflow and profile file this pull request changes; "
+        "not named: .github/workflows/ci.yml, .tld/toolkit.yaml"]
+
+
+def test_changed_workflows_old_dir_is_not_a_workflow():
+    assert changed_probs(None, [".github/workflows-old/x.yml", ".tld/toolkit.yaml.bak", "docs/.tld/toolkit.yaml"]) == []
+    assert changed_probs(None, ["src/a.py", "README.md"]) == []
+    assert summary.check(pr_with_security(None), "pr")[0] == []
+
+
+def test_changed_blank_and_crlf_lines(tmp_path, capsys):
+    path = tmp_path / "doc.md"
+    path.write_text(pr_with_security("edits ci.yml and toolkit.yaml now"))
+    lst = tmp_path / "changed.txt"
+    lst.write_bytes(b"src/a.py\r\n\r\n.github/workflows/ci.yml\r\n  \n.tld/toolkit.yaml\r\n")
+    assert summary.main([str(path), "--kind", "pr", "--changed", str(lst)]) == 0
+    capsys.readouterr()
+    path.write_text(pr_with_security(None))
+    assert summary.main([str(path), "--kind", "pr", "--changed", str(lst)]) == 1
+    assert capsys.readouterr().out == ("summary: **Security:** is missing or None. but the pull request changes "
+                                       ".github/workflows/ci.yml, .tld/toolkit.yaml\n")
+
+
+def test_changed_quoted_path_still_counts(tmp_path):
+    assert summary.changed_paths('"\\.github/workflows/x.yml"\n"a b.txt"\n') == ["\\.github/workflows/x.yml", "a b.txt"]
+    assert summary.security_paths(summary.changed_paths('".github/workflows/\\303\\251.yml"\n')) == [
+        ".github/workflows/\\303\\251.yml"]
+
+
+@pytest.mark.parametrize("security", [
+    "touches [ok](https://e.x/ci.yml) only",
+    "touches [x] only\n\n[x]: .github/workflows/ci.yml",
+    "touches <span hidden>ci.yml</span> only",
+    "touches ![ci.yml](x.png) only",
+    "touches\n\n> [x]: .github/workflows/ci.yml",
+    "touches\n\n- [x]: .github/workflows/ci.yml",
+    "touches\n\n[x]:\n.github/workflows/ci.yml",
+    "touches [see here ](a(b).github/workflows/ci.yml)",
+    "touches [see [x] here](#.github/workflows/ci.yml)",
+    "touches ![a](b(c) .github/workflows/ci.yml)",
+    "reviewed it\n| a |\n|---|\n| x | .github/workflows/ci.yml |",
+    "none\n\n| a |\n|---|\n| x | ci.yml |",
+    "edits [^.github/workflows/ci.yml] done",
+    "edits [^ci.yml] done",
+    "x\r    ci.yml",
+    "$\\phantom{ci.yml}$ nothing else here",
+    "$$\\color{white}{.github/workflows/ci.yml}$$ nothing",
+    "\u202eci.yml\u202c is it",
+    "touches ci.yml\u200b and more",
+    "touches\n\n```.github/workflows/ci.yml\n```",
+    "touches\n\n~~~ci.yml\n~~~",
+    "touches\n\n1. [a]: /x \".github/workflows/ci.yml\"",
+    "touches\n\n    .github/workflows/ci.yml",
+    "touches \\` <span hidden>.github/workflows/ci.yml</span> \\` files",
+])
+def test_changed_hidden_forms_do_not_name(security):
+    assert changed_probs(security, [".github/workflows/ci.yml"]) != []
+
+
+def test_changed_plain_text_and_code_span_name():
+    assert changed_probs("touches `.github/workflows/ci.yml` and the toolkit.yaml file",
+                         [".github/workflows/ci.yml", ".tld/toolkit.yaml"]) == []
+
+
+def test_changed_other_directory_does_not_name():
+    for sec, path in (("edits docs/examples/ci.yml only", ".github/workflows/ci.yml"),
+                      ("edits other/toolkit.yaml only", ".tld/toolkit.yaml")):
+        assert changed_probs(sec, [path]) != []
+
+
+def test_changed_unreadable_file(tmp_path, capsys):
+    path = tmp_path / "doc.md"
+    path.write_text(pr_with_security(None))
+    gone = tmp_path / "gone.txt"
+    assert summary.main([str(path), "--kind", "pr", "--changed", str(gone)]) == 1
+    assert capsys.readouterr().out == f"summary: cannot read '{gone}': No such file or directory\n"
+
+
+def test_changed_with_kind_plan_exits_2(tmp_path):
+    path = tmp_path / "plan.md"
+    path.write_text(plan_doc())
+    lst = tmp_path / "changed.txt"
+    lst.write_text("")
+    r = subprocess.run(tld_cmd("plan", "summary-check", str(path), "--kind", "plan", "--changed", str(lst)),
+                       capture_output=True, text=True)
+    assert r.returncode == 2 and r.stdout == "" and "Traceback" not in r.stderr
+
+
+def cross_label(opener, closer, security="adds a write token to .github/workflows/ci.yml"):
+    body = f"**Deviations:** None as planned {opener}\n**Security:** {security}\n**Review focus:** read ci first{closer}"
+    return f"Closes #1\n\n## Summary\n\n{body}\n"
+
+
+@pytest.mark.parametrize("opener, closer", [
+    ('<abbr title="', '"> x'),
+    ('[a](#x "', '")'),
+    ('[x]: /u "', '"'),
+    ('$\\phantom{', '}$'),
+    ('<div hidden>', ''),
+])
+def test_changed_markup_opened_in_another_label_is_refused(opener, closer):
+    assert summary.check(cross_label(opener, closer), "pr", None, None, [".github/workflows/ci.yml"])[0] != []
+    # without a workflow change the Summary is not scanned this way
+    assert summary.check(cross_label(opener, closer), "pr", None, None, ["src/a.py"])[0] == []
+
+
+def test_changed_clean_summary_with_all_labels_passes():
+    assert summary.check(cross_label("", ""), "pr", None, None, [".github/workflows/ci.yml"])[0] == []
+
+
+def test_a_composite_action_counts_as_a_security_path():
+    assert summary.security_paths(["src/a.py", ".github/actions/setup/action.yml", ".github/actionsx/y"]) == [
+        ".github/actions/setup/action.yml"]

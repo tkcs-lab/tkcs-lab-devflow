@@ -10,6 +10,7 @@ from conftest import ROOT, TLD, CLAUDE, tld_cmd
 SCRIPT = TLD / "ops" / "docs_index.py"
 SCRIPT_CMD = tld_cmd("ops", "docs-index")
 ROW = "answers the questions about the thing; read when changing the thing."
+BASE = "git:\n  main_branch: main\nverify:\n  fast: ['true']\n  dod: ['true']\n"  # the keys no default can supply
 
 
 def write(root, rel, text):
@@ -167,7 +168,7 @@ def test_adr_missing_from_adr_index(tmp_path):
     write(tmp_path, "docs/adr/0001-a.md", "# A\n\nDecided.\n")
     write(tmp_path, "docs/adr/0002-b.md", "# B\n\nDecided.\n")
     write(tmp_path, ".tld/toolkit.yaml",
-          "docs:\n  index: docs/README.md\n  adr_dir: docs/adr\n  adr_index: docs/adr/README.md\n")
+          BASE + "docs:\n  index: docs/README.md\n  adr_dir: docs/adr\n  adr_index: docs/adr/README.md\n")
     r = run(tmp_path, "--profile", str(tmp_path / ".tld/toolkit.yaml"), index=None)
     assert r.returncode == 1
     assert "docs/adr/0002-b.md: not listed in the ADR index (docs/adr/README.md)" in r.stdout
@@ -236,9 +237,19 @@ def test_missing_index_key_exits_two(tmp_path):
 
 def test_profile_names_the_index(tmp_path):
     make_repo(tmp_path)
-    write(tmp_path, ".tld/toolkit.yaml", "docs:\n  index: docs/README.md\n")
+    write(tmp_path, ".tld/toolkit.yaml", BASE + "docs:\n  index: docs/README.md\n")
     r = run(tmp_path, index=None)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_docs_index_default_applies_when_the_file_exists(tmp_path):
+    make_repo(tmp_path)
+    write(tmp_path, ".tld/toolkit.yaml", BASE)  # no docs.index written: docs/README.md exists, so it is the default
+    r = run(tmp_path, index=None)
+    assert r.returncode == 0, r.stdout + r.stderr
+    (tmp_path / "docs/README.md").unlink()
+    r = run(tmp_path, index=None)
+    assert r.returncode == 2 and "missing required key 'docs.index' (or pass --index)" in r.stderr
 
 
 def test_check_json(tmp_path):

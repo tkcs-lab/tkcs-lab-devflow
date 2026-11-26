@@ -22,7 +22,7 @@ research: list each open question in the final report and go on without it). Run
 
 Load the profile as [policies/profile.md](policies/profile.md) says. On an error show the message verbatim and
 stop; never substitute a value of your own. The profile needs `sysml.subset`; without it print
-`toolkit.yaml: missing required key 'sysml.subset' (add a sysml block; see docs/guides/sysml.md)` and stop. In `init`
+`toolkit.yaml: /sysml needs a 'sysml' section (an empty 'sysml:' uses subset 1; see docs/guides/sysml.md)` and stop. In `init`
 run `tld dod exempt` once: the pull request adds model and generated doc files, not code.
 
 ## check

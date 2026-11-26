@@ -174,6 +174,27 @@
         "environment": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "description": "Name of the environment. Default tld-release; the release workflow template is rendered with it." }
       }
     },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base"],
+      "description": "The org base profile every repository extends (tld.extends): whether it does, whether its pin is current, which guarded keys it overrides.",
+      "properties": {
+        "base": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}/[^@\\s]+\\.ya?ml$", "description": "The base file as <owner>/<repo>/<path>, without a pin." },
+        "pin": { "type": "string", "pattern": "^(latest-tag|[0-9a-f]{40})$", "description": "The pin repositories should have: latest-tag (the newest version tag of the base repository; default) or a full 40-hex commit. A tag name is rejected: a tag can move." },
+        "guarded_overrides": { "enum": ["report", "ignore"], "description": "report (default): list each guarded key a repository overrides, as information. ignore: say nothing." }
+      }
+    },
+    "git_ops": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The central git-ops repository the repositories report to.",
+      "properties": {
+        "repo": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$", "description": "The central repository as <owner>/<repo>." },
+        "workflow": { "type": "string", "pattern": "^[A-Za-z0-9._-]+\\.ya?ml$", "description": "The workflow file name in the central repository. Default tld-git-ops.yml." },
+        "allowlist": { "type": "string", "minLength": 1, "description": "Path of the file in the central repository that names every audited repository." }
+      }
+    },
     "secrets": {
       "type": "object",
       "additionalProperties": false,

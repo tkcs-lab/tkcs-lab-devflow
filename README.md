@@ -6,7 +6,7 @@ feature branch, reviewed, and delivered as one pull request that a person merges
 
 Everything specific to a repository lives in one file, its **profile** `.tld/toolkit.yaml`: the docs to read, the
 branch rules, the verify commands, the CI workflows a session may dispatch, the stacks, the roles and the worker
-levels. The procedures contain no project facts and stop with a message naming a missing key.
+levels. A repository can extend one pinned org base profile ([docs/guides/org-base.md](docs/guides/org-base.md)), and built-in defaults fill the common values. The procedures contain no project facts and stop with a message naming a missing key.
 
 ## Core and adapter
 
@@ -56,13 +56,14 @@ Coming from claude-toolkit: [docs/guides/migrating-from-claude-toolkit.md](docs/
 | Command | What it does |
 |---|---|
 | `/tld:setup [create \| update]` | surveys the repository and writes or updates the profile, including the `roles` block; asks you the posture; one pull request ([guide](docs/guides/setup.md)) |
-| `/tld:make-plan <what you want>` | researches the repository, then writes a single-session prompt (small scope) or a plan with an implementation manifest on its feature branch (large scope); manual steps become an ask |
+| `/tld:make-plan <what you want>` | researches the repository, then writes a single-session prompt (small scope) or a plan with an implementation manifest on its feature branch (large scope); manual steps become an ask; when it finishes, the board shows a Plan ready card with the Summary, the links and the implement command to copy |
 | `/tld:implement <plan URL>` | one worker session per phase, merges into one feature branch, verification after every merge, scope-drift monitoring, one final review, one pull request driven to green ([scope drift](docs/architecture/scope-drift.md)) |
+| `/tld:quick <prompt or issue>` | one small change end to end without a plan: creates the tracking issue, refuses a large change (use `/tld:make-plan`), one worker, the final review, one fix round for the non-blocking findings, dod, one pull request driven to green |
 | `/tld:review [scope]` | deep review of security, tests (unit, integration, e2e) and docs by the roles; verified findings in a review document on a `review/<slug>` branch; your decisions are one ask ([guide](docs/guides/review.md)) |
 | `/tld:dod` | runs the profile's definition of done and reports a table |
 | `/tld:land` | orders the bot's open pull requests, resolves conflicts before review, runs CI once on the set, installs the land workflow |
 | `/tld:ci` | daily or weekly, unattended: finds workflows failing on the default branch, fixes what the repository can fix, reports what it cannot |
-| `/tld:deps` | weekly, unattended: triages Dependabot pull requests and audit findings, fixes what is red, opens pull requests |
+| `/tld:deps` | weekly, unattended: triages Dependabot pull requests and audit findings, fixes what is red, opens one combined pull request |
 | `/tld:upstream` | weekly, unattended: syncs a patch-carrying fork to the newest upstream release tag, one pull request |
 | `/tld:docs [check \| init \| tidy]` | a thin CLAUDE.md, one docs index, docs read only when a row matches ([guide](docs/guides/docs-index.md)) |
 | `/tld:board [prune]` | checks the connection to your board, or prunes its stale records and clears cards whose pull requests are done, after you confirm |
@@ -83,10 +84,10 @@ a policy file; [guide](docs/guides/admin.md)) and `tld:git-ops` (delete a remote
   required checks, no force push, no deletion) and `tld-tags` (no workflow token can tag), an agent account with
   the `write` role, and the environments `tld-agent` and `tld-release` that hold `TLD_AGENT_TOKEN` and
   `TLD_RELEASE_TOKEN`. Tags have one route: the release workflow; the owner approves its publish job in GitHub (after `/tld:release` or by running the workflow).
-- **Seatbelt: the hooks.** `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths` and the opt-in
-  `dod-gate` deny the action before it runs and tell the agent what to do instead; `model-check` only warns when a session runs on the most expensive level, and `env-check` only warns when a cloud session runs in an environment the profile does not list (`runtime.environments`). The protect lists and
-  `hooks.disable` are read from the profile on the remote default branch. They need `python3` 3.11+ and PyYAML in
-  the session, and every repository in a Project that enables `tld` needs at least `git.main_branch` in its profile.
+- **Seatbelt: the hooks.** `no-merge`, `no-force-push`, `no-git-tag`, `secret-scan`, `protect-paths` and the
+  `dod-gate` (on by default, like `plan-gate` and `board-gate`) deny the action before it runs and tell the agent what to do instead; `model-check` only warns when a session runs on the most expensive level, and `env-check` only warns when a cloud session runs in an environment the profile does not list (`runtime.environments`). The protect lists,
+  `hooks.disable` and the gates are clamped to the resolved profile on the remote default branch. They need `python3` 3.11+ and PyYAML in
+  the session, and every repository in a Project that enables `tld` needs a main branch the hooks can resolve (the profile's `git.main_branch`, or the one `origin/HEAD` names).
 
 See [docs/architecture/hooks.md](docs/architecture/hooks.md) and [SECURITY.md](SECURITY.md).
 

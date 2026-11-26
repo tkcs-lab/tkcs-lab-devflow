@@ -4,6 +4,7 @@ import socket
 
 import pytest
 
+import hooks_helpers as hh
 from hooks_helpers import PROFILE, make_repo_with_origin
 from tld.board import mcp as board_mcp
 from tld.board.store import Store
@@ -109,6 +110,13 @@ def test_sysml_init_opens_the_state_and_blocks_once_without_a_write(board, text)
 def test_docs_init_and_tidy_open_the_state_and_block_once_without_a_write(board, text):
     prompt(board, "docs", text=text)
     assert state(board)["command"] == "docs"
+    assert stop(board).verdict == "deny"
+    assert stop(board).verdict == "allow"
+
+
+def test_quick_opens_the_state_and_blocks_once_without_a_write(board):
+    prompt(board, "quick", text="/tld:quick x")
+    assert state(board)["command"] == "quick"
     assert stop(board).verdict == "deny"
     assert stop(board).verdict == "allow"
 
@@ -247,10 +255,26 @@ def test_a_prompt_after_the_ttl_reopens_the_state(board, monkeypatch):
     assert state(board)["written"] is False
 
 
-def test_the_hook_is_off_by_default(tmp_path, monkeypatch):
+def test_the_hook_is_on_by_default(tmp_path, monkeypatch):
     monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
     monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
-    repo = make_repo_with_origin(tmp_path / "r", "feature/demo", PROFILE)
+    repo = make_repo_with_origin(tmp_path / "r", "feature/demo", PROFILE)  # no hooks block
+    prompt(repo, "docs")
+    assert has_state(repo)
+
+
+def test_switched_off_never_blocks(tmp_path, monkeypatch):
+    monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
+    monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
+    repo = make_repo_with_origin(tmp_path / "r", "feature/demo", hh.PROFILE_GATES_OFF)
+    prompt(repo, "docs")
+    assert not has_state(repo) and stop(repo).verdict == "allow"
+
+
+def test_no_profile_allows_everything(tmp_path, monkeypatch):
+    monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
+    monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
+    repo = make_repo_with_origin(tmp_path / "r", "feature/demo", None)
     prompt(repo, "docs")
     assert not has_state(repo) and stop(repo).verdict == "allow"
 
@@ -271,12 +295,12 @@ def test_hooks_disable_in_the_committed_profile_never_blocks(tmp_path, monkeypat
     assert stop(repo).verdict == "allow"
 
 
-def test_a_malformed_board_gate_section_notes_and_allows(tmp_path, monkeypatch):
+def test_a_malformed_board_gate_section_counts_as_on(tmp_path, monkeypatch):
     monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
     monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
     repo = make_repo_with_origin(tmp_path / "r", "feature/demo", PROFILE + "hooks:\n  board_gate:\n    enabled: yes please\n")
-    d = stop(repo)
-    assert d.verdict == "allow" and "hooks.board_gate.enabled" in (d.notice or "")
+    prompt(repo, "docs")
+    assert has_state(repo)
 
 
 def test_an_invalid_json_state_file_never_blocks(board):
@@ -645,3 +669,13 @@ def test_parallel_updates_are_not_lost(board):
     for t in threads:
         t.join()
     assert state(board)["dirty_seq"] == 8
+
+
+def test_a_malformed_disable_does_not_switch_the_board_gate_off(tmp_path, monkeypatch):
+    monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
+    monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
+    for n, bad in enumerate(("hooks:\n  disable: 5\n", "hooks: 5\n")):
+        repo = make_repo_with_origin(tmp_path / f"r{n}", "feature/demo", PROFILE, working=PROFILE + bad)
+        assert prompt(repo, "docs").verdict == "allow"
+        assert has_state(repo), bad
+        assert stop(repo).verdict == "deny", bad

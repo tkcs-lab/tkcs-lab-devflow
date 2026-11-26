@@ -334,3 +334,29 @@ def test_survey_then_set_block_validates(tmp_path):
     check = subprocess.run([*tld_cmd("profile", "validate"), str(profile), "--no-file-checks"],
                            capture_output=True, text=True)
     assert check.returncode == 0, check.stdout + check.stderr
+
+
+def test_set_block_writes_tld_extends(tmp_path):
+    from tld.profile import patch as pp
+    text = 'tld:\n  version: ">=1.0,<2"\n\nproject:\n  name: x\n'
+    out = pp.set_block(text, "tld.extends", "org/.github/tld/profile-base.yaml@" + "a" * 40 + "  # v1.7.0")
+    assert out == ('tld:\n  extends: org/.github/tld/profile-base.yaml@' + "a" * 40 + '  # v1.7.0\n'
+                   '  version: ">=1.0,<2"\n\nproject:\n  name: x\n')
+    again = pp.set_block(out, "tld.extends", "org/.github/tld/profile-base.yaml@" + "b" * 40)
+    assert again.count("extends:") == 1 and "b" * 40 in again and "# v1.7.0" not in again
+    assert pp.set_block("project:\n  name: x\n", "tld.extends", "o/r/p.yaml@" + "c" * 40).startswith("tld:\n  extends:")
+
+
+def test_set_block_rejects_a_bad_tld_extends():
+    from tld.profile import patch as pp
+    for bad in ("o/r/p@main", "o/r/../x.yaml@" + "a" * 40, "o/r/p@" + "a" * 40 + "  # x\rgit: {bot_login: evil}", "o/r/p@" + "a" * 40 + "\n"):
+        with pytest.raises(pp.PatchError):
+            pp.set_block("tld:\n  version: x\n", "tld.extends", bad)
+
+
+def test_set_block_tld_extends_refuses_what_it_cannot_edit_safely():
+    from tld.profile import patch as pp
+    value = "o/r/p.yaml@" + "a" * 40
+    for text in ("tld: {}\nproject:\n  name: x\n", "tld: null\n", "tld:\n  extends: >\n    old\n  version: x\n"):
+        with pytest.raises(pp.PatchError, match="by hand"):
+            pp.set_block(text, "tld.extends", value)

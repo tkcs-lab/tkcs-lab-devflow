@@ -338,3 +338,24 @@ def test_dismiss_and_restore_leave_data_and_version_alone(store):
     store.dismiss("f-waiting--run--plan-f-waiting", 1)
     store.restore("f-waiting--run--plan-f-waiting")
     assert store.get("f-waiting--run--plan-f-waiting") == before
+
+
+HANDOVER_ID = "tkcs-lab-devflow--make-plan--89abcdef"
+
+
+def handover_record():
+    return json.loads((FIXTURES / "status-records" / "good-command-handover.json").read_text())
+
+
+def test_store_set_accepts_a_handover_and_returns_it_unchanged(store):
+    assert store.set(HANDOVER_ID, handover_record(), None) == {"id": HANDOVER_ID, "version": 1}
+    assert store.get(HANDOVER_ID)["data"] == handover_record()
+
+
+def test_store_rejects_a_handover_with_a_foreign_issue_url(store):
+    bad = handover_record()
+    bad["handover"]["issue_url"] = "https://github.com/someone/else/issues/7"
+    with pytest.raises(Invalid) as exc:
+        store.set(HANDOVER_ID, bad, None)
+    assert any("handover.issue_url" in e for e in exc.value.errors)
+    assert store.count() == 0

@@ -26,7 +26,7 @@ def test_matches_expected(case):
     assert names == expected["dispatchable"]
     for key in ("adr_dir", "adr_index", "changelog"):
         assert profile["docs"].get(key) == expected[key]
-    assert list(profile) == [k for k in ("stacks", "git", "docs", "ci", "roles") if k in profile]
+    assert list(profile) == [k for k in ("stacks", "git", "docs", "ci", "release", "deps", "roles") if k in profile]
     assert profile["git"] == {"main_branch": "main"}
 
 
@@ -85,3 +85,49 @@ def test_index_is_proposed_and_must_read_capped():
     assert docs["must_read"] == ["README.md", "CONTRIBUTING.md", "ARCHITECTURE.md"]
     ev["docs"].pop("index")
     assert "index" not in sp.build(ev)["profile"]["docs"]
+
+
+def _evidence(**repo):
+    return {"stacks": [{"name": "python", "evidence": ["pyproject.toml"]}],
+            "git": {"main_branch": "main", "branch_prefixes": {"feature": 3}},
+            "docs": {"must_read": ["README.md"], "adr_dir": "docs/adr"},
+            "signals": {}, "repo": repo}
+
+
+def test_code_owners_differ_from_the_base():
+    base = {"git": {"bot_login": "bot", "codeowners": ["alice"]}}
+    same = sp.build(_evidence(codeowners=["alice", "bot"]), base)["profile"]
+    assert "codeowners" not in same.get("git", {})
+    other = sp.build(_evidence(codeowners=["alice", "bob", "bot"]), base)
+    assert other["profile"]["git"]["codeowners"] == ["alice", "bob"]
+    assert "git.codeowners" in [r["key"] for r in other["rationale"]]
+    assert sp.build(_evidence(codeowners=["bob"]))["profile"]["git"]["codeowners"] == ["bob"]
+
+
+def test_values_the_base_sets_are_left_out():
+    base = {"git": {"main_branch": "main"}, "roles": {"posture": {"security": "critical"}}, "stacks": ["python"]}
+    ev = _evidence(adr_bar="CONTRIBUTING.md#decisions", version_files=[{"path": "a", "pattern": "p"}],
+                   deps_audit=[{"ecosystem": "go", "run": "govulncheck ./..."}])
+    out = sp.build(ev, base)
+    profile = out["profile"]
+    assert "stacks" not in profile and "git" not in profile
+    assert "posture" not in profile.get("roles", {})
+    assert profile["docs"]["adr_bar"] == "CONTRIBUTING.md#decisions"
+    assert profile["release"] == {"version_files": [{"path": "a", "pattern": "p"}]}
+    assert profile["deps"] == {"audit": [{"ecosystem": "go", "run": "govulncheck ./..."}]}
+    keys = [r["key"] for r in out["rationale"]]
+    assert "stacks" not in keys and "git.main_branch" not in keys and "roles.posture.security" not in keys
+    own = sp.build(ev, {"release": {"version_files": []}})["profile"]
+    assert "release" not in own
+
+
+def test_no_branch_types_or_merge_style_is_proposed(case):
+    assert "branch_types" not in case[1]["profile"].get("git", {})
+    assert "merge_style" not in case[1]["profile"].get("git", {})
+    out = sp.build(_evidence())["profile"]["git"]
+    assert out == {"main_branch": "main"}
+
+
+def test_two_version_files_propose_none():
+    files = [{"path": "a", "pattern": "p"}, {"path": "b", "pattern": "p"}]
+    assert "release" not in sp.build(_evidence(version_files=files))["profile"]

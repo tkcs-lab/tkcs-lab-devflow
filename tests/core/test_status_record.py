@@ -17,7 +17,7 @@ def run(*args, stdin=None):
     return subprocess.run([*SCRIPT_CMD, *map(str, args)], input=stdin, capture_output=True, text=True)
 
 
-@pytest.mark.parametrize("name", ["good-run", "good-run-prompt", "good-run-scope", "good-command", "good-command-docs"])
+@pytest.mark.parametrize("name", ["good-run", "good-run-prompt", "good-run-scope", "good-command", "good-command-docs", "good-command-handover", "good-run-prompt-issue"])
 def test_good_fixture_passes(name):
     result = run(RECORDS / f"{name}.json")
     assert result.returncode == 0, result.stdout
@@ -176,9 +176,12 @@ def test_unknown_field_is_rejected():
 def test_fields_match_schema():
     schema = json.loads(SCHEMA.read_text())
     module = _load("tld.board.record")
-    assert set(module.FIELDS) == set(schema["properties"])
+    assert set(module.FIELDS) | set(module.OPTIONAL_FIELDS) == set(schema["properties"])
     assert set(schema["required"]) == set(module.FIELDS)
     assert schema["additionalProperties"] is False
+    handover = schema["$defs"]["handover"]
+    assert set(handover["required"]) == set(handover["properties"]) == set(module.HANDOVER_FIELDS)
+    assert handover["additionalProperties"] is False
 
 
 def test_schema_examples_validate():
@@ -518,3 +521,283 @@ def test_record_id_cli():
     ):
         bad = record_id(*args)
         assert bad.returncode == 1 and bad.stdout == "" and bad.stderr.startswith("status-record: "), (args, bad.stderr)
+
+
+# ---- the optional handover field ----------------------------------------------------------------------------
+
+REC = _load("tld.board.record")
+PLAN_URL = "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/feature/demo-plan/docs/plans/7/plan.md"
+
+
+def good_handover():
+    return json.loads((RECORDS / "good-command-handover.json").read_text())
+
+
+def with_handover(**changes):
+    rec = good_handover()
+    rec["handover"].update(changes)
+    return rec
+
+
+def shape(key, repo="tkcs-lab/tkcs-lab-devflow"):
+    tail = {"issue_url": "issues/<n>", "plan_url": "blob/<branch>/<path>.md",
+            "spec_url": "tree/<branch>/openspec/changes/<plan_slug>"}[key]
+    return (f"'handover.{key}' must be null or https://github.com/{repo}/{tail} "
+            "(at most 300 characters, no empty, . or .. segment)")
+
+
+FIRST = "'handover' is only allowed in a make-plan command record"
+SECOND = "'handover' is only allowed when 'status' is 'done'"
+UNSAFE_MSG = "'handover.summary' holds a control, format, surrogate, private-use or separator character"
+
+
+def test_handover_good_fixture_has_no_errors():
+    assert REC.validate(good_handover()) == []
+
+
+def test_handover_on_a_running_run_gives_both_placement_errors():
+    rec = json.loads((RECORDS / "good-run.json").read_text())
+    rec["handover"] = good_handover()["handover"]
+    assert REC.validate(rec) == [FIRST, SECOND]
+
+
+def test_handover_on_a_done_deps_record_gives_the_kind_error():
+    rec = good_handover()
+    rec["command"] = "deps"
+    assert REC.validate(rec) == [FIRST]
+
+
+def test_handover_on_a_running_make_plan_gives_the_status_error():
+    rec = good_handover()
+    rec.update(status="running", finished_at=None)
+    assert REC.validate(rec) == [SECOND]
+
+
+@pytest.mark.parametrize("handover, expected", [
+    (None, ["'handover' must be an object"]),
+    ("text", ["'handover' must be an object"]),
+    ([1], ["'handover' must be an object"]),
+])
+def test_handover_must_be_an_object(handover, expected):
+    rec = good_handover()
+    rec["handover"] = handover
+    assert REC.validate(rec) == expected
+
+
+def test_handover_missing_and_unknown_keys():
+    rec = good_handover()
+    del rec["handover"]["spec_url"]
+    assert REC.validate(rec) == ["'handover' is missing 'spec_url'"]
+    rec = good_handover()
+    rec["handover"]["extra"] = 1
+    assert REC.validate(rec) == ["'handover' has unknown field 'extra'"]
+
+
+def test_handover_non_string_values():
+    assert REC.validate(with_handover(summary=5)) == ["'handover.summary' must be a non-empty string"]
+    assert REC.validate(with_handover(issue_url=7)) == [shape("issue_url")]
+    assert REC.validate(with_handover(next_command=7)) == [
+        "'handover.next_command' must be '<prefix> <plan_url>' with a prefix of /tld:implement, implement"]
+
+
+def test_handover_invalid_slug_checks_the_spec_link_by_its_generic_shape():
+    rec = with_handover(plan_slug="Demo")
+    assert REC.validate(rec) == ["'handover.plan_slug' must match ^[a-z0-9][a-z0-9-]{0,79}$"]
+    assert REC.validate(with_handover(plan_slug="-x", spec_url=None)) == [
+        "'handover.plan_slug' must match ^[a-z0-9][a-z0-9-]{0,79}$"]
+
+
+def test_handover_summary_empty():
+    assert REC.validate(with_handover(summary="")) == ["'handover.summary' must be a non-empty string"]
+
+
+@pytest.mark.parametrize("char", ["\u202e", "\u200b", "\t", "\r", "\x7f", "\x85", "\u2028", "\u2029", "\ue000",
+                                  json.loads('"\\ud800"')])
+def test_handover_summary_unsafe_character(char):
+    assert REC.validate(with_handover(summary=f"Use it: a{char}b")) == [UNSAFE_MSG]
+
+
+def test_handover_summary_limits():
+    assert REC.validate(with_handover(summary=" ".join(["w"] * 351))) == [
+        "'handover.summary' has 351 words, at most 350 are allowed"]
+    text = " ".join(["ab"] * 299) + " " + "c" * 3200
+    assert len(text) > 4000 and len(text.split()) == 300
+    assert REC.validate(with_handover(summary=text)) == [
+        f"'handover.summary' has {len(text)} characters, at most 4000 are allowed"]
+
+
+def test_handover_accepts_limits():
+    long_url = "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/main/"
+    long_url += "a" * (300 - len(long_url) - 3) + ".md"
+    assert len(long_url) == 300
+    for changes in (
+        {"summary": " ".join(["w"] * 350)},
+        {"summary": ("x" * 99 + " ") * 40},
+        {"plan_url": long_url, "next_command": "/tld:implement " + long_url},
+        {"summary": "Use it: a\nScope: b"},
+        {"next_command": "implement " + PLAN_URL},
+        {"next_command": None},
+    ):
+        assert REC.validate(with_handover(**changes)) == [], changes
+    assert len(("x" * 99 + " ") * 40) == 4000
+
+
+def test_handover_plan_slug_pattern():
+    assert REC.validate(with_handover(plan_slug="a" * 80, spec_url=None)) == []
+    assert REC.validate(with_handover(plan_slug="a" * 81, spec_url=None)) == [
+        "'handover.plan_slug' must match ^[a-z0-9][a-z0-9-]{0,79}$"]
+
+
+@pytest.mark.parametrize("key", ["issue_url", "plan_url", "spec_url"])
+def test_handover_link_rejects_trailing_newline(key):
+    changes = {key: good_handover()["handover"][key] + "\n"}
+    if key == "plan_url":
+        changes["next_command"] = None
+    assert REC.validate(with_handover(**changes)) == [shape(key)]
+
+
+@pytest.mark.parametrize("url", [
+    PLAN_URL.replace("feature/demo-plan/docs", "../docs"), PLAN_URL + "?x=1", PLAN_URL + "#a",
+    PLAN_URL[:-3] + ".txt", "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/main/" + "a" * 250 + ".md",
+])
+def test_handover_plan_url_refused(url):
+    assert REC.validate(with_handover(plan_url=url, next_command=None)) == [shape("plan_url")]
+
+
+def test_handover_plan_url_301_characters():
+    url = "https://github.com/tkcs-lab/tkcs-lab-devflow/blob/main/"
+    url += "a" * (301 - len(url) - 3) + ".md"
+    assert len(url) == 301
+    assert REC.validate(with_handover(plan_url=url, next_command=None)) == [shape("plan_url")]
+
+
+def test_handover_spec_url_must_end_in_the_slug():
+    url = "https://github.com/tkcs-lab/tkcs-lab-devflow/tree/feature/demo-plan/openspec/changes/other"
+    assert REC.validate(with_handover(spec_url=url)) == [shape("spec_url")]
+
+
+def test_handover_next_command_is_built_from_the_plan_link():
+    for command in ("/tld:implement " + PLAN_URL + " && rm -rf x", "/tld:implement " + PLAN_URL + "\n",
+                    "tld implement " + PLAN_URL, "/tld:implement  " + PLAN_URL):
+        assert REC.validate(with_handover(next_command=command)) == [
+            "'handover.next_command' must be '<prefix> <plan_url>' with a prefix of /tld:implement, implement"]
+    assert REC.validate(with_handover(plan_url=None, next_command="/tld:implement " + PLAN_URL)) == [
+        "'handover.next_command' must be null when 'handover.plan_url' is null"]
+
+
+def test_handover_link_corpus():
+    cases = json.loads((FIXTURES / "handover-links.json").read_text())
+    base = good_handover()["handover"]
+    for case in cases:
+        handover = {**base, "plan_slug": case["plan_slug"], "issue_url": None, "plan_url": None,
+                    "spec_url": None, "next_command": None, case["key"]: case["url"]}
+        assert (REC.handover_errors(handover, case["repo"]) == []) is case["ok"], case
+
+
+def test_handover_rules_match_summary_check():
+    summary = _load("tld.plan.summary")
+    assert REC.HANDOVER_UNSAFE == summary.UNSAFE
+    assert REC.HANDOVER_MAX_WORDS == summary.MAX_WORDS["plan"]
+
+
+def test_old_board_refuses_handover_with_one_named_error(monkeypatch):
+    monkeypatch.setattr(REC, "OPTIONAL_FIELDS", ())
+    assert REC.validate(good_handover()) == ["'handover' is not a known field"]
+
+
+def test_handover_refuses_a_repo_with_a_trailing_newline():
+    repo = "tkcs-lab/tkcs-lab-devflow\n"
+    rec = good_handover()
+    rec["repo"] = repo
+    rec["handover"].update(issue_url=f"https://github.com/{repo}/issues/7", plan_url=f"https://github.com/{repo}/blob/main/p.md",
+                           spec_url=None, next_command=None)
+    assert REC.validate(rec) == [
+        "'repo' must look like owner/name",
+        "'repo' must look like owner/name before a 'handover' link can be checked"]
+
+
+# ---- the optional tracking_issue field ----------------------------------------------------------------------
+
+TI_MALFORMED = "'tracking_issue' must be null or a positive integer of at most 10 digits"
+
+
+def fixture_rec(name):
+    return json.loads((RECORDS / f"{name}.json").read_text())
+
+
+def with_ti(name, value, **changes):
+    rec = fixture_rec(name)
+    rec.update(changes)
+    rec["tracking_issue"] = value
+    return rec
+
+
+@pytest.mark.parametrize("value", [0, -1, 10_000_000_000, True, 1.5, "12"])
+def test_tracking_issue_malformed_is_refused(value):
+    assert REC.validate(with_ti("good-run", value)) == [TI_MALFORMED]
+
+
+@pytest.mark.parametrize("value", [1, 9_999_999_999, None])
+def test_tracking_issue_valid_values_pass(value):
+    assert REC.validate(with_ti("good-run", value)) == []
+
+
+def test_tracking_issue_on_a_command_record_passes():
+    assert REC.validate(with_ti("good-command", 7)) == []
+
+
+@pytest.mark.parametrize("value", [7, None])
+def test_tracking_issue_agrees_with_handover(value):
+    assert REC.validate(with_ti("good-command-handover", value)) == []
+
+
+def test_tracking_issue_disagreeing_with_handover_is_refused():
+    assert REC.validate(with_ti("good-command-handover", 8)) == ["'tracking_issue' must agree with 'handover.issue_url'"]
+
+
+def test_tracking_issue_malformed_issue_url_reports_once():
+    rec = with_ti("good-command-handover", 7)
+    rec["handover"]["issue_url"] = "https://github.com/tkcs-lab/tkcs-lab-devflow/issues/07"
+    assert REC.validate(rec) == REC.handover_errors(rec["handover"], rec["repo"])
+    assert not any("tracking_issue" in e for e in REC.validate(rec))
+
+
+def test_tracking_issue_cross_repo_issue_url_reports_once():
+    rec = with_ti("good-command-handover", 8)
+    rec["handover"]["issue_url"] = "https://github.com/other/repo/issues/7"
+    errors = REC.validate(rec)
+    assert errors == REC.handover_errors(rec["handover"], rec["repo"])
+    assert not any("tracking_issue" in e for e in errors)
+
+
+@pytest.mark.parametrize("name, value", [
+    ("good-run-prompt", "42"), ("good-run-prompt", 0), ("good-command-handover", 0),
+])
+def test_tracking_issue_malformed_skips_agreement_rules(name, value):
+    assert REC.validate(with_ti(name, value)) == [TI_MALFORMED]
+
+
+def test_tracking_issue_disagreeing_with_issue_slug_is_refused():
+    assert REC.validate(with_ti("good-run-prompt", 43)) == ["'tracking_issue' must be 42, the number in 'plan_slug'"]
+    assert REC.validate(with_ti("good-run-prompt", None)) == []
+
+
+@pytest.mark.parametrize("status, extra", [
+    ("failed", {"finished_at": "2026-11-08T20:10:00Z"}),
+    ("waiting_user", {}),
+])
+def test_tracking_issue_on_a_failed_or_waiting_user_run_record(status, extra):
+    rec = with_ti("good-run-prompt-issue", 42, status=status, **extra)
+    assert REC.validate(rec) == []
+    rec["tracking_issue"] = 43
+    assert REC.validate(rec) == ["'tracking_issue' must be 42, the number in 'plan_slug'"]
+
+
+def test_tracking_issue_ignores_a_plan_slug_that_is_not_issue_n():
+    assert REC.validate(with_ti("good-run-prompt-issue", 42, plan_slug="issue-042x")) == []
+    assert REC.validate(with_ti("good-run-prompt-issue", 7, plan_slug="issue-42x")) == []
+
+
+def test_old_board_refuses_tracking_issue_with_one_named_error(monkeypatch):
+    monkeypatch.setattr(REC, "OPTIONAL_FIELDS", ("handover",))
+    assert REC.validate(fixture_rec("good-run-prompt-issue")) == ["'tracking_issue' is not a known field"]

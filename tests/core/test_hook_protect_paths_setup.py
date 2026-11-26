@@ -4,10 +4,25 @@ import subprocess
 import sys
 import time
 
-from hooks_helpers import HOOKS, bash, event, make_repo, run, run_script
+import pytest
+
+from hooks_helpers import HOOKS, PROFILE as BASE_PROFILE, bash, event, make_repo, run, run_script
 
 HOOK = "protect-paths"
 PROFILE = ".tld/toolkit.yaml"
+# The profile is no longer on the default protect list: a repository that adds it back (here with the workflows) is the
+# case the /setup marker still serves.
+LISTED = BASE_PROFILE + "hooks:\n  protect_paths: ['.tld/toolkit.yaml', '.env', '*.lock', '.github/workflows/**']\n"
+
+
+@pytest.fixture()
+def fresh_repo(tmp_path):
+    return make_repo(tmp_path / "repo", "feature/demo", LISTED)
+
+
+def test_the_profile_and_ordinary_workflows_are_allowed_by_default(tmp_path):
+    repo = make_repo(tmp_path / "plain", "feature/demo")
+    assert write(repo, PROFILE) == 0 and write(repo, ".github/workflows/ci.yml") == 0
 STILL_DENIED = [".env", "uv.lock", ".github/workflows/ci.yml"]
 
 
@@ -76,7 +91,7 @@ def test_script_contract_with_the_marker(fresh_repo):
 
 
 def test_a_marker_in_one_repository_does_not_allow_another(tmp_path):
-    a, b = make_repo(tmp_path / "a", "feature/x"), make_repo(tmp_path / "b", "feature/x")
+    a, b = make_repo(tmp_path / "a", "feature/x", LISTED), make_repo(tmp_path / "b", "feature/x", LISTED)
     cli(a, "--allow-profile")
     assert write(a, PROFILE) == 0
     assert write(b, PROFILE) == 2

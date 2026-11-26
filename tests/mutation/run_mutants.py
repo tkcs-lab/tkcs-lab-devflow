@@ -73,6 +73,8 @@ def run(mutants: list[dict], tests: dict[str, list[str]], timeout: int) -> list[
                 lines = (p.stdout or p.stderr).strip().splitlines()
                 verdict = "killed" if p.returncode != 0 else "SURVIVED"
                 detail = next((l for l in lines if l.startswith("FAILED")), lines[-1] if lines else "")
+                if p.returncode == 5:  # nothing collected (every listed test is slow): the mutant was never tried
+                    verdict, detail = "PROBLEM", "no test selected: every listed test is marked slow"
             except subprocess.TimeoutExpired:
                 verdict, detail = "killed", f"timeout after {timeout} s"
             finally:
@@ -100,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         mutants = [m for m in mutants if m["id"] in args.only]
     results = run(mutants, tests, args.timeout)
-    survived = [m["id"] for m, v, _ in results if v == "SURVIVED"]
+    survived = [m["id"] for m, v, _ in results if v in ("SURVIVED", "PROBLEM")]
     summary = f"{len(results) - len(survived)} of {len(results)} mutants killed" + (f"; survived: {', '.join(survived)}" if survived else "")
     print(summary)
     if args.report:

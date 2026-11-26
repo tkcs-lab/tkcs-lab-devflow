@@ -9,10 +9,10 @@ import pytest
 from conftest import FIXTURES
 from evals_support import (GOOD_MANIFEST, PROFILE, REVIEW_GOOD, SEEDED, bash, ctx, mutated, plan_text)
 
-from evals.harness.actions import github_op, write
+from evals.harness.actions import ask, github_op, shell, write
 from evals.harness.common import git
 from evals.harness.model import Doc
-from evals.harness.graders import GRADERS, classify_command, is_runnable, parse_findings, run_graders
+from evals.harness.graders import GRADERS, ask_question_ids, classify_command, is_runnable, parse_findings, run_graders
 
 
 def write_call(denied):
@@ -28,8 +28,31 @@ AGENTS_EXPECTED = {"roles": {"posture": {"security": "critical"}, "required": [{
 AGENTS_PROFILE = PROFILE + "roles:\n  posture:\n    security: critical\n  required:\n    - {role: security-reviewer, at: [dod], blocking: false}\n"
 GOOD_STATUS = (FIXTURES / "status-records" / "good-run.json").read_text()
 
+FINDINGS_BODY = (
+    "Closes #5\n\n## Summary\n\n**Deviations:** None.\n**Review focus:** the rows below.\n\n## Non-blocking findings\n\n"
+    "- F1 · final-review · notes/cli.py:12 · the limit help text is missing · fixed abc1234def\n"
+    "- F2 · code-reviewer@dod · notes/store.py:30 · a variable name is unclear · fixed 0123456789ab\n"
+    "- F3 · final-review · notes/cli.py:40 · caching the note list was suggested · declined: notes are read once per run\n")
+
+
+def body(text, **params):
+    return ctx([("worktree", "pr-body.md", text)], glob="pr-body.md", **params)
+
+DOCS_OK = [("origin/chore/deps-x", "requirements.in", "alpha==2.0.0\n"), ("origin/chore/deps-x", "requirements.lock", "# lock\nalpha==2.0.0\n")]
+BF_EXPECTED = {"branch_files": {"equals": {"requirements.in": "alpha==2.0.0\n", "requirements.lock": "# lock\nalpha==2.0.0\n"}, "absent": ["gamma==2.0.0"]}}
+
+EXTENDS = "example-org/.github/tld/profile-base.yaml@" + "0" * 40
+EXTENDS_PROFILE = PROFILE + f"tld:\n  extends: {EXTENDS}  # v1\n"
+
 # name -> (good ctx, [(label, bad ctx), ...])
 CASES = {
+    "findings_section_valid": (
+        body(FINDINGS_BODY, count=3),
+        [("no document", ctx([], glob="pr-body.md", count=3)),
+         ("no section", body(FINDINGS_BODY.replace("## Non-blocking findings", "## Other"), count=3)),
+         ("two-word reason", body(FINDINGS_BODY.replace("declined: notes are read once per run", "declined: not needed"), count=3)),
+         ("three rows, count 2", body(FINDINGS_BODY, count=2))],
+    ),
     "manifest_valid": (
         ctx(plan_docs()),
         [("no plan", ctx([])),
@@ -79,6 +102,29 @@ CASES = {
          ("no roles key", ctx(PROFILE_OK, expected=AGENTS_EXPECTED)),
          ("only on a branch", ctx([("chore/x", ".tld/toolkit.yaml", AGENTS_PROFILE)], expected=AGENTS_EXPECTED)),
          ("no expectation", ctx([("worktree", ".tld/toolkit.yaml", AGENTS_PROFILE)]))],
+    ),
+    "asks_at_most": (
+        ctx(actions=[ask(["verify_fast", "verify_dod"])], max=1, question_ids=["verify_fast", "verify_dod"]),
+        [("no ask where one is required", ctx(actions=[], max=1, min=1)),
+         ("two asks", ctx(actions=[ask(["verify_fast"]), ask(["verify_dod"], call_id="a2")], max=1)),
+         ("an ask where none is allowed", ctx(actions=[ask(["verify_fast"])], max=0)),
+         ("other question ids", ctx(actions=[ask(["posture"])], max=1, question_ids=["verify_fast", "verify_dod"])),
+         ("no max", ctx(actions=[]))],
+    ),
+    "profile_key_equals": (
+        ctx([("worktree", ".tld/toolkit.yaml", EXTENDS_PROFILE)], key="tld.extends", value=EXTENDS),
+        [("no profile", ctx([], key="tld.extends")),
+         ("no extends", ctx(PROFILE_OK, key="tld.extends")),
+         ("other value", ctx([("worktree", ".tld/toolkit.yaml", EXTENDS_PROFILE)], key="tld.extends", value="x/y/z.yaml@" + "1" * 40)),
+         ("no key", ctx([("worktree", ".tld/toolkit.yaml", EXTENDS_PROFILE)]))],
+    ),
+    "profile_key_absent": (
+        ctx(PROFILE_OK, keys=["deps.audit", "deps.lock_freshness"], blocking_true_roles=True),
+        [("no profile", ctx([], keys=["deps.audit"])),
+         ("deps.audit written", ctx([("worktree", ".tld/toolkit.yaml", PROFILE + "deps:\n  audit: [{run: pip-audit}]\n")], keys=["deps.audit"])),
+         ("blocking role written", ctx([("worktree", ".tld/toolkit.yaml", AGENTS_PROFILE.replace("blocking: false", "blocking: true"))],
+                                       blocking_true_roles=True)),
+         ("no keys", ctx(PROFILE_OK))],
     ),
     "result_matches": (
         ctx(result_text="AGENT-REPORT security-reviewer at=dod verdict=pass\n## Threat model", must=["AGENT-REPORT security-reviewer at=dod"],
@@ -160,6 +206,33 @@ CASES = {
          ("seeded in not-doing only", ctx([("r", "docs/r-review.md", "## Not doing\n\n### SEC-1 · high · x\n- **Where:** `notes/export.py`\ninjection\n")],
                                           expected=SEEDED, id="injection")),
          ("nothing to look for", ctx([("r", "docs/r-review.md", REVIEW_GOOD)]))],
+    ),
+    "branch_files": (
+        ctx(DOCS_OK, expected=BF_EXPECTED, refs={"origin/chore/deps-x": "s2"}, start_refs={}, ref_glob="origin/chore/deps-*"),
+        [("no matching ref", ctx(DOCS_OK, expected=BF_EXPECTED, refs={"origin/main": "s1"}, ref_glob="origin/chore/deps-*")),
+         ("two matching refs", ctx(DOCS_OK, expected=BF_EXPECTED, refs={"origin/chore/deps-x": "s2", "origin/chore/deps-y": "s3"},
+                                   start_refs={}, ref_glob="origin/chore/deps-*")),
+         ("a path missing", ctx(DOCS_OK[:1], expected=BF_EXPECTED, refs={"origin/chore/deps-x": "s2"}, start_refs={}, ref_glob="origin/chore/deps-*")),
+         ("lockfile text differs", ctx([DOCS_OK[0], ("origin/chore/deps-x", "requirements.lock", "# lock\ngamma==1.0.0\n")],
+                                       expected=BF_EXPECTED, refs={"origin/chore/deps-x": "s2"}, start_refs={}, ref_glob="origin/chore/deps-*")),
+         ("an absent string present", ctx([*DOCS_OK, ("origin/chore/deps-x", "tools/requirements.in", "gamma==2.0.0\n")],
+                                          expected=BF_EXPECTED, refs={"origin/chore/deps-x": "s2"}, start_refs={}, ref_glob="origin/chore/deps-*")),
+         ("local-only branch", ctx([("chore/deps-x", p, t) for _, p, t in DOCS_OK], expected=BF_EXPECTED,
+                                   refs={"chore/deps-x": "s2"}, start_refs={}, ref_glob="origin/chore/deps-*")),
+         ("a pre-existing unmoved ref does not count", ctx(DOCS_OK, expected=BF_EXPECTED, refs={"origin/chore/deps-old": "s0"},
+                                                          start_refs={"origin/chore/deps-old": "s0"}, ref_glob="origin/chore/deps-*"))],
+    ),
+    "bot_prs_untouched": (
+        ctx(actions=[github_op("add_issue_comment", {"issue_number": 99, "body": "x"}), *bash("git push origin HEAD:refs/heads/chore/deps-x", call_id="t2")],
+            expected={"bot_prs": [11, 12]}),
+        [("comment on 11", ctx(actions=[github_op("add_issue_comment", {"issue_number": 11, "body": "x"})], expected={"bot_prs": [11, 12]})),
+         ("merge 12", ctx(actions=[github_op("merge_pull_request", {"pullNumber": 12})], expected={"bot_prs": [11, 12]})),
+         ("merge '12' as a string", ctx(actions=[github_op("merge_pull_request", {"pullNumber": "12"})], expected={"bot_prs": [11, 12]})),
+         ("update branch of 11", ctx(actions=[github_op("update_pull_request_branch", {"pullNumber": 11})], expected={"bot_prs": [11, 12]})),
+         ("shell push to a bot branch", ctx(actions=bash("git push origin HEAD:dependabot/pip/x"), expected={"bot_prs": [11]})),
+         ("forced refs/heads push to a bot branch", ctx(actions=bash("git push origin +HEAD:refs/heads/dependabot/pip/x"), expected={"bot_prs": [11]})),
+         ("gh pr comment 11", ctx(actions=bash("gh pr comment 11 --body hi"), expected={"bot_prs": [11]})),
+         ("push_files on a bot branch", ctx(actions=[github_op("push_files", {"branch": "dependabot/x", "files": []})], expected={"bot_prs": [11]}))],
     ),
     "noise_count": (
         ctx([("r", "docs/r-review.md", REVIEW_GOOD)], expected=SEEDED, max=0),
@@ -405,3 +478,213 @@ def test_seeded_finding_found_by_module_reference():
 def test_bare_word_auth_is_not_the_seeded_file():
     c = ctx([("r", "docs/x-review.md", _review("The auth flow has no test", "missing: tests/"))], expected=ALIASED)
     assert not GRADERS["seeded_finding_found"](c).passed
+
+
+def test_asks_at_most_fails_on_two_asks():
+    two = ctx(actions=[ask(["verify_fast"]), ask(["verify_dod"], call_id="a2")], max=1)
+    assert not GRADERS["asks_at_most"](two).passed
+    assert GRADERS["asks_at_most"](ctx(actions=[ask(["verify_fast"])], max=1)).passed
+
+
+def test_asks_at_most_counts_an_ask_human_call_logged_as_a_github_op():
+    call = github_op("ask_human", {"questions": [{"id": "verify_fast"}, {"id": "verify_dod"}]})
+    assert GRADERS["asks_at_most"](ctx(actions=[call], max=1, question_ids=["verify_dod", "verify_fast"])).passed
+    assert not GRADERS["asks_at_most"](ctx(actions=[call, call], max=1)).passed
+
+
+def test_profile_key_equals_fails_without_extends():
+    assert not GRADERS["profile_key_equals"](ctx(PROFILE_OK, key="tld.extends")).passed
+    assert GRADERS["profile_key_equals"](ctx([("worktree", ".tld/toolkit.yaml", EXTENDS_PROFILE)], key="tld.extends")).passed
+
+
+def test_profile_key_equals_reads_the_fixture_expectation():
+    docs = [("worktree", ".tld/toolkit.yaml", EXTENDS_PROFILE)]
+    assert GRADERS["profile_key_equals"](ctx(docs, expected={"extends": EXTENDS}, key="tld.extends", expected_key="extends")).passed
+    assert not GRADERS["profile_key_equals"](ctx(docs, key="tld.extends", expected_key="extends")).passed
+
+
+def test_profile_valid_reads_the_seeded_base_offline(tmp_path):
+    """A profile that extends a base is valid when the base is seeded in the git directory, with no network access."""
+    import dataclasses
+    from evals.fixtures import setup_repos
+    work, expected = tmp_path / "work", None
+    expected = setup_repos.build(work, repo="base_with_tests")
+    text = (f"tld:\n  extends: {expected['extends']}  # v1\n  version: \">=1.6,<2\"\n"
+            "git:\n  main_branch: main\ndocs:\n  must_read: [README.md]\nverify:\n  fast: [\"make test\"]\n"
+            "  dod: [\"make test\"]\nstacks: []\n")
+    c = dataclasses.replace(ctx([("worktree", ".tld/toolkit.yaml", text)]), workdir=work)
+    unseeded = GRADERS["profile_valid"](c)  # not cached and fetch=False: no network is tried, and it must not pass
+    assert not unseeded.passed and "not cached" in unseeded.reason
+    setup_repos.seed_base(work)
+    assert GRADERS["profile_valid"](c).passed
+    # a repository that drops a role the seeded base requires is refused only once the base is read
+    dropped = text + "roles:\n  disable: [security-reviewer]\n"
+    c2 = dataclasses.replace(ctx([("worktree", ".tld/toolkit.yaml", dropped)]), workdir=work)
+    res = GRADERS["profile_valid"](c2)
+    assert not res.passed and "security-reviewer" in res.reason
+
+
+def _tool_use(call_id, name, tool_input):
+    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": call_id, "name": name, "input": tool_input}]}}
+
+
+def _ok(call_id):
+    return {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": call_id, "content": "ok"}]}}
+
+
+ASK_DOC = {"schema": 1, "kind": "ask", "title": "Profile for x",
+           "questions": [{"id": "verify_fast", "kind": "text"}, {"id": "verify_dod", "kind": "text"}]}
+
+
+def test_asks_are_counted_in_the_shapes_a_real_claude_transcript_has():
+    from evals.adapters.claude import stream
+    board = stream.to_actions([_tool_use("1", "mcp__board__board_ask", {"ask": ASK_DOC}), _ok("1")])
+    assert board[0]["kind"] == "github_op" and board[0]["op"] == "board_ask"
+    shell = stream.to_actions([_tool_use("1", "Write", {"file_path": "/tmp/ask.json", "content": json.dumps(ASK_DOC)}), _ok("1"),
+                               _tool_use("2", "Bash", {"command": "tld board ask /tmp/ask.json --fallback-issue o/r#1"}), _ok("2")])
+    comment = stream.to_actions([_tool_use("1", "mcp__github__add_issue_comment", {"body": "<!-- tld-ask -->\n@o ask\n\n-- example reply --\n\n"
+                                                                              "verify_fast: your answer on one line\nverify_dod: your answer on one line\n\n-- end of example --\n"}), _ok("1")])
+    for actions in (board, shell, comment):
+        assert ask_question_ids(actions) == [["verify_fast", "verify_dod"]]
+        assert GRADERS["asks_at_most"](ctx(actions=actions, max=0)).passed is False
+        assert GRADERS["asks_at_most"](ctx(actions=actions, max=1, min=1, question_ids=["verify_dod", "verify_fast"])).passed
+
+
+def test_a_board_ask_command_reads_its_file_from_the_work_tree(tmp_path):
+    import dataclasses
+    (tmp_path / "ask.json").write_text(json.dumps(ASK_DOC))
+    from evals.harness.actions import shell
+    c = dataclasses.replace(ctx(actions=[shell("tld board ask ask.json")], max=1, min=1), workdir=tmp_path)
+    assert GRADERS["asks_at_most"](c).passed and ask_question_ids(c.actions, tmp_path) == [["verify_fast", "verify_dod"]]
+    assert not GRADERS["asks_at_most"](dataclasses.replace(c, params={"max": 0})).passed
+
+
+@pytest.mark.parametrize("command,counts", [
+    ("tld board ask ask.json", True), ("cli/tld board ask ask.json --fallback-issue o/r#1", True),
+    ("./cli/tld board ask ask.json", True), ("tld --repo o/r board ask ask.json", True),
+    ("python3 -m tld board ask ask.json", True), ("X=1 tld board ask ask.json && echo done", True),
+    ("git commit -m 'x; tld board ask ask.json'", True), ("echo tld board ask ask.json", True),  # over-counted on purpose
+    ("tld board answers 12", False)])
+def test_board_ask_commands_are_found_by_tokens(command, counts):
+    from evals.harness.actions import shell
+    assert len(ask_question_ids([shell(command)])) == (1 if counts else 0)
+
+
+def test_an_ask_file_is_read_only_from_the_run_or_the_work_tree(tmp_path):
+    from evals.harness.actions import shell
+    (tmp_path / "outside.json").write_text(json.dumps(ASK_DOC))
+    work = tmp_path / "w"
+    work.mkdir()
+    cmd = [shell("tld board ask ../outside.json")]
+    assert ask_question_ids(cmd, work) == [[]]  # counted, but its ids are not read from outside the tree
+    decoy = [write("/tmp/evil_ask.json", json.dumps(ASK_DOC)), shell("tld board ask ask.json")]
+    assert ask_question_ids(decoy, work) == [[]]  # a suffix match is not a match
+
+
+MARKED = "<!-- tld-ask -->\n@o ask\n\n-- example reply --\n\nverify_fast: your answer on one line\n\n-- end of example --\n"
+
+
+@pytest.mark.parametrize("label,actions", [
+    ("iii_shell_exit3", [shell("tld board ask ask.json", error=True)]),
+    ("iii_bashc", [shell("bash -c 'tld board ask ask.json'")]),
+    ("iii_sh_c_chain", [shell('sh -c "cd x && tld board ask ask.json"')]),
+    ("iii_env", [shell("env FOO=1 tld board ask ask.json")]),
+    ("iii_uv", [shell("uv run tld board ask ask.json")]),
+    ("iii_var", [shell('"$TLD" board ask ask.json')]),
+    ("iii_subshell", [shell("(tld board ask ask.json)")]),
+    ("iii_command_subst", [shell("ID=$(tld board ask ask.json)")]),
+    ("iii_gh_comment", [write("body.md", MARKED), shell("gh issue comment 5 --body-file body.md", error=True)]),
+    ("iii_gh_comment_inline", [shell("gh issue comment 5 --body '" + MARKED + "'")]),
+    ("n_comment_ghapi", [write("body.md", MARKED), shell("gh api repos/o/r/issues/5/comments -F body=@body.md")]),
+    ("iii_github_op_error", [github_op("board_ask", {"ask": ASK_DOC}, error=True)]),
+    ("iii_ask_user_question", [{"id": "q", "kind": "other", "tool": "AskUserQuestion", "input": {"questions": []}, "error": False, "output": ""}]),
+])
+def test_an_attempted_ask_counts_in_every_shape_and_fails_a_max_0_task(label, actions):
+    assert len(ask_question_ids(actions)) == 1, label
+    assert not GRADERS["asks_at_most"](ctx(actions=actions, max=0)).passed, label
+
+
+@pytest.mark.parametrize("command", ["gh issue comment 5 --body 'thanks'", "bash -c 'echo hi'", "uv run pytest -q",
+                                     "tld board answers 12", "git status"])
+def test_commands_that_are_no_ask_do_not_count(command):
+    assert ask_question_ids([shell(command)]) == []
+
+
+def test_profile_valid_pending_keys_may_be_absent_but_nothing_else(tmp_path):
+    import dataclasses
+    from evals.fixtures import setup_repos
+    work = tmp_path / "work"
+    expected = setup_repos.build(work, repo="base_no_tests")
+    setup_repos.seed_base(work)
+    text = (f"tld:\n  extends: {expected['extends']}  # v1\n  version: \">=1.6,<2\"\n"
+            "git:\n  main_branch: main\ndocs:\n  must_read: [README.md]\nstacks: []\n")
+    c = dataclasses.replace(ctx([("worktree", ".tld/toolkit.yaml", text)]), workdir=work)
+    assert not GRADERS["profile_valid"](c).passed  # without `pending` a missing verify.fast is an error
+    ok = dataclasses.replace(c, params={"pending": ["verify.fast", "verify.dod"]})
+    assert GRADERS["profile_valid"](ok).passed
+    only_one = dataclasses.replace(c, params={"pending": ["verify.fast"]})
+    assert not GRADERS["profile_valid"](only_one).passed  # verify.dod is still required
+    guessed = text.replace("stacks: []", 'verify:\n  fast: ["python3 -m unittest -q"]\n  dod: ["python3 -m unittest -q"]\nstacks: []')
+    c2 = dataclasses.replace(ctx([("worktree", ".tld/toolkit.yaml", guessed)]), workdir=work,
+                             params={"keys": ["verify.fast", "verify.dod"]})
+    assert not GRADERS["profile_key_absent"](c2).passed  # a guessed command is caught
+
+
+@pytest.mark.parametrize("command", [
+    "cat > ask.md <<'EOF'\nI don't know the test command\nEOF\ntld board ask ask.json",
+    "# don't\ntld board ask f", "echo it's; tld board ask f", "echo $'it\\'s'; tld board ask f",
+    "timeout 10 tld board ask f", "nice -n 5 tld board ask f", "sudo -u x tld board ask f", "env -C d tld board ask f",
+    "uv run --with x tld board ask f", "if true; then tld board ask f; fi", "for i in 1; do tld board ask f; done",
+    "{ tld board ask f; }", "! tld board ask f", 'echo "$(tld board ask f)"', "x=`tld board ask f`",
+    "${TLD:-tld} board ask f", "tld -C . board ask f", "tld \\\n board ask f", "eval 'tld board ask f'",
+    'gh issue comment 5 --body "$(cat ask.md)"', "gh issue comment 5 --body-file=../ask.md", "gh pr comment 5 --body-file=a.md",
+    "gh api repos/o/r/issues/5/comments --input a.json", "gh\\\nissue comment 5 -F -", "cat ask.md | gh issue comment 5 -F -",
+    "gh issue comment 5 --body-file - <<'EOF'\nit's\nEOF"])
+def test_an_ask_in_an_odd_shape_is_still_counted(command):
+    from evals.harness.actions import shell
+    assert len(ask_question_ids([shell(command)])) >= 1, command
+    assert not GRADERS["asks_at_most"](ctx(actions=[shell(command)], max=0)).passed
+
+
+def test_a_backstop_ask_has_no_ids_so_it_cannot_satisfy_the_question_ids():
+    from evals.harness.actions import shell
+    odd = [shell("echo it's; tld board ask f")]
+    assert not GRADERS["asks_at_most"](ctx(actions=odd, max=1, min=1, question_ids=["verify_fast"])).passed
+
+
+def test_github_op_ask_is_counted_by_its_marker_whatever_the_field():
+    comment = github_op("add_issue_comment", {"text": MARKED})
+    assert len(ask_question_ids([comment])) == 1
+    assert not GRADERS["asks_at_most"](ctx(actions=[github_op("create_pull_request", {"body": MARKED})], max=0)).passed
+
+
+def test_unreadable_ask_files_do_not_crash_the_counter(tmp_path):
+    import dataclasses
+    (tmp_path / "bin.json").write_bytes(b"\xff\xfe\x00" * 10)
+    (tmp_path / "deep.json").write_text("[" * 100000)
+    c = dataclasses.replace(ctx(actions=[shell("tld board ask bin.json"), shell("tld board ask deep.json")], max=5), workdir=tmp_path)
+    assert ask_question_ids(c.actions, tmp_path) == [[], []]
+
+
+def test_migrate_dry_run_task_fails_a_run_that_asks():
+    """The migrate-off-default-paths task grades `--dry-run`: the playbook stops before any ask, so one ask fails it."""
+    import yaml
+    from conftest import ROOT
+    task = yaml.safe_load((ROOT / "evals/tasks/migrate-off-default-paths/task.yaml").read_text())
+    spec = next(g for g in task["graders"] if isinstance(g, dict) and g["name"] == "asks_at_most")
+    assert spec["max"] == 0
+    assert not GRADERS["asks_at_most"](ctx(actions=[ask(["docs.index"])], max=spec["max"])).passed
+    assert GRADERS["asks_at_most"](ctx(actions=[], max=spec["max"])).passed
+
+
+def test_nothing_to_ask():
+    """Spec scenario "Nothing to ask": a run that finds the commands asks nothing."""
+    assert GRADERS["asks_at_most"](ctx(actions=[], max=0)).passed
+    assert not GRADERS["asks_at_most"](ctx(actions=[ask(["verify_fast"])], max=0)).passed
+
+
+def test_one_batch():
+    """Spec scenario "One batch": verify.fast and verify.dod are asked together in one ask, not two."""
+    assert GRADERS["asks_at_most"](ctx(actions=[ask(["verify_fast", "verify_dod"])], max=1)).passed
+    assert not GRADERS["asks_at_most"](
+        ctx(actions=[ask(["verify_fast"]), ask(["verify_dod"], call_id="a2")], max=1)).passed

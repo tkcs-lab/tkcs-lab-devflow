@@ -157,25 +157,29 @@ def test_allow_mark_with_line_splitter_is_refused(sep):
     payload = json.dumps({"s": f"{TOKEN} secret-scan:allow{sep}x"}, ensure_ascii=False)
     assert reasons(page(payload)) == []
     got = reflektor.verify_html(page(payload))
-    assert got and ("line-splitting" in got[0] or "allow mark" in got[0])
+    assert got and ("line-splitting" in got[0] or "credential" in got[0])
 
 
 @pytest.mark.parametrize("sep", ["\u2028", "\u0085", "\x0b", "\x1f"])
 def test_line_splitter_alone_is_refused(sep):
     payload = json.dumps({"s": f"a{sep}b"}, ensure_ascii=False)
-    assert reflektor.verify_html(page(payload)) == ["the data holds a line-splitting character"]
+    assert reflektor.verify_html(page(payload)) == [reflektor.REASON_SPLIT]
 
 
 def test_allow_mark_behind_newline_escape_is_refused():
     payload = json.dumps({"s": f"{TOKEN} secret-scan:allow\nx"})
     assert "\\n" in payload
-    assert reflektor.verify_html(page(payload)) == ["the page carries a secret-scan allow mark"]
+    got = reflektor.verify_html(page(payload))
+    assert len(got) == 1 and "credential" in got[0] and "github-token" in got[0]
 
 
 def test_allow_mark_in_a_key_and_plain_is_refused():
-    for payload in (json.dumps({f"{TOKEN} secret-scan:allow\nx": 1}), json.dumps({"s": "secret-scan:allow"}),
-                    '{"s":"secret-scan\\u003aallow"}'):
-        assert reflektor.verify_html(page(payload)) == ["the page carries a secret-scan allow mark"]
+    got = reflektor.verify_html(page(json.dumps({f"{TOKEN} secret-scan:allow\nx": 1})))
+    assert len(got) == 1 and "credential" in got[0]
+    assert reflektor.verify_html(page(json.dumps({"s": "secret-scan:allow"}))) == []
+    with pytest.raises(PrepareError) as e:
+        reflektor.prepare_page(page('{"s":"secret-scan\\u003aallow"}'))
+    assert e.value.message == reflektor.REASON_ESCAPED
 
 
 def test_token_in_a_key_with_splitter_is_refused():
@@ -451,3 +455,166 @@ def test_report_check_imports_nothing_from_tld():
     src = open(report_check.__file__, encoding="utf-8").read()
     assert not re.search(r"^\s*(from|import)\s+tld", src, re.M)
     assert len(report_check.VIEWER_PARTS) == 4
+
+
+# ---- the allow mark: scan with the skip off, then neutralise
+
+MARK = "secret-scan:allow"
+ESC_TOKEN = '\\u0067' + TOKEN[1:]
+
+
+def test_raw_scan_ignores_mark_in_viewer_part(monkeypatch):
+    fake_a = "<!doctype html>\n<!-- " + TOKEN + " secret-scan:allow\n--><head>"
+    monkeypatch.setattr(report_check, "VIEWER_PARTS", (_p(fake_a), _p(B), _p(C), _p(D)))
+    text = page(a=fake_a)
+    assert reasons(text) == []
+    got = reflektor.verify_html(text)
+    assert len(got) == 1 and "github-token" in got[0]
+
+
+def test_escaped_token_on_marked_decoded_line_is_refused():
+    as_string = '{"s":"' + ESC_TOKEN + ' secret-scan:allow\\nx"}'
+    as_key = '{"' + ESC_TOKEN + ' secret-scan:allow\\nx":1}'
+    for payload in (as_string, as_key):
+        assert TOKEN not in payload and reasons(page(payload)) == []
+        got = reflektor.verify_html(page(payload))
+        assert len(got) == 1 and "github-token" in got[0]
+
+
+def test_credential_on_marked_line_is_refused_and_nothing_is_written(tmp_path):
+    f = write(tmp_path / "r.html", hardless(json.dumps({"s": f"{TOKEN} {MARK}\nx"})))
+    before = f.read_bytes()
+    with pytest.raises(PrepareError) as e:
+        reflektor.harden_html(f)
+    assert "credential" in e.value.message
+    assert f.read_bytes() == before
+
+
+def test_title_token_on_marked_line_is_refused():
+    got = reflektor.verify_html(page(title=f"{TOKEN} {MARK}"))
+    assert len(got) == 1 and "credential" in got[0]
+
+
+def test_quoted_mark_is_built_and_stored(tmp_path, capfd):
+    payload = json.dumps({"note": f"quotes {MARK} in prose", f"k {MARK}": f"v {MARK}"})
+    f = write(tmp_path / "r.html", hardless(payload).replace("<title>t</title>", f"<title>about {MARK}</title>"))
+    reflektor.harden_html(f)
+    out = f.read_text(encoding="utf-8")
+    assert MARK not in out and reflektor.REDACTED_MARK in out
+    assert report_check.check(out) == []
+    assert "removed 4 secret-scan allow marks" in capfd.readouterr().err
+
+    ans, h = make_answer(tmp_path, ["REPORT-HTML @H@"], html=page(payload, title=f"about {MARK}"), name="q")
+    dest = tmp_path / "dq"
+    dest.mkdir()
+    got = reflektor.send_copy(ans, dest).read_text(encoding="utf-8")
+    assert MARK not in got and reflektor.REDACTED_MARK in got and report_check.check(got) == []
+    assert "removed 4 secret-scan allow marks" in capfd.readouterr().err
+    assert got.startswith(A + report_check.CSP_META + B) and got.endswith(D)
+
+
+def test_mark_in_viewer_part_is_refused(monkeypatch):
+    fake_a = A[:-6] + MARK + "<head>"
+    monkeypatch.setattr(report_check, "VIEWER_PARTS", (_p(fake_a), _p(B), _p(C), _p(D)))
+    with pytest.raises(PrepareError) as e:
+        reflektor.prepare_page(page(a=fake_a))
+    assert e.value.message == reflektor.REASON_MARK_RAW
+
+
+def test_marks_left():
+    assert reflektor.marks_left(page('{"s":"secret-scan:allow"}')) == [reflektor.REASON_MARK_RAW]
+    assert reflektor.marks_left(page()) == []
+    assert reflektor.marks_left(page('{"s":"secret-scan\\u003aallow"}')) == [reflektor.REASON_ESCAPED]
+    assert reflektor.marks_left(page('{"secret-scan\\u003aallow":1}')) == [reflektor.REASON_ESCAPED]
+
+
+def test_escaped_mark_is_refused(tmp_path):
+    f = write(tmp_path / "r.html", hardless('{"s":"secret-scan\\u003aallow"}'))
+    before = f.read_bytes()
+    with pytest.raises(PrepareError) as e:
+        reflektor.harden_html(f)
+    assert e.value.message == reflektor.REASON_ESCAPED
+    assert f.read_bytes() == before
+
+
+@pytest.mark.parametrize("quote,count", [("secret-scan:secret-scan:allowallow", 2), ("secret-scan:allowsecret-scan:allow", 4)])
+def test_overlapping_marks_leave_no_mark(quote, count):
+    neutral, n = reflektor.neutralise_page(page(json.dumps({"s": quote}), title=quote))
+    assert MARK not in neutral
+    assert n == count
+    assert reflektor.marks_left(neutral) == []
+
+
+def test_neutralise_page_swaps_only_title_and_data():
+    neutral, n = reflektor.neutralise_page(page('{"s":"x secret-scan:allow"}', title=MARK))
+    assert n == 2
+    assert neutral == page('{"s":"x ' + reflektor.REDACTED_MARK + '"}', title=reflektor.REDACTED_MARK)
+    assert reflektor.neutralise_page(page())[1] == 0
+
+
+def test_long_title_over_the_cap_after_the_swap_is_refused():
+    title = MARK * 11  # 187 characters; 9 more per mark makes 286
+    assert reasons(page(title=title)) == []
+    with pytest.raises(PrepareError) as e:
+        reflektor.prepare_page(page(title=title))
+    assert e.value.message == "the title is not plain one-line text"
+
+
+def test_refusal_prints_no_removed_line(tmp_path, capfd):
+    with pytest.raises(PrepareError):
+        reflektor.prepare_page(page(json.dumps({"s": f"{MARK} {TOKEN}\nx", "t": MARK})))
+    assert "removed" not in capfd.readouterr().err
+
+
+def test_known_reason():
+    for r in (reflektor.REASON_SPLIT, reflektor.REASON_ESCAPED, reflektor.REASON_MARK_RAW, "already hardened",
+              "the page holds something that looks like a credential (github-token, high-entropy-assignment)",
+              "invalid payload (contains '<')", "invalid payload", "the data has a link target under 'branch.pr'",
+              "page part 3 differs from the pinned viewer", "cannot open the page: FileNotFoundError",
+              "the page is larger than 20971520 bytes"):
+        assert reflektor.known_reason(r), r
+    for r in ("the page holds something that looks like a credential (ghp_x)", "other", "already hardened!",
+              "the data has a link target under 'x'"):
+        assert not reflektor.known_reason(r), r
+
+
+NPM = "npm_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"[:36]
+AWS = "AKIA" + "ABCDEFGHIJKLMNOP"
+
+
+@pytest.mark.parametrize("kind,make", [
+    ("after", lambda: (json.dumps({"s": MARK + TOKEN}), "t")),
+    ("npm before", lambda: (json.dumps({"s": NPM + MARK}), "t")),
+    ("aws before", lambda: (json.dumps({"s": AWS + MARK}), "t")),
+    ("title after", lambda: ('{"a":1}', MARK + TOKEN)),
+    ("title before", lambda: ('{"a":1}', NPM + MARK)),
+])
+def test_token_glued_to_mark_is_refused(tmp_path, kind, make):
+    payload, title = make()
+    text = page(payload, title=title)
+    assert reasons(text) == []
+    assert reflektor.verify_html(text) == []  # the original hides it: no word boundary next to the mark
+    f = write(tmp_path / "r.html", hardless(payload).replace("<title>t</title>", f"<title>{title}</title>"))
+    before = f.read_bytes()
+    with pytest.raises(PrepareError) as e:
+        reflektor.harden_html(f)
+    assert "credential" in e.value.message
+    assert f.read_bytes() == before
+    ans, _h = make_answer(tmp_path, ["REPORT-HTML @H@"], html=text, name="g")
+    dest = tmp_path / "dg"
+    dest.mkdir()
+    with pytest.raises(PrepareError) as e:
+        reflektor.send_copy(ans, dest)
+    assert "credential" in e.value.message and list(dest.iterdir()) == []
+
+
+def test_removed_line_is_not_printed_when_the_write_fails(tmp_path, capfd, monkeypatch):
+    payload = json.dumps({"note": f"quotes {MARK}"})
+    f = write(tmp_path / "w.html", hardless(payload))
+
+    def boom(*_a, **_k):
+        raise OSError("disk")
+    monkeypatch.setattr(reflektor.os, "replace", boom)
+    with pytest.raises(PrepareError):
+        reflektor.harden_html(f)
+    assert "removed" not in capfd.readouterr().err

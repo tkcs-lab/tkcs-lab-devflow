@@ -55,6 +55,7 @@ this one is valid (save it as `record.json`):
   "command": null,
   "project": "example-project",
   "repo": "example/example-project",
+  "tracking_issue": 7,
   "plan_slug": "demo",
   "plan_url": "https://example.com/example/example-project/blob/plan/docs/plan.md",
   "feature_branch": "feature/plan-example-project",

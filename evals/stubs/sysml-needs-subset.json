@@ -3,7 +3,7 @@
   "turns": 3,
   "cost_usd": 0.0,
   "guard": true,
-  "result_text": "toolkit.yaml: missing required key 'sysml.subset' (add a sysml block; see docs/guides/sysml.md)",
+  "result_text": "toolkit.yaml: /sysml needs a 'sysml' section (an empty 'sysml:' uses subset 1; see docs/guides/sysml.md)",
   "actions": [
     {
       "id": "t1",

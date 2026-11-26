@@ -61,7 +61,8 @@ These are the branch kinds the playbooks use, and no others:
 | review | `review/<slug>`, `review/questions-<yyyy-mm-dd>` (kept: the dedupe memory of the next questions run) | review (`tld plan branch-name --review-slug <slug>`), questions |
 | feature | the manifest's `feature_branch`, following `git.branch_pattern` | make-plan (with the plan), then implement |
 | phase | `<feature>--<phase id>`, `<feature>--<phase id>-rev<n>`, `<feature>--fix-<n>` | implement (`tld plan branch-name --manifest <plan> ...`) |
-| chore | `chore/<what>` or `chore/<what>-<date>`: `chore/toolkit-profile` (setup), `chore/docs-init-<yyyymmdd>` and `chore/docs-tidy-<yyyymmdd>` (docs), `chore/deps-<ecosystem>-<yyyymmdd>` (deps), `chore/ci-<workflow>-<yyyymmdd>` (ci), `chore/upstream-<new-with-hyphens>` (upstream), `chore/land-<yyyymmdd-hhmm>` and `chore/tld-land-workflow` (land), `chore/tld-migrate` (migrate), `chore/protected-<slug>-<yyyymmdd>` (protected-changes) | setup, docs, deps, ci, upstream, land, migrate, implement, an attended session |
+| chore | `chore/<what>` or `chore/<what>-<date>`: `chore/toolkit-profile` (setup), `chore/docs-init-<yyyymmdd>` and `chore/docs-tidy-<yyyymmdd>` (docs), `chore/deps-<yyyymmdd>` (deps; `-2`, `-3` on a later run that day), `chore/ci-<workflow>-<yyyymmdd>` (ci), `chore/upstream-<new-with-hyphens>` (upstream), `chore/land-<yyyymmdd-hhmm>` and `chore/tld-land-workflow` (land), `chore/tld-migrate` (migrate), `chore/protected-<slug>-<yyyymmdd>` (protected-changes) | setup, docs, deps, ci, upstream, land, migrate, implement, an attended session |
+| local | `tld-deps/<k>`, `tld-deps/combined-<m>`: never pushed under that name | deps |
 
 When the runtime refuses to push a branch name (a git proxy that allows only its own assigned branch), the
 playbook says what to do: create the branch with `github.branch_create` and push again, and if that is also
@@ -74,5 +75,8 @@ request title.
   the main branch's history; write each one for that audience.
 - **Never open a version heading in the changelog on a feature branch** (when `docs.changelog` is set):
   entries go under `docs.changelog.section`.
+- **A pull request that changes a workflow or the profile names it under Security.** The `## Summary` of a pull
+  request that changes a file under `.github/workflows/` or `.tld/toolkit.yaml` has a `**Security:**` line that names
+  each such file (`tld plan summary-check --changed` checks it).
 - **A protected branch is protected like the main branch.** Work that targets a long-lived integration
   branch the project documents branches from it and is proposed back into it.

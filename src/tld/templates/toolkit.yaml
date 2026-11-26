@@ -5,6 +5,7 @@
 
 tld:
   version: ">=1.0,<2"    # optional: the tld releases this profile is written for; tld profile validate checks it
+  # extends: <owner>/<repo>/<path>@<40-hex commit sha>  # optional: the base profile this one extends; setup writes it
 
 project:
   name: My Project       # optional; used in prose. Default: the repository name
@@ -134,19 +135,22 @@ stacks: []               # REQUIRED (may be []). Stack guides to load (stacks/<n
 #     - TLD
 
 # hooks:                 # optional: settings of the guardrail hooks tld ships (docs/architecture/hooks.md).
-#                        # The values below are the defaults; with no `hooks` section all hooks but dod-gate are on.
+#                        # The values below are the defaults; with no `hooks` section all hooks are on by default.
 #   disable: []          # escape hatch: names of hooks to switch off here, any of
-#                        #   no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate
+#                        #   no-merge, no-force-push, no-git-tag, secret-scan, protect-paths, dod-gate,
+#                        #   plan-gate, model-check, board-gate, env-check
 #   protect_paths:       # paths protect-paths refuses to edit (replaces this default list when set)
-#     - .tld/toolkit.yaml
 #     - .env
 #     - ".env.*"
 #     - "*.lock"
 #     - package-lock.json
 #     - go.sum
-#     - ".github/workflows/**"
 #   protect_paths_allow: []   # exceptions, on top of .env.example / .env.sample / .env.template / .env.dist
-#                             # and the workflow files /land and repo-admin install
+#                             # (the workflow files /land and repo-admin install are always guarded)
 #   dod_gate:
-#     enabled: false     # opt in: block stopping until verify.dod passes (not for the /implement orchestrator)
+#     enabled: true      # on by default: block stopping until verify.dod passes (not for the /implement orchestrator)
 #     max_attempts: 3    # after this many failed attempts the session may stop, and the user is told why
+#   plan_gate:
+#     enabled: true      # on by default: a session no tld command started cannot write to the repository
+#   board_gate:
+#     enabled: true      # on by default: the board commands record their ask and answer in the board
