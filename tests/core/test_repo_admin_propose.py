@@ -269,3 +269,32 @@ def test_a_workflow_entry_without_a_template_is_not_proposed(ra):
     ctx, _ = inherited(ra, policy, routes=served(), files={"app": {TOOLKIT: own}})
     [f] = proposals(ra, ctx)
     assert f.subject == "override:propose" and content(f)["workflows"] == [{"template": "land"}]
+
+
+def _live_main(checks):
+    rule = {"type": "required_status_checks", "parameters": {"required_status_checks": checks}}
+    return {("GET", "/repos/acme/app/rulesets"): [{"id": 7, "name": "tld-main", "source_type": "Repository"}],
+            ("GET", "/repos/acme/app/rulesets/7"): {"id": 7, "name": "tld-main", "rules": [{"type": "deletion"}, rule]}}
+
+
+def test_live_checks_are_not_replaced_by_a_proposal(ra):
+    live = _live_main([{"context": "test", "integration_id": 15368}, {"context": "only-live"}])
+    ctx, _ = inherited(ra, POLICY, routes={**served(), **live}, files={"app": {"README.md": "x"}})
+    [f] = proposals(ra, ctx)
+    doc = content(f)
+    assert "rulesets" not in doc  # the key stays absent: the live checks and their binding are kept
+    assert "required_status_checks are not proposed: tld-main already requires 2" in f.action.note
+    assert doc["workflow_params"]["release"]["tag_prefix"] == "v"
+    only = {**POLICY, "workflows": [{"template": "release", "params": {"tag_prefix": "v"}}]}
+    ctx, fake = inherited(ra, only, routes={**served(), **live}, files={"app": {"README.md": "x"}})
+    assert proposals(ra, ctx) == []  # nothing left to propose
+    assert [p for p in fake.reads if p.endswith("/pulls")] == []
+
+
+def test_a_path_workflow_left_out_is_named(ra):
+    policy = {**POLICY, "workflows": [{"template": "release"}, {"path": "ci/x.yml"}, {"path": "o.yml", "repos": ["other-*"]},
+                                      {"template": "land"}]}
+    own = prof("", "release: {workflow: ship.yml, version_files: [{path: VERSION, pattern: '(.*)'}]}\n")
+    ctx, _ = inherited(ra, policy, routes=served(), files={"app": {TOOLKIT: own}})
+    [f] = proposals(ra, ctx)
+    assert "leaves out the workflow with path ci/x.yml" in f.action.note and "o.yml" not in f.action.note
