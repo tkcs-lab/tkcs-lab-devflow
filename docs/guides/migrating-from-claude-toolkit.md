@@ -54,6 +54,14 @@ minutes plus your review of one pull request.
    until then a `verify.dod` entry that runs a `plugins/devflow/` script fails. `tld migrate .` now says
    `Nothing to migrate`.
 
+## After the move
+
+`tld migrate .` moves a claude-toolkit repository to tld. A repository that is already on tld has a second mode:
+`tld migrate . --defaults` lists a docs index, ADR directory or changelog found off its default path, and with
+`--write --answers FILE` renames it or keeps it with an explicit key (see [cli.md](../reference/cli.md)). When you
+upgrade to tld 1.7, read [org-base.md#behaviour-changes-on-upgrade-17](org-base.md#behaviour-changes-on-upgrade-17)
+for the defaults and protect-list changes that come with it.
+
 ## What `tld migrate` never touches
 
 Prose: only the exact texts `devflow:` (as a command or skill prefix), `.claude/toolkit.yaml` and `DEVFLOW_` are
