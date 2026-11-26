@@ -175,8 +175,8 @@ the pull request in one go. In this order:
    before the first change, the dod playbook, one pull request following the repository template whose body
    starts with `Closes #<n>` (the tracking issue; one more per issue the ask named) and then a `## Summary` of at
    most 175 words that says how the result differs from this prompt (labels `**Deviations:**`, `**Review focus:**`
-   and optionally `**Scope:**`; `None.` is allowed for Deviations; the worker's own words, nothing pasted), the
-   body written to a scratch file and checked with `tld plan summary-check <body file> --kind pr`, which must
+   and optionally `**Scope:**` and `**Security:**`, which is required and names each file when the diff changes a workflow or the profile (write `$` and `<` in words there: they are refused, even in inline code); `None.` is allowed for Deviations; the worker's own words, nothing pasted), the
+   body written to a scratch file and checked, with the changed paths (`git diff --name-only --no-renames origin/<main>...HEAD`) in a second scratch file, by `tld plan summary-check <body file> --kind pr --changed <changed list>`, which must
    exit 0 before `github.pr_create`; the comment
    `PR opened: <url>.`, and driving it to green per the pr-steward policy (and the steward file, if any).
 9. **After merge-ready**: the `manual_after` steps as unchecked items in the pull request body.
@@ -371,7 +371,9 @@ here so the worker only has to execute. Every phase passes all of these:
   without a question; any other command is put to the owner before implement runs it (S14).
 
 - **A phase never lists a protected path in `touches`**; its brief says: do not edit <path>, report
-  protected-change: <path> - <why> with the diff (policies/protected-changes.md).
+  protected-change: <path> - <why> with the diff (policies/protected-changes.md). The profile and ordinary
+  workflows are not protected by default and may be listed; the brief then says the pull request names them
+  under Security.
 - **`worker_level: fast`** is allowed only for a phase that is complexity `S`, whose brief gives the literal text
   or the literal edit for every change (docs, strings, config values, renames, fixture or baseline refreshes),
   contains no new control flow or function, and whose acceptance is a named test or a grep. The default is the

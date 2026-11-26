@@ -350,3 +350,14 @@ def test_the_base_content_must_still_match_the_pattern(repo, capsys):
     prepared(repo, capsys)
     assert rp._rebuild_problems(repo, "HEAD", "pkg/__init__.py", r'^nothing = "(\d+)"', "1") == [
         "no match for the pattern in pkg/__init__.py at the base"]
+
+
+def test_release_workflow_defaults_inside_section(repo):
+    prof = yaml.safe_load((repo / ".tld/toolkit.yaml").read_text())
+    del prof["release"]["workflow"]
+    (repo / "p.yaml").write_text(yaml.safe_dump(prof))
+    assert rp._load(str(repo / "p.yaml"))["release"]["workflow"] == "tld-release.yml"
+    del prof["release"]  # no section: the default is not invented
+    (repo / "p.yaml").write_text(yaml.safe_dump(prof))
+    with pytest.raises(rp.ReleaseError, match="no 'release' section"):
+        rp._load(str(repo / "p.yaml"))

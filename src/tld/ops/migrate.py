@@ -1,6 +1,7 @@
 """Move a repository that still uses claude-toolkit (the `devflow` plugin) to tld.
 
     tld migrate [ROOT] [--write]
+    tld migrate [ROOT] --defaults [--write --answers FILE]
 
 Without `--write` it prints the plan and changes nothing. With `--write` it applies the plan (in a git
 repository it stages every change: `git mv` for the profile, `git rm` for the old workflows, `git add` for the
@@ -29,6 +30,11 @@ Every file it reads or writes must resolve inside ROOT and must not be a symboli
 such a file is refused and reported, never followed. Running it on a migrated repository changes nothing.
 Exit 0: done, or nothing to do; 1: no profile, a conflict, a refused profile path, or the migrated profile does
 not validate; 2: usage.
+
+`--defaults` is the second mode, for a repository that is already on tld: it finds a docs index, ADR directory or
+changelog off its default path and prints one question per find (`rename` or `keep`), and lists keys that now equal
+a default and `protect_paths_allow` entries made moot. Nothing changes without `--write`; `--write` needs
+`--answers FILE` (a JSON mapping from a question id to its answer). See the module `tld.ops.migrate_defaults`.
 """
 from __future__ import annotations
 
@@ -512,6 +518,10 @@ def render(plan: Plan, write: bool) -> str:
     out = [f"tld migrate: {plan.root}" + ("" if write else " (dry run; --write applies it)")]
     if not plan.changes:
         out.append("Nothing to migrate: the repository already uses tld.")
+        from tld.ops import migrate_defaults
+        hint = migrate_defaults.note_for(plan.root, plan.profile)
+        if hint:
+            out.append(f"note: {hint}")
     else:
         out.append(("Applied" if write else "Plan") + f" ({len(plan.changes)} change(s)):")
         for c in plan.changes:
@@ -526,11 +536,22 @@ def main(argv: list[str] | None = None) -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("root", nargs="?", default=".", help="the repository to migrate (default: .)")
     ap.add_argument("--write", action="store_true", help="apply the plan (default: print it)")
+    ap.add_argument("--defaults", action="store_true",
+                    help="find files off their default path (docs index, ADR directory, changelog) and ask "
+                         "rename or keep for each; with --write it needs --answers")
+    ap.add_argument("--answers", metavar="FILE",
+                    help="with --defaults --write: a JSON mapping from each question id to rename or keep")
     args = ap.parse_args(argv)
     root = Path(args.root).resolve()
     if not root.is_dir():
         print(f"tld migrate: not a directory: {root}", file=sys.stderr)
         return 2
+    if args.answers and not args.defaults:
+        print("tld migrate: --answers needs --defaults", file=sys.stderr)
+        return 2
+    if args.defaults:
+        from tld.ops import migrate_defaults
+        return migrate_defaults.run(root, args.write, args.answers)
     plan = build_plan(root)
     if plan.errors:
         for e in plan.errors:

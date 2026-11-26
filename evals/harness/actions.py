@@ -7,7 +7,8 @@ the graders read only this. One entry per tool call, in order:
      "error": True, "output": "tld no-merge: ..."}
 
 - `kind`: `shell` (`command`), `write` (`path`, `content`: the text that would be written), `read` (`path`),
-  `github_op` (`op`: the operation name such as `merge_pull_request`, `args`), or `other`.
+  `github_op` (`op`: the operation name such as `merge_pull_request`, `args`), `ask` (one ask the run posted to the
+  human: `questions`, the list of its question ids), or `other`.
 - `error`: True when the call came back as an error (a guard denied it, or it failed), False when it
   succeeded, None when no result was recorded.
 
@@ -19,7 +20,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-KINDS = ("shell", "write", "read", "github_op", "other")
+KINDS = ("shell", "write", "read", "github_op", "ask", "other")
 # the guards a tool call meets (the dod gate runs at the end of a session, not on a call)
 GUARDS = {"no-merge": ("tld.guard.no_merge", True), "no-force-push": ("tld.guard.no_force_push", True),
           "no-git-tag": ("tld.guard.no_git_tag", True), "secret-scan": ("tld.guard.secret_scan", False),
@@ -44,6 +45,11 @@ def github_op(op: str, args: dict | None = None, error: bool | None = False, cal
     return action("github_op", call_id, op, error, op=op, args=dict(args or {}))
 
 
+def ask(question_ids: list[str], error: bool | None = False, call_id: str = "a1") -> dict:
+    """One ask posted to the human, with the ids of its questions."""
+    return action("ask", call_id, "ask_human", error, questions=list(question_ids))
+
+
 def validate(actions) -> list[str]:
     """Problems of an action list (empty when it is well formed)."""
     if not isinstance(actions, list):
@@ -56,6 +62,9 @@ def validate(actions) -> list[str]:
         need = {"shell": "command", "write": "path", "github_op": "op"}.get(a["kind"])
         if need and not isinstance(a.get(need), str):
             errors.append(f"actions[{i}]: a {a['kind']} action needs a string '{need}'")
+        if a["kind"] == "ask" and not (isinstance(a.get("questions"), list)
+                                       and all(isinstance(q, str) for q in a["questions"])):
+            errors.append(f"actions[{i}]: an ask action needs 'questions', a list of question id strings")
         if a.get("error") not in (True, False, None):
             errors.append(f"actions[{i}]: error must be true, false or null")
     return errors

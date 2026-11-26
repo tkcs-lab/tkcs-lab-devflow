@@ -9,7 +9,7 @@ Input: optional pull request numbers.
 
 Load the profile as [policies/profile.md](policies/profile.md) says. On an error show the message verbatim and
 stop; never substitute a value of your own. This playbook needs `git.bot_login`; without it stop with
-`toolkit.yaml: missing required key 'git.bot_login'`. `land.max_prs` is optional. "The gate" is `verify.dod`.
+`toolkit.yaml: missing required key 'git.bot_login'`. `land.max_prs` is part of the resolved profile (default 10; `false` means no limit). "The gate" is `verify.dod`.
 
 **DoD gate.** This playbook merges branches on an integration branch and changes no code itself: `tld dod
 exempt` once.
@@ -40,7 +40,7 @@ exempt` once.
    are all in this repository), so `origin/<head>` is each pull request's current head. Never merge a head you
    have not just fetched; when a pull request's reported head SHA differs from the fetched one, fetch again.
 3. Build the JSON list of `{"number", "head", "base"}` (branch names) and run
-   `tld ops land-order - --max <land.max_prs> < list.json` (`--max` only when `land.max_prs` is set). The output
+   `tld ops land-order - --max <land.max_prs> < list.json` (`--max` is always passed with the resolved value; leave it out only when the profile says `land.max_prs: false`). The output
    is the order, one number per line. Exit 1 prints `land_order: <message>`: show it verbatim, set `needs_you`
    with that message and stop.
 

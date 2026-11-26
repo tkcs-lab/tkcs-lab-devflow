@@ -139,7 +139,7 @@ The system SHALL provide `tld plan deviations init`, `add` and `check` to create
 - **THEN** `deviations: <message>` is printed and the exit code is 1
 
 ### Requirement: Summary section check
-The system SHALL, in `tld plan summary-check FILE --kind plan|issue|pr [--findings N]`, require exactly one `## Summary` section placed first (an issue: right after `## Request`) that follows the rules of the scenarios below, and SHALL print `summary: <problem>` per problem and exit 1, or `summary: OK (<n> words)`.
+The system SHALL, in `tld plan summary-check FILE --kind plan|issue|pr [--findings N] [--changed LIST]`, require exactly one `## Summary` section placed first (an issue: right after `## Request`) that follows the rules of the scenarios below, and SHALL print `summary: <problem>` per problem and exit 1, or `summary: OK (<n> words)`.
 
 #### Scenario: Labels
 - **WHEN** the Summary is checked
@@ -169,8 +169,12 @@ The system SHALL, in `tld plan summary-check FILE --kind plan|issue|pr [--findin
 - **WHEN** `--findings N` is given with `--kind pr`
 - **THEN** the section must exist and hold exactly N rows (the line `None.` when N is 0), otherwise a `summary: findings:` or `summary: no '## Non-blocking findings' section` problem is printed and the exit code is 1
 
+#### Scenario: Changed workflow or profile not named
+- **WHEN** `--changed LIST` (one path per line) is given with `--kind pr` and lists a workflow file or the profile file, and the Summary's Security label is missing, `None.`, or does not name each such path (its full path or its file name)
+- **THEN** a problem names the paths that are not named and the exit code is 1
+
 #### Scenario: Unreadable file or misuse
-- **WHEN** the file is missing, larger than 1000000 bytes or not UTF-8, or `--deviations` or `--findings` is used with a kind other than pr, or `--findings` is negative
+- **WHEN** the file is missing, larger than 1000000 bytes or not UTF-8, or `--deviations`, `--findings` or `--changed` is used with a kind other than pr, or `--findings` is negative
 - **THEN** a missing, oversized or non-UTF-8 file prints one `summary:` line and exits 1, and the misuse prints a usage message and exits 2
 
 ### Requirement: Scope drift monitoring

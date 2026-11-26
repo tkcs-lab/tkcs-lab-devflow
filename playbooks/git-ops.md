@@ -13,9 +13,10 @@ actions: [runtime.md](runtime.md).
 
 ## Before anything
 
-1. Load the profile as [policies/profile.md](policies/profile.md) says. This playbook needs `git_ops.repo`;
-   without it stop with `toolkit.yaml: missing required key 'git_ops.repo'` and point to
-   `docs/guides/git-ops.md`. Never substitute a repository of your own.
+1. Load the profile as [policies/profile.md](policies/profile.md) says. The `git_ops` section is optional:
+   `git_ops.repo` defaults to `<origin owner>/git-ops` (the resolved profile has it). With `git_ops: false` stop
+   with `toolkit.yaml: /git-ops is switched off ('git_ops: false')` and point to `docs/guides/git-ops.md`. Never
+   substitute a repository of your own.
 2. The central repository must be reachable: `github.attach_repo(<git_ops.repo>, push)`. A refusal is quoted and
    the run stops.
 

@@ -135,3 +135,40 @@ def test_cli(tmp_path):
     out = json.loads(proc.stdout)
     assert set(out) == {"root", "evidence", "proposal"}
     assert out["proposal"]["profile"]["stacks"] is not None
+
+
+def test_base_option_drops_the_bot_and_the_values_the_base_sets(tmp_path):
+    build(tmp_path, "security_heavy")
+    (tmp_path / ".github").mkdir(exist_ok=True)
+    (tmp_path / ".github" / "CODEOWNERS").write_text("* @alice @bot @carol\n", encoding="utf-8")
+    base = tmp_path.parent / (tmp_path.name + "-base.yaml")
+    base.write_text("git:\n  bot_login: bot\n  codeowners: [alice]\n  main_branch: main\n", encoding="utf-8")
+    proc = subprocess.run([*SCRIPT_CMD, str(tmp_path), "--base", str(base)], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+    assert out["evidence"]["repo"]["codeowners"] == ["alice", "carol"]
+    assert out["proposal"]["profile"]["git"] == {"codeowners": ["alice", "carol"]}
+    assert out["evidence"]["git"]["branch_prefixes"] is not None
+
+
+def test_base_option_rejects_an_unreadable_base(tmp_path):
+    proc = subprocess.run([*SCRIPT_CMD, str(tmp_path), "--base", str(tmp_path / "none.yaml")],
+                          capture_output=True, text=True)
+    assert proc.returncode == 1 and "profile_survey: cannot read" in proc.stderr
+
+
+def test_a_bot_in_the_repositorys_own_profile_is_never_a_code_owner_whatever_its_case(tmp_path):
+    build(tmp_path, "security_heavy")
+    (tmp_path / ".github").mkdir(exist_ok=True)
+    (tmp_path / ".github" / "CODEOWNERS").write_text("* @TLD-Bot @alice @Alice\n", encoding="utf-8")
+    (tmp_path / ".tld").mkdir(exist_ok=True)
+    (tmp_path / ".tld" / "toolkit.yaml").write_text("git:\n  bot_login: tld-bot\n", encoding="utf-8")
+    out = ps.survey(tmp_path)
+    assert out["evidence"]["repo"]["codeowners"] == ["alice"]
+    assert out["proposal"]["profile"]["git"]["codeowners"] == ["alice"]
+
+
+def test_a_bot_in_the_proposal_is_dropped_without_a_base(tmp_path):
+    from tld.profile import survey_proposal as sp
+    out = sp.build({"bot_login": "tld-bot", "repo": {"codeowners": ["TLD-bot", "alice"]}})
+    assert out["profile"]["git"]["codeowners"] == ["alice"]

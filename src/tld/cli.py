@@ -14,6 +14,7 @@ import tld
 # (group, command) -> (module, arguments put in front of the user's, one-line help)
 COMMANDS: dict[tuple[str, str], tuple[str, tuple[str, ...], str]] = {
     ("profile", "validate"): ("tld.profile.validate", (), "validate a profile against the schema"),
+    ("profile", "base"): ("tld.profile.base", (), "check | fetch | latest: the org base profile a profile extends"),
     ("profile", "patch"): ("tld.profile.patch", (), "set-block | diff: text-level edits of the profile"),
     ("profile", "survey"): ("tld.profile.survey", (), "survey a repository and propose profile blocks"),
     ("profile", "survey-docs"): ("tld.profile.survey_docs", (), "the docs part of the survey"),

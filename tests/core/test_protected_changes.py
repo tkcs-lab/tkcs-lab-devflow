@@ -76,7 +76,7 @@ def test_the_flow_checks_the_whole_diff_and_the_excluded_set():
 ALLOW_SENTENCE = (
     "`BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the "
     "effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of "
-    "`GUARDED_WORKFLOWS`, `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow "
+    "any workflow `guarded_workflows` returns (the land and release workflows, `tld-git-ops.yml` and the profile's `release.workflow` and `git_ops.workflow`), `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow "
     "pattern matches them.")
 
 

@@ -51,7 +51,8 @@ def test_every_tld_ops_spec_span_runs_through_the_wrapper(name, tmp_path, monkey
     pkg.write_text(json.dumps({"version": "2.1.0"}))
     monkeypatch.setenv("TLD_CACHE_DIR", str(cache))
     profile = tmp_path / "toolkit.yaml"
-    profile.write_text('spec:\n  version: "2.1.0"\n')
+    profile.write_text("git:\n  main_branch: main\nverify:\n  fast: ['true']\n  dod: ['true']\n"
+                       'spec:\n  version: "2.1.0"\n')
     calls = []
     monkeypatch.setattr(spec, "_which", lambda n: f"/bin/{n}")
     monkeypatch.setattr(spec, "_node_version", lambda: "22.20.0")

@@ -42,7 +42,7 @@ def write(root: Path, rel: str, text: str) -> None:
 
 
 def make_repo(root: Path, with_change: bool) -> None:
-    write(root, ".tld/toolkit.yaml", "sysml:\n  subset: 1\n")
+    write(root, ".tld/toolkit.yaml", "git:\n  main_branch: main\nverify:\n  fast: ['true']\n  dod: ['true']\nsysml:\n  subset: 1\n")
     write(root, "sysml/model/core/api.sysml", API)
     assert sysml.main(["render", "--root", str(root)]) == 0
     if with_change:

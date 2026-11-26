@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Validate .tld/toolkit.yaml against schema/profile.schema.json.
 
-    tld profile validate [PROFILE] [--root DIR] [--resolved] [--no-file-checks]
+    tld profile validate [PROFILE] [--root DIR] [--ref REF] [--resolved] [--explain] [--no-file-checks]
 
-Exit 0 when valid, 1 with one error per line otherwise. --resolved prints the profile as JSON with
-the schema's documented defaults filled in (the only defaults there are). `tld.version`, when set, is
-checked against the running tld (src/tld/profile/version.py). Python 3.11+, PyYAML.
+Exit 0 when valid, 1 with one error per line otherwise. The profile is resolved by tld.profile.resolve: the org
+base (`tld.extends`), the built-in defaults of tld.profile.defaults and the trusted default branch's guarded keys.
+--resolved prints the resolved profile as JSON (and a note on stderr); --explain prints `<key> = <value>  # <source>`
+per value; --ref REF reads the profile and the files that decide the defaults from that ref. `tld.version`, when
+set, is checked against the running tld (src/tld/profile/version.py). Python 3.11+, PyYAML.
 """
 from __future__ import annotations
 
@@ -14,8 +16,6 @@ import json
 import re
 import sys
 from pathlib import Path
-
-import yaml
 
 import tld
 from tld.profile import version as tv
@@ -52,17 +52,21 @@ def _ref(schema: dict, root: dict) -> dict:
     return {**node, **{k: v for k, v in schema.items() if k != "$ref"}}
 
 
-def check(value, schema: dict, root: dict, path: str, errors: list[str]) -> None:
-    """Validate the JSON Schema subset the profile schema uses."""
+def check(value, schema: dict, root: dict, path: str, errors: list[str], *, required: bool = True) -> None:
+    """Validate the JSON Schema subset the profile schema uses. With required=False a missing required key is not
+    an error (types, enums and unknown keys still are): the raw repository profile may lean on a base and defaults."""
     schema = _ref(schema, root)
     if "oneOf" in schema:
-        if any(_errs(value, s, root, path) == [] for s in schema["oneOf"]):
+        if any(_errs(value, s, root, path, required) == [] for s in schema["oneOf"]):
             return
         typed = [s for s in schema["oneOf"] if "type" in s and _is(value, s["type"])]
         if typed:  # right kind of value, wrong content: report that option's own errors
-            check(value, typed[0], root, path, errors)
+            check(value, typed[0], root, path, errors, required=required)
         else:
             errors.append(f"'{path}': {_describe(schema['oneOf'])}")
+        return
+    if "const" in schema and not (value == schema["const"] and type(value) is type(schema["const"])):
+        errors.append(f"'{path}': must be {json.dumps(schema['const'])} (got {value!r})")
         return
     if "enum" in schema and value not in schema["enum"]:
         errors.append(f"'{path}': must be one of {', '.join(map(str, schema['enum']))} (got {value!r})")
@@ -84,22 +88,23 @@ def check(value, schema: dict, root: dict, path: str, errors: list[str]) -> None
         if len(value) < schema.get("minItems", 0):
             errors.append(f"'{path}': needs at least {schema['minItems']} item(s)")
         for i, item in enumerate(value):
-            check(item, schema.get("items", {}), root, f"{path}[{i}]", errors)
+            check(item, schema.get("items", {}), root, f"{path}[{i}]", errors, required=required)
     if t == "object":
         props = schema.get("properties", {})
-        for key in schema.get("required", []):
-            if key not in value:
-                errors.append(f"missing required key '{_join(path, key)}'")
+        if required:
+            for key in schema.get("required", []):
+                if key not in value:
+                    errors.append(f"missing required key '{_join(path, key)}'")
         for key, sub in value.items():
             if key in props:
-                check(sub, props[key], root, _join(path, key), errors)
+                check(sub, props[key], root, _join(path, key), errors, required=required)
             elif schema.get("additionalProperties") is False:
                 errors.append(f"unknown key '{_join(path, key)}' (typo? {HELP})")
 
 
-def _errs(value, schema, root, path) -> list[str]:
+def _errs(value, schema, root, path, required: bool = True) -> list[str]:
     out: list[str] = []
-    check(value, schema, root, path, out)
+    check(value, schema, root, path, out, required=required)
     return out
 
 
@@ -113,7 +118,19 @@ def _article(t: str) -> str:
 
 def _describe(options: list[dict]) -> str:
     names = [_article(o["type"]) for o in options if "type" in o]
+    names += [json.dumps(o["const"]) for o in options if "const" in o]
     return "must be " + " or ".join(names)
+
+
+OPTIONAL_SECTIONS = ("deps", "spec", "sysml")
+def normalise(profile: dict) -> dict:
+    """A copy where an empty `deps:`, `spec:` or `sysml:` block (YAML null) is the empty mapping: an empty block
+    means "on"."""
+    out = dict(profile)
+    for key in OPTIONAL_SECTIONS:
+        if key in out and out[key] is None:
+            out[key] = {}
+    return out
 
 
 def apply_defaults(value: dict, schema: dict, root: dict) -> dict:
@@ -140,6 +157,8 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
         errors.append("'docs.adr_index' / 'docs.adr_bar' need 'docs.adr_dir' (ADRs are used iff adr_dir is set)")
     git = profile.get("git", {})
     owners, bot = git.get("codeowners"), git.get("bot_login")
+    if isinstance(owners, list) and isinstance(bot, str):
+        owners, bot = [o.lower() for o in owners if isinstance(o, str)], bot.lower()  # logins ignore case
     if owners is not None and bot is not None and bot in owners:
         errors.append("'git.codeowners' must not contain 'git.bot_login': the agent cannot be its own code owner")
     if owners is not None and bot is None:
@@ -239,57 +258,40 @@ def semantic_checks(profile: dict, root_dir: Path | None) -> tuple[list[str], li
     return errors, warnings
 
 
-def validate(profile, root_dir: Path | None = None) -> tuple[list[str], list[str], dict]:
-    schema = json.loads(SCHEMA.read_text())
-    errors: list[str] = []
-    if not isinstance(profile, dict):
-        return ["the profile must be a YAML mapping"], [], {}
-    if "toolkit" in profile:
-        return (["'toolkit' was removed: the toolkit is delivered only as plugins (docs/guides/delivery.md); "
-                 "delete the 'toolkit' section"], [], {})
-    if "agents" in profile:
-        return (["'agents' was renamed to 'roles' (and each entry's 'agent' to 'role'): "
-                 "rename the section"], [], {})
-    check(profile, schema, schema, "", errors)
-    if errors:
-        return errors, [], {}
-    resolved = apply_defaults(profile, schema, schema)
-    resolved["docs"]["plan_dir"] = resolved["docs"]["plan_dir"].rstrip("/")
-    sem_errors, warnings = semantic_checks(resolved, root_dir)
-    return sem_errors, warnings, resolved
+def validate(profile, root_dir: Path | None = None, *, fetch: bool = True) -> tuple[list[str], list[str], dict]:
+    """(errors, warnings, resolved profile) of an already parsed profile: a wrapper over tld.profile.resolve. With
+    fetch=False a base that is not cached is skipped with a warning."""
+    from tld.profile import resolve as rs  # imported here: resolve imports this module
+    r = rs.resolve_dict(profile, root_dir, fetch=fetch)
+    return r.errors, r.warnings, r.profile
 
 
 def main(argv: list[str] | None = None) -> int:
+    from tld.profile import resolve as rs
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("profile", nargs="?", default=DEFAULT_PROFILE)
     ap.add_argument("--root", help="repo root for file-existence checks (default: the profile's repo root)")
+    ap.add_argument("--ref", help="read the profile and the files that decide the defaults from this git ref")
     ap.add_argument("--resolved", action="store_true", help="print the resolved profile as JSON")
+    ap.add_argument("--explain", action="store_true", help="print each resolved value and where it came from")
     ap.add_argument("--no-file-checks", action="store_true", help="skip checking that listed files exist")
     args = ap.parse_args(argv)
 
     path = Path(args.profile)
-    if not path.is_file():
-        print(f"toolkit.yaml: no profile at '{path}'. Create one from the starter in "
-              f"src/tld/templates/toolkit.yaml ({HELP}).", file=sys.stderr)
-        return 1
-    try:
-        profile = yaml.safe_load(path.read_text())
-    except yaml.YAMLError as exc:
-        print(f"toolkit.yaml: not valid YAML: {exc}", file=sys.stderr)
-        return 1
-
-    root_dir = None if args.no_file_checks else Path(args.root) if args.root else path.resolve().parent.parent
-    errors, warnings, resolved = validate(profile, root_dir)
-    for w in warnings:
+    r = rs.load(path, ref=args.ref, root=args.root, file_checks=not args.no_file_checks)
+    for w in r.warnings:
         print(f"toolkit.yaml: warning: {w}", file=sys.stderr)
-    if errors:
-        for e in errors:
+    if r.errors:
+        for e in r.errors:
             print(f"toolkit.yaml: {e}", file=sys.stderr)
         return 1
+    if args.explain:
+        print("\n".join(rs.explain_lines(r)))
     if args.resolved:
-        json.dump(resolved, sys.stdout, indent=2)
+        json.dump(r.profile, sys.stdout, indent=2)
         print()
-    else:
+        print(rs.note_line(r), file=sys.stderr)
+    if not (args.explain or args.resolved):
         print(f"toolkit.yaml: OK ({path})")
     return 0
 

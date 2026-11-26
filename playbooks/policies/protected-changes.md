@@ -6,18 +6,22 @@ Read it when a guard denies an edit or a plan touches a protected path.
 
 ## What is protected
 
-A protected path is a path that matches the effective protect list (`hooks.protect_paths`; by default the profile
-`.tld/toolkit.yaml` and `.github/workflows/**`, besides secrets and lockfiles), read from the main profile (step 6).
+A protected path is a path that matches the effective protect list (`hooks.protect_paths`; by default secrets and
+lockfiles only: `.env`, `.env.*`, `*.lock`, `package-lock.json` and `go.sum`), read from the main profile (step 6).
+The profile `.tld/toolkit.yaml` and ordinary workflows are not on the default list: a pull request that changes one
+names it under Security and the security reviewer checks it at `implement_final`. A repository or its base may add
+them back to `hooks.protect_paths`, and then this flow handles them like any other protected path. Always outside the
+flow: the land and release workflows (`GUARDED_WORKFLOWS`), the git-ops workflow (`tld-git-ops.yml`), the release and git-ops workflows the main profile names, `.git/**`
+and the adapter's protected paths.
 `.env*`, `.git/**` and lockfiles are never part of this flow: secrets are never edited. A lockfile in a phase diff is blocking whoever produced it; lockfile changes are made outside implement (the deps playbook or by the owner).
-`BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of `GUARDED_WORKFLOWS`, `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow pattern matches them. The built-in allow set is `.env.example`, `.env.sample`, `.env.template`, `.env.dist`. The flow also never handles the guarded workflows (`GUARDED_WORKFLOWS`:
+`BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of any workflow `guarded_workflows` returns (the land and release workflows, `tld-git-ops.yml` and the profile's `release.workflow` and `git_ops.workflow`), `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow pattern matches them. The built-in allow set is `.env.example`, `.env.sample`, `.env.template`, `.env.dist`. The flow also never handles the guarded workflows (`GUARDED_WORKFLOWS`:
 `tld-land.yml` and `tld-release.yml`, installed only by land and release), the always protected paths
 (`ALWAYS_PROTECTED`) or the adapter's protected paths (`.mcp.json`, `.claude/settings*.json`, `.claude/hooks/**`),
 even when a profile lists them.
 
 **The deps exception.** The deps playbook's combined pull request may carry a dependency bot's own workflow
 version bumps: `tld ops deps-prepare` takes a change under `.github/workflows/` only when every change moves the ref
-of the same action and every commit carries the bot's identity, and leaves out any group that touches another
-protected path. The pull request body lists each action move and the owner reviews them there; no other path goes
+of the same action and every commit carries the bot's identity, and leaves out any group that touches a path of the effective protect list or any other protected path. The pull request body lists each action move and the owner reviews them there; no other path goes
 this way.
 
 ## The report line
@@ -38,7 +42,7 @@ The orchestrator finds these changes by the lines that start with `protected-cha
    the make-plan command instead). The flow never delays a phase merge. Before a pull request is opened the
    orchestrator also checks `git diff --name-only --no-renames origin/<main>...<feature_branch>` (both sides of a
    rename; a deleted path counts) against the main profile's effective list plus every path "What is protected"
-   excludes. `BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of `GUARDED_WORKFLOWS`, `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow pattern matches them. A hit in the effective list is
+   excludes. `BUILTIN_PROTECT_ALLOW` and the main profile's `hooks.protect_paths_allow` are subtracted only from the effective list and from the `.env*` and lockfile parts of the excluded set; they never remove a path of any workflow `guarded_workflows` returns (the land and release workflows, `tld-git-ops.yml` and the profile's `release.workflow` and `git_ops.workflow`), `ALWAYS_PROTECTED`, `.git/**` or the adapter's protected paths, even when an allow pattern matches them. A hit in the effective list is
    a blocking finding; a hit in the excluded set is also a blocking finding and is never routed into this flow.
    A lockfile in a phase diff is blocking whoever produced it; lockfile changes are made outside implement (the deps playbook or by the owner).
 3. **The diff is untrusted text** ([untrusted-text.md](untrusted-text.md)). Record `origin/<main>`'s SHA (the
@@ -82,12 +86,12 @@ The orchestrator finds these changes by the lines that start with `protected-cha
    branch's profile. If the GitHub write is refused, post the full diff on the issue (without one, show it in
    the conversation) and set `needs_you` with the reason `Apply protected change to <path>`, report any
    leftover branch for deletion through git-ops, and stop trying.
-6. **Main's profile only.** Every playbook and guard reads the profile as it is on the main branch (`git show
-   origin/<main>:.tld/toolkit.yaml`, "the main profile"). implement's merge review sends back any phase diff that
+6. **Main's profile only.** Every playbook and guard reads the profile as it is on the main branch (`tld profile
+   validate --ref origin/<main> --resolved`, "the main profile"). implement's merge review sends back any phase diff that
    touches a protected path, and the final reviewer's brief makes such a diff a blocking finding.
 
 ## Main's profile only
 
-The profile of a feature branch never decides what is protected or allowed: read `.tld/toolkit.yaml` from
-`origin/<main>`. A change to the profile reaches the main branch only through the pull request of step 5, after
+The profile of a feature branch never decides what is protected or allowed: read the resolved profile of
+`origin/<main>` with `tld profile validate --ref origin/<main> --resolved` (a plain `git show` of the file misses the base and the defaults). A change to the profile reaches the main branch only through the pull request of step 5, after
 the owner's `apply`.

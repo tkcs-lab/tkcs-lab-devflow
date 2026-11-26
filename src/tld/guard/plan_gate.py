@@ -1,6 +1,6 @@
 """plan-gate (UserPromptSubmit and PreToolUse): a session that no tld command started cannot write to the repository.
 
-Opt-in (`hooks.plan_gate.enabled: true`). A prompt that starts a tld command opens the session; a plain prompt gets
+On by default (`hooks.plan_gate.enabled: false` switches it off; a gate the default branch turns on stays on). A prompt that starts a tld command opens the session; a plain prompt gets
 one sentence of context; a write into the repository is denied while the session is not open. See docs/architecture/hooks.md.
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 
 from tld.dod.gate import state_dir
 from tld.guard import _writes, markers, protect_paths
-from tld.guard._common import Ctx, ProfileError
+from tld.guard._common import Ctx, ProfileError, gate_enabled
 
 NAME = "plan-gate"
 OPENING = ("make-plan", "implement", "review", "setup", "migrate", "land", "deps", "upstream", "questions", "docs", "repo-admin", "release", "spec", "sysml", "quick")
@@ -33,15 +33,7 @@ DENY = ("blocked: {what} would change the repository, but this session was not s
 
 
 def enabled(ctx: Ctx) -> bool:
-    gate = ctx.hooks_section().get("plan_gate")
-    if gate is None:
-        return False
-    if not isinstance(gate, dict):
-        raise ProfileError("toolkit.yaml: 'hooks.plan_gate' must be a mapping")
-    value = gate.get("enabled", False)
-    if not isinstance(value, bool):
-        raise ProfileError("toolkit.yaml: 'hooks.plan_gate.enabled' must be true or false")
-    return value
+    return gate_enabled(ctx, "plan_gate")
 
 
 def session_file(project: str, sid: object) -> Path:
@@ -108,7 +100,7 @@ def _evaluate(ctx: Ctx) -> str | None:
         return None
     a = ctx.action
     if a.kind == "prompt":
-        if ctx.disabled(NAME):
+        if ctx.disabled_or_on(NAME):
             return None
         if a.invoked in OPENING and a.session_id:
             open_session(ctx.project_dir, a.session_id)
@@ -125,7 +117,7 @@ def _evaluate(ctx: Ctx) -> str | None:
     what = _target(ctx)
     if what is None:
         return None
-    if ctx.disabled(NAME):
+    if ctx.disabled_or_on(NAME):
         return None
     if not a.session_id and markers.read(ctx.project_dir, "plan-open") is None:
         return None

@@ -97,6 +97,9 @@ must see every repository.
 | `branches` | Branches whose every commit is already in the default branch, not protected, not the head or base of an open pull request, last activity older than `branches.min_age_days` | deletes when `branches.delete_merged` (irreversible, though the commits stay in the default branch) |
 | `files` | `config_dirs.forbid` paths that exist; `config_dirs.require` files that are missing; top-level dot directories outside `config_dirs.known`; `workflows` missing or different from their template | pull requests (a missing required file is only reported) |
 | `lint` | `workflow_lint`: actions not pinned to a commit SHA, workflows without top-level `permissions`, `pull_request_target` | nothing: read only |
+| `profile` | `profile-no-extends` and `profile-invalid-extends` (a repository with a profile but no valid `tld.extends`, or one that names another base; warn, the step is to run setup in update mode), `profile-pin-old` (the pin is not the newest tagged commit, or not the commit `profile.pin` names), `profile-guarded-override` (info: the repository's own profile overrides guarded keys the base allows), `profile-merge-style` (the repository's merge settings do not match `git.merge_style`; the starter policy allows merge commits only) | `profile-pin-old`: a pull request, through the API, that rewrites only the `extends:` line, titled `chore: bump the tld base to <tag>`; the rest is reported |
+| `git_ops` | `git-ops-workflow` and `git-ops-allowlist` (the shipped `tld-git-ops.yml` and an allowlist naming every audited repository are missing or differ in the central repository), `git-ops-environment` and `git-ops-token` (the `git-ops` environment limited to the default branch and the `GIT_OPS_TOKEN` secret in it: open items with manual steps, never created) | a pull request into the central repository for the workflow and the allowlist; the rest is manual |
+| `secrets_scope` (runs with the `git_ops` section) | A repository or organisation Actions secret, or a secret of an environment any branch may deploy to; an environment limited to the default branch is not reported. A pushed branch's workflow runs with repository-level secrets before anyone reads it, so only environment secrets limited to the default branch are safe from it | nothing: reported with the manual steps |
 
 How "unused" is decided, and where it can be wrong:
 
@@ -154,6 +157,12 @@ Every key is optional except `org`. The schema is the exact source of truth.
 | `deploy_keys.max_unused_days`, `deploy_keys.delete_unused` | |
 | `config_dirs.forbid`, `config_dirs.require`, `config_dirs.known` | `forbid`: root-relative paths or globs with at least two literal characters (not the root, `.git` or a bare wildcard); `*` matches within one path segment, so `*.bak` is a top-level file only. `require`: root-relative files that must exist (for example `SECURITY.md`, `.github/CODEOWNERS`, `LICENSE`). `known`: more top-level dot directories to expect, added to the built-in `.github .claude .devcontainer .vscode .husky .config .changeset .githooks`; any other is reported |
 | `workflow_lint.pin_actions`, `workflow_lint.require_permissions`, `workflow_lint.forbid_pull_request_target` | `pin_actions`: `third_party` (leaves `actions/*` and `github/*`) or `all` |
+| `profile.base` | The base file as `<owner>/<repo>/<path>`, without a pin; required inside `profile`. See [org-base.md](org-base.md) |
+| `profile.pin` | `latest-tag` (default: the newest tagged commit of the base) or a 40-hex commit; a tag name is rejected |
+| `profile.guarded_overrides` | `report` (default: list each guarded key a repository overrides with the base's permission) or `ignore` |
+| `git_ops.repo` | The central repository as `<owner>/<repo>` (the repository's own owner and `git-ops` when the project profile has an origin) |
+| `git_ops.workflow` | The workflow file name in the central repository (default `tld-git-ops.yml`) |
+| `git_ops.allowlist` | The file in the central repository naming every audited repository. Entries are compared ignoring case; an entry that matches every repository, uses a wildcard on the owner or reaches a repository the audit did not see is reported, not written |
 | `workflows` | List of workflow entries, below |
 
 A `workflows` entry has exactly one of `template` (`release` or `land`) or `path` (your own template, below the directory of

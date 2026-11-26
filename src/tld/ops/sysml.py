@@ -22,7 +22,6 @@ import json
 import sys
 from pathlib import Path
 
-import yaml
 
 from tld.sysml import change, files, layout as layout_mod, markdown, svg
 from tld.sysml.diff import diff
@@ -79,13 +78,14 @@ def _check(ns: argparse.Namespace, root: Path) -> None:
     profile = Path(ns.profile) if ns.profile else root / DEFAULT_PROFILE
     if "\0" in str(profile) or "\0" in str(root) or not profile.is_file():
         raise ModelError(f"profile not found: {_line(str(profile))}")
-    try:
-        data = yaml.safe_load(profile.read_text(encoding="utf-8")) or {}
-    except (yaml.YAMLError, ValueError, RecursionError):
-        data = {}
-    block = data.get("sysml") if isinstance(data, dict) else None
+    from tld.profile import resolve as rs
+    loaded = rs.load(profile, root=root, trusted=False, fetch=False)
+    if loaded.errors:
+        raise _Plain("\n".join(f"toolkit.yaml: {_line(e)}" for e in loaded.errors))
+    block = loaded.profile.get("sysml")
     if not isinstance(block, dict) or "subset" not in block:
-        raise _Plain("toolkit.yaml: missing required key 'sysml.subset' (add a sysml block; see docs/guides/sysml.md)")
+        raise _Plain("toolkit.yaml: /sysml needs a 'sysml' section (an empty 'sysml:' uses subset 1; "
+                     "see docs/guides/sysml.md)")
     subset = block["subset"]
     if type(subset) is not int or subset != 1:
         raise ModelError(f"sysml.subset must be 1 (got {_line(repr(subset))})")

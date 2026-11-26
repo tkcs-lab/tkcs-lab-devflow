@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """The `## Summary` section of a plan, a tracking-issue body or a pull-request body.
 
-    summary.py FILE --kind plan|issue|pr [--deviations FILE] [--findings N]
+    summary.py FILE --kind plan|issue|pr [--deviations FILE] [--findings N] [--changed FILE]
 
 Checks where the Summary stands, its labels and their order, hidden markup and the word limit (350 for a plan
 and an issue, 175 for a pull request). With `--deviations` it also checks that `None.` is not claimed over a
 non-empty deviations file. For a pull request it checks the rows of a `## Non-blocking findings` section when
-there is one; with `--findings N` that section must exist and hold exactly N rows. Prints one `summary: <problem>` line per problem and exits 1, or prints
+there is one; with `--findings N` that section must exist and hold exactly N rows. With `--changed FILE` (one repository-relative
+path per line, only for a pull request) the `**Security:**` label must name every workflow and profile file the list
+holds. Prints one `summary: <problem>` line per problem and exits 1, or prints
 `summary: OK (<n> words)`. Reads one file of at most 1000000 bytes, runs nothing. Python 3.11+, stdlib only.
 """
 from __future__ import annotations
@@ -41,6 +43,8 @@ HIDDEN = ("<!--", "<details")
 UNSAFE = ("Cc", "Cf", "Cs", "Co", "Zl", "Zp")
 CLOSES = re.compile(r"(closes|fixes|resolves) #[0-9]+\.?", re.IGNORECASE)
 WORD = re.compile(r"\w")
+LINKISH = re.compile(r"\]\(|\]\[|!\[|\[\^|\||<|\$|\]:|```|~~~|^(?: {4}|\t)", re.MULTILINE)
+SECURITY_PATHS = (".github/workflows/", ".tld/toolkit.yaml", ".github/actions/")  # a composite action runs with its workflow's secrets
 
 
 class ReadError(Exception):
@@ -171,8 +175,46 @@ def findings_problems(lines: list[str], heads: list[tuple[int, str]], n: int | N
     return [f"findings: {p}" for p in findings_check.check(body, n)]
 
 
+def security_paths(changed: list[str]) -> list[str]:
+    """The workflow and profile files of a changed-path list, once each, in list order."""
+    hits = [p for p in changed
+            if p.startswith(SECURITY_PATHS[0]) or p.startswith(SECURITY_PATHS[2]) or p == SECURITY_PATHS[1]]
+    return list(dict.fromkeys(hits))
+
+
+def names(path: str, text: str) -> bool:
+    """Whether the Security text names the path by its full path or by its file name as a whole word."""
+    for cand in (path, path.rsplit("/", 1)[-1]):
+        if re.search(r"(?<![\w.\-/])" + re.escape(cand) + r"(?![\w\-]|\.\w)", text):
+            return True
+    return False
+
+
+def security_problems(values: dict[str, str], changed: list[str], section: str = "") -> list[str]:
+    """The problems of the Security label against the workflow and profile files a pull request changes."""
+    hits = security_paths(changed)
+    if not hits:
+        return []
+    value = values.get("Security", "")
+    # markup opened in one label and closed in another hides the lines between, so the whole Summary is scanned
+    scanned = section + "\n" + value
+    if any(unicodedata.category(c) in UNSAFE and c not in "\n\t" for c in scanned):
+        return ["**Security:** the Summary holds a control or direction character, which can hide a file name"]
+    if LINKISH.search(scanned):
+        return ["**Security:** must name the files in plain text, and the Summary must hold no link, image, reference "
+                "definition, code fence, indented code, math (`$`), footnote mark, table or HTML tag (`<`), "
+                "which can hide a file name; write `$` and `<` in words, even inside inline code"]
+    if not value or is_none(value):
+        return [f"**Security:** is missing or None. but the pull request changes {', '.join(clean(p) for p in hits)}"]
+    missing = [p for p in hits if not names(p, value)]
+    if missing:
+        return ["**Security:** must name every workflow and profile file this pull request changes; "
+                f"not named: {', '.join(clean(p) for p in missing)}"]
+    return []
+
+
 def check(text: str, kind: str, deviations_text: str | None = None,
-          findings: int | None = None) -> tuple[list[str], int]:
+          findings: int | None = None, changed: list[str] | None = None) -> tuple[list[str], int]:
     """(problems, word count of the Summary section) for the text of a document."""
     lines = normalise(text).split("\n")
     kinds = scan(lines)
@@ -246,6 +288,8 @@ def check(text: str, kind: str, deviations_text: str | None = None,
         count = sum(1 for item in recorded if item not in ("None.", "pending"))
         if count:
             problems.append(f"Deviations says None. but the deviations file records {count} deviations")
+    if changed is not None:
+        problems += security_problems(values, changed, "\n".join(sect[1:]))
     if kind == "pr":
         problems += findings_problems(lines, heads, findings)
     return problems, words
@@ -265,6 +309,13 @@ def read(path: str) -> str:
         raise ReadError(f"cannot read '{scrub(path)}': not valid UTF-8") from None
 
 
+def changed_paths(text: str) -> list[str]:
+    """The paths of a --changed file: one per line, blank lines and carriage returns ignored."""
+    lines = [ln.strip() for ln in text.replace("\r", "").split("\n") if ln.strip()]
+    # git quotes a path with special characters ("..."): the quotes must not hide a workflow path
+    return [ln[1:-1] if len(ln) > 1 and ln[0] == ln[-1] == '"' else ln for ln in lines]
+
+
 def report(problems: list[str]) -> int:
     for problem in problems:
         print(f"summary: {problem}")
@@ -277,7 +328,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--kind", required=True, choices=KINDS, help="what the file is")
     ap.add_argument("--deviations", metavar="FILE", help="the deviations file (only with --kind pr)")
     ap.add_argument("--findings", type=int, metavar="N", help="the number of findings (only with --kind pr)")
+    ap.add_argument("--changed", metavar="FILE",
+                    help="the changed paths, one per line (only with --kind pr); workflow and profile files must be named under Security")
     args = ap.parse_args(argv)
+    if args.changed is not None and args.kind != "pr":
+        ap.error("--changed is only for --kind pr")
     if args.findings is not None and args.kind != "pr":
         ap.error("--findings is only for --kind pr")
     if args.findings is not None and args.findings < 0:
@@ -287,9 +342,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         text = read(args.file)
         deviations = read(args.deviations) if args.deviations is not None else None
+        changed = changed_paths(read(args.changed)) if args.changed is not None else None
     except ReadError as exc:
         return report([str(exc)])
-    problems, words = check(text, args.kind, deviations, args.findings)
+    problems, words = check(text, args.kind, deviations, args.findings, changed)
     if problems:
         return report(problems)
     print(f"summary: OK ({words} words)")

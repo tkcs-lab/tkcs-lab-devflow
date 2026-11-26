@@ -270,17 +270,291 @@ def profile_valid(ctx: GradeContext) -> GradeResult:
         profile = yaml.safe_load(wt[0].text)
     except yaml.YAMLError as exc:
         return GradeResult(False, f"{path} is not valid YAML: {exc}")
-    errors, _, _ = vp.validate(profile, None)
+    # the fixture root and no fetch: a base seeded in <git dir>/tld/base is found offline, an unseeded one is skipped
+    errors, warnings, _ = vp.validate(profile, ctx.workdir, fetch=False)
+    # `pending`: keys that are meant to be absent (a value nobody supplied is left out, not guessed)
+    allowed = {f"missing required key '{k}'" for k in ctx.params.get("pending") or []}
+    errors = [e for e in errors if e not in allowed]
     if errors:
         return GradeResult(False, _first(errors))
+    if isinstance(profile, dict) and isinstance(profile.get("tld"), dict) and profile["tld"].get("extends"):
+        missing = [w for w in warnings if "is not cached" in w]
+        if missing:  # a base that was never read would let a wrong pin pass
+            return GradeResult(False, _first(missing))
     return GradeResult(True, f"{path} valid")
+
+
+_EXAMPLE_ID = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):\s", re.M)
+MAX_ASK_BYTES = 200_000
+ASK_MARKER = "<!-- tld-ask -->"
+WRAPPERS = {"command", "exec", "time", "nohup", "sudo", "env", "uv", "uvx", "poetry", "pipenv", "npx", "xargs"}
+SHELLS = {"bash", "sh", "zsh", "dash"}
+
+
+def _ids_of_ask(doc) -> list[str] | None:
+    qs = doc.get("questions") if isinstance(doc, dict) else None
+    if not isinstance(qs, list):
+        return None
+    return [str(q.get("id")) for q in qs if isinstance(q, dict)]
+
+
+def _simple_commands(command: str) -> list[list[str]]:
+    """The simple commands of a shell line as token lists: split on `;`, `&&`, `||`, `|`, newlines and parentheses
+    by a shell-aware lexer (so a separator inside quotes does not split)."""
+    try:
+        lex = shlex.shlex(command.replace("\n", " ; "), posix=True, punctuation_chars=True)
+        lex.whitespace_split = True
+        tokens = list(lex)
+    except ValueError:
+        return []
+    out, cur = [], []
+    for t in tokens:
+        if t and all(c in "();<>|&" for c in t):
+            if t in ("<", ">", ">>", "<<", "&>"):
+                continue
+            out.append(cur)
+            cur = []
+        else:
+            cur.append(t)
+    out.append(cur)
+    return [c for c in out if c]
+
+
+def _unwrap(toks: list[str], depth: int = 0) -> list[list[str]]:
+    """The commands behind wrappers: `env`, `uv run`, `sudo`, env assignments, `bash -c '...'` (recursively),
+    `python3 -m tld`, a path to tld, or a variable (`$TLD`) standing for it. Returns the simple commands to look at."""
+    found = []
+    while toks and (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", toks[0]) or toks[0].startswith("-")
+                    or toks[0] in WRAPPERS or toks[0] == "run"):
+        toks = toks[1:]
+    if not toks:
+        return found
+    head = toks[0].rsplit("/", 1)[-1]
+    if head in SHELLS and depth < 4:
+        for i, t in enumerate(toks[1:], 1):
+            if t.startswith("-") and "c" in t.lstrip("-") and i + 1 < len(toks):
+                for sub in _simple_commands(toks[i + 1]):
+                    found += _unwrap(sub, depth + 1)
+                return found
+        return found
+    if head.startswith("python") and len(toks) > 2 and toks[1] == "-m" and toks[2] == "tld":
+        return [["tld", *toks[3:]]]
+    if head.startswith("python") and len(toks) > 1 and toks[1].rsplit("/", 1)[-1] == "tld":
+        return [["tld", *toks[2:]]]
+    if re.fullmatch(r"[\w./-]*tld", toks[0]) or re.fullmatch(r"\$\{?\w*TLD\w*\}?", toks[0]):
+        return [["tld", *toks[1:]]]
+    return [[head, *toks[1:]]]
+
+
+def _scan_command(command: str) -> list[tuple[str, list[str]]]:
+    """('board_ask', [FILE]) for each attempted `tld board ask FILE` and ('gh', tokens) for each `gh` call."""
+    out = []
+    for simple in _simple_commands(command):
+        for toks in _unwrap(simple):
+            if toks[0] == "tld":
+                rest, i = toks[1:], 0
+                while i < len(rest) and rest[i].startswith("--"):  # global options, with or without a value
+                    i += 1 if "=" in rest[i] or i + 1 >= len(rest) or rest[i + 1] == "board" else 2
+                if rest[i:i + 2] == ["board", "ask"]:
+                    files = [t for t in rest[i + 2:] if not t.startswith("-")]
+                    out.append(("board_ask", files[:1]))
+            elif toks[0] == "gh":
+                out.append(("gh", toks[1:]))
+    return out
+
+
+def _read_text(path: str, actions: list[dict], workdir) -> str | None:
+    """A file the run wrote (the same path) or, failing that, a regular file of the work tree (never outside it,
+    bounded in size)."""
+    root = Path(workdir).resolve() if workdir is not None else None
+
+    def norm(p: str) -> str:
+        q = Path(p)
+        if q.is_absolute() and root is not None and q.resolve().is_relative_to(root):
+            return q.resolve().relative_to(root).as_posix()
+        return Path(*[x for x in q.parts if x != "."]).as_posix() if not q.is_absolute() else q.as_posix()
+
+    want = norm(path)
+    for a in reversed(actions):
+        if a.get("kind") == "write" and norm(str(a.get("path", ""))) == want:
+            return str(a.get("content") or "")[:MAX_ASK_BYTES]
+    if root is not None:
+        try:
+            f = (root / path).resolve()
+            if f.is_relative_to(root) and f.is_file() and f.stat().st_size <= MAX_ASK_BYTES:
+                return f.read_text(errors="replace")
+        except (OSError, ValueError):
+            return None
+    return None
+
+
+def _is_comment(tokens: list[str]) -> bool:
+    return tokens[:2] in (["issue", "comment"], ["pr", "comment"]) or (tokens[:1] == ["api"] and any("/comments" in t for t in tokens))
+
+
+def _gh_ask_ids(tokens: list[str], actions: list[dict], workdir) -> list[str] | None:
+    """The ids of a tld ask posted as a GitHub comment through `gh` (its body inline, or in a file the call
+    names), or None when the call is no ask."""
+    texts = [t for t in tokens if ASK_MARKER in t]
+    for t in tokens:
+        t = re.sub(r"^(?:--body-file|--input|-F)=", "", t)
+        cand = t.split("=@", 1)[-1].lstrip("@") if ("=@" in t or t.startswith("@")) else t
+        if cand and not cand.startswith("-") and len(cand) < 256 and " " not in cand and "\n" not in cand:
+            body = _read_text(cand, actions, workdir)
+            if body and ASK_MARKER in body:
+                texts.append(body)
+    if not texts:
+        # a comment whose body is a file or variable that could not be read is an ask that cannot be ruled out
+        return [] if re.search(r"--body-file|--input|-F\b|-b\b|--body\b.*\$|<\(", " ".join(tokens)) and _is_comment(tokens) else None
+    return _EXAMPLE_ID.findall(texts[0].partition("-- example reply --")[2])
+
+
+_RAW_ASK = re.compile(r"\btld\S*(?:\s|\\\n)+(?:\S+(?:\s|\\\n)+){0,6}?board(?:\s|\\\n)+ask\b|\bboard(?:\s|\\\n)+ask\b[^\n]*\.json")
+_GH_COMMENT = re.compile(r"\bgh(?:\s|\\\n)+(?:issue|pr)(?:\s|\\\n)+comment\b|\bgh\s+api\b[^\n]*/comments\b")
+
+
+def _raw_ask(command: str) -> bool:
+    """A conservative backstop over the raw text, for what the lexer cannot follow: the ask marker anywhere, a
+    `tld ... board ask` however the words are separated, or a `gh` comment whose body is not a plain inline string
+    (piped, substituted or read from stdin). It over-counts rather than miss an ask; an over-counted ask has no
+    question ids, so it can neither satisfy `question_ids` nor hide in a `min`. It is no guarantee against an
+    adversary who builds the command by indirection (a variable for a subcommand, a script written then run)."""
+    if ASK_MARKER in command or _RAW_ASK.search(command):
+        return True
+    return bool(_GH_COMMENT.search(command) and re.search(r"\$\(|`|--body-file[ =]-|-F\s+-|--input[ =]|<\(|\|\s*gh\b|<<", command))
+
+
+def ask_question_ids(actions: list[dict], workdir=None) -> list[list[str]]:
+    """The question ids of each ask a run ATTEMPTED, in whatever way the runtime logged it and whatever the exit
+    status (an eval has no board, so a real `tld board ask` exits 3 or 5): an `ask` action; a tool call
+    `ask_human` or `board_ask` (a github_op whose args hold the ask, directly or under `ask`); Claude's own
+    `AskUserQuestion`; a shell `tld board ask FILE` however wrapped (`bash -c`, `env`, `uv run`, `$TLD`, a
+    subshell, `python3 -m tld`); or the GitHub fallback, a comment whose body carries the ask marker, posted by
+    a tool call or by `gh` from the shell. A file that cannot be read still counts as one ask with no ids."""
+    out = []
+    for a in actions:
+        kind, op = a.get("kind"), str(a.get("op", ""))
+        if kind == "ask":
+            out.append([str(q) for q in a.get("questions") or []])
+        elif a.get("tool") == "AskUserQuestion":
+            out.append([])
+        elif kind == "github_op" and (op.endswith("ask_human") or op.endswith("board_ask")):
+            args = a.get("args") or {}
+            doc = args.get("ask") if isinstance(args.get("ask"), dict) else args
+            out.append(_ids_of_ask(doc) or [])
+        elif kind == "github_op" and ASK_MARKER in json.dumps(a.get("args") or {}, default=str):
+            out.append(_EXAMPLE_ID.findall(json.dumps(a["args"], default=str).replace("\\n", "\n").partition("-- example reply --")[2]))
+        elif kind == "shell":
+            found = _scan_command(str(a.get("command", "")))
+            before = len(out)
+            for what, data in found:
+                if what == "board_ask":
+                    text = _read_text(data[0], actions, workdir) if data else None
+                    try:
+                        out.append(_ids_of_ask(json.loads(text)) or [] if text else [])
+                    except (ValueError, RecursionError):
+                        out.append([])
+                else:
+                    ids = _gh_ask_ids(data, actions, workdir)
+                    if ids is not None:
+                        out.append(ids)
+            if len(out) == before and _raw_ask(str(a.get("command", ""))):
+                out.append([])  # backstop: the lexer could not see the ask (odd quoting, a heredoc, a wrapper)
+    return out
+
+
+@grader("asks_at_most")
+def asks_at_most(ctx: GradeContext) -> GradeResult:
+    """The run posted at most `max` and at least `min` (default 0) asks; with `question_ids` (a list), every
+    ask's ids are exactly that set."""
+    limit, floor = ctx.params.get("max"), ctx.params.get("min", 0)
+    if (not isinstance(limit, int) or isinstance(limit, bool) or limit < 0
+            or not isinstance(floor, int) or isinstance(floor, bool) or floor < 0 or floor > limit):
+        return GradeResult(False, "grader misconfigured: max and min must be integers, 0 <= min <= max")
+    asks = ask_question_ids(ctx.actions, ctx.workdir)
+    if len(asks) > limit:
+        return GradeResult(False, f"{len(asks)} asks posted, at most {limit} allowed")
+    if len(asks) < floor:
+        return GradeResult(False, f"{len(asks)} asks posted, at least {floor} expected")
+    want = ctx.params.get("question_ids")
+    if want is not None:
+        for ids in asks:
+            if sorted(ids) != sorted(want) or len(set(ids)) != len(ids):
+                return GradeResult(False, f"ask question ids are {sorted(ids)}, expected exactly {sorted(want)}", value=len(asks))
+    return GradeResult(True, f"{len(asks)} ask(s), between {floor} and {limit}", value=len(asks))
+
+
+def _lookup(node, key: str):
+    for part in key.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None, False
+        node = node[part]
+    return node, True
+
+
+@grader("profile_key_absent")
+def profile_key_absent(ctx: GradeContext) -> GradeResult:
+    """None of the dotted `keys` is set in the profile of the final work tree. `blocking_true_roles: true` also
+    fails on any roles.required entry with `blocking: true` (only a human's confirm may write one)."""
+    path = ctx.params.get("path", ".tld/toolkit.yaml")
+    keys = ctx.params.get("keys") or []
+    if not keys and not ctx.params.get("blocking_true_roles"):
+        return GradeResult(False, "grader misconfigured: no keys")
+    wt = [d for d in ctx.docs(path) if d.ref == "worktree"]
+    if not wt:
+        return GradeResult(False, f"{path} is missing from the final working tree")
+    try:
+        profile = yaml.safe_load(wt[0].text)
+    except yaml.YAMLError as exc:
+        return GradeResult(False, f"{path} is not valid YAML: {exc}")
+    found = [k for k in keys if _lookup(profile, k)[1]]
+    if ctx.params.get("blocking_true_roles"):
+        req, _ = _lookup(profile, "roles.required")
+        found += [f"roles.required[{e.get('role')}].blocking" for e in (req if isinstance(req, list) else [])
+                  if isinstance(e, dict) and e.get("blocking") is True]
+    if found:
+        return GradeResult(False, f"{path} sets {', '.join(found)}, which no human confirmed")
+    return GradeResult(True, "none of the guarded keys is set")
+
+
+@grader("profile_key_equals")
+def profile_key_equals(ctx: GradeContext) -> GradeResult:
+    """A dotted `key` of the profile in the final work tree is set; with `value` it equals it, else with the
+    fixture's expected[`expected_key`]."""
+    path = ctx.params.get("path", ".tld/toolkit.yaml")
+    key = ctx.params.get("key")
+    if not isinstance(key, str) or not key:
+        return GradeResult(False, "grader misconfigured: no key")
+    wt = [d for d in ctx.docs(path) if d.ref == "worktree"]
+    if not wt:
+        return GradeResult(False, f"{path} is missing from the final working tree")
+    try:
+        node = yaml.safe_load(wt[0].text)
+    except yaml.YAMLError as exc:
+        return GradeResult(False, f"{path} is not valid YAML: {exc}")
+    for part in key.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return GradeResult(False, f"{path} has no '{key}'")
+        node = node[part]
+    if "value" in ctx.params:
+        want = ctx.params["value"]
+    elif ctx.params.get("expected_key"):
+        want = ctx.expected.get(ctx.params["expected_key"])
+        if want is None:
+            return GradeResult(False, f"grader misconfigured: no expected[{ctx.params['expected_key']!r}]")
+    else:
+        return GradeResult(True, f"'{key}' is set")
+    if node != want:
+        return GradeResult(False, f"'{key}' is {json.dumps(node)[:120]}, expected {json.dumps(want)[:120]}")
+    return GradeResult(True, f"'{key}' equals the expected value")
 
 
 @grader("roles_block_equals")
 def roles_block_equals(ctx: GradeContext) -> GradeResult:
     """The `roles` key of the profile in the final work tree equals expected["roles"] (the fixture's expectation)."""
     path = ctx.params.get("path", ".tld/toolkit.yaml")
-    if "roles" not in ctx.expected:
+    ekey = ctx.params.get("expected_key", "roles")  # the fixture's expectation (None: the profile has no roles block)
+    if ekey not in ctx.expected:
         return GradeResult(False, "grader misconfigured: no expected roles block")
     wt = [d for d in ctx.docs(path) if d.ref == "worktree"]
     if not wt:
@@ -290,7 +564,7 @@ def roles_block_equals(ctx: GradeContext) -> GradeResult:
     except yaml.YAMLError as exc:
         return GradeResult(False, f"{path} is not valid YAML: {exc}")
     got = profile.get("roles") if isinstance(profile, dict) else None
-    want = ctx.expected["roles"]
+    want = ctx.expected[ekey]
     if got != want:
         return GradeResult(False, f"roles block differs: expected {json.dumps(want, sort_keys=True)}, got {json.dumps(got, sort_keys=True)}"[:300])
     return GradeResult(True, "roles block equals the expected one")

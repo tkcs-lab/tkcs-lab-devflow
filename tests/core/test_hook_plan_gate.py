@@ -38,11 +38,40 @@ def prompt(repo, text, invoked=None, sid="s1"):
     return decide(Action("prompt", str(repo), str(repo), prompt=text, invoked=invoked, session_id=sid))
 
 
-def test_off_by_default_allows_everything(tmp_path):
-    repo = make_repo(tmp_path / "r", "feature/demo")
+def test_on_by_default_denies_a_plain_write(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo")  # a profile with no hooks block
+    assert write(repo, repo / "a.txt").verdict == "deny"
+    assert sh(repo, "echo x > a.txt").verdict == "deny"
+    assert prompt(repo, "hello").context is not None
+
+
+def test_switched_off_allows_all_writes(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo", hh.PROFILE_GATES_OFF)
     assert write(repo, repo / "a.txt").verdict == "allow"
     assert sh(repo, "echo x > a.txt").verdict == "allow"
     assert prompt(repo, "hello").context is None
+
+
+def test_no_profile_allows_everything(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo", None)
+    assert write(repo, repo / "a.txt").verdict == "allow"
+    assert sh(repo, "echo x > a.txt").verdict == "allow"
+    assert prompt(repo, "hello").context is None
+
+
+def test_profile_gates_off_turns_every_gate_off():
+    import yaml
+    from tld.profile import resolve
+    profile, _ = resolve.for_hook(yaml.safe_load(hh.PROFILE_GATES_OFF), ".")
+    assert [profile["hooks"][g]["enabled"] for g in ("plan_gate", "board_gate", "dod_gate")] == [False] * 3
+
+
+def test_no_test_concatenates_a_hooks_block_onto_the_gates_off_profile():
+    from pathlib import Path
+    needle = "PROFILE_GATES_OFF + " + '"hooks'
+    hits = [str(p) for p in Path(__file__).parent.parent.rglob("*.py") if needle in p.read_text()
+            and p.name != Path(__file__).name]
+    assert hits == []
 
 
 def test_closed_session_denies_write_inside_repo(repo):
@@ -190,10 +219,9 @@ def test_session_is_refreshed_on_read(repo):
     assert time.time() - f.stat().st_mtime < 60
 
 
-def test_malformed_plan_gate_section_allows_with_a_notice(tmp_path):
-    repo = make_repo(tmp_path / "r", "feature/demo", hh.PROFILE + "hooks:\n  plan_gate: yes\n")
-    d = write(repo, repo / "a.txt")
-    assert d.verdict == "allow" and d.notice and "plan_gate" in d.notice
+def test_malformed_plan_gate_section_counts_as_on(tmp_path):
+    repo = make_repo(tmp_path / "r", "feature/demo", hh.PROFILE + "hooks:\n  plan_gate:\n    enabled: maybe\n")
+    assert write(repo, repo / "a.txt").verdict == "deny"
 
 
 def test_disable_in_the_trusted_profile_switches_it_off(tmp_path):

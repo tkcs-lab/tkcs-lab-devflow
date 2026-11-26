@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from conftest import ROOT, TLD, CLAUDE
-from hooks_helpers import FAIL_CLOSED, HOOKS, MODULES, bash, git, make_repo, module, run, run_script
+from hooks_helpers import FAIL_CLOSED, HOOKS, MODULES, PROFILE_GATES_OFF, bash, git, make_repo, module, run, run_script
 
 from tld.guard import _common
 from evals.adapters.claude.hookcheck import matcher_matches
@@ -115,8 +115,9 @@ def test_stop_hook_has_the_longest_timeout():
     assert 1800 > module("dod-gate").TOTAL_BUDGET_SECONDS
 
 
-def test_every_hook_command_runs_as_written(fresh_repo):
+def test_every_hook_command_runs_as_written(tmp_path):
     """The command string is run through a shell with the plugin root substituted, as Claude Code does."""
+    fresh_repo = make_repo(tmp_path / "repo", "feature/demo", PROFILE_GATES_OFF)  # the gates are on by default
     event = json.dumps({"cwd": str(fresh_repo), "tool_name": "Bash", "tool_input": {"command": "ls"},
                         "hook_event_name": "PreToolUse", "session_id": "x"})
     for _, _, hook in entries():
@@ -130,7 +131,8 @@ def test_scripts_are_small_stdlib_plus_pyyaml_python_311_without_network():
     stdlib = set(sys.stdlib_module_names)
     local = {"tld", "claude_adapter"}  # the core package and the Claude adapter the entry scripts import
     forbidden = {"socket", "urllib", "http", "requests", "ssl", "ftplib", "smtplib", "httpx", "aiohttp"}
-    for path in [*HOOKS.glob("*.py"), *(TLD / "guard").glob("*.py"), TLD / "dod" / "gate.py"]:
+    resolver = [TLD / "profile" / f"{name}.py" for name in ("resolve", "defaults", "merge", "base")]
+    for path in [*HOOKS.glob("*.py"), *(TLD / "guard").glob("*.py"), TLD / "dod" / "gate.py", *resolver]:
         tree = ast.parse(path.read_text(), feature_version=(3, 11))
         imported = set()
         for node in ast.walk(tree):
@@ -140,7 +142,10 @@ def test_scripts_are_small_stdlib_plus_pyyaml_python_311_without_network():
                 imported.add(node.module.split(".")[0])
         assert imported <= stdlib | local | {"yaml"}, (path.name, imported - stdlib - local)
         assert not imported & forbidden, (path.name, imported & forbidden)
-        assert len(path.read_text().splitlines()) < 480, f"{path.name} is no longer small"
+        # base.py (p2) was already 560 lines when this check reached it and is outside this phase's touches: it keeps
+        # its own bound until a later phase splits it.
+        limit = 600 if path.name == "base.py" else 480
+        assert len(path.read_text().splitlines()) < limit, f"{path.name} is no longer small"
 
 
 def test_hook_names_agree_everywhere():
@@ -157,10 +162,10 @@ def test_schema_defaults_equal_the_hooks_built_in_defaults():
     assert props["protect_paths_allow"]["x-hook-default"] == []
     assert props["disable"]["x-hook-default"] == []
     gate = props["dod_gate"]["properties"]
-    assert gate["enabled"]["x-hook-default"] is False
+    assert gate["enabled"]["x-hook-default"] is True
     assert gate["max_attempts"]["x-hook-default"] == _common.DEFAULT_MAX_ATTEMPTS
-    assert props["plan_gate"]["properties"]["enabled"]["x-hook-default"] is False
-    assert props["board_gate"]["properties"]["enabled"]["x-hook-default"] is False
+    assert props["plan_gate"]["properties"]["enabled"]["x-hook-default"] is True
+    assert props["board_gate"]["properties"]["enabled"]["x-hook-default"] is True
 
 
 def test_template_documents_the_defaults_and_stays_valid(vp):
@@ -173,7 +178,7 @@ def test_template_documents_the_defaults_and_stays_valid(vp):
             break
         block.append(re.sub(r"^# ?", "", line))
     hooks = yaml.safe_load("\n".join(block))["hooks"]
-    assert hooks["protect_paths"] == _common.DEFAULT_PROTECT_PATHS and hooks["dod_gate"]["enabled"] is False
+    assert hooks["protect_paths"] == _common.DEFAULT_PROTECT_PATHS and hooks["dod_gate"]["enabled"] is True
     profile = yaml.safe_load(text)
     profile["hooks"] = hooks
     errors, _, _ = vp.validate(profile)
@@ -197,10 +202,14 @@ def test_schema_rejects_bad_hooks_sections(vp, hooks, message):
     assert any(message in e for e in errors), errors
 
 
-def test_resolved_profile_is_unchanged_by_the_hooks_section(vp):
+def test_resolved_profile_includes_the_hooks_defaults(vp):
     profile = {"docs": {"must_read": []}, "git": {"main_branch": "main", "branch_pattern": "x"},
                "verify": {"fast": [], "dod": ["true"]}, "stacks": []}
-    assert "hooks" not in vp.validate(profile)[2]
+    hooks = vp.validate(profile)[2]["hooks"]
+    assert hooks["disable"] == [] and hooks["protect_paths_allow"] == []
+    assert hooks["protect_paths"] == [".env", ".env.*", "*.lock", "package-lock.json", "go.sum"]
+    assert hooks["dod_gate"] == {"enabled": True, "max_attempts": 3}
+    assert hooks["plan_gate"] == {"enabled": True} and hooks["board_gate"] == {"enabled": True}
 
 
 # ---- the commands that mark themselves exempt -----------------------------------------------------

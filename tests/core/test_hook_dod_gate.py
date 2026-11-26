@@ -1,4 +1,4 @@
-"""dod-gate (Stop): block stopping until verify.dod passes. Opt-in, loop-free, orchestrator-exempt."""
+"""dod-gate (Stop): block stopping until verify.dod passes. On by default, loop-free, orchestrator-exempt."""
 import json
 import os
 import subprocess
@@ -40,10 +40,19 @@ def repo_with(tmp_path, dod, enabled=True, extra="", change=True):
     return repo
 
 
-def test_off_by_default(tmp_path):
-    repo = repo_with(tmp_path, ["exit 1"], enabled=None)
-    assert run(HOOK, stop(repo)).code == 0
-    repo = repo_with(tmp_path / "b", ["exit 1"], enabled=False)
+def test_on_by_default_blocks_a_failing_stop(tmp_path):
+    repo = repo_with(tmp_path, ["exit 1"], enabled=None)  # no hooks block
+    assert run(HOOK, stop(repo)).code == 2
+
+
+def test_switched_off_runs_nothing(tmp_path, counter):
+    repo = repo_with(tmp_path, [counter.cmd + "; exit 1"], enabled=False)
+    assert run(HOOK, stop(repo)).code == 0 and counter() == 0
+
+
+def test_no_profile_allows_everything(tmp_path):
+    repo = make_repo(tmp_path / "repo", "feature/demo", None)
+    (repo / "work.txt").write_text("new work\n")
     assert run(HOOK, stop(repo)).code == 0
 
 
@@ -285,3 +294,70 @@ def test_script_contract(tmp_path):
                        text=True, env={**os.environ, "CLAUDE_PROJECT_DIR": str(repo)})
     assert r.returncode == 2 and "broken tests" in r.stderr and r.stdout == ""
     assert subprocess.run([sys.executable, str(HOOKS / "dod_gate.py"), "--bogus"], capture_output=True).returncode == 2
+
+
+def test_verify_dod_is_read_from_the_trusted_copy(tmp_path):
+    flag = tmp_path / "PWNED"
+    committed = profile(["exit 0"], enabled=None)
+    working = profile([f"touch {flag}; exit 1"], enabled=None)
+    repo = hh.make_repo_with_origin(tmp_path / "r", committed=committed, working=working)
+    (repo / "work.txt").write_text("new work\n")
+    r = run(HOOK, stop(repo))
+    assert r.code == 0 and not flag.exists(), "the working copy's verify.dod must not run"
+
+
+@pytest.mark.parametrize("bad", ['verify: "touch X"\n', "verify: [x]\n", "verify: 5\n"])
+def test_a_non_mapping_verify_is_a_counted_profile_error_in_the_working_copy(tmp_path, bad):
+    repo = make_repo(tmp_path / "repo", "feature/demo", "git:\n  main_branch: main\n" + bad)
+    (repo / "work.txt").write_text("new work\n")
+    r = run(HOOK, stop(repo))
+    assert r.code == 2 and "attempt 1 of 3" in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize("bad", ['verify: "touch X"\n', "verify: [x]\n"])
+def test_a_non_mapping_verify_is_a_counted_profile_error_in_the_trusted_copy(tmp_path, bad):
+    committed = "git:\n  main_branch: main\n" + bad
+    repo = hh.make_repo_with_origin(tmp_path / "r", committed=committed,
+                                    working=profile(["exit 0"], enabled=None))
+    (repo / "work.txt").write_text("new work\n")
+    r = run(HOOK, stop(repo))
+    assert r.code == 2 and "attempt 1 of 3" in r.stderr, r.stderr
+
+
+def test_both_notices_are_kept(tmp_path):
+    from tld.guard import _common
+    from tld.guard.action import Action
+    repo = hh.make_repo_with_origin(tmp_path / "r", committed=profile(["exit 0"], enabled=None),
+                                    working=profile(["exit 1"], enabled=False))
+    ctx = _common.make_ctx(Action("stop", str(repo), str(repo), session_id="s1"), _common.Settings())
+    assert _common.gate_enabled(ctx, "dod_gate") is True
+    _common.dod_profile(ctx)
+    assert "hooks.dod_gate.enabled" in ctx.notice and "verify.dod" in ctx.notice
+
+
+def test_a_damaged_attempt_counter_still_blocks(tmp_path):
+    from tld.dod import gate
+    repo = repo_with(tmp_path, ["exit 1"], enabled=None)
+    assert run(HOOK, stop(repo)).code == 2
+    gate._state_file(str(repo), "s1").write_text(json.dumps({"attempts": "x", "profile_attempts": "y"}))
+    assert run(HOOK, stop(repo)).code == 2
+
+
+def test_infinity_and_booleans_in_the_state_file_count_as_zero(tmp_path):
+    from tld.dod import gate
+    assert gate._count({"k": float("inf")}, "k") == 0 and gate._count({"k": True}, "k") == 0
+    assert gate._count({"k": -3}, "k") == 0 and gate._count({"k": 2}, "k") == 2
+    repo = repo_with(tmp_path, ["exit 1"], enabled=None)
+    assert run(HOOK, stop(repo)).code == 2
+    gate._state_file(str(repo), "s1").write_text('{"attempts": Infinity, "profile_attempts": 1e999}')
+    assert run(HOOK, stop(repo)).code == 2
+
+
+def test_a_nul_byte_in_a_dod_command_is_a_failed_attempt(tmp_path):
+    repo = repo_with(tmp_path, ["echo a\u0000b"], enabled=None)
+    r = run(HOOK, stop(repo))
+    assert r.code == 2 and "could not start" in r.stderr, r.stderr
+
+
+# The spec scenario "Commands come from the default branch" (plan 3.13 names the test after it).
+test_commands_come_from_the_default_branch = test_verify_dod_is_read_from_the_trusted_copy

@@ -113,12 +113,12 @@ def test_unknown_payload_exits_0_silently(repo):
     assert r.returncode == 0 and r.stderr == ""
 
 
-def test_a_malformed_hooks_disable_never_blocks(tmp_path, monkeypatch):
+def test_a_malformed_hooks_disable_does_not_switch_the_gate_off(tmp_path, monkeypatch):
     monkeypatch.setenv("TLD_BOARD_URL", "https://board.example")
     monkeypatch.setenv("TLD_BOARD_TOKEN", "t")
     repo = make_repo_with_origin(tmp_path / "repo", "feature/demo", ON + "  disable: board-gate\n")
     run_script("board-gate", prompt(repo, "/tld:docs init x"))
-    assert run_script("board-gate", stop(repo)).returncode == 0
+    assert run_script("board-gate", stop(repo)).returncode == 2  # a malformed value counts as not disabled
 
 
 def mcp(text):

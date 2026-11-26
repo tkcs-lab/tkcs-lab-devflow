@@ -23,8 +23,8 @@ section `## Change report` plus a standalone HTML page. The design and its decis
 ## Turn it on
 
 1. Install the release that carries the role first: an older `tld` rejects the profile line.
-2. Add `- role: reflektor` with `at: [dod]` to `roles.required` in `.tld/toolkit.yaml` (a protected path: edit it
-   yourself). No other point is valid.
+2. Add `- role: reflektor` with `at: [dod]` to `roles.required` in `.tld/toolkit.yaml` (or in the org base, see [org-base.md](org-base.md); the pull request
+   names the profile under Security). No other point is valid.
 3. The environment must reach `github.com` and `release-assets.githubusercontent.com`; Node 18 or later must be on
    `PATH`. Warning: allowing `github.com` opens git and HTTPS traffic to all of GitHub for every session of that
    environment; use a dedicated environment ([cloud-environments.md](cloud-environments.md)).

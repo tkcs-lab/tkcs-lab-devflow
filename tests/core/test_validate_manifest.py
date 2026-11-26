@@ -171,21 +171,32 @@ def _warns(vm, entry, profile=None):
     return vm.validate(m, profile)
 
 
+# The profile and ordinary workflows are off the default protect list; a repository that lists them gets the warnings.
+FULL = {"git": {"main_branch": "main"}, "verify": {"fast": ["true"], "dod": ["true"]}}  # keys no default supplies
+LISTED = {"hooks": {"protect_paths": [".tld/toolkit.yaml", ".github/workflows/**"]}}
+
+
+def test_the_profile_and_ordinary_workflows_are_not_protected_by_default(vm):
+    for entry in (".tld/toolkit.yaml", ".github/workflows/ci.yml", ".github/**", ".github/"):
+        errs, warns = _warns(vm, entry)
+        assert errs == [] and warns == [], entry
+
+
 def test_a_protected_path_in_touches_is_a_warning(vm):
     for entry in (".tld/toolkit.yaml", ".github/workflows/ci.yml"):
-        errs, warns = _warns(vm, entry)
+        errs, warns = _warns(vm, entry, LISTED)
         assert errs == [], entry
         assert any(f"touches '{entry}' is a protected path" in w and "protected-changes.md" in w for w in warns), entry
 
 
 def test_a_wildcard_over_protected_paths_is_a_warning(vm):
-    errs, warns = _warns(vm, ".github/**")
+    errs, warns = _warns(vm, ".github/**", LISTED)
     assert errs == []
     assert any("touches '.github/**' could name a protected path" in w for w in warns)
 
 
 def test_a_directory_entry_is_checked_like_its_glob(vm):
-    errs, warns = _warns(vm, ".github/")
+    errs, warns = _warns(vm, ".github/", LISTED)
     assert errs == []
     assert any("touches '.github/' could name a protected path" in w for w in warns)
 
@@ -215,6 +226,8 @@ def test_the_profile_protect_list_replaces_the_default(vm):
 
 def test_a_profile_without_hooks_gives_the_default_check(vm):
     errs, warns = _warns(vm, ".tld/toolkit.yaml", {"git": {}})
+    assert errs == [] and warns == []  # the default list has no path with a slash
+    errs, warns = _warns(vm, ".tld/toolkit.yaml", {"git": {}, **LISTED})
     assert errs == []
     assert any("is a protected path" in w for w in warns)
 
@@ -498,7 +511,7 @@ def test_spec_change_differing_from_the_slug_warns(vm):
 
 def test_cli_spec_change_with_a_spec_profile(tmp_path):
     profile = tmp_path / "toolkit.yaml"
-    profile.write_text(yaml.safe_dump(SPEC_PROFILE))
+    profile.write_text(yaml.safe_dump({**FULL, **SPEC_PROFILE}))
     bad = tmp_path / "bad.yaml"
     bad.write_text(yaml.safe_dump(_spec_manifest(spec_change="A")))
     good = tmp_path / "good.yaml"
@@ -509,7 +522,7 @@ def test_cli_spec_change_with_a_spec_profile(tmp_path):
     assert out.returncode != 0
     assert ID_ERR in out.stdout + out.stderr
     no_spec = tmp_path / "plain.yaml"
-    no_spec.write_text("git: {}\n")
+    no_spec.write_text(yaml.safe_dump(FULL))
     out = run_cli(str(good), "--profile", str(no_spec))
     assert "spec_change needs the profile's spec block" in out.stdout + out.stderr
 
@@ -654,7 +667,7 @@ def test_sysml_change_is_a_known_key(vm):
 
 def test_cli_sysml_change_with_a_sysml_profile(tmp_path):
     profile = tmp_path / "toolkit.yaml"
-    profile.write_text(yaml.safe_dump(SYSML_PROFILE))
+    profile.write_text(yaml.safe_dump({**FULL, **SYSML_PROFILE}))
     good = tmp_path / "good.yaml"
     good.write_text(yaml.safe_dump(_sysml_manifest()))
     bad = tmp_path / "bad.yaml"
@@ -664,6 +677,66 @@ def test_cli_sysml_change_with_a_sysml_profile(tmp_path):
     out = run_cli(str(bad), "--profile", str(profile))
     assert out.returncode != 0 and SYSML_ID_ERR in out.stdout + out.stderr
     plain = tmp_path / "plain.yaml"
-    plain.write_text("git: {}\n")
+    plain.write_text(yaml.safe_dump(FULL))
     out = run_cli(str(good), "--profile", str(plain))
     assert SYSML_BLOCK_ERR in out.stdout + out.stderr
+
+
+def test_branch_types_default_is_checked(tmp_path):
+    """A profile that writes no `git.branch_types` still checks the feature branch against the built-in types."""
+    profile = tmp_path / "toolkit.yaml"
+    profile.write_text(yaml.safe_dump(FULL))
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(mutated(lambda m: m.update(feature_branch="feat/demo"))))
+    out = run_cli(str(bad), "--profile", str(profile))
+    assert out.returncode == 1
+    assert "feature_branch 'feat/demo' does not start with one of feature/, fix/, chore/" in out.stderr
+    good = tmp_path / "good.yaml"
+    good.write_text(yaml.safe_dump(GOOD))
+    assert run_cli(str(good), "--profile", str(profile)).returncode == 0
+
+
+def test_plan_dir_default_resolves_trailing_slash(tmp_path):
+    """`docs/plans` of an existing directory is the default; a written trailing slash is dropped before the check."""
+    (tmp_path / ".tld").mkdir()
+    (tmp_path / "docs" / "plans").mkdir(parents=True)
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(mutated(
+        lambda m: (m["phases"][0].update(touches=["docs/plans/14/plan.md"]), m.update(tracking_issue=14)))))
+    for plan_dir in (None, "docs/plans/"):
+        profile = tmp_path / ".tld" / "toolkit.yaml"
+        profile.write_text(yaml.safe_dump({**FULL, **({"docs": {"plan_dir": plan_dir}} if plan_dir else {})}))
+        out = run_cli(str(bad), "--profile", str(profile))
+        assert out.returncode == 1 and "is a plan record" in out.stderr, (plan_dir, out.stderr)
+
+
+def test_cli_clamps_protect_paths_allow_to_the_default_branch(tmp_path):
+    import os
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.test",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.test", "GIT_TERMINAL_PROMPT": "0"}
+
+    def git(*a, cwd):
+        subprocess.run(["git", "-c", "commit.gpgsign=false", *a], cwd=cwd, check=True, capture_output=True, env=env)
+
+    repo, bare = tmp_path / "r", tmp_path / "o.git"
+    repo.mkdir()
+    git("init", "-q", "-b", "main", cwd=repo)
+    (repo / ".tld").mkdir()
+    (repo / ".tld" / "toolkit.yaml").write_text(yaml.safe_dump({**FULL, **LISTED}))
+    git("add", "-A", cwd=repo)
+    git("commit", "-q", "-m", "init", cwd=repo)
+    git("init", "-q", "--bare", "-b", "main", str(bare), cwd=tmp_path)
+    git("remote", "add", "origin", str(bare), cwd=repo)
+    git("push", "-q", "origin", "main", cwd=repo)
+    git("fetch", "-q", "origin", cwd=repo)
+    git("remote", "set-head", "origin", "main", cwd=repo)
+    git("checkout", "-q", "-b", "feature/x", cwd=repo)
+    plan = tmp_path / "plan.yaml"
+    m = mutated(lambda m: m["phases"][0].update(touches=["src/core.py", ".github/workflows/ci.yml"]))
+    plan.write_text(yaml.safe_dump(m))
+    before = run_cli(str(plan), "--profile", str(repo / ".tld" / "toolkit.yaml"))
+    (repo / ".tld" / "toolkit.yaml").write_text(
+        yaml.safe_dump({**FULL, "hooks": {**LISTED["hooks"], "protect_paths_allow": [".github/workflows/**"]}}))
+    after = run_cli(str(plan), "--profile", str(repo / ".tld" / "toolkit.yaml"))
+    assert "protected path" in before.stderr  # the default branch lists the workflows
+    assert "protected path" in after.stderr, after.stderr  # the branch's own allow pattern does not lift it

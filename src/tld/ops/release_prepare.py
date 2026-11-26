@@ -26,9 +26,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-import yaml
 
-from tld.profile import validate as pv
 
 DEFAULT_PROFILE = ".tld/toolkit.yaml"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
@@ -273,13 +271,19 @@ def _load(path: str) -> dict:
     p = Path(path)
     if not p.is_file():
         raise ReleaseError(f"no profile at '{p}'")
+    from tld.profile import resolve as rs
+    root = p.resolve().parent.parent
     try:
-        profile = yaml.safe_load(p.read_text())
-    except yaml.YAMLError as exc:
-        raise ReleaseError(f"{p} is not valid YAML: {exc}")
-    errors, _warnings, resolved = pv.validate(profile, None)
-    if errors:
-        raise ReleaseError("\n".join(f"toolkit.yaml: {e}" for e in errors))
+        top = subprocess.run(["git", "-C", str(p.resolve().parent), "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=10)
+        if top.returncode == 0 and top.stdout.strip():
+            root = Path(top.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass  # no git: the profile's own directory layout decides
+    loaded = rs.load(p, root=root, trusted=False, fetch=False, file_checks=False)
+    if loaded.errors:
+        raise ReleaseError("\n".join(f"toolkit.yaml: {e}" for e in loaded.errors))
+    resolved = loaded.profile
     changelog = resolved.get("docs", {}).get("changelog")
     if "release" not in resolved:
         raise ReleaseError("the profile has no 'release' section")

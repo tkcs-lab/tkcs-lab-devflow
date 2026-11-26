@@ -3,9 +3,9 @@
   "turns": 3,
   "cost_usd": 0.0,
   "branch": "chore/toolkit-profile",
-  "commit_message": "chore: add the tld profile",
+  "commit_message": "chore: add .tld/toolkit.yaml",
+  "result_text": "Profile written.",
   "files": {
-    ".tld/toolkit.yaml": "docs:\n  must_read:\n  - README.md\ngit:\n  main_branch: main\n  branch_pattern: <type>/<kebab-case>\nverify:\n  fast:\n  - python3 -m unittest -q\n  dod:\n  - python3 -m unittest -q\nstacks:\n- python\nroles:\n  posture:\n    security: critical\n  disable:\n  - website-maintainer\n  required:\n  - role: security-reviewer\n    at:\n    - implement_phase\n    - implement_final\n    blocking: false\n  - role: test-architect\n    at:\n    - make_plan\n    blocking: false\n"
-  },
-  "result_text": "Profile written."
+    ".tld/toolkit.yaml": "tld:\n  extends: example-org/.github/tld/profile-base.yaml@0123456789abcdef0123456789abcdef01234567  # v1\n  version: \">=1.6,<2\"\ngit:\n  main_branch: main\ndocs:\n  must_read:\n  - README.md\nverify:\n  fast:\n  - python3 -m unittest -q\n  dod:\n  - python3 -m unittest -q\nstacks:\n- python\nroles:\n  disable:\n  - website-maintainer\n"
+  }
 }
