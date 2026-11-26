@@ -81,6 +81,7 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - final: blocking 1 (p7): the detected proposal sets required_status_checks without reading the live tld-main ruleset, so a merged proposal can drop live checks and their app binding; sent to fix-1
 - final: blocking 2 (p7): the proposal leaves out organisation path workflows without a note; sent to fix-1 with a pull request note
 - final: blocking 3 (p7): the override:propose:invalid subject is undocumented; sent to fix-1 to list it in the policy row of the admin guide
+- final: second final review: approve, no blocking findings; the first review blocking findings are fixed by fix-1
 
 ## Finishing
 
