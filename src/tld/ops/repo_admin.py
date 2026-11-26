@@ -1796,7 +1796,7 @@ def cmd_validate(args) -> int:
         shown = {k: v for k, v in view.items() if not str(k).startswith("_")}
         if explain:
             leaves = repo_admin_policy.explain_lines(shown, sources)
-            print("\n".join(leaves))
+            print("\n".join(clean(line, 2000) for line in leaves))
         else:
             sys.stdout.write(yaml.safe_dump(shown, sort_keys=False))
     suffix = {"run": "", "override": ", repository override", "base": ", base"}[kind]
