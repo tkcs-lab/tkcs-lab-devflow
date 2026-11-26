@@ -113,7 +113,7 @@ The system SHALL take the agent login from the repository's resolved profile bot
 
 #### Scenario: Equal logins
 - **WHEN** the effective agent and reviewer logins are equal when compared without case
-- **THEN** the audit warns and the organisation's logins apply; a login the organisation does not set (or equal organisation logins) is dropped and the check that needs it stands down for that repository
+- **THEN** the audit warns and the organisation's logins apply; where the organisation sets no login or equal ones, the reviewer login is dropped and the release check stands down for that repository, and a dropped agent login is derived from the repository's profile as when it is absent
 
 #### Scenario: Explicit login wins
 - **WHEN** the effective policy states a login
