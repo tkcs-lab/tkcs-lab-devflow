@@ -1922,12 +1922,28 @@ def _need_release_params(eff: dict, repo_name: str) -> bool:
                and not {**(w.get("params") or {}), **shared} for w in eff.get("workflows") or [])
 
 
+def _live_main_checks(ctx: Ctx, fn: str) -> list[dict]:
+    """The status checks the live tld-main ruleset requires (none when there is no such ruleset)."""
+    try:
+        listing = ctx.c.paginate(f"/repos/{fn}/rulesets", {"includes_parents": "false"})
+        mine = [r for r in listing or [] if r.get("name") == MAIN_RULESET and r.get("source_type", "Repository") == "Repository"]
+        return _live_contexts(ctx.c.get(f"/repos/{fn}/rulesets/{mine[0]['id']}")) if mine else []
+    except ApiError as exc:
+        if exc.status == 404:
+            return []
+        raise
+
+
 def _detected(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> tuple[dict, list[str]]:
     """(the override mapping detected from the repository, the lines for the pull request) when something is missing."""
     rs = eff.get("rulesets") if isinstance(eff.get("rulesets"), dict) else {}
     branch = rs.get("default_branch")
     need_checks = isinstance(branch, dict) and "required_status_checks" not in branch
     need_release = _need_release_params(eff, repo["name"])
+    kept: list[str] = []
+    if need_checks:  # an explicit list replaces the live checks and their app binding: with live checks, propose none
+        kept = [c["context"] for c in _live_main_checks(ctx, repo["full_name"])]
+        need_checks = not kept
     if not (need_checks or need_release):
         return {}, []
     got = repo_admin_detect.gather(ctx, repo, want_checks=need_checks)
@@ -1941,6 +1957,10 @@ def _detected(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> tuple[dict, list
         if workflows is not None:
             notes.append(f"the profile's release workflow is {got.profile_release_workflow}, not the template's: "
                          "workflows lists no release template")
+            notes += [f"the proposed workflows list leaves out the workflow with path {w['path']}: the override stops managing it "
+                      "in this repository (a list replaces the organisation's)" for w in eff.get("workflows") or []
+                      if isinstance(w, dict) and isinstance(w.get("path"), str) and not isinstance(w.get("template"), str)
+                      and (not w.get("repos") or any(fnmatch.fnmatchcase(repo["name"], g) for g in w["repos"]))]
         else:
             params, notes = repo_admin_detect.release_params(list(got.tags), list(got.manifests), got.tag_workflow)
             unsafe = sorted(k for k, v in params.items() if not SAFE_PARAM.fullmatch(v) or ".." in v)
@@ -1948,6 +1968,9 @@ def _detected(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> tuple[dict, list
                 notes += [f"{k} was detected but has characters other than letters, digits and . _ / -; no release parameters "
                           "are proposed" for k in unsafe]
                 params = {}
+    if kept:
+        notes.append(f"required_status_checks are not proposed: {MAIN_RULESET} already requires {len(kept)} "
+                     "(kept with their app binding while the key is absent)")
     head = repo_admin_detect.pr_notes(checks, excluded, None, [])
     tail = repo_admin_detect.pr_notes(checks, excluded, params, notes)[len(head):]
     return repo_admin_detect.detected_override(checks, params, workflows), tail + (head if need_checks else [])

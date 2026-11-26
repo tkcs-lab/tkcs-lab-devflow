@@ -5,6 +5,10 @@ entry of the released version at the top of the GitHub release, above the list o
 
 ## [Unreleased]
 
+### Fixed
+
+- Admin audit: a proposed override no longer lists `required_status_checks` when the live `tld-main` ruleset already requires some (an explicit list would drop live checks and their app binding), and its pull request names each `path` workflow a proposed `workflows` list leaves out. The admin guide lists every subject of the `policy` check.
+
 ### Added
 
 - One org base profile: a repository extends it with `tld.extends: <owner>/<repo>/<path>@<40-hex commit>` and writes only `verify.fast` and `verify.dod` (a minimal profile) plus what is its own. The base takes only allow-listed keys, is pinned by a full commit (a version tag's commit or an ancestor of the default branch head), is cached under the git directory, and is refused when it holds token-like text, anchors or aliases. `tld profile validate` refuses (and the audit reports) a repository that weakens the base's guarded keys (hooks, protect lists, gates, security posture, required roles) unless the base lists them in `tld.allow_override`. A profile with `tld.extends` needs tld 1.7 or later. See docs/guides/org-base.md.
