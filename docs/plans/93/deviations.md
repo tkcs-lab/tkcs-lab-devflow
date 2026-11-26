@@ -21,7 +21,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p4-schema-kinds
 
-- pending
+- worker: login, org, environment and workflow dest patterns in the schema now end in a portable end-of-string lookahead instead of $ (a trailing newline is rejected); validate_policy raises ValueError for an unknown kind
+- retry: sent back once after the security review: workflow_params.release and override workflow params could set main_branch or the release environment; now limited to the four plan-listed keys; the second review passed
+- review: security note for a later phase: repos.override_path should be allow-listed and URL-quoted where the contents API path is built
 
 ## p5-cli-resolve
 
