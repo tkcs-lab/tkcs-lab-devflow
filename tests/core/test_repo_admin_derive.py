@@ -171,3 +171,23 @@ def test_release_without_an_agent_section_compares_with_the_profile_bot(ra):
     assert not other.logins(other.all_repos[0]).same
     none, _ = inherited(ra, policy, routes=release_routes(), files={"app": {"README.md": "x"}})
     assert not none.logins(none.all_repos[0]).same  # no profile: nothing to compare with
+
+
+def test_equal_logins_in_the_profile_do_not_switch_off_the_organisations_accounts(ra):
+    same_profile = {"app": {TOOLKIT: prof(", owner_login: alice, bot_login: alice")}}
+    # (a) the organisation names the agent; the reviewer is derived from the profile and differs from it
+    a, _ = inherited(ra, {"agent": {"agent_login": "realbot", "branch_policy": "default_branch"}, "release": {"environment": "tld-release"}},
+                     routes=agent_routes() | release_routes(), files=same_profile)
+    lg = a.logins(a.all_repos[0])
+    assert (lg.agent, lg.reviewer, lg.same) == ("realbot", "alice", False)
+    # (b) release only, explicit reviewer: the profile's own pair is not the effective pair
+    b, _ = inherited(ra, {"release": {"environment": "tld-release", "reviewer_login": "boss"}}, files=same_profile)
+    assert b.logins(b.all_repos[0]).same is False and b.logins(b.all_repos[0]).reviewer == "boss"
+    # (c) derived agent, explicit reviewer
+    c, _ = inherited(ra, {"agent": {"branch_policy": "default_branch"}, "release": {"environment": "tld-release", "reviewer_login": "boss"}},
+                     files=same_profile)
+    lg = c.logins(c.all_repos[0])
+    assert (lg.agent, lg.reviewer, lg.same) == ("alice", "boss", False)
+    found = ra.check_agent(a)
+    assert "role:realbot" in [f.subject for f in found]  # the agent role is still checked
+    assert not [f for f in found if f.subject == "login:same"]

@@ -646,23 +646,22 @@ class Ctx:
         agent_derived = reviewer_derived = False
         compare = agent  # a release section without an agent section still compares with the profile's git.bot_login
         if (has_agent and agent is None) or (has_release and reviewer is None and not dropped) or (has_release and not has_agent):
-            d_agent, d_reviewer, reasons = repo_admin_policy.derive_logins(repo_admin_profile.repo_profile(self, repo))
+            profile = repo_admin_profile.repo_profile(self, repo)
+            d_agent, _, reasons = repo_admin_policy.derive_logins(profile)
+            reasons = [r for r in reasons if r != SAME_LOGIN]
+            # The reviewer candidate must not depend on the profile's own bot_login: only the effective pair is compared.
+            git = profile.get("git") if isinstance(profile, dict) else None
+            bare = {**profile, "git": {k: v for k, v in git.items() if k != "bot_login"}} if isinstance(git, dict) else profile
+            _, d_reviewer, _ = repo_admin_policy.derive_logins(bare)
             if has_agent and agent is None:
                 agent, agent_derived = d_agent, d_agent is not None
             if has_release and reviewer is None and not dropped:
                 reviewer, reviewer_derived = d_reviewer, d_reviewer is not None
-            if not has_agent:
-                bot = (repo_admin_profile.repo_profile(self, repo) or {}).get("git") or {}
-                bot = bot.get("bot_login") if isinstance(bot, dict) else None
-                compare = bot if isinstance(bot, str) and repo_admin_policy.LOGIN_RE.fullmatch(bot) else None
-            else:
-                compare = agent
-        same = has_release and SAME_LOGIN in reasons and (has_agent or compare is not None)
+            compare = agent if has_agent else d_agent
+        same = False
         if has_release and compare and reviewer and compare.casefold() == reviewer.casefold():
-            same, reviewer, reviewer_derived = True, None, False  # fail closed, whichever side was derived
-            reasons = [r for r in reasons if r != SAME_LOGIN] + [SAME_LOGIN]
-        if same:
-            reviewer_derived = False
+            same, reviewer, reviewer_derived = True, None, False  # fail closed on the effective pair only
+            reasons = reasons + [SAME_LOGIN]
         return Logins(agent, reviewer, reasons, same, dropped, agent_derived, reviewer_derived)
 
     def loosenings(self, repo: dict) -> list:
@@ -1936,7 +1935,7 @@ def _detected(ctx: Ctx, repo: dict, ov: Override, eff: dict) -> tuple[dict, list
     params, notes, workflows = None, [], None
     if need_release:
         entries = [{k: v for k, v in w.items() if k in ("template", "params", "remove")}
-                   for w in eff.get("workflows") or [] if isinstance(w, dict)
+                   for w in eff.get("workflows") or [] if isinstance(w, dict) and isinstance(w.get("template"), str)
                    and (not w.get("repos") or any(fnmatch.fnmatchcase(repo["name"], g) for g in w["repos"]))]
         workflows = repo_admin_detect.own_release_workflow(got.profile_release_workflow, entries)
         if workflows is not None:

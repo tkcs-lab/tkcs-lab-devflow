@@ -261,3 +261,11 @@ def test_notes_are_separate_lines_with_the_release_line_first(ra):
     body = [w for w in fake.writes if w[1].endswith("/pulls")][0][2]["body"]
     assert body.index("release parameters") < body.index("required_status_checks") < body.index("flaky29")
     assert body.count("\n- ") >= 30  # one bullet per line, each cut on its own
+
+
+def test_a_workflow_entry_without_a_template_is_not_proposed(ra):
+    policy = {**POLICY, "workflows": [{"template": "release"}, {"path": "x.yml"}, {"template": "land"}]}
+    own = prof("", "release: {workflow: ship.yml, version_files: [{path: VERSION, pattern: '(.*)'}]}\n")
+    ctx, _ = inherited(ra, policy, routes=served(), files={"app": {TOOLKIT: own}})
+    [f] = proposals(ra, ctx)
+    assert f.subject == "override:propose" and content(f)["workflows"] == [{"template": "land"}]
