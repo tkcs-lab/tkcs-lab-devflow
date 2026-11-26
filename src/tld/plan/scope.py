@@ -120,9 +120,9 @@ def phase_touches(manifest: dict) -> dict[str, list[str]]:
     return out
 
 
-def _trusted_ignore(repo: str | None) -> list | None:
-    """`scope.ignore` of the profile on the remote default branch, or None when no trusted copy is reachable. The
-    working copy is not read for it: a merged phase could add `**` and silence the check for every later phase."""
+def _trusted_profile(repo: str | None) -> dict | None:
+    """The profile on the remote default branch (raw), or None when no trusted copy is reachable. The working copy is
+    not read for `scope.ignore` or the changelog file: a merged phase could name `**` and silence every later phase."""
     if not repo:
         return None
     try:
@@ -130,11 +130,7 @@ def _trusted_ignore(repo: str | None) -> list | None:
         t = trust.trusted(str(repo))
     except Exception:  # noqa: BLE001 - the check must never fail the merge
         return None
-    if not t.available or not isinstance(t.profile, dict):
-        return None
-    scope = t.profile.get("scope")
-    ignore = scope.get("ignore") if isinstance(scope, dict) else None
-    return ignore if isinstance(ignore, list) else []
+    return t.profile if t.available and isinstance(t.profile, dict) else None
 
 
 def load_ignore(profile: str | None, repo: str | None = None) -> list[str]:
@@ -149,12 +145,12 @@ def load_ignore(profile: str | None, repo: str | None = None) -> list[str]:
         raise ScopeError("profile unreadable")
     data = loaded.profile
     ignore: list[str] = []
-    scope = data.get("scope") if isinstance(data, dict) else None
-    listed = _trusted_ignore(repo)
-    if listed is None and isinstance(scope, dict) and isinstance(scope.get("ignore"), list):
-        listed = scope["ignore"]
-    ignore += [g for g in listed or [] if isinstance(g, str)]
-    docs = data.get("docs") if isinstance(data, dict) else None
+    trusted = _trusted_profile(repo)
+    source = trusted if trusted is not None else data  # the default branch's copy, else the working copy
+    scope = source.get("scope") if isinstance(source, dict) else None
+    if isinstance(scope, dict) and isinstance(scope.get("ignore"), list):
+        ignore += [g for g in scope["ignore"] if isinstance(g, str)]
+    docs = source.get("docs") if isinstance(source, dict) else None
     changelog = docs.get("changelog") if isinstance(docs, dict) else None
     if isinstance(changelog, dict) and isinstance(changelog.get("file"), str):
         ignore.append(changelog["file"])
