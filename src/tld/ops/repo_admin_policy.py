@@ -287,7 +287,7 @@ def derive_logins(profile: dict | None) -> tuple[str | None, str | None, list[st
     bot = git.get("bot_login")
     agent = None
     if isinstance(bot, str) and bot:
-        if LOGIN_RE.match(bot):
+        if LOGIN_RE.fullmatch(bot):
             agent = bot
         else:
             reasons.append("git.bot_login is not a plain login")
@@ -296,7 +296,7 @@ def derive_logins(profile: dict | None) -> tuple[str | None, str | None, list[st
     owner = git.get("owner_login")
     reviewer = None
     if isinstance(owner, str) and owner:
-        if LOGIN_RE.match(owner):
+        if LOGIN_RE.fullmatch(owner):
             reviewer = owner
         else:
             reasons.append("git.owner_login is not a plain login")
@@ -304,7 +304,7 @@ def derive_logins(profile: dict | None) -> tuple[str | None, str | None, list[st
         owners = git.get("codeowners")
         if isinstance(owners, list) and len(owners) == 1:
             one = owners[0]
-            if isinstance(one, str) and LOGIN_RE.match(one):
+            if isinstance(one, str) and LOGIN_RE.fullmatch(one):
                 reviewer = one
             else:
                 reasons.append("git.codeowners entry is not a plain login")

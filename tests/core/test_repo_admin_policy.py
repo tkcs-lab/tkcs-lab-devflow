@@ -294,6 +294,10 @@ def test_derive_logins():
     assert rp.derive_logins({"git": {"bot_login": "bo/t", "owner_login": "own"}}) == (None, "own", ["git.bot_login is not a plain login"])
     assert rp.derive_logins({"git": {"bot_login": "bot", "owner_login": "o wn"}}) == ("bot", None, ["git.owner_login is not a plain login"])
     assert rp.derive_logins({"git": {"bot_login": "bot", "owner_login": "acme/team"}})[1] is None
+    # a trailing newline (a YAML block scalar) is not a plain login
+    assert rp.derive_logins({"git": {"bot_login": "bot\n", "owner_login": "own"}}) == (None, "own", ["git.bot_login is not a plain login"])
+    assert rp.derive_logins({"git": {"bot_login": "bot", "owner_login": "bot\n"}}) == ("bot", None, ["git.owner_login is not a plain login"])
+    assert rp.derive_logins({"git": {"bot_login": "bot", "codeowners": ["bot\n"]}}) == ("bot", None, ["git.codeowners entry is not a plain login"])
     assert rp.derive_logins({}) == (None, None, ["no git.bot_login", "no git.owner_login and not exactly one git.codeowners entry"])
     # owner_login wins over codeowners
     assert rp.derive_logins({"git": {"bot_login": "bot", "owner_login": "own", "codeowners": ["x"]}})[1] == "own"
