@@ -16,8 +16,9 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 - review: security notes for later phases: release_params should ignore tag prefixes outside the safe-parameter pattern; required check names can come from any source (name-only, as today); pr_notes output must go through _cell escaping in the PR body writer, with a test
 
 ## p3-extends
+- worker: a base file in an internal repository counts as public even when the API says private, and a missing or non-boolean private also counts as public (the plan contradicts itself; the fail-closed reading was chosen and tested)
+- review: security review passed with four non-blocking notes: sanitise key names in fetched-base error messages, cap the read size before parsing and check UTF-8 on raw bytes, latest_pin should skip tags that are not ancestors of the default branch, more fail-closed tests (internal visibility, ahead or diverged compare, non-text answer, oversize file)
 
-- pending
 
 ## p4-schema-kinds
 
