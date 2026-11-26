@@ -2,7 +2,7 @@
   "command_hashes": {
     "board.md": "edcc16ad7136c5a9",
     "ci.md": "d141470aaada2152",
-    "deps.md": "704e9fd46b29e49c",
+    "deps.md": "706daf8c33dcc7d0",
     "docs.md": "90d321222d6d1eef",
     "dod.md": "548beddd3f8e6266",
     "implement.md": "da1895a4ddeac575",
@@ -19,7 +19,7 @@
     "usage.md": "2480aff02d3fe5d8"
   },
   "created": "2026-11-10",
-  "hashes_refreshed": "2026-11-25",
+  "hashes_refreshed": "2026-11-26",
   "model": "claude-sonnet-5-5",
   "plugin_sha": "9e9e72234ea972c3d68f921fd6debf93afb392a2",
   "schema": 1,

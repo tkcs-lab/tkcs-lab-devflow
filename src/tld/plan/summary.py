@@ -44,7 +44,7 @@ UNSAFE = ("Cc", "Cf", "Cs", "Co", "Zl", "Zp")
 CLOSES = re.compile(r"(closes|fixes|resolves) #[0-9]+\.?", re.IGNORECASE)
 WORD = re.compile(r"\w")
 LINKISH = re.compile(r"\]\(|\]\[|!\[|\[\^|\||<|\$|\]:|```|~~~|^(?: {4}|\t)", re.MULTILINE)
-SECURITY_PATHS = (".github/workflows/", ".tld/toolkit.yaml")
+SECURITY_PATHS = (".github/workflows/", ".tld/toolkit.yaml", ".github/actions/")  # a composite action runs with its workflow's secrets
 
 
 class ReadError(Exception):
@@ -177,7 +177,8 @@ def findings_problems(lines: list[str], heads: list[tuple[int, str]], n: int | N
 
 def security_paths(changed: list[str]) -> list[str]:
     """The workflow and profile files of a changed-path list, once each, in list order."""
-    hits = [p for p in changed if p.startswith(SECURITY_PATHS[0]) or p == SECURITY_PATHS[1]]
+    hits = [p for p in changed
+            if p.startswith(SECURITY_PATHS[0]) or p.startswith(SECURITY_PATHS[2]) or p == SECURITY_PATHS[1]]
     return list(dict.fromkeys(hits))
 
 
