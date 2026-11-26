@@ -243,3 +243,9 @@ def test_explicit_empty_checks_ignore_live_checks_in_the_body(ra):
 def test_cell_breaks_bare_urls(ra):
     cell = ra._cell("check https://evil.example/x and www.evil.example")
     assert "://" not in cell and "www.evil" not in cell
+
+
+def test_key_the_organisation_omits(ra):
+    org = {"org": "a", "security": {"secret_scanning": True}}
+    eff, loose, _warns = ra.effective_policy(org, {"security": {"secret_push_protection": False}}, "app")
+    assert eff["security"]["secret_push_protection"] is False and loose == []

@@ -238,3 +238,6 @@ def test_the_validate_view_uses_the_same_function(ra):
     over = {"security": {"secret_scanning": False}, "labels": {"delete_unused": True}}
     eff, loose, _ = ra.effective_policy(org, over, "app")
     assert eff["security"]["secret_scanning"] is True and "labels" not in eff and [i.key for i in loose] == ["security.secret_scanning"]
+
+
+test_login_or_environment_overridden = test_an_explicit_login_override_is_reported

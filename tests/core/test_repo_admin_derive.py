@@ -191,3 +191,7 @@ def test_equal_logins_in_the_profile_do_not_switch_off_the_organisations_account
     found = ra.check_agent(a)
     assert "role:realbot" in [f.subject for f in found]  # the agent role is still checked
     assert not [f for f in found if f.subject == "login:same"]
+
+
+test_derived_login_named = test_a_derived_login_is_named_in_its_fixes
+test_equal_logins = test_equal_effective_logins_stand_down

@@ -222,3 +222,6 @@ def test_the_schema_patterns_avoid_the_python_only_end_anchor():
         key = "agent_login" if login == "agent" else "reviewer_login"
         pattern = json.loads(text)["properties"][login]["properties"][key]["pattern"]
         assert pattern.endswith("(?![\\s\\S])")
+
+
+test_release_parameters_limited = test_override_workflow_params_are_limited_to_the_four_keys
