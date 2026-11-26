@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -344,8 +345,9 @@ def _trusted_profile(root: Path, owner: str | None, warnings: list[str]):
 
 def _is_repo_profile(path: Path, root: Path) -> bool:
     """True when `path` is the repository's own `.tld/toolkit.yaml` (the file the default branch's copy stands for)."""
+    own = root / ".tld" / "toolkit.yaml"
     try:
-        return path.resolve() == (root / ".tld" / "toolkit.yaml").resolve()
+        return os.path.abspath(path) == os.path.abspath(own) or path.resolve() == own.resolve()
     except OSError:
         return False
 
@@ -355,7 +357,7 @@ def load(path, *, ref: str | None = None, root=None, fetch: bool = True, trusted
     """Read the profile (or `git show REF:path`), get the base, resolve. With `trusted` and an origin the
     default branch's profile is resolved on its own and clamps the guarded keys. File checks are skipped at a ref."""
     path = Path(path)
-    root = Path(root) if root is not None else path.resolve().parent.parent
+    root = Path(root) if root is not None else Path(os.path.abspath(path)).parent.parent  # not through a symlink
     sha = None
     if ref is not None:
         sha, problem = resolve_ref(root, ref)
@@ -373,7 +375,9 @@ def load(path, *, ref: str | None = None, root=None, fetch: bool = True, trusted
     url = origin_url(root)
     owner = _owner_of(url)
     branch = _head_branch(root)
-    trusted = trusted and _is_repo_profile(path, root)  # another file (e.g. the starter) is no copy of main's profile
+    if trusted and not _is_repo_profile(path, root):  # another file (e.g. the starter) is no copy of main's profile
+        trusted = False
+        warnings.append("not the repository's .tld/toolkit.yaml; guarded keys are not clamped to the default branch")
     trusted_profile = trusted_branch = trusted_missing = None
     if trusted and url:
         trusted_profile, trusted_branch, trusted_missing = _trusted_profile(root, owner, warnings)

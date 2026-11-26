@@ -501,3 +501,19 @@ def test_tree_env_asks_git_only_about_the_default_paths(tmp_path, monkeypatch):
     assert env.exists("docs/plans") and env.exists("docs/adr") and not env.exists("docs/README.md")
     assert not env.exists("deep/tree/f.txt")
     assert len(calls) == 1 and "-r" not in calls[0] and "--" in calls[0]
+
+
+def test_a_symlinked_profile_is_still_clamped_to_main(tmp_path):
+    repo = make_repo(tmp_path, MAIN, origin=True)
+    (repo / ".tld" / "real.yaml").write_text(yaml.safe_dump(WEAKER))
+    (repo / ".tld" / "toolkit.yaml").unlink()
+    os.symlink("real.yaml", repo / ".tld" / "toolkit.yaml")
+    out = rs.load(repo / ".tld" / "toolkit.yaml", fetch=False, file_checks=False)
+    assert out.errors == [] and out.profile["roles"]["posture"]["security"] == "critical"
+
+
+def test_skipping_the_clamp_for_another_file_says_so(tmp_path):
+    repo = make_repo(tmp_path, MAIN, origin=True)
+    (repo / "other.yaml").write_text(yaml.safe_dump(WEAKER))
+    out = rs.load(repo / "other.yaml", root=repo, fetch=False, file_checks=False)
+    assert any("not clamped to the default branch" in w for w in out.warnings)
