@@ -67,7 +67,10 @@ Every deviation from the plan is listed under its phase. "None." means the phase
 
 ## p11-retire
 
-- pending
+- worker: spec scenarios reworded to the merged behaviour (override param keys, keys the organisation omits, login and environment overrides, derived-login warnings, equal logins, integration_id); two long requirements shortened so spec validate exits 0; the dod playbook and required roles were not run by the worker (tld unavailable)
+- conflict: the spec archive stopped because specs on main had changed; the orchestrator merged origin/main into the feature branch (one mechanical CHANGELOG conflict, both sides kept) and the worker then archived
+- retry: sent back three times after the security reviews for documentation truthfulness: SECURITY.md and the changelog over-promised on guarded keys and deletions, the main spec had lost the requirement text for the owner decisions, and the Equal logins scenario was wrong for the agent login
+- review: open note for the final review: the login:same warning text in src/tld/ops/repo_admin.py says the check that needs the login stands down, but a dropped agent login is derived from the repository profile instead
 
 ## Final review
 
